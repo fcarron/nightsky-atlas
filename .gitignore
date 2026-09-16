@@ -3,8 +3,8 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .eggs/
-build/
-dist/
+/build/
+/dist/
 
 # Virtual environments
 .venv/
@@ -24,8 +24,9 @@ venv/
 .env
 
 # Large catalogue data and build artifacts (regenerate, do not commit)
-data/raw/
-data/processed/
-build/
-benchmarks/ai_review/generated/
-benchmarks/ai_review/results/
+# Leading slash anchors these to the repository root so source packages such as
+# src/nightsky_atlas/build/ and tests/build/ are not ignored.
+/data/raw/
+/data/processed/
+/benchmarks/ai_review/generated/
+/benchmarks/ai_review/results/
