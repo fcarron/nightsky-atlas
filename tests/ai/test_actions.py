@@ -154,6 +154,20 @@ def test_unsupported_action_rejected() -> None:
     assert "not applicable" in outcome.rejected[0][1]
 
 
+def test_locked_label_is_not_modified() -> None:
+    locked = make_label().with_placement("label:x:N", locked=True)
+    outcome = apply_review_actions(
+        (locked,),
+        make_result("label:x", {"type": "select_candidate", "candidate": "S"}),
+        SCENE,
+        TRANSFORM,
+        STYLE,
+    )
+    assert outcome.applied == ()
+    assert outcome.rejected[0][1] == "label is locked by an override"
+    assert outcome.labels[0].selected_candidate_id == "label:x:N"
+
+
 def test_unknown_element_rejected() -> None:
     outcome = apply_review_actions(
         (make_label(),),

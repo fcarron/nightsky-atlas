@@ -75,6 +75,9 @@ def apply_review_actions(
         if label is None:
             rejected.append((issue.element_id, "referenced element is not a label"))
             continue
+        if label.locked:
+            rejected.append((issue.element_id, "label is locked by an override"))
+            continue
         updated = _apply_one(label, action)
         if updated is None:
             rejected.append(

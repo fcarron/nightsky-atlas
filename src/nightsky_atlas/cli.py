@@ -53,6 +53,7 @@ from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.labels import build_dso_labels
 from nightsky_atlas.layout.optimizer import OptimizationResult, optimize_labels
+from nightsky_atlas.layout.overrides import apply_overrides, load_override_library
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import DebugOptions, render_chart, render_magnitude_scale
 from nightsky_atlas.render.review import render_review_png
@@ -123,6 +124,25 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
     parser.add_argument("--png-dpi", type=float, default=300.0)
+    parser.add_argument(
+        "--overrides",
+        type=Path,
+        default=None,
+        help="manual override file or directory (stable-ID label overrides)",
+    )
+
+
+def _apply_chart_overrides(
+    args: argparse.Namespace, definition: ChartDefinition, labels: tuple
+) -> tuple:
+    """Apply explicit chart overrides, if given, after initial label layout."""
+    path = getattr(args, "overrides", None)
+    if path is None:
+        return labels
+    overrides = load_override_library(path).for_chart(definition.id)
+    if overrides is None:
+        raise ConfigError(f"no overrides found for chart {definition.id!r} in {path}")
+    return apply_overrides(labels, overrides)
 
 
 def _add_chart_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -277,6 +297,12 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     build.add_argument("--star-store", type=Path, default=_DEFAULT_STORE)
     build.add_argument("--stars", type=Path, default=_DEFAULT_STARS)
     build.add_argument("--dsos", type=Path, default=None)
+    build.add_argument(
+        "--overrides",
+        type=Path,
+        default=None,
+        help="manual override file or directory (stable-ID label overrides)",
+    )
     build.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
     build.add_argument("--limit", type=int, default=None)
     build.add_argument("--charts", default=None, help="comma-separated chart ids")
@@ -326,7 +352,9 @@ def _parse_debug(value: str) -> DebugOptions | None:
 def _command_chart_render(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
 
-    labels = build_dso_labels(scene, transform, style) if (args.labels or args.optimize) else ()
+    has_labels = bool(args.labels or args.optimize or args.overrides)
+    labels = build_dso_labels(scene, transform, style) if has_labels else ()
+    labels = _apply_chart_overrides(args, definition, labels)
     result: OptimizationResult | None = None
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style)
@@ -359,6 +387,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
 def _command_chart_review(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
     labels = build_dso_labels(scene, transform, style)
+    labels = _apply_chart_overrides(args, definition, labels)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style)
         labels = result.labels
@@ -452,6 +481,7 @@ def _write_layout_json(
 def _command_chart_validate(args: argparse.Namespace) -> int:
     _atlas, style, definition, _page, scene, transform = _chart_context(args)
     labels = build_dso_labels(scene, transform, style)
+    labels = _apply_chart_overrides(args, definition, labels)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style)
         labels = result.labels
@@ -606,6 +636,7 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         star_store=args.star_store,
         stars_csv=args.stars,
         dsos_path=args.dsos,
+        overrides_path=args.overrides,
         chart_ids=chart_ids,
         limit=args.limit,
         optimize=not args.no_optimize,

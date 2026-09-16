@@ -84,7 +84,9 @@ class Label:
 
     ``selected_candidate_id`` is ``None`` until an optimizer or the renderer
     picks a candidate.  ``mandatory`` labels must be placed; optional labels may
-    remain hidden if no candidate is acceptable.
+    remain hidden if no candidate is acceptable.  ``locked`` labels come from a
+    manual override and must not be moved by later optimizers (``AGENTS.md``
+    section 22).
     """
 
     id: str
@@ -95,6 +97,7 @@ class Label:
     candidates: tuple[LabelCandidate, ...]
     selected_candidate_id: str | None = None
     hidden: bool = False
+    locked: bool = False
 
     def candidate(self, candidate_id: str) -> LabelCandidate | None:
         """Return the candidate with the given ID, if present."""
@@ -120,10 +123,17 @@ class Label:
             candidates=self.candidates,
             selected_candidate_id=candidate_id,
             hidden=self.hidden,
+            locked=self.locked,
         )
 
-    def with_placement(self, candidate_id: str | None, *, hidden: bool = False) -> Label:
-        """Return a copy with an explicit selection and visibility."""
+    def with_placement(
+        self, candidate_id: str | None, *, hidden: bool = False, locked: bool | None = None
+    ) -> Label:
+        """Return a copy with an explicit selection and visibility.
+
+        ``locked`` is preserved when omitted, so optimizer passes never unlock a
+        manual override.
+        """
         return Label(
             id=self.id,
             target_id=self.target_id,
@@ -133,6 +143,7 @@ class Label:
             candidates=self.candidates,
             selected_candidate_id=candidate_id,
             hidden=hidden,
+            locked=self.locked if locked is None else locked,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -144,6 +155,7 @@ class Label:
             "priority": self.priority,
             "mandatory": self.mandatory,
             "hidden": self.hidden,
+            "locked": self.locked,
             "selected_candidate_id": self.selected_candidate_id,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
@@ -162,4 +174,5 @@ class Label:
             ),
             selected_candidate_id=data.get("selected_candidate_id"),
             hidden=bool(data.get("hidden", False)),
+            locked=bool(data.get("locked", False)),
         )

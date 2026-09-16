@@ -2254,7 +2254,7 @@ Do not begin Pocket/Deep merely because a full PDF exists. Standard must first b
 
 ## M16 — Manual override workflow and publication hardening
 
-### [ ] M16.1 Implement override files
+### [x] M16.1 Implement override files
 
 Stable ID-based overrides, including locked label candidates.
 

@@ -5,8 +5,9 @@ Handoff snapshot. The authoritative plan remains `AGENTS.md`.
 ## Progress
 
 - M0–M14 complete. M15.1–M15.4 complete. M15.5 in progress (alpha built, field test pending).
+- M16.1 complete (manual Stable-ID label overrides, including locked placements).
 - M11.4 and M13.3 complete (live AI review through OpenRouter).
-- `make check`: Ruff clean, 278 tests passing.
+- `make check`: Ruff clean, 292 tests passing.
 
 ## Frozen Standard geometry (M14.1)
 
@@ -41,7 +42,7 @@ Handoff snapshot. The authoritative plan remains `AGENTS.md`.
 
 - 14 hard violations on 6 dense pages: standard-007, 008, 009, 020, 059, 060 (Milky Way / Virgo-Coma).
 - Polar pages reuse the standard field and stereographic projection; coverage is complete but distortion near the pole is larger.
-- `git_commit` in manifests is null until the repository has commits.
+- The alpha manifest predates the first git commit, so its `git_commit` is null; a rebuild records the real commit.
 
 ## CLI
 
@@ -50,8 +51,20 @@ Handoff snapshot. The authoritative plan remains `AGENTS.md`.
 `atlas tile|coverage|build`,
 `benchmark ai-review`.
 
+`chart render|validate|review` and `atlas build` accept `--overrides PATH`
+(a single override file or a directory of them).
+
+## Manual overrides (M16.1)
+
+- `overrides/<chart>.yaml` with `chart:` and stable-ID `labels:` entries
+  (`candidate`, `locked`, `hidden`). Example: `overrides/test-virgo.yaml`.
+- Applied after initial label layout; locked placements are preserved by the
+  deterministic optimizer and by AI action application.
+- Unknown label IDs or invalid candidates are hard errors; invalid locked
+  geometry is honoured but reported by validation.
+
 ## Next
 
 1. M15.5 print/field test of representative pages.
-2. M16: M16.1 manual overrides, M16.2 atlas-wide issue report, M16.3 preflight, M16.4 `docs/DATA_SOURCES.md`.
+2. M16: M16.2 atlas-wide issue report, M16.3 preflight (`atlas validate --publication`), M16.4 `docs/DATA_SOURCES.md`.
 3. M17 Pocket, M18 Deep data expansion, M19 extended structures, M20 Deep atlas.

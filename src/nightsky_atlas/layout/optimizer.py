@@ -139,8 +139,14 @@ def optimize_labels(
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
     # Initial layout: fixed preference order (first candidate), as rendered
-    # without optimization.
-    before = {label.id: (label.candidates[0].id if label.candidates else None) for label in ordered}
+    # without optimization.  Locked labels start from their override so the
+    # "before" diagnostics already reflect the manual placement.
+    before: dict[str, str | None] = {}
+    for label in ordered:
+        if label.locked:
+            before[label.id] = label.selected_candidate_id
+        else:
+            before[label.id] = label.candidates[0].id if label.candidates else None
     cost_before, totals_before = _evaluate(
         ordered, before, anchors, printable, symbols, weights
     )
@@ -148,6 +154,19 @@ def optimize_labels(
     placements: dict[str, str | None] = {}
     placed_bounds: list[PageRect] = []
     for label in ordered:
+        if not label.locked:
+            continue
+        candidate_id = label.selected_candidate_id
+        candidate = label.candidate(candidate_id) if candidate_id is not None else None
+        if candidate is not None:
+            placements[label.id] = candidate.id
+            placed_bounds.append(candidate.bounds)
+        else:
+            placements[label.id] = None
+
+    for label in ordered:
+        if label.id in placements:
+            continue
         best: tuple[tuple[float, float, int], LabelCandidate] | None = None
         for candidate in label.candidates:
             valid = _is_valid(candidate.bounds, tuple(placed_bounds), printable, symbols)
@@ -230,6 +249,8 @@ def _local_repair(
     for _ in range(_MAX_REPAIR_PASSES):
         changed = False
         for label in ordered:
+            if label.locked:
+                continue
             current_id = placements.get(label.id)
             if current_id is None:
                 continue

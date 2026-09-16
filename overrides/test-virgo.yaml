@@ -1,0 +1,10 @@
+# Example manual label override (AGENTS.md section 22).
+#
+# Overrides reference labels by stable ID and are applied after the initial
+# deterministic layout.  A locked placement is preserved by later optimizers.
+# Use with:  nightsky chart render --chart test-virgo --optimize --overrides overrides/test-virgo.yaml
+chart: test-virgo
+labels:
+  label:dso:IC0713:
+    candidate: E
+    locked: true
