@@ -1,0 +1,15 @@
+# NightSky Atlas — optional AI review configuration.
+#
+# Default reviewer model chosen at M13.3 (see docs/AI_REVIEW.md).
+enabled: true
+provider: openrouter
+reviewer_model: "qwen/qwen3.7-flash"
+fallback_models: []
+max_iterations: 4
+max_cost_per_chart_usd: 0.05
+min_target_score: 9.0
+# Only apply AI actions at or above this severity; suppresses low-confidence
+# false positives on already-clean pages (chosen at M13.3).
+min_action_severity: 6
+timeout_s: 60.0
+max_retries: 3

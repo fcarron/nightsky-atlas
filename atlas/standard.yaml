@@ -1,0 +1,48 @@
+# NightSky Atlas — Standard edition definition.
+#
+# Content and tiling only; visual appearance lives in styles/standard.yaml.
+# Chart definitions are explicitly listed at this milestone.  Automatic tiling
+# is not implemented yet.
+
+id: standard
+
+# Provisional standard-edition stellar limiting magnitude (chosen at M4.3).
+stellar_limit_magnitude: 9.0
+
+# Standard page/FOV target frozen at M14.1: A4 landscape, 27 x 18.5 deg at
+# ~10 mm/deg. Declination-band tiling with ~3 deg overlap.
+tiling:
+  width_deg: 27.0
+  height_deg: 18.5
+  overlap_deg: 3.0
+  coverage_step_deg: 2.0
+
+# Deep-sky objects fainter than this are omitted unless they have no known
+# magnitude, in which case they are kept.
+dso_limit_magnitude: 12.0
+
+page:
+  width_mm: 297.0
+  height_mm: 210.0
+  margin_mm: 12.0
+
+charts:
+  - id: test-virgo
+    center_ra_deg: 187.5
+    center_dec_deg: 12.0
+    width_deg: 27.0
+    height_deg: 18.5
+    neighbours:
+      N: test-sparse
+  - id: test-cygnus
+    center_ra_deg: 307.0
+    center_dec_deg: 41.0
+    width_deg: 27.0
+    height_deg: 18.5
+    neighbours:
+      S: test-virgo
+  - id: test-sparse
+    center_ra_deg: 192.0
+    center_dec_deg: 27.0
+    width_deg: 27.0
+    height_deg: 18.5

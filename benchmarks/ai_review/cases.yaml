@@ -1,0 +1,70 @@
+# NightSky Atlas — AI review benchmark cases (M13.1).
+#
+# Each case is a chart + layout mode. Known problems are the hard violations of
+# that layout, captured when the case is materialized; a reviewer is scored on
+# detecting them, avoiding false positives, and using valid actions.
+#
+# Fields per case:
+#   id                  stable case identifier
+#   chart               chart id from atlas/standard.yaml
+#   mode                raw | optimized
+#   magnitude_limit     optional stellar limit override
+#   dso_magnitude_limit optional deep-sky limit override
+#   forbidden_actions   actions this case must not use
+#   notes               human quality notes
+
+cases:
+  - id: virgo-raw-m9
+    chart: test-virgo
+    mode: raw
+    notes: "Dense Virgo/Coma cluster; many mutual label overlaps."
+  - id: virgo-opt-m9
+    chart: test-virgo
+    mode: optimized
+    notes: "Clean optimized Virgo page; low false-positive target."
+  - id: virgo-raw-m85
+    chart: test-virgo
+    mode: raw
+    magnitude_limit: 8.5
+    notes: "Sparser Virgo field."
+  - id: virgo-opt-m95
+    chart: test-virgo
+    mode: optimized
+    magnitude_limit: 9.5
+    notes: "Denser Virgo field."
+  - id: cygnus-raw-m9
+    chart: test-cygnus
+    mode: raw
+    notes: "Dense Milky Way star field, few DSOs."
+  - id: cygnus-opt-m9
+    chart: test-cygnus
+    mode: optimized
+    notes: "Clean Cygnus page."
+  - id: cygnus-raw-m95
+    chart: test-cygnus
+    mode: raw
+    magnitude_limit: 9.5
+    notes: "Very dense Cygnus star field."
+  - id: sparse-raw-m9
+    chart: test-sparse
+    mode: raw
+    notes: "Coma-direction galaxy field."
+  - id: sparse-opt-m9
+    chart: test-sparse
+    mode: optimized
+    notes: "Clean sparse-star but DSO-rich page."
+  - id: sparse-raw-m85
+    chart: test-sparse
+    mode: raw
+    magnitude_limit: 8.5
+    notes: "Bright-only deep-sky subset."
+  - id: sparse-opt-m95
+    chart: test-sparse
+    mode: optimized
+    magnitude_limit: 9.5
+    notes: "Deep sparse-field page."
+  - id: virgo-opt-m85
+    chart: test-virgo
+    mode: optimized
+    magnitude_limit: 8.5
+    notes: "Low-density optimized page; false-positive control."

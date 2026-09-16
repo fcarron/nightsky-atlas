@@ -1,0 +1,39 @@
+# NightSky Atlas — Standard rendering style.
+#
+# Appearance only; chart geometry and content live in atlas/standard.yaml.
+
+id: standard
+
+star:
+  min_diameter_mm: 0.2
+  max_diameter_mm: 2.4
+  bright_magnitude: 0.0
+  faint_magnitude: 9.0
+
+label:
+  font_family: "DejaVu Sans"
+  font_size_pt: 6.0
+  candidate_rings: 3
+  ring_gap_mm: 3.0
+
+dso:
+  size_mm: 1.4
+  min_axis_mm: 0.7
+  max_axis_mm: 12.0
+  line_width_mm: 0.15
+  dash_mm: 0.4
+
+grid:
+  enabled: true
+  ra_step_deg: 2.0
+  dec_step_deg: 2.0
+  line_width_mm: 0.1
+  gray: 0.6
+  label_font_size_pt: 5.0
+
+furniture:
+  title_font_size_pt: 9.0
+  scale_font_size_pt: 6.0
+  scale_bar_length_deg: 5.0
+  scale_bar_thickness_mm: 0.4
+  chart_border_width_mm: 0.25

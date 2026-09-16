@@ -1,0 +1,70 @@
+"""Review models and schemas.
+
+Review artifacts let a vision model reason about a rendered page without seeing
+the whole layout document (``AGENTS.md`` sections 17 and 18).  The
+:class:`ReviewRequest` is built from a scene; :mod:`nightsky_atlas.review.schema`
+validates model responses before they can affect anything.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+from nightsky_atlas.chart.page import PageRect
+
+__all__ = ["ReviewElement", "ReviewRequest"]
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewElement:
+    """A visible element a reviewer may refer to, with its page geometry."""
+
+    id: str
+    kind: str
+    text: str | None = None
+    page_x_mm: float | None = None
+    page_y_mm: float | None = None
+    bounds: PageRect | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"id": self.id, "kind": self.kind}
+        if self.text is not None:
+            payload["text"] = self.text
+        if self.page_x_mm is not None:
+            payload["page_x_mm"] = self.page_x_mm
+        if self.page_y_mm is not None:
+            payload["page_y_mm"] = self.page_y_mm
+        if self.bounds is not None:
+            payload["bounds"] = {
+                "left_mm": self.bounds.left_mm,
+                "top_mm": self.bounds.top_mm,
+                "width_mm": self.bounds.width_mm,
+                "height_mm": self.bounds.height_mm,
+            }
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewRequest:
+    """Everything a reviewer needs for one page."""
+
+    page_id: str
+    prompt_version: str
+    schema_version: str
+    images: tuple[str, ...]
+    permitted_actions: tuple[str, ...]
+    elements: tuple[ReviewElement, ...] = ()
+    diagnostics: dict[str, float] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable mapping of this request."""
+        return {
+            "page_id": self.page_id,
+            "prompt_version": self.prompt_version,
+            "schema_version": self.schema_version,
+            "images": list(self.images),
+            "permitted_actions": list(self.permitted_actions),
+            "elements": [element.to_dict() for element in self.elements],
+            "diagnostics": dict(self.diagnostics),
+        }
