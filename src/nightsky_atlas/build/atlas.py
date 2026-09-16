@@ -16,7 +16,12 @@ from typing import Any
 
 import cairo
 
-from nightsky_atlas.atlas.config import AtlasConfig, StyleConfig, load_atlas_config, load_style_config
+from nightsky_atlas.atlas.config import (
+    AtlasConfig,
+    StyleConfig,
+    load_atlas_config,
+    load_style_config,
+)
 from nightsky_atlas.atlas.tiling import TilingSpec, tile_sky, with_neighbours
 from nightsky_atlas.build.chart import build_chart_context
 from nightsky_atlas.chart.models import ChartDefinition
@@ -173,6 +178,8 @@ def build_atlas(
     star_store: str | Path | None = None,
     stars_csv: str | Path | None = None,
     dsos_path: str | Path | None = None,
+    constellations_dir: str | Path | None = None,
+    outlines_dir: str | Path | None = None,
     overrides_path: str | Path | None = None,
     chart_ids: tuple[str, ...] | None = None,
     limit: int | None = None,
@@ -218,6 +225,8 @@ def build_atlas(
             star_store=star_store,
             stars_csv=stars_csv,
             dsos_path=dsos_path,
+            constellations_dir=constellations_dir,
+            outlines_dir=outlines_dir,
         )
         labels = build_dso_labels(chart_context.scene, chart_context.transform, chart_context.style)
         chart_overrides = library.for_chart(definition.id) if library is not None else None

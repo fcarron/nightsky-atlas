@@ -40,7 +40,14 @@ charts:
     width_deg: 27.0
     height_deg: 18.5
     neighbours:
-      S: test-virgo
+      S: test-veil
+  - id: test-veil
+    center_ra_deg: 312.5
+    center_dec_deg: 31.0
+    width_deg: 27.0
+    height_deg: 18.5
+    neighbours:
+      N: test-cygnus
   - id: test-sparse
     center_ra_deg: 192.0
     center_dec_deg: 27.0

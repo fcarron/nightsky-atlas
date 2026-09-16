@@ -22,7 +22,7 @@ from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.models import Label
-from nightsky_atlas.render.grid import build_grid
+from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
 from nightsky_atlas.render.symbols import (
     DsoShape,
     EllipseGeometry,
@@ -31,7 +31,7 @@ from nightsky_atlas.render.symbols import (
     galaxy_ellipse,
 )
 from nightsky_atlas.render.text import TextMeasurer, draw_centered_text, draw_text
-from nightsky_atlas.scene.models import ChartScene
+from nightsky_atlas.scene.models import ChartScene, SceneOutline, SceneSegment
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = ["DebugOptions", "draw_chart_page", "render_chart", "render_magnitude_scale"]
@@ -95,10 +95,13 @@ def draw_chart_page(
     """
     size_model = StarSizeModel.from_style(style.star)
     _draw_background(cr, transform.page)
-    _draw_grid(cr, transform, scene.definition, style)
+    grid_lines = _draw_grid(cr, transform, scene.definition, style)
+    _draw_constellations(cr, transform, scene, style)
     _draw_chart_border(cr, transform, style)
+    _draw_outlines(cr, transform, scene, style)
     _draw_stars(cr, transform, scene, size_model)
     _draw_dsos(cr, transform, scene, style)
+    _draw_grid_labels(cr, grid_lines, transform, style)
     _draw_labels(cr, labels, style)
     if debug is not None:
         _draw_debug(cr, transform, scene, labels, style, debug)
@@ -434,17 +437,96 @@ def _draw_debug(
             )
 
 
+def _draw_constellations(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    scene: ChartScene,
+    style: StyleConfig,
+) -> None:
+    config = style.constellation
+    if config.boundaries.enabled and scene.constellation_boundaries:
+        _draw_segments(
+            cr,
+            transform,
+            scene.constellation_boundaries,
+            gray=config.boundaries.gray,
+            line_width_mm=config.boundaries.line_width_mm,
+            dash_mm=(config.boundaries.dash_mm, config.boundaries.gap_mm),
+        )
+    if config.lines.enabled and scene.constellation_lines:
+        _draw_segments(
+            cr,
+            transform,
+            scene.constellation_lines,
+            gray=config.lines.gray,
+            line_width_mm=config.lines.line_width_mm,
+            dash_mm=None,
+        )
+
+
+def _draw_outlines(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    scene: ChartScene,
+    style: StyleConfig,
+) -> None:
+    if not scene.nebula_outlines:
+        return
+    _draw_segments(
+        cr,
+        transform,
+        scene.nebula_outlines,
+        gray=style.dso.outline_gray,
+        line_width_mm=style.dso.outline_line_width_mm,
+        dash_mm=(style.dso.outline_dash_mm, style.dso.outline_dash_mm),
+    )
+
+
+def _draw_segments(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    segments: Iterable[SceneSegment | SceneOutline],
+    *,
+    gray: float,
+    line_width_mm: float,
+    dash_mm: tuple[float, float] | None,
+) -> None:
+    rect = transform.chart_rect
+    tone = min(max(gray, 0.0), 1.0)
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
+    cr.set_source_rgb(tone, tone, tone)
+    cr.set_line_width(mm_to_pt(line_width_mm))
+    if dash_mm is not None:
+        cr.set_dash([mm_to_pt(dash_mm[0]), mm_to_pt(dash_mm[1])], 0.0)
+    for segment in segments:
+        for index, chart_point in enumerate(segment.points):
+            point = transform.to_page(chart_point)
+            if index == 0:
+                cr.move_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+            else:
+                cr.line_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+        cr.stroke()
+    cr.restore()
+
+
 def _draw_grid(
     cr: cairo.Context[cairo.Surface],
     transform: PageTransform,
     definition: ChartDefinition,
     style: StyleConfig,
-) -> None:
+) -> tuple[GridLine, ...]:
     if not style.grid.enabled:
-        return
+        return ()
     lines = build_grid(definition, transform, style)
     if not lines:
-        return
+        return ()
     rect = transform.chart_rect
     cr.save()
     cr.rectangle(
@@ -465,6 +547,31 @@ def _draw_grid(
                 cr.line_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
         cr.stroke()
     cr.restore()
+    return lines
+
+
+def _draw_grid_labels(
+    cr: cairo.Context[cairo.Surface],
+    lines: tuple[GridLine, ...],
+    transform: PageTransform,
+    style: StyleConfig,
+) -> None:
+    if not lines:
+        return
+    labels = build_grid_labels(transform.chart, transform, style, lines=lines)
+    if not labels:
+        return
+    gray = min(max(style.grid.label_gray, 0.0), 1.0)
+    cr.set_source_rgb(gray, gray, gray)
+    for label in labels:
+        draw_text(
+            cr,
+            label.text,
+            mm_to_pt(label.bounds.left_mm),
+            mm_to_pt(label.bounds.top_mm),
+            style.label.font_family,
+            style.grid.label_font_size_pt,
+        )
 
 
 def _draw_scale_bar(

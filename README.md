@@ -6,8 +6,8 @@ deep-sky observing, especially Dobsonian star-hopping.
 The primary output is vector PDF. Secondary outputs include SVG, PNG previews,
 annotated review PNGs and a machine-readable layout JSON document.
 
-See `AGENTS.md` for the authoritative product, architecture and engineering
-contract.
+See `AGENTS.md` for the condensed engineering contract, and `docs/` for the
+product, architecture, plan, cartography, AI-review and data-source details.
 
 ## Development
 
@@ -45,15 +45,21 @@ Artifacts are written to `build/standard/charts/test-virgo/chart.pdf` and
 ### Real star catalogue (Tycho-2)
 
 ```bash
-.venv/bin/nightsky data fetch-stars     # download raw parts into data/raw/
-.venv/bin/nightsky data import-stars    # build data/processed/stars/tycho2.sqlite
+.venv/bin/nightsky data fetch-stars       # download raw Tycho-2 parts into data/raw/
+.venv/bin/nightsky data fetch-hipparcos   # download the bright-star supplement
+.venv/bin/nightsky data import-stars      # build data/processed/stars/tycho2.sqlite
 .venv/bin/nightsky chart render --chart test-cygnus \
     --star-store data/processed/stars/tycho2.sqlite --magnitude-limit 9.0
 ```
+
+The store merges Tycho-2 with the Hipparcos main catalogue because Tycho-2 omits
+the brightest stars (Deneb, Vega, Altair, Sirius, ...). See
+`docs/DATA_SOURCES.md` for provenance and licensing.
 
 Raw and processed catalogue data are build inputs and are not committed. See
 `docs/PERFORMANCE.md` for benchmark numbers and licensing notes.
 
 ## Status
 
-Early development. See the development plan in `AGENTS.md`.
+Early development. See the development plan in `docs/DEVELOPMENT_PLAN.md` and the
+current snapshot in `docs/STATE.md`.

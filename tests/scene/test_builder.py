@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
+from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection import ChartPoint
@@ -104,3 +106,84 @@ def test_dso_magnitude_limit_keeps_unknown_magnitudes() -> None:
     ]
     scene = build_scene(DEFINITION, (), dsos, dso_magnitude_limit=12.0)
     assert {item.dso.id for item in scene.deep_sky_objects} == {"bright", "unknown"}
+
+
+def make_segment(
+    ra1_deg: float, dec1_deg: float, ra2_deg: float, dec2_deg: float
+) -> ConstellationSegment:
+    return ConstellationSegment(
+        id=f"seg:{ra1_deg}:{dec1_deg}:{ra2_deg}:{dec2_deg}",
+        ra1_deg=ra1_deg,
+        dec1_deg=dec1_deg,
+        ra2_deg=ra2_deg,
+        dec2_deg=dec2_deg,
+        provenance=Provenance(catalogue="TEST", source_id="seg"),
+    )
+
+
+def test_constellation_segment_inside_field_is_clipped() -> None:
+    segment = make_segment(170.0, 12.0, 205.0, 12.0)
+    scene = build_scene(DEFINITION, [], [], constellation_lines=[segment])
+    assert len(scene.constellation_lines) == 1
+    for point in scene.constellation_lines[0].points:
+        assert DEFINITION.contains(point)
+
+
+def test_constellation_segment_far_away_is_excluded() -> None:
+    segment = make_segment(0.0, -50.0, 20.0, -50.0)
+    scene = build_scene(DEFINITION, [], [], constellation_lines=[segment])
+    assert scene.constellation_lines == ()
+
+
+def test_constellation_boundaries_tracked_separately() -> None:
+    boundary = make_segment(175.0, 12.0, 200.0, 12.0)
+    line = make_segment(178.0, 10.0, 190.0, 10.0)
+    scene = build_scene(
+        DEFINITION, [], [], constellation_lines=[line], constellation_boundaries=[boundary]
+    )
+    assert len(scene.constellation_boundaries) == 1
+    assert len(scene.constellation_lines) == 1
+
+
+def make_outline(dso_id: str, points: tuple[tuple[float, float], ...]) -> NebulaOutline:
+    return NebulaOutline(
+        id=f"outline:dso:{dso_id}",
+        dso_id=dso_id,
+        points=points,
+        provenance=Provenance(catalogue="TEST", source_id=dso_id),
+    )
+
+
+def test_outline_inside_field_is_closed() -> None:
+    outline = make_outline(
+        "NGC7000",
+        ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0), (186.5, 13.0)),
+    )
+    scene = build_scene(DEFINITION, [], [], nebula_outlines=[outline])
+    assert scene.outline_count == 1
+    ring = scene.nebula_outlines[0]
+    assert ring.dso_id == "NGC7000"
+    assert ring.points[0] == ring.points[-1]
+    for point in ring.points:
+        assert DEFINITION.contains(point)
+
+
+def test_outline_far_away_is_excluded() -> None:
+    outline = make_outline(
+        "FAR",
+        ((0.0, -50.0), (2.0, -50.0), (2.0, -48.0)),
+    )
+    scene = build_scene(DEFINITION, [], [], nebula_outlines=[outline])
+    assert scene.nebula_outlines == ()
+
+
+def test_outline_partly_outside_field_is_clipped() -> None:
+    outline = make_outline(
+        "BIG",
+        ((186.5, 10.0), (188.5, 10.0), (188.5, 20.0), (186.5, 20.0)),
+    )
+    scene = build_scene(DEFINITION, [], [], nebula_outlines=[outline])
+    assert scene.outline_count >= 1
+    for run in scene.nebula_outlines:
+        for point in run.points:
+            assert DEFINITION.contains(point)

@@ -7,18 +7,20 @@ single-threaded. Hardware is a normal development workstation.
 
 ### Import
 
-Tycho-2 (CDS I/259), 20 gzip parts, ~159 MB compressed:
+Tycho-2 (CDS I/259), 20 gzip parts, ~159 MB compressed, merged with the
+Hipparcos main catalogue (CDS I/239) bright-star supplement:
 
 | Measure | Value |
 | --- | --- |
-| Stars imported | 2 539 913 |
-| Import wall time | ~14 s |
+| Stars imported | 2 541 232 (2 539 913 TYC2 + 1 319 HIP) |
+| Import wall time | ~18 s |
 | SQLite file size | ~364 MB |
 | Indexes | `(dec_deg, magnitude)`, `(ra_deg)` |
 
-The importer streams raw parts, derives Johnson `V = VT - 0.090 * (BT - VT)`,
-and bulk-loads inside a single transaction with indexing deferred until after
-insertion.
+The importer streams raw Tycho-2 parts, derives Johnson `V = VT - 0.090 * (BT - VT)`,
+and merges the Hipparcos supplement with a 3 arcsec positional match (Tycho-2
+wins). Bulk loading happens inside a single transaction with indexing deferred
+until after insertion.
 
 ### Per-chart query benchmark
 
@@ -53,6 +55,7 @@ latency is already acceptable (`AGENTS.md` section 25).
 
 ```bash
 nightsky data fetch-stars          # ~159 MB download (explicit network use)
+nightsky data fetch-hipparcos      # ~53 MB download (explicit network use)
 nightsky data import-stars         # writes data/processed/stars/tycho2.sqlite
 nightsky chart render --chart test-cygnus \
     --star-store data/processed/stars/tycho2.sqlite --magnitude-limit 9.0
@@ -62,6 +65,7 @@ Raw and processed catalogue data are build inputs and are not committed.
 
 ### Licence
 
-Tycho-2 (CDS I/259) is distributed under **CC-BY-NC-3.0 IGO** (non-commercial).
-That restriction must be reviewed before any public or commercial distribution
-of a generated atlas; see `AGENTS.md` section 8.4.
+Tycho-2 (CDS I/259) and the Hipparcos main catalogue (CDS I/239) are distributed
+under **CC-BY-NC-3.0 IGO** (non-commercial). That restriction must be reviewed
+before any public or commercial distribution of a generated atlas; see
+`AGENTS.md` section 8.4.

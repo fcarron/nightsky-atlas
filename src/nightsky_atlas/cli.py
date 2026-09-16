@@ -31,7 +31,21 @@ from nightsky_atlas.atlas.tiling import (
 from nightsky_atlas.build.atlas import build_atlas
 from nightsky_atlas.build.chart import build_chart_context
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
+from nightsky_atlas.catalog.hipparcos import (
+    CATALOGUE as HIPPARCOS_CATALOGUE,
+)
+from nightsky_atlas.catalog.hipparcos import (
+    VERSION as HIPPARCOS_VERSION,
+)
+from nightsky_atlas.catalog.hipparcos import (
+    download_hipparcos,
+    iter_hipparcos_stars,
+)
+from nightsky_atlas.catalog.hipparcos import (
+    raw_path as hipparcos_raw_path,
+)
 from nightsky_atlas.catalog.manifest import write_manifest
+from nightsky_atlas.catalog.merge import merge_stars
 from nightsky_atlas.catalog.openngc import (
     CATALOGUE as OPENNGC_CATALOGUE,
 )
@@ -67,9 +81,12 @@ _DEFAULT_STARS = Path("data/fixtures/stars/test_virgo.csv")
 _DEFAULT_RAW = Path("data/raw/tycho2")
 _DEFAULT_STORE = Path("data/processed/stars/tycho2.sqlite")
 _DEFAULT_MANIFEST = Path("data/processed/stars/tycho2.manifest.json")
+_DEFAULT_HIP_RAW = Path("data/raw/hipparcos")
 _DEFAULT_OPENNGC_RAW = Path("data/raw/openngc")
 _DEFAULT_DSO_OUT = Path("data/processed/dso/openngc.json")
 _DEFAULT_DSO_MANIFEST = Path("data/processed/dso/openngc.manifest.json")
+_DEFAULT_CONSTELLATIONS = Path("data/fixtures/constellations")
+_DEFAULT_OUTLINES = Path("data/fixtures/outlines")
 _DEFAULT_CASES = Path("benchmarks/ai_review/cases.yaml")
 _DEFAULT_BENCH_OUT = Path("benchmarks/ai_review/results")
 _DEFAULT_OUTDIR = Path("build")
@@ -121,6 +138,18 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=None,
         help="faintest deep-sky magnitude to render (default: atlas setting)",
+    )
+    parser.add_argument(
+        "--constellations",
+        type=Path,
+        default=_DEFAULT_CONSTELLATIONS,
+        help="directory of constellation geometry fixtures (empty to omit)",
+    )
+    parser.add_argument(
+        "--outlines",
+        type=Path,
+        default=_DEFAULT_OUTLINES,
+        help="directory of schematic nebula outline fixtures (empty to omit)",
     )
     parser.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
     parser.add_argument("--png-dpi", type=float, default=300.0)
@@ -225,10 +254,24 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     fetch.add_argument("--base-url", default=CDS_BASE_URL)
     fetch.set_defaults(handler=_command_fetch_stars)
 
+    hip_fetch = data_subparsers.add_parser(
+        "fetch-hipparcos",
+        help="download the raw Hipparcos main catalogue (network access)",
+    )
+    hip_fetch.add_argument("--dest", type=Path, default=_DEFAULT_HIP_RAW)
+    hip_fetch.set_defaults(handler=_command_fetch_hipparcos)
+
     importer = data_subparsers.add_parser(
-        "import-stars", help="import raw Tycho-2 parts into a SQLite store"
+        "import-stars",
+        help="import Tycho-2 plus the Hipparcos bright-star supplement into a SQLite store",
     )
     importer.add_argument("--raw", type=Path, default=_DEFAULT_RAW)
+    importer.add_argument(
+        "--bright-raw",
+        type=Path,
+        default=_DEFAULT_HIP_RAW,
+        help="directory containing the raw Hipparcos main catalogue",
+    )
     importer.add_argument("--out", type=Path, default=_DEFAULT_STORE)
     importer.add_argument("--manifest", type=Path, default=_DEFAULT_MANIFEST)
     importer.set_defaults(handler=_command_import_stars)
@@ -298,6 +341,18 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     build.add_argument("--stars", type=Path, default=_DEFAULT_STARS)
     build.add_argument("--dsos", type=Path, default=None)
     build.add_argument(
+        "--constellations",
+        type=Path,
+        default=_DEFAULT_CONSTELLATIONS,
+        help="directory of constellation geometry fixtures (empty to omit)",
+    )
+    build.add_argument(
+        "--outlines",
+        type=Path,
+        default=_DEFAULT_OUTLINES,
+        help="directory of schematic nebula outline fixtures (empty to omit)",
+    )
+    build.add_argument(
         "--overrides",
         type=Path,
         default=None,
@@ -323,6 +378,8 @@ def _chart_context(
         star_store=args.star_store,
         stars_csv=args.stars,
         dsos_path=args.dsos,
+        constellations_dir=args.constellations,
+        outlines_dir=args.outlines,
         magnitude_limit=args.magnitude_limit,
         dso_magnitude_limit=args.dso_magnitude_limit,
     )
@@ -527,6 +584,12 @@ def _command_fetch_stars(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_fetch_hipparcos(args: argparse.Namespace) -> int:
+    path = download_hipparcos(args.dest)
+    print(f"downloaded Hipparcos main catalogue -> {path}")
+    return 0
+
+
 def _command_import_stars(args: argparse.Namespace) -> int:
     parts = raw_part_paths(args.raw)
     missing = [path for path in parts if not path.exists()]
@@ -535,7 +598,15 @@ def _command_import_stars(args: argparse.Namespace) -> int:
             f"missing {len(missing)} raw part(s) under {args.raw}; "
             "run 'nightsky data fetch-stars' first"
         )
-    count = build_star_store(args.out, iter_tycho2_stars(parts))
+    bright_path = hipparcos_raw_path(args.bright_raw)
+    if not bright_path.exists():
+        raise ConfigError(
+            f"missing bright-star catalogue {bright_path}; "
+            "run 'nightsky data fetch-hipparcos' first"
+        )
+    tycho = iter_tycho2_stars(parts)
+    bright = iter_hipparcos_stars(bright_path)
+    count = build_star_store(args.out, merge_stars(tycho, bright))
     manifest = {
         "catalogue": CATALOGUE,
         "version": VERSION,
@@ -547,6 +618,18 @@ def _command_import_stars(args: argparse.Namespace) -> int:
         "raw_files": [path.name for path in parts],
         "star_count": count,
         "processed_file": args.out.name,
+        "bright_star_supplement": {
+            "catalogue": HIPPARCOS_CATALOGUE,
+            "version": HIPPARCOS_VERSION,
+            "source": "The Hipparcos and Tycho Catalogues (ESA 1997), CDS I/239",
+            "license": "CC-BY-NC-3.0 IGO",
+            "magnitude_rule": "Johnson V (Vmag); Hpmag fallback",
+            "coordinate_rule": (
+                "ICRS position at J1991.25 propagated to J2000 with catalogue proper motion"
+            ),
+            "match_rule": "Hipparcos star dropped when a Tycho-2 star lies within 3 arcsec",
+            "raw_file": bright_path.name,
+        },
     }
     write_manifest(args.manifest, manifest)
     print(f"imported {count} stars -> {args.out}")
@@ -636,6 +719,8 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         star_store=args.star_store,
         stars_csv=args.stars,
         dsos_path=args.dsos,
+        constellations_dir=args.constellations,
+        outlines_dir=args.outlines,
         overrides_path=args.overrides,
         chart_ids=chart_ids,
         limit=args.limit,

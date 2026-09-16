@@ -24,6 +24,7 @@ from pydantic import (
     PositiveFloat,
     ValidationError,
     field_validator,
+    model_validator,
 )
 
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
@@ -32,6 +33,9 @@ __all__ = [
     "AtlasConfig",
     "ChartConfig",
     "ConfigError",
+    "ConstellationBoundaryStyle",
+    "ConstellationLineStyle",
+    "ConstellationStyle",
     "DsoStyle",
     "FurnitureStyle",
     "GridStyle",
@@ -172,7 +176,9 @@ class DsoStyle(_StrictModel):
 
     ``size_mm`` is the default symbol diameter for non-galaxy classes.
     ``min_axis_mm`` is the smallest printable galaxy axis; ``max_axis_mm`` caps
-    very large objects so they do not swamp a page.
+    very large objects so they do not swamp a page.  Outline fields control the
+    schematic stroke drawn around extended objects that have an authored
+    outline.
     """
 
     size_mm: PositiveFloat = 1.4
@@ -180,6 +186,9 @@ class DsoStyle(_StrictModel):
     max_axis_mm: PositiveFloat = 12.0
     line_width_mm: PositiveFloat = 0.15
     dash_mm: PositiveFloat = 0.4
+    outline_line_width_mm: PositiveFloat = 0.18
+    outline_dash_mm: PositiveFloat = 0.8
+    outline_gray: float = 0.45
 
 
 class GridStyle(_StrictModel):
@@ -187,6 +196,12 @@ class GridStyle(_StrictModel):
 
     The grid is furniture, not sky content: it has lower visual priority than
     labels and may be clipped (``AGENTS.md`` sections 14.4 and 16).
+
+    Grid *lines* use ``ra_step_deg`` / ``dec_step_deg``.  Edge *labels* are
+    independent furniture drawn just inside the chart frame; ``label_ra_step_deg``
+    and ``label_dec_step_deg`` select which grid lines carry a label.  A label
+    step must be a whole multiple of the corresponding line step so that a
+    labelled value is always an actual grid line; ``None`` labels every line.
     """
 
     enabled: bool = True
@@ -194,7 +209,55 @@ class GridStyle(_StrictModel):
     dec_step_deg: PositiveFloat = 2.0
     line_width_mm: PositiveFloat = 0.1
     gray: float = 0.6
+    labels_enabled: bool = True
     label_font_size_pt: PositiveFloat = 5.0
+    label_gray: float = 0.35
+    label_padding_mm: PositiveFloat = 1.5
+    label_ra_step_deg: PositiveFloat | None = None
+    label_dec_step_deg: PositiveFloat | None = None
+
+    @model_validator(mode="after")
+    def _label_steps_align_with_lines(self) -> GridStyle:
+        for label_name, line_name in (
+            ("label_ra_step_deg", "ra_step_deg"),
+            ("label_dec_step_deg", "dec_step_deg"),
+        ):
+            label_step = getattr(self, label_name)
+            if label_step is None:
+                continue
+            line_step = getattr(self, line_name)
+            ratio = label_step / line_step
+            if ratio < 1.0 or abs(ratio - round(ratio)) > 1e-6:
+                raise ValueError(
+                    f"{label_name} ({label_step:g}) must be a whole multiple of "
+                    f"{line_name} ({line_step:g})"
+                )
+        return self
+
+
+class ConstellationLineStyle(_StrictModel):
+    """Stick-figure constellation line appearance."""
+
+    enabled: bool = True
+    gray: float = 0.55
+    line_width_mm: PositiveFloat = 0.15
+
+
+class ConstellationBoundaryStyle(_StrictModel):
+    """Dotted constellation boundary appearance."""
+
+    enabled: bool = True
+    gray: float = 0.6
+    line_width_mm: PositiveFloat = 0.12
+    dash_mm: PositiveFloat = 1.0
+    gap_mm: PositiveFloat = 1.2
+
+
+class ConstellationStyle(_StrictModel):
+    """Constellation line and boundary appearance."""
+
+    lines: ConstellationLineStyle = Field(default_factory=ConstellationLineStyle)
+    boundaries: ConstellationBoundaryStyle = Field(default_factory=ConstellationBoundaryStyle)
 
 
 class FurnitureStyle(_StrictModel):
@@ -215,6 +278,7 @@ class StyleConfig(_StrictModel):
     label: LabelStyle
     dso: DsoStyle = Field(default_factory=DsoStyle)
     grid: GridStyle = Field(default_factory=GridStyle)
+    constellation: ConstellationStyle = Field(default_factory=ConstellationStyle)
     furniture: FurnitureStyle = Field(default_factory=FurnitureStyle)
 
 

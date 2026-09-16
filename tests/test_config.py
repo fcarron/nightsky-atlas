@@ -62,6 +62,7 @@ def test_shipped_atlas_fixture_loads() -> None:
     assert [chart.id for chart in config.charts] == [
         "test-virgo",
         "test-cygnus",
+        "test-veil",
         "test-sparse",
     ]
     assert config.charts[0].projection == "stereographic"
@@ -72,6 +73,10 @@ def test_shipped_style_fixture_loads() -> None:
     assert config.id == "standard"
     assert config.star.min_diameter_mm == pytest.approx(0.2)
     assert config.label.font_size_pt == pytest.approx(6.0)
+    assert config.constellation.lines.enabled is True
+    assert config.constellation.boundaries.enabled is True
+    assert config.dso.outline_line_width_mm > 0.0
+    assert config.dso.outline_dash_mm > 0.0
 
 
 def test_valid_dict_loads(tmp_path: Path) -> None:
@@ -129,6 +134,24 @@ def test_max_diameter_below_min_fails(tmp_path: Path) -> None:
     path = write_yaml(tmp_path / "style.yaml", data)
     with pytest.raises(ConfigError):
         load_style_config(path)
+
+
+def test_grid_label_step_must_align_with_line_step(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["grid"] = {"ra_step_deg": 2.0, "label_ra_step_deg": 3.0}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError) as excinfo:
+        load_style_config(path)
+    assert "label_ra_step_deg" in str(excinfo.value)
+
+
+def test_grid_label_step_multiple_is_valid(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["grid"] = {"ra_step_deg": 2.0, "label_ra_step_deg": 10.0}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    config = load_style_config(path)
+    assert config.grid.label_ra_step_deg == pytest.approx(10.0)
+    assert config.grid.label_dec_step_deg is None
 
 
 def test_missing_file_fails(tmp_path: Path) -> None:

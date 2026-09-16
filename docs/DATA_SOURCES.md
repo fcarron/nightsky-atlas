@@ -1,0 +1,178 @@
+# Data sources and storage
+
+Catalogue strategy, storage and licensing. `AGENTS.md` links here. This is the
+authoritative provenance record required before any public distribution (plan
+item M16.4).
+
+## Strategy
+
+Catalogue ingestion is isolated from rendering. The import layer retains source
+provenance; source-specific column semantics never leak outside their importer.
+
+### Stars
+
+Initial preferred source: **Tycho-2**, supplemented by the **Hipparcos** main
+catalogue for the brightest stars. Tycho's star mapper saturated on stars
+brighter than roughly V=2.5, so Tycho-2 omits Deneb, Vega, Altair, Sirius and
+other bright stars that are essential to a usable star atlas. Hipparcos (the
+companion mission) contains them and shares the same license.
+
+Required normalized fields:
+
+```text
+id
+ra
+Dec
+visual magnitude or documented display magnitude
+source catalogue
+source identifier
+```
+
+Optional later fields: `B-V`/colour index, proper motion, spectral class,
+variable-star flags, common names, Bayer/Flamsteed designations.
+
+### Deep-sky objects
+
+Initial source: **OpenNGC** (structured, suitable for prototyping). The
+normalized DSO model supports:
+
+```text
+canonical id
+cross identifiers
+RA
+Dec
+object type
+magnitude
+magnitude type/source
+major axis
+minor axis
+position angle
+common name
+constellation
+source provenance
+```
+
+The model must not assume every field exists.
+
+### Later catalogues
+
+NightSky Deep may need additional legally compatible datasets for non-NGC/IC
+galaxies, planetary nebulae, dark/emission/reflection nebulae, galaxy clusters,
+large stellar associations, nebula outlines and Milky Way brightness contours.
+
+Do not ingest additional catalogues merely to increase object count. Each
+source requires:
+
+1. license review;
+2. provenance metadata;
+3. field mapping;
+4. duplicate/cross-ID strategy;
+5. explicit visual-observing value.
+
+## Licensing
+
+Never assume that data visible through an astronomy service can be freely
+redistributed. For every data source, record:
+
+- source name, URL/reference, version/date;
+- license;
+- redistribution constraints;
+- attribution requirements;
+- imported fields;
+- transformations performed.
+
+## Storage
+
+- raw downloaded catalogue files: `data/raw/`;
+- normalized build data: `data/processed/`;
+- metadata/provenance: adjacent JSON manifest;
+- build artifacts: `build/`.
+
+Do not commit large catalogue files unless license and repository size make that
+appropriate. The repository provides scripts to reproduce processed data from
+raw inputs. Potential formats: Parquet for large stellar tables, SQLite for
+indexed lookup, compact JSON only for small fixtures/tests.
+
+Format decisions follow profiling, not preference. SQLite was retained after the
+M4 benchmark (see `docs/PERFORMANCE.md`); Parquet was rejected because it would
+add a large dependency without a spatial index while query latency is already
+acceptable.
+
+Tests must use small committed fixtures and must not depend on multi-gigabyte
+external catalogues.
+
+## Current sources
+
+### Tycho-2 (stars)
+
+| Field | Value |
+| --- | --- |
+| Source | The Tycho-2 Catalogue (Høg et al. 2000), CDS I/259 |
+| Raw | `data/raw/tycho2/` (20 gzip parts, ~159 MB) |
+| Processed | `data/processed/stars/tycho2.sqlite` (2,539,913 stars, ~364 MB) |
+| Manifest | `data/processed/stars/tycho2.manifest.json` |
+| License | **CC-BY-NC-3.0 IGO** (non-commercial) |
+| Transformations | Johnson `V = VT - 0.090 * (BT - VT)`, VT/BT fallback; ICRS mean J2000 position, observed-position fallback |
+| Import | `nightsky data fetch-stars` then `nightsky data import-stars` |
+
+The non-commercial restriction must be reviewed before any public or commercial
+distribution of a generated atlas. Tycho-2 is the primary catalogue; the
+Hipparcos supplement below adds the bright stars it omits.
+
+### Hipparcos (bright-star supplement)
+
+| Field | Value |
+| --- | --- |
+| Source | The Hipparcos and Tycho Catalogues (ESA 1997), CDS I/239, `hip_main.dat` |
+| Raw | `data/raw/hipparcos/hip_main.dat` (118,218 records, ~53 MB) |
+| Processed | merged into `data/processed/stars/tycho2.sqlite` |
+| Manifest | `data/processed/stars/tycho2.manifest.json` (`bright_star_supplement`) |
+| License | **CC-BY-NC-3.0 IGO** (non-commercial) |
+| Transformations | Johnson `V` (`Vmag`; `Hpmag` fallback); ICRS position at J1991.25 propagated to J2000 with catalogue proper motion |
+| Duplicates | a Hipparcos star is dropped when a Tycho-2 star lies within 3 arcsec (Tycho-2 wins) |
+| Import | `nightsky data fetch-hipparcos` then `nightsky data import-stars` |
+
+### OpenNGC (deep-sky)
+
+| Field | Value |
+| --- | --- |
+| Source | OpenNGC (mattiaverga/OpenNGC) |
+| Raw | `data/raw/openngc/{NGC.csv,addendum.csv}` |
+| Processed | `data/processed/dso/openngc.json` (13,372 objects) |
+| Manifest | `data/processed/dso/openngc.manifest.json` |
+| License | **CC-BY-SA-4.0** |
+| Transformations | sexagesimal RA/Dec to degrees; V-Mag preferred, B-Mag fallback |
+| Import | `nightsky data fetch-openngc` then `nightsky data import-openngc` |
+
+### Constellation geometry
+
+| Field | Value |
+| --- | --- |
+| Source | d3-celestial (Olaf Frohn), `master`, fetched 2026-09-16 |
+| Files | `data/fixtures/constellations/{constellations.lines,constellations.bounds}.json` |
+| Companion | `LICENSE`, `SOURCE.md` in the same directory |
+| License | **BSD-3-Clause** |
+| Content | 89 stick figures; 785 deduplicated IAU boundary segments |
+| Transformations | none on import; boundary polygons converted to a deduplicated segment set at load time |
+| Committed | yes (~68 kB); build must be reproducible offline |
+
+### Schematic nebula outlines
+
+| Field | Value |
+| --- | --- |
+| Source | authored for NightSky Atlas (project-authored schematic tracing) |
+| Files | `data/fixtures/outlines/nebulae.json` |
+| Companion | `SOURCE.md` in the same directory |
+| License | proprietary, covered by the project license (no third-party data) |
+| Content | coarse closed RA/Dec outlines for extended objects where an ellipse would mislead (Veil, North America, Pelican, ...) |
+| Stable IDs | `outline:dso:<dso_id>` (e.g. `outline:dso:NGC7000`) |
+| Transformations | edges densified along RA/Dec, projected with the chart projection, clipped to the chart field |
+| Committed | yes; build must be reproducible offline |
+
+## Committed versus ignored
+
+Git-ignored (regenerate, do not commit): `data/raw/`, `data/processed/`,
+`build/`, `benchmarks/ai_review/generated/`, `benchmarks/ai_review/results/`,
+`.env`.
+
+Committed: small fixtures under `data/fixtures/` and `overrides/`.

@@ -9,7 +9,12 @@ import pytest
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
-from nightsky_atlas.render.grid import build_grid
+from nightsky_atlas.render.grid import (
+    build_grid,
+    build_grid_labels,
+    format_dec_deg,
+    format_ra_deg,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = load_style_config(REPO_ROOT / "styles" / "standard.yaml")
@@ -45,3 +50,57 @@ def test_grid_points_are_finite() -> None:
 def test_disabled_grid_is_empty() -> None:
     style = STYLE.model_copy(update={"grid": STYLE.grid.model_copy(update={"enabled": False})})
     assert build_grid(CHART, TRANSFORM, style) == ()
+
+
+def test_format_ra_deg() -> None:
+    assert format_ra_deg(0.0) == "00h00m"
+    assert format_ra_deg(180.0) == "12h00m"
+    assert format_ra_deg(187.5) == "12h30m"
+    assert format_ra_deg(359.9) == "00h00m"
+
+
+def test_format_dec_deg() -> None:
+    assert format_dec_deg(12.0) == "+12\u00b0"
+    assert format_dec_deg(0.0) == "+0\u00b0"
+    assert format_dec_deg(-5.0) == "-5\u00b0"
+    assert format_dec_deg(-5.5) == "-5.5\u00b0"
+
+
+def test_grid_labels_cover_both_kinds() -> None:
+    labels = build_grid_labels(CHART, TRANSFORM, STYLE)
+    assert {label.kind for label in labels} == {"ra", "dec"}
+    assert len({label.id for label in labels}) == len(labels)
+    for label in labels:
+        if label.kind == "ra":
+            assert label.text.endswith("m")
+        else:
+            assert label.text.endswith("\u00b0")
+
+
+def test_grid_labels_stay_inside_chart_rect() -> None:
+    rect = TRANSFORM.chart_rect
+    for label in build_grid_labels(CHART, TRANSFORM, STYLE):
+        assert rect.left_mm <= label.bounds.left_mm
+        assert label.bounds.right_mm <= rect.right_mm + 1e-6
+        assert rect.top_mm <= label.bounds.top_mm
+        assert label.bounds.bottom_mm <= rect.bottom_mm + 1e-6
+
+
+def test_label_step_reduces_label_count() -> None:
+    every_line = STYLE.model_copy(
+        update={
+            "grid": STYLE.grid.model_copy(
+                update={"label_ra_step_deg": None, "label_dec_step_deg": None}
+            )
+        }
+    )
+    sparse = build_grid_labels(CHART, TRANSFORM, STYLE)
+    dense = build_grid_labels(CHART, TRANSFORM, every_line)
+    assert 0 < len(sparse) < len(dense)
+
+
+def test_disabled_grid_labels_are_empty() -> None:
+    style = STYLE.model_copy(
+        update={"grid": STYLE.grid.model_copy(update={"labels_enabled": False})}
+    )
+    assert build_grid_labels(CHART, TRANSFORM, style) == ()

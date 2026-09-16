@@ -1,13 +1,26 @@
 # Project state
 
-Handoff snapshot. The authoritative plan remains `AGENTS.md`.
+Handoff snapshot. The authoritative contract remains `AGENTS.md`; the granular
+plan is `docs/DEVELOPMENT_PLAN.md`.
 
 ## Progress
 
 - M0–M14 complete. M15.1–M15.4 complete. M15.5 in progress (alpha built, field test pending).
 - M16.1 complete (manual Stable-ID label overrides, including locked placements).
 - M11.4 and M13.3 complete (live AI review through OpenRouter).
-- `make check`: Ruff clean, 292 tests passing.
+- Grid coordinate edge labels added (RA along top/bottom, Dec along left/right),
+  configurable and independent of grid line spacing.
+- Constellation stick figures (solid) and dotted IAU boundaries added, from a
+  vendored BSD-3-Clause fixture.
+- Bright-star gap fixed: the star store now merges Tycho-2 with the Hipparcos
+  main catalogue, adding 1,319 stars that Tycho-2 omits (Deneb, Vega, Sirius,
+  ...). Store count 2,539,913 -> 2,541,232.
+- Schematic nebula outlines added (M19.1 partial): project-authored RA/Dec
+  polygons for extended objects, projected/clipped as true vector paths and drawn
+  as faint dashed strokes. First set is Cygnus-centred (Veil NGC6960/NGC6992,
+  Pickering's Triangle NGC6979, North America NGC7000, Pelican IC5070); new
+  `test-veil` test chart for the Cygnus Loop.
+- `make check`: Ruff clean, 327 tests passing.
 
 ## Frozen Standard geometry (M14.1)
 
@@ -18,11 +31,23 @@ Handoff snapshot. The authoritative plan remains `AGENTS.md`.
 - Coverage: 0 gaps at 1 deg sampling, maximum overlap 6.
 - Star style: min 0.2 / max 2.4 mm, bright magnitude 0.0 / faint magnitude 9.0.
 - Label candidates: 3 concentric rings, ring gap 3.0 mm.
+- Grid labels: RA/Dec every 10 deg (lines every 2 deg), drawn just inside the
+  frame as furniture, beneath sky labels.
 
 ## Data
 
-- Tycho-2 (CDS I/259), **CC-BY-NC-3.0 IGO** (non-commercial). `data/raw/tycho2` + SQLite store, 2,539,913 stars.
+- Tycho-2 (CDS I/259), **CC-BY-NC-3.0 IGO** (non-commercial). `data/raw/tycho2` + SQLite store.
+- Hipparcos main catalogue (CDS I/239), **CC-BY-NC-3.0 IGO**, bright-star
+  supplement: `data/raw/hipparcos/hip_main.dat` (118,218 records). Merged into
+  the store with a 3 arcsec positional match (Tycho-2 wins); 1,319 stars added.
+  Store: 2,541,232 stars (2,539,913 TYC2 + 1,319 HIP).
 - OpenNGC, **CC-BY-SA-4.0**. Processed JSON, 13,372 objects.
+- Constellation geometry: d3-celestial (Olaf Frohn), **BSD-3-Clause**, vendored as
+  `data/fixtures/constellations/{constellations.lines,constellations.bounds}.json`
+  with `LICENSE` and `SOURCE.md`. 89 stick figures + 785 deduplicated boundary segments.
+- Schematic nebula outlines: project-authored (proprietary), vendored as
+  `data/fixtures/outlines/nebulae.json` with `SOURCE.md`. 5 Cygnus-region outlines;
+  stable IDs `outline:dso:<dso_id>`.
 - Git-ignored: `data/raw/`, `data/processed/`, `build/`, `.env`, `benchmarks/ai_review/generated|results/`.
 
 ## AI review
@@ -33,13 +58,20 @@ Handoff snapshot. The authoritative plan remains `AGENTS.md`.
 
 ## Alpha artifacts (M15.5)
 
-- `build/standard-alpha/standard/atlas.pdf` (9.2 MB, 135 charts + front matter).
+- Rebuilt with grid labels + constellations: `build/standard/atlas.pdf` (135 charts
+  + front matter), per-page artifacts under `build/standard/charts/<id>/`, and
+  `build/standard/manifest.json`. Still 14 hard violations on 6 dense pages.
+- Earlier pre-grid/constellation alpha: `build/standard-alpha/standard/atlas.pdf` (9.2 MB).
 - Per-page `build/standard-alpha/standard/charts/<id>/chart.pdf` and `preview.png`.
 - `build/standard-alpha/standard/manifest.json` with per-page diagnostics, limits and data-source manifests.
 - 5,061 / 5,622 labels placed.
+- Test-page previews (no AI, deterministic optimizer): `build/testpages/standard/charts/{test-virgo,test-cygnus,test-veil,test-sparse}/`.
 
 ## Open issues
 
+- The alpha artifacts predate the Hipparcos bright-star supplement and must be
+  rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page
+  already includes Deneb.
 - 14 hard violations on 6 dense pages: standard-007, 008, 009, 020, 059, 060 (Milky Way / Virgo-Coma).
 - Polar pages reuse the standard field and stereographic projection; coverage is complete but distortion near the pole is larger.
 - The alpha manifest predates the first git commit, so its `git_commit` is null; a rebuild records the real commit.
@@ -52,7 +84,9 @@ Handoff snapshot. The authoritative plan remains `AGENTS.md`.
 `benchmark ai-review`.
 
 `chart render|validate|review` and `atlas build` accept `--overrides PATH`
-(a single override file or a directory of them).
+(a single override file or a directory of them), `--constellations DIR`
+(default `data/fixtures/constellations`; point elsewhere or leave empty to omit)
+and `--outlines DIR` (default `data/fixtures/outlines`; empty to omit).
 
 ## Manual overrides (M16.1)
 

@@ -18,8 +18,20 @@ from nightsky_atlas.atlas.config import (
     load_atlas_config,
     load_style_config,
 )
+from nightsky_atlas.catalog.constellations import (
+    DEFAULT_FIXTURE_DIR as CONSTELLATION_FIXTURE_DIR,
+)
+from nightsky_atlas.catalog.constellations import (
+    load_constellations,
+)
 from nightsky_atlas.catalog.dso_store import load_dso_catalog
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
+from nightsky_atlas.catalog.outlines import (
+    DEFAULT_FIXTURE_DIR as OUTLINE_FIXTURE_DIR,
+)
+from nightsky_atlas.catalog.outlines import (
+    load_outlines,
+)
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.store import StarStore, chart_query_box
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
@@ -98,6 +110,8 @@ def build_chart_context(
     star_store: str | Path | None = None,
     stars_csv: str | Path | None = None,
     dsos_path: str | Path | None = None,
+    constellations_dir: str | Path | None = None,
+    outlines_dir: str | Path | None = None,
     magnitude_limit: float | None = None,
     dso_magnitude_limit: float | None = None,
 ) -> ChartContext:
@@ -129,7 +143,23 @@ def build_chart_context(
         if dso_magnitude_limit is not None
         else atlas.dso_limit_magnitude
     )
-    scene = build_scene(definition, stars, dsos, dso_magnitude_limit=dso_limit)
+    constellations = load_constellations(
+        constellations_dir
+        if constellations_dir is not None
+        else CONSTELLATION_FIXTURE_DIR
+    )
+    outlines = load_outlines(
+        outlines_dir if outlines_dir is not None else OUTLINE_FIXTURE_DIR
+    )
+    scene = build_scene(
+        definition,
+        stars,
+        dsos,
+        dso_magnitude_limit=dso_limit,
+        constellation_lines=constellations.lines,
+        constellation_boundaries=constellations.boundaries,
+        nebula_outlines=outlines,
+    )
     transform = PageTransform(chart=definition, page=page)
     return ChartContext(
         atlas=atlas,
