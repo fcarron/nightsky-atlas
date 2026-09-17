@@ -32,6 +32,7 @@ from nightsky_atlas.catalog.constellations import (
     DEFAULT_FIXTURE_DIR as CONSTELLATION_FIXTURE_DIR,
 )
 from nightsky_atlas.catalog.constellations import (
+    ConstellationCatalogue,
     load_constellations,
 )
 from nightsky_atlas.catalog.dso_store import load_dso_catalog
@@ -48,6 +49,7 @@ from nightsky_atlas.catalog.outlines import (
     DEFAULT_FIXTURE_DIR as OUTLINE_FIXTURE_DIR,
 )
 from nightsky_atlas.catalog.outlines import (
+    NebulaOutline,
     load_outlines,
 )
 from nightsky_atlas.catalog.sample import load_sample_stars
@@ -68,8 +70,10 @@ from nightsky_atlas.scene.models import ChartScene
 
 __all__ = [
     "ChartContext",
+    "ChartInputs",
     "build_chart_context",
     "find_chart",
+    "load_chart_inputs",
     "load_chart_stars",
 ]
 
@@ -128,6 +132,78 @@ def load_star_systems(systems_path: str | Path | None = None) -> list[StarSystem
 
 
 @dataclass(frozen=True, slots=True)
+class ChartInputs:
+    """Configuration and catalogue fixtures shared by every chart in a build.
+
+    Loading these once avoids re-parsing large catalogue files per chart; the
+    per-chart work (star query, double-star match, scene) is still done by
+    :func:`build_chart_context`.
+    """
+
+    atlas: AtlasConfig
+    style: StyleConfig
+    dsos: tuple[DeepSkyObject, ...]
+    constellations: ConstellationCatalogue
+    outlines: tuple[NebulaOutline, ...]
+    observing_lists: dict[str, ObservingList]
+    selection_policy: SelectionPolicy
+
+
+def load_chart_inputs(
+    *,
+    atlas_path: str | Path,
+    style_path: str | Path,
+    dsos_path: str | Path | None = None,
+    constellations_dir: str | Path | None = None,
+    outlines_dir: str | Path | None = None,
+    observing_lists_dir: str | Path | None = None,
+    observing_config_path: str | Path | None = None,
+    atlas: AtlasConfig | None = None,
+    style: StyleConfig | None = None,
+    progress: Progress | None = None,
+) -> ChartInputs:
+    """Load the configuration and catalogue fixtures shared by all charts."""
+    progress = progress if progress is not None else null_progress()
+    with progress.step("config load", detail=True):
+        if atlas is None:
+            atlas = load_atlas_config(atlas_path)
+        if style is None:
+            style = load_style_config(style_path)
+    with progress.step("dso load", detail=True):
+        dsos = tuple(load_dsos(dsos_path))
+    with progress.step("constellation/outline load", detail=True):
+        constellations = load_constellations(
+            constellations_dir
+            if constellations_dir is not None
+            else CONSTELLATION_FIXTURE_DIR
+        )
+        outlines = load_outlines(
+            outlines_dir if outlines_dir is not None else OUTLINE_FIXTURE_DIR
+        )
+    with progress.step("observing-list load", detail=True):
+        observing_lists = load_observing_lists(
+            observing_lists_dir
+            if observing_lists_dir is not None
+            else OBSERVING_LISTS_FIXTURE_DIR
+        )
+        selection_policy = _selection_policy(
+            atlas,
+            observing_config_path
+            if observing_config_path is not None
+            else OBSERVING_CONFIG_PATH,
+        )
+    return ChartInputs(
+        atlas=atlas,
+        style=style,
+        dsos=dsos,
+        constellations=constellations,
+        outlines=outlines,
+        observing_lists=observing_lists,
+        selection_policy=selection_policy,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ChartContext:
     """Everything needed to render or review one chart."""
 
@@ -163,6 +239,7 @@ def build_chart_context(
     magnitude_limit: float | None = None,
     dso_magnitude_limit: float | None = None,
     progress: Progress | None = None,
+    inputs: ChartInputs | None = None,
 ) -> ChartContext:
     """Assemble a chart context from configuration and catalogue inputs.
 
@@ -173,14 +250,24 @@ def build_chart_context(
     that behaviour.
     """
     progress = progress if progress is not None else null_progress()
-    with progress.step("config load", detail=True):
-        atlas = load_atlas_config(atlas_path)
-        style = load_style_config(style_path)
-        if definition is None:
-            if chart_id is None:
-                raise ConfigError("either chart_id or definition is required")
-            definition = find_chart(atlas, chart_id)
-        page = atlas.page.to_geometry()
+    if inputs is None:
+        inputs = load_chart_inputs(
+            atlas_path=atlas_path,
+            style_path=style_path,
+            dsos_path=dsos_path,
+            constellations_dir=constellations_dir,
+            outlines_dir=outlines_dir,
+            observing_lists_dir=observing_lists_dir,
+            observing_config_path=observing_config_path,
+            progress=progress,
+        )
+    atlas = inputs.atlas
+    style = inputs.style
+    if definition is None:
+        if chart_id is None:
+            raise ConfigError("either chart_id or definition is required")
+        definition = find_chart(atlas, chart_id)
+    page = atlas.page.to_geometry()
 
     star_limit = (
         magnitude_limit if magnitude_limit is not None else atlas.stellar_limit_magnitude
@@ -192,35 +279,16 @@ def build_chart_context(
             stars_csv=stars_csv,
             magnitude_limit=star_limit,
         )
-    with progress.step("dso load", detail=True):
-        dsos = load_dsos(dsos_path)
+    dsos = inputs.dsos
     dso_limit = (
         dso_magnitude_limit
         if dso_magnitude_limit is not None
         else atlas.dso_limit_magnitude
     )
-    with progress.step("constellation/outline load", detail=True):
-        constellations = load_constellations(
-            constellations_dir
-            if constellations_dir is not None
-            else CONSTELLATION_FIXTURE_DIR
-        )
-        outlines = load_outlines(
-            outlines_dir if outlines_dir is not None else OUTLINE_FIXTURE_DIR
-        )
-
-    with progress.step("observing-list load", detail=True):
-        observing_lists = load_observing_lists(
-            observing_lists_dir
-            if observing_lists_dir is not None
-            else OBSERVING_LISTS_FIXTURE_DIR
-        )
-        selection_policy = _selection_policy(
-            atlas,
-            observing_config_path
-            if observing_config_path is not None
-            else OBSERVING_CONFIG_PATH,
-        )
+    constellations = inputs.constellations
+    outlines = inputs.outlines
+    observing_lists = inputs.observing_lists
+    selection_policy = inputs.selection_policy
 
     with progress.step("double-star match", detail=True):
         all_systems = (

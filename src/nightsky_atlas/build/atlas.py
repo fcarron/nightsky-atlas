@@ -20,8 +20,6 @@ import cairo
 from nightsky_atlas.atlas.config import (
     AtlasConfig,
     StyleConfig,
-    load_atlas_config,
-    load_style_config,
 )
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 from nightsky_atlas.atlas.tiling import (
@@ -30,7 +28,11 @@ from nightsky_atlas.atlas.tiling import (
     tile_sky,
     with_neighbours,
 )
-from nightsky_atlas.build.chart import build_chart_context, load_star_systems
+from nightsky_atlas.build.chart import (
+    build_chart_context,
+    load_chart_inputs,
+    load_star_systems,
+)
 from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
@@ -246,9 +248,19 @@ def build_atlas(
 ) -> AtlasBuildResult:
     """Build an atlas subset or the whole atlas and write a manifest."""
     progress = progress if progress is not None else null_progress()
-    with progress.step("load atlas/style config"):
-        atlas = load_atlas_config(atlas_path)
-        style = load_style_config(style_path)
+    with progress.step("load config and shared catalogues"):
+        inputs = load_chart_inputs(
+            atlas_path=atlas_path,
+            style_path=style_path,
+            dsos_path=dsos_path,
+            constellations_dir=constellations_dir,
+            outlines_dir=outlines_dir,
+            observing_lists_dir=observing_lists_dir,
+            observing_config_path=observing_config_path,
+            progress=progress,
+        )
+    atlas = inputs.atlas
+    style = inputs.style
     with progress.step("resolve chart definitions"):
         charts = chart_definitions(atlas)
     if chart_ids is not None:
@@ -297,14 +309,10 @@ def build_atlas(
             definition=definition,
             star_store=star_store,
             stars_csv=stars_csv,
-            dsos_path=dsos_path,
-            constellations_dir=constellations_dir,
-            outlines_dir=outlines_dir,
-            observing_lists_dir=observing_lists_dir,
-            observing_config_path=observing_config_path,
             double_stars_path=double_stars_path,
             star_systems=star_systems,
             progress=progress,
+            inputs=inputs,
         )
         context_s = time.perf_counter() - stage_start
         stage_start = time.perf_counter()
@@ -321,12 +329,8 @@ def build_atlas(
             labels = apply_overrides(labels, chart_overrides)
             applied_chart_ids.add(definition.id)
         overrides_applied = len(chart_overrides) if chart_overrides is not None else 0
-        stage_start = time.perf_counter()
-        cost_before = layout_cost(
-            labels, chart_context.scene, chart_context.transform, chart_context.style
-        )[0]
-        cost_s = time.perf_counter() - stage_start
         optimize_s = 0.0
+        cost_s = 0.0
         if optimize:
             stage_start = time.perf_counter()
             optimized = optimize_labels(
@@ -334,11 +338,15 @@ def build_atlas(
             )
             labels = optimized.labels
             optimize_s = time.perf_counter() - stage_start
-        stage_start = time.perf_counter()
-        cost_after = layout_cost(
-            labels, chart_context.scene, chart_context.transform, chart_context.style
-        )[0]
-        cost_s += time.perf_counter() - stage_start
+            cost_before = optimized.cost_before
+            cost_after = optimized.cost_after
+        else:
+            stage_start = time.perf_counter()
+            cost_before = layout_cost(
+                labels, chart_context.scene, chart_context.transform, chart_context.style
+            )[0]
+            cost_after = cost_before
+            cost_s = time.perf_counter() - stage_start
         stage_start = time.perf_counter()
         validation = validate_layout(
             labels, chart_context.scene, chart_context.transform, chart_context.style
