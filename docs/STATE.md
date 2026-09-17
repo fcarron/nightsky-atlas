@@ -68,7 +68,14 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   `marker_line_width_mm` (0.15) and `companion_magnitude_limit` (9.0: a system is
   marked only when the companion is plotted or catalogued bright enough to
   observe). The marker is a map symbol, not the real position angle.
-- `make check`: Ruff clean, 481 tests passing.
+- `make check`: Ruff clean, 514 tests passing.
+- Standard v0.1 full-sky tiling (draft): explicit declination rings every 16 deg
+  (-72 ... +72), stereographic polar caps, RA staggering, config-driven with
+  automatic per-ring count resolution. Start counts `5/8/11/13/14` resolve to
+  `10/10/12/13/14` per hemisphere -> **120 charts** (`standard-001` south cap,
+  `standard-120` north cap). Numeric coverage at 0.5 deg: 0 gaps, overlap 1..4;
+  every N/S/E/W neighbour pair shares covered sky. Tiling code:
+  `atlas/tiling.py`; draft report: `atlas/report.py`.
 
 ## Frozen Standard geometry (M14.1)
 
@@ -77,8 +84,11 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Stellar limit magnitude 9.0; deep-sky selection is per-type (8-10 inch dark
   sky: integrated magnitude 13.5, surface brightness 23.5, min axis 1.5 arcmin).
   `dso_limit_magnitude` 12.0 remains only as the no-policy fallback.
-- Tiling: declination bands with 3 deg overlap; coverage sampled at 2 deg; **135 charts**, ids `standard-NNN`, N/S/E/W neighbour references.
-- Coverage: 0 gaps at 1 deg sampling, maximum overlap 6.
+- Tiling (Standard v0.1): declination-ring tiling, ring step 16 deg, nominal
+  vertical overlap 2 deg, staggered RA, stereographic polar caps; coverage
+  sampled at 0.5 deg; **120 charts**, ids `standard-NNN`, N/S/E/W neighbour
+  references (caps have no E/W).
+- Coverage: 0 gaps at 0.5 deg sampling, overlap 1..4, 259,200 samples.
 - Star style: min 0.2 / max 2.4 mm, bright magnitude 0.0 / faint magnitude 9.0.
 - Label candidates: 3 concentric rings, ring gap 3.0 mm.
 - Grid labels: RA/Dec every 10 deg (lines every 2 deg), drawn as furniture
@@ -116,6 +126,20 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Benchmark: 12 cases, schema compliance 1.00, detected 118/556, 40 false positives, $0.0073.
 - Replay via `RecordedReviewer`; the loop records per-iteration layout hashes, review results and cost.
 
+## Full-sky Standard v0.1 draft
+
+- `build/fullsky-draft/standard/atlas.pdf` (120 charts + front matter, 9.0 MB),
+  per-page artifacts under `build/fullsky-draft/standard/charts/<id>/`
+  (`chart.pdf` + `preview.png` at 100 dpi), `manifest.json` (with per-chart
+  neighbours and resolved tiling) and `draft-report.json`.
+- Build result: 120 charts, **0 hard violations**, 0 coverage gaps
+  (259,200 samples at 0.5 deg), overlap 1..4, all 474 neighbour pairs overlap.
+- Density: DSO mean 52 (max 255, `standard-068` Virgo; min 9), label mean 60
+  (max 214), star mean 1,575 (max 3,672). Densest pages flagged in the report.
+- Region review list: Virgo `standard-068`, Cygnus `standard-098`, Sagittarius
+  `standard-044`, Orion `standard-050`, LMC `standard-004`, SMC `standard-002`,
+  poles `standard-120` / `standard-001`.
+
 ## Alpha artifacts (M15.5)
 
 - Rebuilt with grid labels + constellations: `build/standard/atlas.pdf` (135 charts
@@ -135,7 +159,16 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - The alpha artifacts predate the Hipparcos bright-star supplement and must be
   rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page
   already includes Deneb.
-- 14 hard violations on 6 dense pages: standard-007, 008, 009, 020, 059, 060 (Milky Way / Virgo-Coma).
+- The full-sky v0.1 draft reports 0 hard violations, but "0 hard issues" only
+  means no unresolved *hard* label constraint; dense pages still need visual
+  review (see `draft-report.json`). The earlier alpha's 14 hard violations on
+  standard-007/008/009/020/059/060 belong to the superseded 135-chart band
+  tiling and numbering, not the v0.1 ring tiling.
+- The 120-chart count is geometry-driven: the outer rings need 10 charts each to
+  close the seams between rings and the polar caps. A later optional pass may
+  nudge individual chart centres by +-1-2 deg or reduce counts where a neighbour
+  ring already covers the seam; the draft deliberately uses a clean geometric
+  grid only.
 - Polar pages reuse the standard field and stereographic projection; coverage is
   complete but distortion near the pole is larger. The dec-parallel sampling bug
   (chords across the pole) is fixed, so the parallels form clean concentric
@@ -161,7 +194,7 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 
 `data fetch-stars|import-stars|fetch-hipparcos|fetch-openngc|import-openngc|fetch-wds|import-wds`,
 `chart render|validate|review|magnitude-scale`,
-`atlas tile|coverage|build`,
+`atlas tile|coverage|report|build`,
 `benchmark ai-review`.
 
 `chart render|validate|review` and `atlas build` accept `--overrides PATH`

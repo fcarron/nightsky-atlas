@@ -22,6 +22,7 @@ from nightsky_atlas.atlas.config import (
     load_atlas_config,
     load_style_config,
 )
+from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 from nightsky_atlas.atlas.tiling import (
     TilingSpec,
     coverage_report,
@@ -407,6 +408,21 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     coverage.add_argument("--step", type=float, default=2.0)
     coverage.set_defaults(handler=_command_atlas_coverage)
 
+    report = atlas_subparsers.add_parser(
+        "report", help="summarize a tiled atlas draft (coverage, density, review list)"
+    )
+    report.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
+    report.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
+    report.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="built manifest for per-page density (default: <outdir>/<atlas>/manifest.json)",
+    )
+    report.add_argument("--coverage-step", type=float, default=None)
+    report.add_argument("--out", type=Path, default=None)
+    report.set_defaults(handler=_command_atlas_report)
+
     build = atlas_subparsers.add_parser("build", help="build pages and a combined PDF")
     build.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     build.add_argument("--style", type=Path, default=_DEFAULT_STYLE)
@@ -463,6 +479,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     build.add_argument("--no-png", action="store_true")
     build.add_argument("--no-optimize", action="store_true")
     build.add_argument("--no-front-matter", action="store_true")
+    build.add_argument("--no-draft-report", action="store_true")
     build.set_defaults(handler=_command_atlas_build)
 
 
@@ -859,11 +876,38 @@ def _command_atlas_coverage(args: argparse.Namespace) -> int:
     report = coverage_report(charts, step_deg=args.step)
     print(
         f"samples={report.sample_count} gaps={report.gap_count} "
-        f"max_overlap={report.max_overlap}"
+        f"overlap={report.min_overlap}..{report.max_overlap}"
     )
+    print(f"overlap histogram: {dict(report.overlap_histogram)}")
     for ra, dec in report.gaps[:10]:
         print(f"  gap ra={ra:.1f} dec={dec:.1f}")
     return 0 if report.covers_all else 1
+
+
+def _command_atlas_report(args: argparse.Namespace) -> int:
+    atlas = load_atlas_config(args.atlas)
+    manifest_path = (
+        args.manifest
+        if args.manifest is not None
+        else args.outdir / atlas.id / "manifest.json"
+    )
+    pages = None
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        pages = manifest.get("pages", [])
+    report = build_draft_report(
+        atlas_path=args.atlas,
+        pages=pages,
+        coverage_step_deg=args.coverage_step,
+    )
+    out = args.out if args.out is not None else args.outdir / atlas.id / "draft-report.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(render_text_summary(report))
+    print(f"-> {out}")
+    return 0
 
 
 def _command_atlas_build(args: argparse.Namespace) -> int:
@@ -890,6 +934,7 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         render_png=not args.no_png,
         png_dpi=args.png_dpi,
         write_front_matter=not args.no_front_matter,
+        write_draft_report=not args.no_draft_report,
     )
     print(
         f"{result.atlas_id}: {len(result.pages)} charts, "

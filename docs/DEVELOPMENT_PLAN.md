@@ -32,9 +32,11 @@ page is visible.
 
 ## Current position
 
-- M0–M14 complete. M15.1–M15.4 complete. **M15.5 in progress** (alpha built,
-  field test pending).
-- M16.1 complete. M16.2–M16.4 not started (M16.4 document now seeded).
+- M0–M14 complete. M15.1–M15.4 complete. **M15.5 in progress** (alpha built and
+  a Standard v0.1 full-sky tiling draft generated, field test pending).
+- M16.1 complete. M16.2 partially implemented as `atlas report`
+  (coverage/density/neighbour/region review). M16.3–M16.4 not started (M16.4
+  document now seeded).
 - M21.1–M21.4 complete (observing-list-driven DSO selection with per-type
   visibility; Herschel 400 forced into Standard). M21.5 not started.
 - M11.4 and M13.3 complete (live OpenRouter review and model selection).
@@ -217,10 +219,13 @@ page is visible.
 - [x] **M14.1 Standard page/FOV target** — freeze page size, drawing area, FOV
   strategy, overlap target, stellar limit from printed test experience.
 - [x] **M14.2 Declination-band tiling** — generate complete chart definitions
-  programmatically; handle RA convergence with declination.
+  programmatically; handle RA convergence with declination. Revised for Standard
+  v0.1 into configurable declination-ring tiling with RA staggering, polar caps
+  and automatic per-ring count resolution; 120 charts, 0 gaps.
 - [x] **M14.3 Polar charts** — appropriate polar tiling/projection if required.
 - [x] **M14.4 Coverage validator** — automated complete-coverage and overlap
-  test.
+  test, plus a neighbour-overlap check that every declared N/S/E/W pair shares
+  covered sky.
 - [x] **M14.5 Chart numbering and neighbours** — stable deterministic IDs/page
   numbers.
 
@@ -243,8 +248,10 @@ page is visible.
 
 - [x] **M16.1 Override files** — stable-ID overrides including locked label
   candidates.
-- [ ] **M16.2 Atlas-wide issue report** — pages with hard errors, high
-  deterministic costs, AI warnings, manual overrides, missing data.
+- [~] **M16.2 Atlas-wide issue report** — `nightsky atlas report` writes
+  `draft-report.json` with coverage, per-page density outliers, neighbour
+  problems and a named-region review list; hard-error/cost aggregation and
+  manual-override report still to add.
 - [ ] **M16.3 Preflight command** — `nightsky atlas validate standard
   --publication`; fail on any unresolved publication blocker.
 - [~] **M16.4 Data-source/license documentation** — `docs/DATA_SOURCES.md` now

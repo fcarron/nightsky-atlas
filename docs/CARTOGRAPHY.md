@@ -1,6 +1,6 @@
 # Standard edition cartography
 
-Frozen at M14.1 (2026-09-16).
+Frozen at M14.1 (2026-09-16); tiling revised for Standard v0.1 (full-sky draft).
 
 ## Page and field
 
@@ -13,41 +13,63 @@ Frozen at M14.1 (2026-09-16).
 | Projection | stereographic, north up / east left |
 | Stellar limit | magnitude 9.0 |
 | DSO limit | magnitude 12.0 (objects with no magnitude are kept) |
-| Charts (tiled) | 135 |
+| Charts (tiled) | 120 |
 
 This sits between Sky Atlas 2000.0 (26 charts, ~10 mm/deg, mag 8.5) and
 Uranometria 2000.0 (~220 charts, mag ~9.75) in chart count: Tirion-like scale
 and readability, but a deeper limit and many more pages.
 
-## Tiling
+## Tiling (Standard v0.1)
 
-Declination-band tiling with 3 degree overlap. Bands step by
-`height - overlap` from pole to pole; within a band, charts are spaced in right
-ascension using the band edge nearest the equator (where a chart covers the
-least RA), so coverage is guaranteed and adjacent charts overlap. Near-pole
-bands naturally widen in RA and close the polar caps.
+Explicit declination rings with staggered right ascension and stereographic
+polar caps:
 
-- Coverage validated at 1 degree sampling: 0 gaps, maximum overlap 6 charts.
-- Charts are numbered `standard-NNN` (deterministic band-then-RA order).
-- N/S/E/W neighbour references are derived from band adjacency and RA order.
+- ring centres every 16 deg: -72, -56, -40, -24, -8, +8, +24, +40, +56, +72;
+- one stereographic chart centred on each pole;
+- alternate rings offset by half a chart spacing (less four-corner clustering);
+- nominal vertical overlap 2 deg (`height - step = 2.5 deg` in practice).
+
+The `chart_counts` in `atlas/standard.yaml` are start values.  Because the
+field is a tangent-plane rectangle, its declination extent shrinks away from the
+central meridian, so the tiler does **not** trust a `cos(dec)` estimate: it
+samples each ring's declination slice, finds the narrowest right-ascension half
+width and raises that ring's count until it covers the slice at every RA.  The
+start values `5/8/11/13/14` resolve to `10/10/12/13/14` per hemisphere (120
+charts including the caps); the outermost rings need to be denser than a naive
+`cos(dec)` rule suggests to close the seams between rings and the polar caps.
+
+- Coverage validated numerically (`nightsky atlas coverage --step 0.5`): 0 gaps,
+  overlap 1..4, 259,200 samples.
+- Every declared N/S/E/W neighbour pair shares covered sky
+  (`neighbour_overlap_report`).
+- Charts are numbered `standard-NNN` (deterministic cap/ring-then-RA order).
+- The two polar caps have no east/west neighbour; the remaining rings are
+  complete circles.
 
 ## Build
 
 ```bash
-nightsky atlas tile                        # 135 chart definitions + neighbours
-nightsky atlas coverage --step 1           # gaps=0, max_overlap=6
+nightsky atlas tile                        # 120 chart definitions + neighbours
+nightsky atlas coverage --step 0.5         # gaps=0, overlap 1..4
 nightsky atlas build --png-dpi 100         # per-page PDF/PNG + atlas.pdf + manifest
+nightsky atlas report                      # draft stats + region review list
 ```
 
-`build/<atlas>/manifest.json` records page geometry, limits, per-page layout
-hashes and diagnostics, data-source manifests, AI model and the git commit.
+`build/<atlas>/manifest.json` records page geometry, limits, tiling (including
+resolved ring counts), per-page layout hashes, neighbours and diagnostics,
+data-source manifests, and the git commit.  `build/<atlas>/draft-report.json`
+holds coverage, density outliers, neighbour-reference problems and the region
+review list.
 
 ## Open items
 
-- 14 residual hard violations on 6 dense pages (Milky Way / Virgo-Coma fields);
-  the two reference MVP charts validate cleanly.
-- Polar pages use the same chart field and stereographic projection, not a
-  dedicated polar projection; coverage is complete but local distortion near
-  the pole is larger. Fields reaching the pole use the polar grid (meridians at
-  the coarser `grid.polar_ra_step_deg`); the meridian fan is still dense at the
-  pole itself. Revisit if field tests show it matters.
+- Residual hard violations on dense pages (Milky Way / Virgo-Coma fields); the
+  reference MVP charts validate cleanly.
+- Polar charts are stereographic like every other chart; local distortion at the
+  pole is larger and the meridian fan is dense.  The polar grid uses the coarser
+  `grid.polar_ra_step_deg`; a minimum-spacing rule for edge labels near the pole
+  is still a possible follow-up.
+- The 120-chart count is geometry-driven.  A later optional pass may nudge
+  individual chart centres by +-1-2 deg to move important regions away from page
+  edges, but the draft deliberately uses a clean geometric grid only.
+

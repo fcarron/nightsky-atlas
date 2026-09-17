@@ -1,4 +1,4 @@
-"""Tests for declination-band sky tiling."""
+"""Tests for sky tiling (declination rings and legacy bands)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from nightsky_atlas.atlas.config import load_atlas_config
 from nightsky_atlas.atlas.tiling import (
     TilingSpec,
     coverage_report,
+    neighbour_overlap_report,
+    resolve_ring_counts,
     tile_sky,
     with_neighbours,
 )
@@ -24,17 +26,52 @@ def standard_spec() -> TilingSpec:
     return TilingSpec.from_config(config.tiling)
 
 
+def ring_spec(**overrides: object) -> TilingSpec:
+    params: dict[str, object] = {
+        "width_deg": 27.0,
+        "height_deg": 18.5,
+        "declination_centers": (-72.0, -56.0, -40.0, -24.0, -8.0, 8.0, 24.0, 40.0, 56.0, 72.0),
+        "chart_counts": (5, 8, 11, 13, 14, 14, 13, 11, 8, 5),
+        "polar_caps": True,
+        "stagger_ra_centers": True,
+        "auto_adjust_counts": True,
+    }
+    params.update(overrides)
+    return TilingSpec(**params)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
         {"width_deg": 0.0, "height_deg": 18.5, "overlap_deg": 3.0},
         {"width_deg": 27.0, "height_deg": 18.5, "overlap_deg": 0.0},
         {"width_deg": 27.0, "height_deg": 18.5, "overlap_deg": 20.0},
+        {"width_deg": 27.0, "height_deg": 18.5},
     ],
 )
 def test_invalid_spec_rejected(kwargs: dict[str, float]) -> None:
     with pytest.raises(ValueError):
         TilingSpec(**kwargs)
+
+
+def test_ring_spec_requires_centre_inside_poles() -> None:
+    with pytest.raises(ValueError):
+        ring_spec(declination_centers=(90.0,), chart_counts=(1,))
+
+
+def test_ring_spec_counts_must_match_centres() -> None:
+    with pytest.raises(ValueError):
+        ring_spec(chart_counts=(1, 2))
+
+
+def test_resolve_ring_counts_raises_start_values() -> None:
+    spec = ring_spec()
+    assert resolve_ring_counts(spec) == (10, 10, 12, 13, 14, 14, 13, 12, 10, 10)
+
+
+def test_resolve_ring_counts_respects_auto_adjust_off() -> None:
+    spec = ring_spec(auto_adjust_counts=False)
+    assert resolve_ring_counts(spec) == (5, 8, 11, 13, 14, 14, 13, 11, 8, 5)
 
 
 def test_tile_sky_is_deterministic_and_unique() -> None:
@@ -47,11 +84,26 @@ def test_tile_sky_is_deterministic_and_unique() -> None:
     assert first[0].id == "standard-001"
 
 
+def test_ring_tiling_has_polar_caps_and_staggering() -> None:
+    charts = tile_sky("standard", standard_spec())
+    assert len(charts) == 120
+    assert charts[0].center_dec_deg == pytest.approx(-90.0)
+    assert charts[-1].center_dec_deg == pytest.approx(90.0)
+    rings = {chart.center_dec_deg for chart in charts}
+    assert -72.0 in rings and 72.0 in rings
+    # Alternate rings are offset by half a chart spacing.
+    first = [chart for chart in charts if chart.center_dec_deg == -72.0]
+    second = [chart for chart in charts if chart.center_dec_deg == -56.0]
+    assert first[0].center_ra_deg == pytest.approx(0.0)
+    assert second[0].center_ra_deg == pytest.approx(0.5 * 360.0 / len(second))
+
+
 def test_tiling_covers_sky_with_overlap() -> None:
     charts = tile_sky("standard", standard_spec())
-    report = coverage_report(charts, step_deg=5.0)
+    report = coverage_report(charts, step_deg=1.0)
     assert report.covers_all, report.gaps[:5]
     assert report.has_overlap
+    assert report.min_overlap >= 1
     assert report.max_overlap >= 2
 
 
@@ -61,17 +113,43 @@ def test_neighbours_reference_existing_charts() -> None:
     directions_seen: set[str] = set()
     for chart in charts:
         present = {direction for direction, _ in chart.neighbours}
-        assert {"E", "W"} <= present  # every band is a ring
+        if abs(chart.center_dec_deg) < 89.0:
+            assert {"E", "W"} <= present
         for direction, neighbour_id in chart.neighbours:
             assert direction in {"N", "S", "E", "W"}
             assert neighbour_id in ids
             directions_seen.add(direction)
-    assert {"N", "S"} <= directions_seen  # interior bands have both
+    assert {"N", "S"} <= directions_seen
+
+
+def test_polar_caps_have_no_east_west_neighbour() -> None:
+    charts = with_neighbours(tile_sky("standard", standard_spec()))
+    for chart in charts:
+        if abs(chart.center_dec_deg) >= 89.0:
+            directions = {direction for direction, _ in chart.neighbours}
+            assert directions in ({"N"}, {"S"})
 
 
 def test_east_west_neighbours_are_symmetric() -> None:
     charts = {chart.id: chart for chart in with_neighbours(tile_sky("standard", standard_spec()))}
     for chart in charts.values():
         neighbours = dict(chart.neighbours)
+        if "E" not in neighbours:
+            continue
         east = charts[neighbours["E"]]
         assert dict(east.neighbours)["W"] == chart.id
+
+
+def test_declared_neighbours_share_covered_sky() -> None:
+    charts = with_neighbours(tile_sky("standard", standard_spec()))
+    report = neighbour_overlap_report(charts, step_deg=1.0)
+    assert report.checked_pairs > 0
+    assert report.is_complete, report.missing_overlaps[:5]
+
+
+def test_legacy_band_mode_still_tiles() -> None:
+    spec = TilingSpec(width_deg=27.0, height_deg=18.5, overlap_deg=3.0)
+    charts = tile_sky("legacy", spec)
+    assert len(charts) > 50
+    report = coverage_report(charts, step_deg=5.0)
+    assert report.covers_all

@@ -44,6 +44,7 @@ __all__ = [
     "DsoStyle",
     "FurnitureStyle",
     "GridStyle",
+    "OverlapTargetConfig",
     "PageConfig",
     "StyleConfig",
     "TilingConfig",
@@ -117,13 +118,84 @@ class ChartConfig(_StrictModel):
         )
 
 
+class OverlapTargetConfig(_StrictModel):
+    """Desired overlap between neighbouring charts, in degrees.
+
+    ``vertical_deg`` is the nominal overlap between charts in adjacent
+    declination rings; ``horizontal_min_deg`` is the smallest acceptable
+    overlap between charts within a ring, measured at the ring's centre
+    declination.  These are design targets used for reporting and count
+    resolution, not hard geometry.
+    """
+
+    vertical_deg: PositiveFloat = 2.0
+    horizontal_min_deg: PositiveFloat = 1.5
+
+
 class TilingConfig(_StrictModel):
-    """Declination-band tiling parameters for a complete atlas."""
+    """Sky tiling parameters for a complete atlas.
+
+    Two modes are supported:
+
+    - **declination-ring mode** (``declination_centers`` non-empty): explicit
+      ring centre declinations, optionally with per-ring start counts, polar
+      caps and right-ascension staggering.  This is the Standard v0.1 layout.
+    - **legacy band mode**: a single ``overlap_deg`` and a fixed declination
+      step derived from the chart height.  Kept for the original tiling and
+      small test atlases.
+
+    In ring mode, ``chart_counts`` are *start* values: when
+    ``auto_adjust_counts`` is true they are raised as needed until each ring
+    covers its declination slice at every right ascension (validated by
+    :func:`nightsky_atlas.atlas.tiling.coverage_report`).  A count of ``None``
+    lets the tiler derive it entirely from the geometry.
+    """
 
     width_deg: PositiveFloat
     height_deg: PositiveFloat
-    overlap_deg: PositiveFloat = 3.0
-    coverage_step_deg: PositiveFloat = 2.0
+    overlap_deg: PositiveFloat | None = None
+    coverage_step_deg: PositiveFloat = 1.0
+
+    declination_centers: tuple[float, ...] = ()
+    chart_counts: tuple[int, ...] = ()
+    polar_caps: bool = False
+    target_overlap: OverlapTargetConfig = Field(default_factory=OverlapTargetConfig)
+    stagger_ra_centers: bool = False
+    auto_adjust_counts: bool = True
+
+    @model_validator(mode="after")
+    def _validate_tiling(self) -> TilingConfig:
+        if self.overlap_deg is None and not self.declination_centers:
+            raise ValueError(
+                "tiling requires either overlap_deg (band mode) or "
+                "declination_centers (ring mode)"
+            )
+        if self.overlap_deg is not None and self.declination_centers:
+            raise ValueError(
+                "specify either overlap_deg (band mode) or declination_centers "
+                "(ring mode), not both"
+            )
+        if self.overlap_deg is not None and self.overlap_deg >= min(
+            self.width_deg, self.height_deg
+        ):
+            raise ValueError("overlap_deg must be smaller than the chart field")
+        for center in self.declination_centers:
+            if not -90.0 < center < 90.0:
+                raise ValueError(
+                    "declination_centers must lie strictly inside (-90, 90); "
+                    "use polar_caps for the poles"
+                )
+        if len(set(self.declination_centers)) != len(self.declination_centers):
+            raise ValueError("declination_centers must be unique")
+        if self.chart_counts and len(self.chart_counts) != len(self.declination_centers):
+            raise ValueError(
+                "chart_counts must have one entry per declination_center"
+            )
+        if any(count < 1 for count in self.chart_counts):
+            raise ValueError("chart_counts entries must be positive")
+        if self.polar_caps and not self.declination_centers:
+            raise ValueError("polar_caps requires declination_centers")
+        return self
 
 
 class VisibilityConfig(_StrictModel):

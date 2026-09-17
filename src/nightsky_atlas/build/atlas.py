@@ -22,7 +22,13 @@ from nightsky_atlas.atlas.config import (
     load_atlas_config,
     load_style_config,
 )
-from nightsky_atlas.atlas.tiling import TilingSpec, tile_sky, with_neighbours
+from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
+from nightsky_atlas.atlas.tiling import (
+    TilingSpec,
+    resolve_ring_counts,
+    tile_sky,
+    with_neighbours,
+)
 from nightsky_atlas.build.chart import build_chart_context, load_star_systems
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
@@ -67,6 +73,7 @@ class ChartPageResult:
     cost_before: float
     cost_after: float
     layout_hash: str
+    neighbours: tuple[tuple[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +89,7 @@ class ChartPageResult:
             "cost_before": self.cost_before,
             "cost_after": self.cost_after,
             "layout_hash": self.layout_hash,
+            "neighbours": {direction: neighbour for direction, neighbour in self.neighbours},
         }
 
 
@@ -93,6 +101,7 @@ class AtlasBuildResult:
     pages: tuple[ChartPageResult, ...]
     combined_pdf: Path
     manifest_path: Path
+    draft_report_path: Path | None = None
 
     @property
     def total_hard_issues(self) -> int:
@@ -120,6 +129,36 @@ def _git_commit() -> str | None:
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
+
+
+def _tiling_manifest(atlas: AtlasConfig) -> dict[str, Any] | None:
+    """Describe the tiling actually used, including resolved ring counts."""
+    if atlas.tiling is None:
+        return None
+    spec = TilingSpec.from_config(atlas.tiling)
+    payload: dict[str, Any] = {
+        "mode": "declination_rings" if spec.is_ring_mode else "declination_bands",
+        "width_deg": spec.width_deg,
+        "height_deg": spec.height_deg,
+        "coverage_step_deg": spec.coverage_step_deg,
+    }
+    if spec.is_ring_mode:
+        payload.update(
+            {
+                "declination_centers": list(spec.declination_centers),
+                "resolved_chart_counts": list(resolve_ring_counts(spec)),
+                "polar_caps": spec.polar_caps,
+                "stagger_ra_centers": spec.stagger_ra_centers,
+                "auto_adjust_counts": spec.auto_adjust_counts,
+                "target_overlap": {
+                    "vertical_deg": spec.vertical_overlap_deg,
+                    "horizontal_min_deg": spec.horizontal_overlap_min_deg,
+                },
+            }
+        )
+    else:
+        payload["overlap_deg"] = spec.overlap_deg
+    return payload
 
 
 def _data_sources() -> list[dict[str, Any]]:
@@ -200,6 +239,7 @@ def build_atlas(
     render_png: bool = True,
     png_dpi: float = 150.0,
     write_front_matter: bool = True,
+    write_draft_report: bool = True,
 ) -> AtlasBuildResult:
     """Build an atlas subset or the whole atlas and write a manifest."""
     atlas = load_atlas_config(atlas_path)
@@ -313,6 +353,7 @@ def build_atlas(
                 cost_before=cost_before,
                 cost_after=cost_after,
                 layout_hash=layout_hash(labels),
+                neighbours=definition.neighbours,
             )
         )
 
@@ -339,6 +380,7 @@ def build_atlas(
         "stellar_limit_magnitude": atlas.stellar_limit_magnitude,
         "dso_limit_magnitude": atlas.dso_limit_magnitude,
         "visibility": atlas.visibility.model_dump(),
+        "tiling": _tiling_manifest(atlas),
         "observing_lists": {
             "lists": sorted(observing_lists),
             "forced": forced_lists,
@@ -353,9 +395,22 @@ def build_atlas(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
+    draft_report_path: Path | None = None
+    if write_draft_report and atlas.tiling is not None:
+        draft_report = build_draft_report(
+            atlas_path=atlas_path,
+            pages=[page_result.to_dict() for page_result in results],
+        )
+        draft_report_path = outroot / "draft-report.json"
+        draft_report_path.write_text(
+            json.dumps(draft_report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print(render_text_summary(draft_report))
+
     return AtlasBuildResult(
         atlas_id=atlas.id,
         pages=tuple(results),
         combined_pdf=combined_pdf,
         manifest_path=manifest_path,
+        draft_report_path=draft_report_path,
     )

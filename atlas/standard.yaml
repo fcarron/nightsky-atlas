@@ -10,12 +10,23 @@ id: standard
 stellar_limit_magnitude: 9.0
 
 # Standard page/FOV target frozen at M14.1: A4 landscape, 27 x 18.5 deg at
-# ~10 mm/deg. Declination-band tiling with ~3 deg overlap.
+# ~10 mm/deg.  Standard v0.1 uses explicit declination rings with polar caps,
+# RA staggering and numeric coverage validation.  The chart counts below are
+# *start* values; auto_adjust_counts raises a ring's count until it covers its
+# declination slice at every right ascension (resolved: 10/10/12/13/14 per
+# hemisphere, 120 charts including the two polar caps).
 tiling:
   width_deg: 27.0
   height_deg: 18.5
-  overlap_deg: 3.0
-  coverage_step_deg: 2.0
+  coverage_step_deg: 0.5
+  declination_centers: [-72.0, -56.0, -40.0, -24.0, -8.0, 8.0, 24.0, 40.0, 56.0, 72.0]
+  chart_counts: [5, 8, 11, 13, 14, 14, 13, 11, 8, 5]
+  polar_caps: true
+  stagger_ra_centers: true
+  auto_adjust_counts: true
+  target_overlap:
+    vertical_deg: 2.0
+    horizontal_min_deg: 1.5
 
 # Deep-sky objects fainter than this are omitted only when no selection policy
 # is active (per-type visibility below is the normal path).
