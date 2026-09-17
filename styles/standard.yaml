@@ -77,14 +77,16 @@ grid:
   enabled: true
   ra_step_deg: 2.0
   dec_step_deg: 2.0
-  line_width_mm: 0.1
-  gray: 0.6
+  polar_ra_step_deg: 10.0
+  line_width_mm: 0.12
+  gray: 0.78
   labels_enabled: true
+  label_placement: outside
   label_font_size_pt: 5.0
   label_gray: 0.35
   label_padding_mm: 1.5
-  label_ra_step_deg: 10.0
-  label_dec_step_deg: 10.0
+  label_ra_step_deg: null
+  label_dec_step_deg: null
 
 furniture:
   title_font_size_pt: 9.0

@@ -48,4 +48,6 @@ hashes and diagnostics, data-source manifests, AI model and the git commit.
   the two reference MVP charts validate cleanly.
 - Polar pages use the same chart field and stereographic projection, not a
   dedicated polar projection; coverage is complete but local distortion near
-  the pole is larger. Revisit if field tests show it matters.
+  the pole is larger. Fields reaching the pole use the polar grid (meridians at
+  the coarser `grid.polar_ra_step_deg`); the meridian fan is still dense at the
+  pole itself. Revisit if field tests show it matters.

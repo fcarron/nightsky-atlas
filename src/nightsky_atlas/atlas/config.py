@@ -332,19 +332,29 @@ class GridStyle(_StrictModel):
     The grid is furniture, not sky content: it has lower visual priority than
     labels and may be clipped (``AGENTS.md`` sections 14.4 and 16).
 
-    Grid *lines* use ``ra_step_deg`` / ``dec_step_deg``.  Edge *labels* are
-    independent furniture drawn just inside the chart frame; ``label_ra_step_deg``
-    and ``label_dec_step_deg`` select which grid lines carry a label.  A label
-    step must be a whole multiple of the corresponding line step so that a
-    labelled value is always an actual grid line; ``None`` labels every line.
+    Grid *lines* use ``ra_step_deg`` / ``dec_step_deg``.  On a polar field,
+    where the celestial pole lies at or just outside the frame and every
+    meridian crosses the chart, ``polar_ra_step_deg`` replaces ``ra_step_deg``
+    for the meridians so the converging fan stays legible.  Edge *labels* are
+    independent furniture; ``label_ra_step_deg`` and ``label_dec_step_deg``
+    select which grid lines carry a label.  A label step must be a whole
+    multiple of the corresponding line step so that a labelled value is always
+    an actual grid line; ``None`` labels every line.
+
+    ``label_placement`` controls where those labels sit relative to the chart
+    frame: ``inside`` places them in the margin band within the frame,
+    ``outside`` places them beyond the frame (RA against the top/bottom page
+    margin, Dec against the left/right page margin).
     """
 
     enabled: bool = True
     ra_step_deg: PositiveFloat = 2.0
     dec_step_deg: PositiveFloat = 2.0
-    line_width_mm: PositiveFloat = 0.1
-    gray: float = 0.6
+    polar_ra_step_deg: PositiveFloat = 10.0
+    line_width_mm: PositiveFloat = 0.12
+    gray: float = 0.78
     labels_enabled: bool = True
+    label_placement: Literal["inside", "outside"] = "inside"
     label_font_size_pt: PositiveFloat = 5.0
     label_gray: float = 0.35
     label_padding_mm: PositiveFloat = 1.5

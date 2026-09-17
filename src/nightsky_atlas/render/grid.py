@@ -4,13 +4,16 @@ Grid lines are generated in chart-plane degrees and mapped to page millimetres.
 They are clipped by the renderer to the chart field; labels take priority over
 them (``AGENTS.md`` section 5.2 / 14.4).
 
-Coordinate edge labels are *furniture*: they are placed just inside the chart
-frame, never collision-routed against sky labels, and drawn beneath them.
+Coordinate edge labels are *furniture*: they are never collision-routed against
+sky labels and are drawn beneath them.  ``grid.label_placement`` selects whether
+they sit just inside the chart frame (``inside``) or beyond it in the page
+margin (``outside``).
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import StyleConfig
@@ -33,6 +36,9 @@ __all__ = [
 _SAMPLES = 65
 _EDGE_MARGIN_DEG = 1.0
 _MULTIPLE_TOL = 1e-6
+_OBSTACLE_CLEARANCE_MM = 0.5
+_POLAR_DEC_TOLERANCE_DEG = 1.0
+_RECT_HIT_TOLERANCE_MM = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +52,7 @@ class GridLine:
 
 @dataclass(frozen=True, slots=True)
 class GridLabel:
-    """A coordinate label placed just inside the chart frame."""
+    """A coordinate label placed inside or outside the chart frame."""
 
     id: str
     kind: str
@@ -74,13 +80,48 @@ def format_dec_deg(dec_deg: float) -> str:
     return f"{sign}{body}\N{DEGREE SIGN}"
 
 
-def _ra_half_width_deg(definition: ChartDefinition) -> float:
-    half_height = definition.height_deg / 2.0
-    dec_min = definition.center_dec_deg - half_height
-    dec_max = definition.center_dec_deg + half_height
-    worst = min(89.9, max(abs(dec_min), abs(dec_max)))
-    cos_dec = math.cos(math.radians(worst))
-    return (definition.width_deg / 2.0) / max(cos_dec, 1e-4)
+def _ra_half_width_deg(definition: ChartDefinition, dec_deg: float) -> float:
+    """Half-width in right ascension of the field at ``dec_deg``.
+
+    Clamped to 180 deg: at or near a pole the field can wrap the whole sky, and
+    the sampling must not run past a full turn (which would draw chords across
+    the pole instead of the parallel).
+    """
+    cos_dec = math.cos(math.radians(min(89.9, abs(dec_deg))))
+    return min(180.0, (definition.width_deg / 2.0) / max(cos_dec, 1e-6))
+
+
+def _field_angular_radius_deg(definition: ChartDefinition) -> float:
+    """Angular radius of the chart field, to its corner, in degrees.
+
+    The field is a tangent-plane rectangle; its plane half-diagonal is
+    ``2 tan(c / 2)`` for angular radius ``c``.
+    """
+    half_diagonal_deg = math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0)
+    return math.degrees(2.0 * math.atan(math.radians(half_diagonal_deg) / 2.0))
+
+
+def _is_polar_field(definition: ChartDefinition) -> bool:
+    """Whether the field reaches the celestial pole it is closest to.
+
+    Such fields wrap right ascension, so every meridian crosses the chart and
+    the right-ascension grid needs the polar spacing instead of the equatorial
+    one.  The pole lies within the field when the near declination edge is
+    within a small tolerance of 90 deg.
+    """
+    near_edge = abs(definition.center_dec_deg) + definition.height_deg / 2.0
+    return near_edge >= 90.0 - _POLAR_DEC_TOLERANCE_DEG
+
+
+def _polyline_hits_rect(
+    points: tuple[PagePoint, ...], rect: PageRect, margin_mm: float
+) -> bool:
+    """Whether any point of a densely sampled polyline lies on the page rect."""
+    return any(
+        rect.left_mm - margin_mm <= point.x_mm <= rect.right_mm + margin_mm
+        and rect.top_mm - margin_mm <= point.y_mm <= rect.bottom_mm + margin_mm
+        for point in points
+    )
 
 
 def _project(
@@ -114,36 +155,25 @@ def build_grid(
     half_height = definition.height_deg / 2.0
     dec_min = definition.center_dec_deg - half_height
     dec_max = definition.center_dec_deg + half_height
-    ra_half = _ra_half_width_deg(definition)
+    worst_dec = min(89.9, max(abs(dec_min), abs(dec_max)))
+    ra_half = _ra_half_width_deg(definition, worst_dec)
+    polar = _is_polar_field(definition)
+    rect = transform.chart_rect
     lines: list[GridLine] = []
 
-    if ra_half < 180.0:
-        ra = _first_multiple(definition.center_ra_deg - ra_half, grid.ra_step_deg)
+    ra_step = grid.polar_ra_step_deg if polar else grid.ra_step_deg
+    if polar:
+        ra = 0.0
+        ra_limit = 360.0 - 1e-9
+        radius = _field_angular_radius_deg(definition)
+        sample_dec_min = max(-90.0, definition.center_dec_deg - radius - _EDGE_MARGIN_DEG)
+        sample_dec_max = min(90.0, definition.center_dec_deg + radius + _EDGE_MARGIN_DEG)
+    else:
+        ra = _first_multiple(definition.center_ra_deg - ra_half, ra_step)
         ra_limit = definition.center_ra_deg + ra_half + 1e-9
         sample_dec_min = dec_min - _EDGE_MARGIN_DEG
         sample_dec_max = dec_max + _EDGE_MARGIN_DEG
-        while ra <= ra_limit:
-            points = [
-                point
-                for index in range(_SAMPLES)
-                if (
-                    point := _project(
-                        projector,
-                        transform,
-                        ra,
-                        sample_dec_min
-                        + (sample_dec_max - sample_dec_min) * index / (_SAMPLES - 1),
-                    )
-                )
-                is not None
-            ]
-            if len(points) >= 2:
-                lines.append(GridLine(kind="ra", value_deg=ra, points=tuple(points)))
-            ra += grid.ra_step_deg
-
-    dec = _first_multiple(dec_min, grid.dec_step_deg)
-    dec_limit = dec_max + 1e-9
-    while dec <= dec_limit:
+    while ra <= ra_limit:
         points = [
             point
             for index in range(_SAMPLES)
@@ -151,7 +181,34 @@ def build_grid(
                 point := _project(
                     projector,
                     transform,
-                    definition.center_ra_deg - ra_half + 2.0 * ra_half * index / (_SAMPLES - 1),
+                    ra,
+                    sample_dec_min
+                    + (sample_dec_max - sample_dec_min) * index / (_SAMPLES - 1),
+                )
+            )
+            is not None
+        ]
+        if len(points) >= 2 and (
+            not polar or _polyline_hits_rect(tuple(points), rect, _RECT_HIT_TOLERANCE_MM)
+        ):
+            lines.append(GridLine(kind="ra", value_deg=ra, points=tuple(points)))
+        ra += ra_step
+
+    dec = _first_multiple(dec_min, grid.dec_step_deg)
+    dec_limit = dec_max + 1e-9
+    while dec <= dec_limit:
+        ra_half_dec = _ra_half_width_deg(definition, dec)
+        samples = max(_SAMPLES, int(2.0 * ra_half_dec) + 1)
+        points = [
+            point
+            for index in range(samples)
+            if (
+                point := _project(
+                    projector,
+                    transform,
+                    definition.center_ra_deg
+                    - ra_half_dec
+                    + 2.0 * ra_half_dec * index / (samples - 1),
                     dec,
                 )
             )
@@ -173,6 +230,16 @@ def _clamp(value: float, low: float, high: float) -> float:
     if high < low:
         return low
     return min(max(value, low), high)
+
+
+def _overlaps(first: PageRect, second: PageRect, margin_mm: float = 0.0) -> bool:
+    """Return whether two page rectangles overlap (optionally with clearance)."""
+    return not (
+        first.right_mm + margin_mm <= second.left_mm
+        or second.right_mm + margin_mm <= first.left_mm
+        or first.bottom_mm + margin_mm <= second.top_mm
+        or second.bottom_mm + margin_mm <= first.top_mm
+    )
 
 
 def _scan_crossings(
@@ -214,13 +281,16 @@ def build_grid_labels(
     style: StyleConfig,
     *,
     lines: tuple[GridLine, ...] | None = None,
+    avoid: Iterable[PageRect] = (),
 ) -> tuple[GridLabel, ...]:
-    """Build RA/Dec edge labels just inside the chart frame.
+    """Build RA/Dec edge labels inside or outside the chart frame.
 
     RA labels sit against the top and bottom edges; Dec labels against the left
     and right edges.  The set of labelled lines is controlled by
-    ``grid.label_ra_step_deg`` / ``grid.label_dec_step_deg``.  These are
-    furniture, not sky labels, so they are not collision-routed.
+    ``grid.label_ra_step_deg`` / ``grid.label_dec_step_deg`` and the side by
+    ``grid.label_placement``.  These are furniture, not sky labels, so they are
+    not collision-routed against sky labels, but any placement overlapping one
+    of the ``avoid`` rectangles (title, scale bar, ...) is dropped.
     """
     grid = style.grid
     if not grid.enabled or not grid.labels_enabled:
@@ -229,32 +299,46 @@ def build_grid_labels(
         lines = build_grid(definition, transform, style)
 
     rect = transform.chart_rect
+    page = transform.page
     measurer = TextMeasurer(style.label.font_family, grid.label_font_size_pt)
     ra_step = grid.label_ra_step_deg or grid.ra_step_deg
     dec_step = grid.label_dec_step_deg or grid.dec_step_deg
     pad = grid.label_padding_mm
+    outside = grid.label_placement == "outside"
 
     labels: list[GridLabel] = []
     seen_ids: set[str] = set()
+    obstacles = tuple(avoid)
 
     def add(edge: str, kind: str, value_deg: float, text: str, left: float, top: float) -> None:
         label_id = f"grid:{kind}:{value_deg:g}:{edge}"
         if label_id in seen_ids:
             return
-        seen_ids.add(label_id)
         metrics = measurer.measure_mm(text)
+        bounds = PageRect(
+            left_mm=left,
+            top_mm=top,
+            width_mm=metrics.width_mm,
+            height_mm=metrics.height_mm,
+        )
+        if any(
+            _overlaps(bounds, obstacle, margin_mm=_OBSTACLE_CLEARANCE_MM)
+            for obstacle in obstacles
+        ):
+            return
+        if any(
+            _overlaps(bounds, placed.bounds, margin_mm=_OBSTACLE_CLEARANCE_MM)
+            for placed in labels
+        ):
+            return
+        seen_ids.add(label_id)
         labels.append(
             GridLabel(
                 id=label_id,
                 kind=kind,
                 value_deg=value_deg,
                 text=text,
-                bounds=PageRect(
-                    left_mm=left,
-                    top_mm=top,
-                    width_mm=metrics.width_mm,
-                    height_mm=metrics.height_mm,
-                ),
+                bounds=bounds,
             )
         )
 
@@ -264,42 +348,74 @@ def build_grid_labels(
                 continue
             text = format_ra_deg(line.value_deg)
             metrics = measurer.measure_mm(text)
-            for edge, top in (
-                ("top", rect.top_mm + pad),
-                ("bottom", rect.bottom_mm - pad - metrics.height_mm),
-            ):
+            if outside:
+                placements = (
+                    ("top", rect.top_mm - pad - metrics.height_mm, rect.top_mm),
+                    ("bottom", rect.bottom_mm + pad, page.height_mm - rect.bottom_mm),
+                )
+            else:
+                placements = (
+                    ("top", rect.top_mm + pad, rect.height_mm),
+                    ("bottom", rect.bottom_mm - pad - metrics.height_mm, rect.height_mm),
+                )
+            for edge, top, available in placements:
+                if outside and available < pad + metrics.height_mm - _MULTIPLE_TOL:
+                    continue
                 crossings = _scan_crossings(
                     line.points, rect.top_mm if edge == "top" else rect.bottom_mm, "y"
                 )
                 for x in crossings:
                     if not rect.left_mm <= x <= rect.right_mm:
                         continue
-                    left = _clamp(
-                        x - metrics.width_mm / 2.0,
-                        rect.left_mm + pad,
-                        rect.right_mm - pad - metrics.width_mm,
-                    )
+                    if outside:
+                        left = _clamp(
+                            x - metrics.width_mm / 2.0,
+                            0.0,
+                            page.width_mm - metrics.width_mm,
+                        )
+                    else:
+                        left = _clamp(
+                            x - metrics.width_mm / 2.0,
+                            rect.left_mm + pad,
+                            rect.right_mm - pad - metrics.width_mm,
+                        )
                     add(edge, "ra", line.value_deg, text, left, top)
         else:
             if not _is_multiple(line.value_deg, dec_step):
                 continue
             text = format_dec_deg(line.value_deg)
             metrics = measurer.measure_mm(text)
-            for edge, left in (
-                ("left", rect.left_mm + pad),
-                ("right", rect.right_mm - pad - metrics.width_mm),
-            ):
+            if outside:
+                placements = (
+                    ("left", rect.left_mm - pad - metrics.width_mm, rect.left_mm),
+                    ("right", rect.right_mm + pad, page.width_mm - rect.right_mm),
+                )
+            else:
+                placements = (
+                    ("left", rect.left_mm + pad, rect.width_mm),
+                    ("right", rect.right_mm - pad - metrics.width_mm, rect.width_mm),
+                )
+            for edge, left, available in placements:
+                if outside and available < pad + metrics.width_mm - _MULTIPLE_TOL:
+                    continue
                 crossings = _scan_crossings(
                     line.points, rect.left_mm if edge == "left" else rect.right_mm, "x"
                 )
                 for y in crossings:
                     if not rect.top_mm <= y <= rect.bottom_mm:
                         continue
-                    top = _clamp(
-                        y - metrics.height_mm / 2.0,
-                        rect.top_mm + pad,
-                        rect.bottom_mm - pad - metrics.height_mm,
-                    )
+                    if outside:
+                        top = _clamp(
+                            y - metrics.height_mm / 2.0,
+                            0.0,
+                            page.height_mm - metrics.height_mm,
+                        )
+                    else:
+                        top = _clamp(
+                            y - metrics.height_mm / 2.0,
+                            rect.top_mm + pad,
+                            rect.bottom_mm - pad - metrics.height_mm,
+                        )
                     add(edge, "dec", line.value_deg, text, left, top)
 
     return tuple(labels)

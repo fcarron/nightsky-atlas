@@ -79,8 +79,9 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Coverage: 0 gaps at 1 deg sampling, maximum overlap 6.
 - Star style: min 0.2 / max 2.4 mm, bright magnitude 0.0 / faint magnitude 9.0.
 - Label candidates: 3 concentric rings, ring gap 3.0 mm.
-- Grid labels: RA/Dec every 10 deg (lines every 2 deg), drawn just inside the
-  frame as furniture, beneath sky labels.
+- Grid labels: RA/Dec every 10 deg (lines every 2 deg), drawn as furniture
+  outside the frame (`grid.label_placement: outside`) in the page margin,
+  beneath sky labels.
 
 ## Data
 
@@ -133,12 +134,26 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page
   already includes Deneb.
 - 14 hard violations on 6 dense pages: standard-007, 008, 009, 020, 059, 060 (Milky Way / Virgo-Coma).
-- Polar pages reuse the standard field and stereographic projection; coverage is complete but distortion near the pole is larger.
+- Polar pages reuse the standard field and stereographic projection; coverage is
+  complete but distortion near the pole is larger. The dec-parallel sampling bug
+  (chords across the pole) is fixed, so the parallels form clean concentric
+  circles. Fields whose near declination edge reaches the pole (`grid` detects
+  this from the chart geometry) are now drawn with the dedicated polar grid:
+  meridians as projected great-circle arcs converging on the pole image, filtered
+  to those crossing the frame, at the coarser `grid.polar_ra_step_deg` (10 deg by
+  default) instead of `ra_step_deg`, with RA labels picked up by the normal edge
+  label pass. Remaining polar item: the meridian fan is still dense close to the
+  pole, so a minimum-spacing rule may be wanted after field testing.
 - The alpha manifest predates the first git commit, so its `git_commit` is null; a rebuild records the real commit.
 - Every safe WDS match whose companion is observable currently gets a
   double-star marker (roughly 2-3% of plotted stars in dense fields after the
   `companion_magnitude_limit` filter). A curated `visual_priority` and, if
   needed, a per-chart cap are the M22.4 refinement.
+- Coordinate labels now sit outside the frame (`grid.label_placement: outside`)
+  and label every grid line (`label_ra_step_deg`/`label_dec_step_deg: null`).
+  Placements overlapping the title or scale bar are dropped via the renderer's
+  furniture obstacle rectangles; if dense fields still look busy, raise the line
+  step or set an explicit label step.
 
 ## CLI
 
