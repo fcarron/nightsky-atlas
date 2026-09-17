@@ -22,6 +22,7 @@ from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.models import Label
+from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
 from nightsky_atlas.render.symbols import (
     DsoShape,
@@ -101,7 +102,7 @@ def draw_chart_page(
     _draw_constellations(cr, transform, scene, style)
     _draw_chart_border(cr, transform, style)
     _draw_outlines(cr, transform, scene, style)
-    _draw_stars(cr, transform, scene, size_model)
+    _draw_stars(cr, transform, scene, size_model, style)
     _draw_dsos(cr, transform, scene, style, bold_symbol_ids)
     _draw_grid_labels(cr, grid_lines, transform, style)
     _draw_labels(cr, label_list, style)
@@ -242,13 +243,48 @@ def _draw_stars(
     transform: PageTransform,
     scene: ChartScene,
     size_model: StarSizeModel,
+    style: StyleConfig,
 ) -> None:
+    """Draw stars, collapsing unseparable double/multiple systems to one marker.
+
+    The close/separate decision is made in
+    :func:`~nightsky_atlas.render.double_stars.resolve_double_stars` from the
+    printed separation, not here; the renderer only draws what it is told.
+    """
+    marks = resolve_double_stars(scene, transform, style)
+    suppressed: set[str] = set()
+    for mark in marks:
+        suppressed |= mark.suppress_star_ids
+
     cr.set_source_rgb(0.0, 0.0, 0.0)
     for scene_star in scene.stars:
+        if scene_star.star.id in suppressed:
+            continue
         point = transform.to_page(scene_star.chart_point)
         radius = mm_to_pt(size_model.radius_mm(scene_star.star.magnitude))
         cr.arc(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), radius, 0.0, 2.0 * math.pi)
         cr.fill()
+
+    for mark in marks:
+        _draw_double_star_mark(cr, mark, size_model)
+
+
+def _draw_double_star_mark(
+    cr: cairo.Context[cairo.Surface],
+    mark: DoubleStarMark,
+    size_model: StarSizeModel,
+) -> None:
+    """Draw one collapsed double star: symbol plus a short horizontal marker."""
+    x = mm_to_pt(mark.page_point.x_mm)
+    y = mm_to_pt(mark.page_point.y_mm)
+    radius = mm_to_pt(size_model.radius_mm(mark.magnitude))
+    cr.arc(x, y, radius, 0.0, 2.0 * math.pi)
+    cr.fill()
+    half_length = mm_to_pt(mark.marker_length_mm) / 2.0
+    cr.set_line_width(mm_to_pt(mark.marker_line_width_mm))
+    cr.move_to(x - half_length, y)
+    cr.line_to(x + half_length, y)
+    cr.stroke()
 
 
 def _bold_symbol_ids(labels: Iterable[Label]) -> frozenset[str]:

@@ -98,13 +98,19 @@ AI output must never directly mutate astronomical objects.
 - `Star`, `DeepSkyObject`, `ConstellationBoundary`, `ConstellationLine`,
   `NebulaOutline`, `MilkyWayFeature` — normalized sky data with no page
   coordinates.
+- `StarSystem` — a catalogued visual double/multiple system (WDS overlay):
+  `primary_star_id`, `component_star_ids`, `is_multiple`, `separation_arcsec`,
+  `position_angle_deg`, `component_magnitudes`, `combined_magnitude`,
+  `source`/`source_id`, `visual_priority` and a `match_status`
+  (`exact`/`positional`/`ambiguous`/`unmatched`). It links to stars by ID and
+  never mutates them; only safe matches may affect the chart.
 - `ChartDefinition` — what part of the sky to render. Fields:
   `id`, `center_ra_deg`, `center_dec_deg`, `width_deg`, `height_deg`,
   `projection`, `rotation_deg`, `atlas_id`, `neighbours`.
 - `ChartScene` — astronomical content selected after projection:
-  `definition`, `stars`, `deep_sky_objects`, `constellation_boundaries`,
-  `constellation_lines`, `nebula_outlines`. Contains chart-plane coordinates but
-  no final typesetting decisions.
+  `definition`, `stars`, `deep_sky_objects`, `star_systems`,
+  `constellation_boundaries`, `constellation_lines`, `nebula_outlines`.
+  Contains chart-plane coordinates but no final typesetting decisions.
 - `DsoMetadata` (attached to each `SceneDso`) — atlas selection metadata:
   `list_memberships`, `visual_score`, `importance_score`, `render_priority`,
   `label_priority`, `forced`, `visible`, `visibility_reasons`. Observing-list
@@ -188,6 +194,17 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
 - Emphasized symbols (Messier, Herschel 400) use `dso.bold_line_width_mm` so the
   mark is bold wherever its label is. The renderer derives the set of bold
   targets from the labels' `font_weight`; it never re-derives catalogue facts.
+- Visual double/multiple stars use three cases, decided by the **printed**
+  separation, not a fixed angular separation: an ordinary star has no marker; a
+  pair whose components cannot be separated on the page
+  (`double_stars.min_component_separation_mm`) collapses to one symbol carrying
+  the combined magnitude plus a short horizontal marker; a separable pair is
+  drawn as two real star positions with their own magnitudes. The marker scales
+  with the printed star diameter and is only drawn when the companion is
+  actually plotted or catalogued bright enough to observe
+  (`double_stars.companion_magnitude_limit`). The marker is a cartographic symbol
+  only and does **not** encode the real position angle. The decision lives in
+  `render/double_stars.py`; the renderer only draws it.
 
 ## Typography
 

@@ -8,6 +8,7 @@ they cannot drift apart.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -50,7 +51,15 @@ from nightsky_atlas.catalog.outlines import (
 )
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.selection import SelectionPolicy
-from nightsky_atlas.catalog.store import StarStore, chart_query_box
+from nightsky_atlas.catalog.store import QueryBox, StarStore, chart_query_box
+from nightsky_atlas.catalog.systems import (
+    DEFAULT_AMBIGUOUS_RADIUS_ARCSEC,
+    DEFAULT_COMPANION_TOLERANCE_ARCSEC,
+    DEFAULT_MATCH_TOLERANCE_ARCSEC,
+    StarSystem,
+    load_system_catalog,
+    match_star_systems,
+)
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.scene.builder import build_scene
@@ -64,6 +73,7 @@ __all__ = [
 ]
 
 DEFAULT_DSO_PATH = Path("data/processed/dso/openngc.json")
+DEFAULT_DOUBLE_STAR_PATH = Path("data/processed/double_stars/wds.json")
 
 
 def find_chart(atlas: AtlasConfig, chart_id: str) -> ChartDefinition:
@@ -106,6 +116,16 @@ def load_dsos(dsos_path: str | Path | None = None) -> list[DeepSkyObject]:
     return load_dso_catalog(path)
 
 
+def load_star_systems(systems_path: str | Path | None = None) -> list[StarSystem]:
+    """Load the processed double/multiple star overlay, or none."""
+    path = Path(systems_path) if systems_path is not None else DEFAULT_DOUBLE_STAR_PATH
+    if not path.exists():
+        if systems_path is not None:
+            raise FileNotFoundError(f"double-star catalogue not found: {path}")
+        return []
+    return load_system_catalog(path)
+
+
 @dataclass(frozen=True, slots=True)
 class ChartContext:
     """Everything needed to render or review one chart."""
@@ -118,6 +138,7 @@ class ChartContext:
     transform: PageTransform
     observing_lists: dict[str, ObservingList] | None = None
     selection_policy: SelectionPolicy | None = None
+    star_systems: tuple[StarSystem, ...] = ()
 
 
 def build_chart_context(
@@ -133,6 +154,11 @@ def build_chart_context(
     outlines_dir: str | Path | None = None,
     observing_lists_dir: str | Path | None = None,
     observing_config_path: str | Path | None = None,
+    double_stars_path: str | Path | None = None,
+    star_systems: Sequence[StarSystem] | None = None,
+    double_star_match_tolerance_arcsec: float = DEFAULT_MATCH_TOLERANCE_ARCSEC,
+    double_star_companion_tolerance_arcsec: float = DEFAULT_COMPANION_TOLERANCE_ARCSEC,
+    double_star_ambiguous_radius_arcsec: float = DEFAULT_AMBIGUOUS_RADIUS_ARCSEC,
     magnitude_limit: float | None = None,
     dso_magnitude_limit: float | None = None,
 ) -> ChartContext:
@@ -188,6 +214,21 @@ def build_chart_context(
         else OBSERVING_CONFIG_PATH,
     )
 
+    all_systems = (
+        list(star_systems) if star_systems is not None else load_star_systems(double_stars_path)
+    )
+    box = chart_query_box(definition, padding_deg=1.0)
+    nearby_systems = [
+        system for system in all_systems if _system_in_box(system, box)
+    ]
+    matched_systems = match_star_systems(
+        nearby_systems,
+        stars,
+        tolerance_arcsec=double_star_match_tolerance_arcsec,
+        companion_tolerance_arcsec=double_star_companion_tolerance_arcsec,
+        ambiguous_radius_arcsec=double_star_ambiguous_radius_arcsec,
+    )
+
     scene = build_scene(
         definition,
         stars,
@@ -196,6 +237,7 @@ def build_chart_context(
         constellation_lines=constellations.lines,
         constellation_boundaries=constellations.boundaries,
         nebula_outlines=outlines,
+        star_systems=matched_systems,
         observing_index=build_membership_index(observing_lists),
         selection_policy=selection_policy,
     )
@@ -209,7 +251,19 @@ def build_chart_context(
         transform=transform,
         observing_lists=observing_lists,
         selection_policy=selection_policy,
+        star_systems=matched_systems,
     )
+
+
+def _system_in_box(system: StarSystem, box: QueryBox) -> bool:
+    """Return whether a system position falls inside a catalogue query box."""
+    if system.ra_deg is None or system.dec_deg is None:
+        return False
+    if not box.dec_min_deg <= system.dec_deg <= box.dec_max_deg:
+        return False
+    if box.wraps_ra:
+        return system.ra_deg >= box.ra_min_deg or system.ra_deg <= box.ra_max_deg
+    return box.ra_min_deg <= system.ra_deg <= box.ra_max_deg
 
 
 def _selection_policy(atlas: AtlasConfig, config_path: str | Path) -> SelectionPolicy:

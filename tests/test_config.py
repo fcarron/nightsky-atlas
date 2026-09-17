@@ -64,6 +64,7 @@ def test_shipped_atlas_fixture_loads() -> None:
         "test-cygnus",
         "test-veil",
         "test-sparse",
+        "test-orion",
     ]
     assert config.charts[0].projection == "stereographic"
 
@@ -253,3 +254,36 @@ def test_non_mapping_root_fails(tmp_path: Path) -> None:
     path.write_text("- a\n- b\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_atlas_config(path)
+
+
+def test_shipped_style_declares_double_star_marker() -> None:
+    config = load_style_config(STYLE_FIXTURE)
+    assert config.double_stars.enabled is True
+    assert config.double_stars.min_component_separation_mm == pytest.approx(0.7)
+    assert config.double_stars.marker_length_factor == pytest.approx(1.8)
+    assert config.double_stars.min_marker_length_mm == pytest.approx(0.8)
+    assert config.double_stars.marker_line_width_mm == pytest.approx(0.15)
+    assert config.double_stars.companion_magnitude_limit == pytest.approx(9.0)
+
+
+def test_double_star_style_defaults_when_omitted(tmp_path: Path) -> None:
+    path = write_yaml(tmp_path / "style.yaml", valid_style_dict())
+    config = load_style_config(path)
+    assert config.double_stars.enabled is True
+    assert config.double_stars.min_component_separation_mm == pytest.approx(0.7)
+
+
+def test_double_star_style_rejects_unknown_key(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["double_stars"] = {"min_component_separation_mm": 0.7, "colour": "red"}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError):
+        load_style_config(path)
+
+
+def test_double_star_min_separation_must_be_positive(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["double_stars"] = {"min_component_separation_mm": 0.0}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError):
+        load_style_config(path)

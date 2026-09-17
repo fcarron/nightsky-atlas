@@ -23,7 +23,7 @@ from nightsky_atlas.atlas.config import (
     load_style_config,
 )
 from nightsky_atlas.atlas.tiling import TilingSpec, tile_sky, with_neighbours
-from nightsky_atlas.build.chart import build_chart_context
+from nightsky_atlas.build.chart import build_chart_context, load_star_systems
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
 )
@@ -58,6 +58,7 @@ class ChartPageResult:
     chart_id: str
     star_count: int
     dso_count: int
+    star_system_count: int
     label_count: int
     placed_count: int
     hidden_count: int
@@ -72,6 +73,7 @@ class ChartPageResult:
             "chart_id": self.chart_id,
             "star_count": self.star_count,
             "dso_count": self.dso_count,
+            "star_system_count": self.star_system_count,
             "label_count": self.label_count,
             "placed_count": self.placed_count,
             "hidden_count": self.hidden_count,
@@ -124,6 +126,7 @@ def _data_sources() -> list[dict[str, Any]]:
     manifest_paths = [
         Path("data/processed/stars/tycho2.manifest.json"),
         Path("data/processed/dso/openngc.manifest.json"),
+        Path("data/processed/double_stars/wds.manifest.json"),
     ]
     sources = []
     for path in manifest_paths:
@@ -189,6 +192,7 @@ def build_atlas(
     star_names_dir: str | Path | None = None,
     observing_lists_dir: str | Path | None = None,
     observing_config_path: str | Path | None = None,
+    double_stars_path: str | Path | None = None,
     overrides_path: str | Path | None = None,
     chart_ids: tuple[str, ...] | None = None,
     limit: int | None = None,
@@ -215,6 +219,7 @@ def build_atlas(
     star_names = load_star_names(
         star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
     )
+    star_systems = load_star_systems(double_stars_path)
 
     page = atlas.page.to_geometry()
     outroot = Path(outdir) / atlas.id
@@ -244,6 +249,8 @@ def build_atlas(
             outlines_dir=outlines_dir,
             observing_lists_dir=observing_lists_dir,
             observing_config_path=observing_config_path,
+            double_stars_path=double_stars_path,
+            star_systems=star_systems,
         )
         labels = build_labels(
             chart_context.scene, chart_context.transform, chart_context.style, star_names
@@ -297,6 +304,7 @@ def build_atlas(
                 chart_id=definition.id,
                 star_count=chart_context.scene.star_count,
                 dso_count=chart_context.scene.dso_count,
+                star_system_count=chart_context.scene.star_system_count,
                 label_count=len(labels),
                 placed_count=placed,
                 hidden_count=len(labels) - placed,

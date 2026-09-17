@@ -37,6 +37,7 @@ __all__ = [
     "ConstellationBoundaryStyle",
     "ConstellationLineStyle",
     "ConstellationStyle",
+    "DoubleStarStyle",
     "DsoLabelStyle",
     "DsoLabelTierStyle",
     "DsoStyle",
@@ -298,6 +299,33 @@ class DsoStyle(_StrictModel):
         return value
 
 
+class DoubleStarStyle(_StrictModel):
+    """Visual double/multiple star symbol behaviour.
+
+    Whether a pair is drawn as one symbol plus a marker or as two separate
+    components is decided by its separation **on the printed page**, not by a
+    fixed angular distance.  ``min_component_separation_mm`` is the page
+    distance above which the two components are plotted separately; below it
+    the pair collapses to one symbol carrying the combined magnitude and a
+    short horizontal marker.
+
+    The marker scales with the printed star: its length is
+    ``marker_length_factor`` times the symbol diameter, never shorter than
+    ``min_marker_length_mm``.  ``companion_magnitude_limit`` keeps the chart
+    selective: a system is only marked when a companion star is actually
+    plotted or the catalogued companion is bright enough to observe.  The
+    marker is a cartographic symbol only and does **not** encode the real
+    position angle.
+    """
+
+    enabled: bool = True
+    min_component_separation_mm: PositiveFloat = 0.7
+    marker_length_factor: PositiveFloat = 1.8
+    min_marker_length_mm: PositiveFloat = 0.8
+    marker_line_width_mm: PositiveFloat = 0.15
+    companion_magnitude_limit: float = 9.0
+
+
 class GridStyle(_StrictModel):
     """Coordinate grid appearance and spacing.
 
@@ -384,6 +412,7 @@ class StyleConfig(_StrictModel):
     star: StarStyle
     label: LabelStyle
     dso: DsoStyle = Field(default_factory=DsoStyle)
+    double_stars: DoubleStarStyle = Field(default_factory=DoubleStarStyle)
     grid: GridStyle = Field(default_factory=GridStyle)
     constellation: ConstellationStyle = Field(default_factory=ConstellationStyle)
     furniture: FurnitureStyle = Field(default_factory=FurnitureStyle)

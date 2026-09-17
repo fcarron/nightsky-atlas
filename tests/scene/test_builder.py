@@ -8,10 +8,11 @@ from pathlib import Path
 import pytest
 
 from nightsky_atlas.catalog.constellations import ConstellationSegment
-from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.selection import SelectionPolicy
+from nightsky_atlas.catalog.systems import MatchStatus, StarSystem
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection import ChartPoint
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
@@ -264,3 +265,63 @@ def test_policy_excludes_star_typed_objects() -> None:
         selection_policy=SelectionPolicy(),
     )
     assert scene.dso_count == 0
+
+
+def make_star(star_id: str, ra_deg: float, dec_deg: float, magnitude: float) -> Star:
+    return Star(
+        id=star_id,
+        ra_deg=ra_deg,
+        dec_deg=dec_deg,
+        magnitude=magnitude,
+        provenance=Provenance(catalogue="TEST", source_id=star_id),
+    )
+
+
+def make_system(primary_star_id: str | None, *, status: MatchStatus) -> StarSystem:
+    return StarSystem(
+        id="system:wds:TEST",
+        source="wds",
+        source_id="TEST",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        primary_star_id=primary_star_id,
+        component_star_ids=("star-002",) if primary_star_id else (),
+        match_status=status,
+    )
+
+
+def test_safe_star_system_is_projected_into_the_scene() -> None:
+    stars = load_sample_stars(FIXTURE)
+    scene = build_scene(
+        DEFINITION,
+        stars,
+        star_systems=[make_system("star-001", status=MatchStatus.POSITIONAL)],
+    )
+    assert scene.star_system_count == 1
+    scene_system = scene.star_systems[0]
+    assert scene_system.system.primary_star_id == "star-001"
+    assert len(scene_system.component_points) == 1
+
+
+def test_unsafe_star_system_is_not_added_to_the_scene() -> None:
+    stars = load_sample_stars(FIXTURE)
+    scene = build_scene(
+        DEFINITION,
+        stars,
+        star_systems=[make_system("star-001", status=MatchStatus.AMBIGUOUS)],
+    )
+    assert scene.star_system_count == 0
+
+
+def test_star_system_outside_the_chart_is_excluded() -> None:
+    outside = StarSystem(
+        id="system:wds:OUT",
+        source="wds",
+        source_id="OUT",
+        ra_deg=100.0,
+        dec_deg=-40.0,
+        primary_star_id="star-001",
+        match_status=MatchStatus.POSITIONAL,
+    )
+    scene = build_scene(DEFINITION, [], star_systems=[outside])
+    assert scene.star_system_count == 0

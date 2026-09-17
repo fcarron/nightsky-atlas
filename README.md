@@ -56,6 +56,20 @@ The store merges Tycho-2 with the Hipparcos main catalogue because Tycho-2 omits
 the brightest stars (Deneb, Vega, Altair, Sirius, ...). See
 `docs/DATA_SOURCES.md` for provenance and licensing.
 
+### Double/multiple stars (WDS overlay)
+
+```bash
+.venv/bin/nightsky data fetch-wds        # download the raw WDS into data/raw/
+.venv/bin/nightsky data import-wds       # build data/processed/double_stars/wds.json
+```
+
+Tycho-2 remains the source of truth for single-star positions and magnitudes.
+The Washington Double Star Catalog is a separate overlay for visual double and
+multiple systems; systems are linked to stars per chart, and only safe matches
+influence the printed chart. A pair that cannot be separated on the page is
+drawn as one symbol with a horizontal marker; a separable pair is drawn as two
+real positions. See `docs/ARCHITECTURE.md` and `docs/DATA_SOURCES.md`.
+
 Raw and processed catalogue data are build inputs and are not committed. See
 `docs/PERFORMANCE.md` for benchmark numbers and licensing notes.
 

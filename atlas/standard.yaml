@@ -66,3 +66,8 @@ charts:
     center_dec_deg: 27.0
     width_deg: 27.0
     height_deg: 18.5
+  - id: test-orion
+    center_ra_deg: 83.5
+    center_dec_deg: -1.0
+    width_deg: 27.0
+    height_deg: 18.5

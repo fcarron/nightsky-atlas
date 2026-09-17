@@ -13,6 +13,7 @@ from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.selection import SelectionPolicy, select_dso
+from nightsky_atlas.catalog.systems import StarSystem
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection.base import ChartPoint, ProjectionError
 from nightsky_atlas.projection.stereographic import StereographicProjection
@@ -22,6 +23,7 @@ from nightsky_atlas.scene.models import (
     SceneOutline,
     SceneSegment,
     SceneStar,
+    SceneStarSystem,
 )
 
 __all__ = ["build_scene", "build_star_scene", "default_projection"]
@@ -58,6 +60,7 @@ def build_scene(
     constellation_lines: Iterable[ConstellationSegment] = (),
     constellation_boundaries: Iterable[ConstellationSegment] = (),
     nebula_outlines: Iterable[NebulaOutline] = (),
+    star_systems: Iterable[StarSystem] = (),
     observing_index: Mapping[str, frozenset[str]] | None = None,
     selection_policy: SelectionPolicy | None = None,
 ) -> ChartScene:
@@ -105,10 +108,38 @@ def build_scene(
         if point is not None:
             scene_dsos.append(SceneDso(dso=dso, chart_point=point, metadata=metadata))
 
+    star_points = {scene_star.star.id: scene_star.chart_point for scene_star in scene_stars}
+    scene_systems: list[SceneStarSystem] = []
+    for system in star_systems:
+        if not system.is_safe_match:
+            continue
+        primary_point = star_points.get(system.primary_star_id or "")
+        if primary_point is None:
+            if system.ra_deg is None or system.dec_deg is None:
+                continue
+            primary_point = _project_inside(
+                projector, definition, system.ra_deg, system.dec_deg
+            )
+        if primary_point is None:
+            continue
+        component_points = tuple(
+            star_points[star_id]
+            for star_id in system.component_star_ids
+            if star_id in star_points
+        )
+        scene_systems.append(
+            SceneStarSystem(
+                system=system,
+                chart_point=primary_point,
+                component_points=component_points,
+            )
+        )
+
     return ChartScene(
         definition=definition,
         stars=tuple(scene_stars),
         deep_sky_objects=tuple(scene_dsos),
+        star_systems=tuple(scene_systems),
         constellation_lines=_project_segments(
             constellation_lines, projector, definition, "line"
         ),

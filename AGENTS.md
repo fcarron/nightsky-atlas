@@ -110,10 +110,13 @@ decorative elements. AI must never directly mutate astronomical objects.
 
 - Sky objects (`Star`, `DeepSkyObject`, `ConstellationBoundary`,
   `ConstellationLine`, `NebulaOutline`, `MilkyWayFeature`): no page coordinates.
+- `StarSystem` (double/multiple overlay; WDS): catalogue identity, components,
+  separation, position angle, component magnitudes and a match status. It links
+  to `Star` objects by stable ID and never mutates them.
 - `ChartDefinition`: what sky to render (`id`, center RA/Dec, width/height,
   `projection`, `rotation_deg`, `atlas_id`, `neighbours`); geometry only.
-- `ChartScene`: projected content (stars, DSOs, boundaries, lines, outlines);
-  chart-plane coordinates, no typesetting decisions.
+- `ChartScene`: projected content (stars, DSOs, star systems, boundaries, lines,
+  outlines); chart-plane coordinates, no typesetting decisions.
 - `ChartLayout`: complete serializable page description (symbols, labels,
   selected candidate, text metrics, grid, borders, title, neighbours, optional
   legend, diagnostics, optimizer metadata). Serialized layout JSON is a
@@ -141,9 +144,12 @@ Page coordinates are physical millimetres/points, never screen pixels alone.
 Ingestion is isolated from rendering and retains provenance; source-specific
 column semantics never leave their importer. Stars: Tycho-2 (preferred),
 supplemented by Hipparcos for the bright stars Tycho-2 omits. DSOs:
-OpenNGC. Additional catalogues require license decision, provenance, field
-mapping, duplicate strategy and explicit visual value. Never assume
-redistributable. Sources, licenses, storage: `docs/DATA_SOURCES.md`.
+OpenNGC. Visual double/multiple stars: the Washington Double Star Catalog (WDS)
+is a semantic **overlay** on the star base, never a source of single-star
+positions; it is linked per chart and never overwrites Tycho-2. Additional
+catalogues require license decision, provenance, field mapping, duplicate
+strategy and explicit visual value. Never assume redistributable. Sources,
+licenses, storage: `docs/DATA_SOURCES.md`.
 
 ## 9. Storage strategy
 
@@ -177,7 +183,12 @@ available, with a minimum printable size preserving orientation. Large nebula
 outlines (later) are true vector paths. Emphasized objects (Messier, Herschel
 400) use a heavier configurable stroke, so the symbol is bold wherever its label
 is; the renderer takes that emphasis from the layout's bold labels rather than
-re-deriving catalogue facts.
+re-deriving catalogue facts. Visual double/multiple stars use three cases decided
+by the printed separation, never a fixed angular separation: ordinary star (no
+marker); unseparable pair (one symbol with combined magnitude plus a short
+horizontal marker); separable pair (two real positions). The marker is a
+cartographic symbol only, not the real position angle. Configurable under
+`double_stars:` in the style.
 
 ## 13. Typography
 

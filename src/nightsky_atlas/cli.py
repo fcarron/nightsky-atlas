@@ -61,6 +61,7 @@ from nightsky_atlas.catalog.star_names import (
     load_star_names,
 )
 from nightsky_atlas.catalog.store import StarStore, build_star_store
+from nightsky_atlas.catalog.systems import write_system_catalog
 from nightsky_atlas.catalog.tycho import (
     CATALOGUE,
     CDS_BASE_URL,
@@ -68,6 +69,19 @@ from nightsky_atlas.catalog.tycho import (
     download_tycho2,
     iter_tycho2_stars,
     raw_part_paths,
+)
+from nightsky_atlas.catalog.wds import (
+    CATALOGUE as WDS_CATALOGUE,
+)
+from nightsky_atlas.catalog.wds import (
+    EDITION as WDS_EDITION,
+)
+from nightsky_atlas.catalog.wds import (
+    download_wds,
+    iter_wds_systems,
+)
+from nightsky_atlas.catalog.wds import (
+    raw_path as wds_raw_path,
 )
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
@@ -91,6 +105,9 @@ _DEFAULT_HIP_RAW = Path("data/raw/hipparcos")
 _DEFAULT_OPENNGC_RAW = Path("data/raw/openngc")
 _DEFAULT_DSO_OUT = Path("data/processed/dso/openngc.json")
 _DEFAULT_DSO_MANIFEST = Path("data/processed/dso/openngc.manifest.json")
+_DEFAULT_WDS_RAW = Path("data/raw/wds")
+_DEFAULT_WDS_OUT = Path("data/processed/double_stars/wds.json")
+_DEFAULT_WDS_MANIFEST = Path("data/processed/double_stars/wds.manifest.json")
 _DEFAULT_CONSTELLATIONS = Path("data/fixtures/constellations")
 _DEFAULT_OUTLINES = Path("data/fixtures/outlines")
 _DEFAULT_STAR_NAMES = STAR_NAMES_FIXTURE_DIR
@@ -177,6 +194,19 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         type=Path,
         default=_DEFAULT_OBSERVING_CONFIG,
         help="observing-list selection policy YAML",
+    )
+    parser.add_argument(
+        "--double-stars",
+        type=Path,
+        default=None,
+        help="processed WDS double/multiple star overlay JSON "
+        "(default: processed WDS if present)",
+    )
+    parser.add_argument(
+        "--double-star-match-tolerance-arcsec",
+        type=float,
+        default=2.0,
+        help="positional tolerance when linking WDS systems to stars",
     )
     parser.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
     parser.add_argument("--png-dpi", type=float, default=300.0)
@@ -321,6 +351,22 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     dso_import.add_argument("--manifest", type=Path, default=_DEFAULT_DSO_MANIFEST)
     dso_import.set_defaults(handler=_command_import_openngc)
 
+    wds_fetch = data_subparsers.add_parser(
+        "fetch-wds",
+        help="download the raw Washington Double Star Catalog (network access)",
+    )
+    wds_fetch.add_argument("--dest", type=Path, default=_DEFAULT_WDS_RAW)
+    wds_fetch.set_defaults(handler=_command_fetch_wds)
+
+    wds_import = data_subparsers.add_parser(
+        "import-wds",
+        help="normalize the raw WDS into a processed double-star overlay",
+    )
+    wds_import.add_argument("--raw", type=Path, default=_DEFAULT_WDS_RAW)
+    wds_import.add_argument("--out", type=Path, default=_DEFAULT_WDS_OUT)
+    wds_import.add_argument("--manifest", type=Path, default=_DEFAULT_WDS_MANIFEST)
+    wds_import.set_defaults(handler=_command_import_wds)
+
 
 def _add_benchmark_commands(subparsers: argparse._SubParsersAction) -> None:
     benchmark = subparsers.add_parser("benchmark", help="run AI review benchmarks")
@@ -398,6 +444,13 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
         help="observing-list selection policy YAML",
     )
     build.add_argument(
+        "--double-stars",
+        type=Path,
+        default=None,
+        help="processed WDS double/multiple star overlay JSON "
+        "(default: processed WDS if present)",
+    )
+    build.add_argument(
         "--overrides",
         type=Path,
         default=None,
@@ -427,6 +480,8 @@ def _chart_context(
         outlines_dir=args.outlines,
         observing_lists_dir=args.observing_lists,
         observing_config_path=args.observing_config,
+        double_stars_path=args.double_stars,
+        double_star_match_tolerance_arcsec=args.double_star_match_tolerance_arcsec,
         magnitude_limit=args.magnitude_limit,
         dso_magnitude_limit=args.dso_magnitude_limit,
     )
@@ -572,6 +627,10 @@ def _write_layout_json(
         "scene": {
             "star_count": scene.star_count,
             "dso_count": scene.dso_count,
+            "star_system_count": scene.star_system_count,
+            "star_systems": [
+                scene_system.system.to_dict() for scene_system in scene.star_systems
+            ],
             "deep_sky_objects": [
                 {"id": scene_dso.dso.id, **scene_dso.metadata.to_dict()}
                 for scene_dso in scene.deep_sky_objects
@@ -734,6 +793,47 @@ def _command_import_openngc(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_fetch_wds(args: argparse.Namespace) -> int:
+    path = download_wds(args.dest)
+    print(f"downloaded WDS -> {path}")
+    return 0
+
+
+def _command_import_wds(args: argparse.Namespace) -> int:
+    raw = wds_raw_path(args.raw)
+    if not raw.exists():
+        raise ConfigError(
+            f"missing raw WDS {raw}; run 'nightsky data fetch-wds' first"
+        )
+    systems = list(iter_wds_systems(raw))
+    count = write_system_catalog(args.out, systems)
+    manifest = {
+        "catalogue": WDS_CATALOGUE,
+        "edition": WDS_EDITION,
+        "source": "The Washington Visual Double Star Catalog (Mason et al.), CDS B/wds",
+        "license": "Public domain (U.S. Naval Observatory); acknowledgement requested",
+        "epoch": "J2000",
+        "coordinate_rule": "sexagesimal RA/Dec converted to degrees",
+        "separation_rule": (
+            "latest-epoch separation/position angle where present, first-epoch fallback"
+        ),
+        "magnitude_rule": (
+            "component magnitudes mag1/mag2; combined via "
+            "-2.5 * log10(sum(10 ** (-0.4 * m_i)))"
+        ),
+        "raw_file": raw.name,
+        "system_count": count,
+        "processed_file": args.out.name,
+        "match_note": (
+            "linked to Tycho-2 stars per chart; WDS never overwrites the star base"
+        ),
+    }
+    write_manifest(args.manifest, manifest)
+    print(f"imported {count} star systems -> {args.out}")
+    print(f"manifest -> {args.manifest}")
+    return 0
+
+
 def _command_atlas_tile(args: argparse.Namespace) -> int:
     atlas = load_atlas_config(args.atlas)
     if atlas.tiling is None:
@@ -782,6 +882,7 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         star_names_dir=args.star_names,
         observing_lists_dir=args.observing_lists,
         observing_config_path=args.observing_config,
+        double_stars_path=args.double_stars,
         overrides_path=args.overrides,
         chart_ids=chart_ids,
         limit=args.limit,

@@ -12,10 +12,18 @@ from dataclasses import dataclass
 
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.selection import DsoMetadata
+from nightsky_atlas.catalog.systems import StarSystem
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection.base import ChartPoint
 
-__all__ = ["ChartScene", "SceneDso", "SceneOutline", "SceneSegment", "SceneStar"]
+__all__ = [
+    "ChartScene",
+    "SceneDso",
+    "SceneOutline",
+    "SceneSegment",
+    "SceneStar",
+    "SceneStarSystem",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +32,23 @@ class SceneStar:
 
     star: Star
     chart_point: ChartPoint
+
+
+@dataclass(frozen=True, slots=True)
+class SceneStarSystem:
+    """A catalogued double/multiple star placed on the chart plane.
+
+    ``chart_point`` is the primary (or, when the primary is not in the star
+    base, the catalogued system) position.  ``component_points`` holds the
+    chart positions of the linked companions, so the renderer can decide from
+    the printed separation whether to plot them separately.  The underlying
+    :class:`StarSystem` is immutable astronomy/overlay metadata; no page or
+    typesetting decision is made here.
+    """
+
+    system: StarSystem
+    chart_point: ChartPoint
+    component_points: tuple[ChartPoint, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +106,7 @@ class ChartScene:
     definition: ChartDefinition
     stars: tuple[SceneStar, ...] = ()
     deep_sky_objects: tuple[SceneDso, ...] = ()
+    star_systems: tuple[SceneStarSystem, ...] = ()
     constellation_lines: tuple[SceneSegment, ...] = ()
     constellation_boundaries: tuple[SceneSegment, ...] = ()
     nebula_outlines: tuple[SceneOutline, ...] = ()
@@ -89,6 +115,11 @@ class ChartScene:
     def star_count(self) -> int:
         """Number of stars in the scene."""
         return len(self.stars)
+
+    @property
+    def star_system_count(self) -> int:
+        """Number of double/multiple star systems in the scene."""
+        return len(self.star_systems)
 
     @property
     def dso_count(self) -> int:

@@ -53,7 +53,20 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   the designation. The corresponding deep-sky *symbol* is drawn with the heavier
   `dso.bold_line_width_mm` whenever its label is bold, so the map mark matches
   the name.
-- `make check`: Ruff clean, 446 tests passing.
+- Visual double/multiple stars (M22): Tycho-2 stays the star base; the
+  Washington Double Star Catalog is a separate overlay (`catalog/wds.py`,
+  `data/processed/double_stars/wds.json`, 157,644 systems). `StarSystem`
+  (`catalog/systems.py`) links to stars by ID with a match status; only
+  `exact`/`positional` matches influence the chart. `render/double_stars.py`
+  decides from the printed separation: an ordinary star is unchanged, an
+  unseparable pair collapses to one symbol (combined magnitude) plus a short
+  horizontal marker, and a separable pair stays two real positions. Config:
+  `double_stars.enabled`, `min_component_separation_mm` (0.7),
+  `marker_length_factor` (1.8, x symbol diameter), `min_marker_length_mm` (0.8),
+  `marker_line_width_mm` (0.15) and `companion_magnitude_limit` (9.0: a system is
+  marked only when the companion is plotted or catalogued bright enough to
+  observe). The marker is a map symbol, not the real position angle.
+- `make check`: Ruff clean, 481 tests passing.
 
 ## Frozen Standard geometry (M14.1)
 
@@ -110,6 +123,9 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - `build/standard-alpha/standard/manifest.json` with per-page diagnostics, limits and data-source manifests.
 - 5,061 / 5,622 labels placed.
 - Test-page previews (no AI, deterministic optimizer): `build/testpages/standard/charts/{test-virgo,test-cygnus,test-veil,test-sparse}/`.
+- `test-orion` (RA 83.5, Dec -1.0) is an explicit test chart for the double-star
+  overlay (belt/sword, Rigel, Alnitak, Mintaka); render it with
+  `nightsky chart render --chart test-orion --star-store ... --optimize`.
 
 ## Open issues
 
@@ -119,10 +135,14 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - 14 hard violations on 6 dense pages: standard-007, 008, 009, 020, 059, 060 (Milky Way / Virgo-Coma).
 - Polar pages reuse the standard field and stereographic projection; coverage is complete but distortion near the pole is larger.
 - The alpha manifest predates the first git commit, so its `git_commit` is null; a rebuild records the real commit.
+- Every safe WDS match whose companion is observable currently gets a
+  double-star marker (roughly 2-3% of plotted stars in dense fields after the
+  `companion_magnitude_limit` filter). A curated `visual_priority` and, if
+  needed, a per-chart cap are the M22.4 refinement.
 
 ## CLI
 
-`data fetch-stars|import-stars|fetch-openngc|import-openngc`,
+`data fetch-stars|import-stars|fetch-hipparcos|fetch-openngc|import-openngc|fetch-wds|import-wds`,
 `chart render|validate|review|magnitude-scale`,
 `atlas tile|coverage|build`,
 `benchmark ai-review`.
@@ -134,7 +154,10 @@ and `--outlines DIR` (default `data/fixtures/outlines`; empty to omit) and
 `--star-names DIR` (default `data/fixtures/starnames`; empty to omit). DSO
 selection additionally accepts `--observing-lists DIR` (default
 `data/fixtures/observing_lists`; empty to omit) and `--observing-config PATH`
-(default `config/observing_lists.yaml`).
+(default `config/observing_lists.yaml`). Double stars accept
+`--double-stars PATH` (default `data/processed/double_stars/wds.json` when
+present) and `--double-star-match-tolerance-arcsec` (default 2.0 primary
+tolerance; the companion tolerance is 3.0 arcsec inside the builder).
 
 ## Manual overrides (M16.1)
 

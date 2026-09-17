@@ -330,6 +330,38 @@ atlas metadata and never modify the astronomical model (`AGENTS.md` section 5).
   (licensing permitting) NSOG; Deep adds Herschel II and the Astronomical League
   programs.  Each needs a license/provenance decision before ingestion.
 
+## M22 — Visual double/multiple stars (WDS overlay)
+
+Double stars are not inferred from Tycho-2 proximity. Tycho-2 stays the source
+of truth for single-star positions and magnitudes; the Washington Double Star
+Catalog is a separate semantic overlay. WDS never overwrites the star base —
+systems are linked to stars per chart, and only safe matches influence the
+chart.
+
+- [x] **M22.1 Star system model and matching** — `catalog/systems.py`
+  (`StarSystem`, `VisualPriority`, `MatchStatus`, `combined_magnitude`,
+  `match_star_system(s)`), stable IDs, provenance and JSON store. Primary
+  tolerance 2 arcsec, companion 3 arcsec; ambiguous/unmatched matches are never
+  safe.
+- [x] **M22.2 WDS importer** — `catalog/wds.py` (CDS `B/wds`, fixed-width
+  records, J2000 positions, latest-epoch separation/PA, sentinel handling),
+  `nightsky data fetch-wds` / `import-wds`, provenance manifest and a committed
+  nine-record fixture with `SOURCE.md`.
+- [x] **M22.3 Double-star symbol** — `render/double_stars.py` resolves the
+  printed separation: ordinary star, collapsed symbol + horizontal marker with
+  combined magnitude, or two real component positions. The marker scales with
+  the printed star (`marker_length_factor`, floored at `min_marker_length_mm`)
+  and is only drawn when the companion is plotted or catalogued bright enough to
+  observe (`companion_magnitude_limit`), keeping dense charts selective.
+  Configurable `double_stars:` style block; `SceneStarSystem` carries the
+  overlay into the scene; the renderer only draws the resolved decision.
+- [ ] **M22.4 Visual priority and chart-density control** — curated
+  `notable`/`showcase` doubles and, if dense fields still prove busy, a
+  per-chart cap.
+- [ ] **M22.5 Detail use** — separation/position angle for dedicated detail
+  charts or object information (data is retained but not printed on normal
+  pages).
+
 ## Human decision checkpoints
 
 Stop and request explicit human evaluation at these points:

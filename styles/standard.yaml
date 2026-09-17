@@ -46,6 +46,21 @@ dso:
   outline_dash_mm: 0.8
   outline_gray: 0.45
 
+# Visual double/multiple stars (WDS overlay).  A pair is drawn as one symbol
+# plus a short horizontal marker only when its components cannot be separated on
+# the page, i.e. their printed separation is below min_component_separation_mm.
+# The marker scales with the printed star (marker_length_factor x diameter,
+# floored at min_marker_length_mm).  companion_magnitude_limit keeps the chart
+# selective: companions fainter than this are not marked unless they are
+# actually plotted.  The marker is a map symbol, not the real position angle.
+double_stars:
+  enabled: true
+  min_component_separation_mm: 0.7
+  marker_length_factor: 1.8
+  min_marker_length_mm: 0.8
+  marker_line_width_mm: 0.15
+  companion_magnitude_limit: 9.0
+
 constellation:
   lines:
     enabled: true

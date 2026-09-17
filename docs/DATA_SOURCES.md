@@ -144,6 +144,33 @@ Hipparcos supplement below adds the bright stars it omits.
 | Transformations | sexagesimal RA/Dec to degrees; V-Mag preferred, B-Mag fallback |
 | Import | `nightsky data fetch-openngc` then `nightsky data import-openngc` |
 
+### Visual double/multiple stars (overlay)
+
+Tycho-2 remains the source of truth for single-star positions and magnitudes.
+WDS is a **semantic overlay** for visual double/multiple systems: it identifies
+systems and components, and records separation, position angle and component
+magnitudes, but it never overwrites Tycho-2 data. Systems are linked to the star
+base per chart (`catalog/systems.py`), and only `exact`/`positional` matches may
+influence the printed chart.
+
+| Field | Value |
+| --- | --- |
+| Source | The Washington Visual Double Star Catalog (WDS), Mason et al. 2001, CDS `B/wds` |
+| Edition | `2026-08-10` |
+| Raw | `data/raw/wds/wds.dat.gz` (~6.5 MB, 157,917 records) |
+| Processed | `data/processed/double_stars/wds.json` (157,644 systems, ~57 MB) |
+| Manifest | `data/processed/double_stars/wds.manifest.json` |
+| License | **Public domain** (U.S. Naval Observatory); acknowledgement requested |
+| Transformations | sexagesimal RA/Dec to degrees; latest-epoch separation/position angle (first-epoch fallback, negative sentinels dropped); component magnitudes `mag1`/`mag2`, combined as `-2.5*log10(sum(10**(-0.4*m_i)))` |
+| Fixture | `data/fixtures/double_stars/wds_subset.dat` (nine verbatim records) + `SOURCE.md` |
+| Import | `nightsky data fetch-wds` then `nightsky data import-wds` |
+
+The USNO requests the acknowledgement: *"This research has made use of the
+Washington Double Star Catalog maintained at the U.S. Naval Observatory."*
+Linkage is positional (default 2 arcsec primary / 3 arcsec companion tolerance)
+and per chart, so the overlay scales with the atlas edition instead of baking a
+fixed angular separation into the data.
+
 ### Observing-list membership (atlas metadata)
 
 Curated visual observing lists drive DSO selection (forced include plus
