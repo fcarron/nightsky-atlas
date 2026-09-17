@@ -31,6 +31,9 @@ from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_st
 from nightsky_atlas.render.furniture import build_furniture_plan, draw_furniture
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
 from nightsky_atlas.render.symbols import (
+    CIRCLE_CROSS_REACH_FACTOR,
+    SPOKED_CIRCLE_INNER_FACTOR,
+    SPOKED_CIRCLE_OUTER_FACTOR,
     DsoShape,
     StarSizeModel,
     SymbolExtent,
@@ -389,16 +392,18 @@ def _draw_dso_shape(
         cr.arc(cx, cy, radius, 0.0, 2.0 * math.pi)
         cr.fill()
     if shape == DsoShape.CIRCLE_CROSS:
-        reach = radius * 1.4
+        reach = radius * CIRCLE_CROSS_REACH_FACTOR
         cr.move_to(cx - reach, cy)
         cr.line_to(cx + reach, cy)
         cr.move_to(cx, cy - reach)
         cr.line_to(cx, cy + reach)
         cr.stroke()
     if shape == DsoShape.SPOKED_CIRCLE:
+        inner = radius * SPOKED_CIRCLE_INNER_FACTOR
+        outer = radius * SPOKED_CIRCLE_OUTER_FACTOR
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            cr.move_to(cx + dx * radius, cy + dy * radius)
-            cr.line_to(cx + dx * radius * 1.5, cy + dy * radius * 1.5)
+            cr.move_to(cx + dx * inner, cy + dy * inner)
+            cr.line_to(cx + dx * outer, cy + dy * outer)
         cr.stroke()
     cr.restore()
 

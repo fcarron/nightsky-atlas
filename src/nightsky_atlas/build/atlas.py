@@ -24,9 +24,8 @@ from nightsky_atlas.atlas.config import (
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 from nightsky_atlas.atlas.tiling import (
     TilingSpec,
+    chart_definitions,
     resolve_ring_counts,
-    tile_sky,
-    with_neighbours,
 )
 from nightsky_atlas.build.chart import (
     build_chart_context,
@@ -40,7 +39,6 @@ from nightsky_atlas.catalog.star_names import (
 from nightsky_atlas.catalog.star_names import (
     load_star_names,
 )
-from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.presentation import (
     presentation_from_edition,
     product_edition_title,
@@ -114,14 +112,6 @@ class AtlasBuildResult:
     @property
     def total_hard_issues(self) -> int:
         return sum(page.hard_issues for page in self.pages)
-
-
-def chart_definitions(atlas: AtlasConfig) -> tuple[ChartDefinition, ...]:
-    """Return the chart definitions for an atlas edition."""
-    if atlas.tiling is not None:
-        charts = tile_sky(atlas.id, TilingSpec.from_config(atlas.tiling))
-        return with_neighbours(charts)
-    return tuple(chart.to_definition(atlas_id=atlas.id) for chart in atlas.charts)
 
 
 def _git_commit() -> str | None:

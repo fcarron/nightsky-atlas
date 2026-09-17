@@ -22,7 +22,7 @@ import math
 from dataclasses import dataclass, replace
 
 from nightsky_atlas.astronomy.angles import angular_separation_deg
-from nightsky_atlas.atlas.config import TilingConfig
+from nightsky_atlas.atlas.config import AtlasConfig, TilingConfig
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection.base import ProjectionError
 from nightsky_atlas.projection.stereographic import StereographicProjection
@@ -31,6 +31,7 @@ __all__ = [
     "CoverageReport",
     "NeighbourOverlapReport",
     "TilingSpec",
+    "chart_definitions",
     "coverage_report",
     "neighbour_overlap_report",
     "resolve_ring_counts",
@@ -363,6 +364,18 @@ def tile_sky(atlas_id: str, spec: TilingSpec) -> tuple[ChartDefinition, ...]:
         for index, chart in enumerate(charts)
     ]
     return tuple(numbered)
+
+
+def chart_definitions(atlas: AtlasConfig) -> tuple[ChartDefinition, ...]:
+    """Return the chart definitions for an atlas edition.
+
+    Tiled atlases generate their charts (and derive neighbours); atlases with
+    explicit ``charts`` use those definitions unchanged.
+    """
+    if atlas.tiling is not None:
+        charts = tile_sky(atlas.id, TilingSpec.from_config(atlas.tiling))
+        return with_neighbours(charts)
+    return tuple(chart.to_definition(atlas_id=atlas.id) for chart in atlas.charts)
 
 
 @dataclass(frozen=True, slots=True)

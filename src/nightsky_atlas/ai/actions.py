@@ -65,7 +65,9 @@ def apply_review_actions(
     current = labels
     applied: list[str] = []
     rejected: list[tuple[str, str]] = []
-    baseline = len(validate_layout(current, scene, transform, style).issues)
+    baseline = {
+        issue.id for issue in validate_layout(current, scene, transform, style).issues
+    }
 
     for issue in result.issues:
         action = issue.action
@@ -87,12 +89,15 @@ def apply_review_actions(
         candidate_labels = tuple(
             updated if item.id == label.id else item for item in current
         )
-        hard_count = len(validate_layout(candidate_labels, scene, transform, style).issues)
-        if hard_count > baseline:
+        candidate_issues = {
+            item.id
+            for item in validate_layout(candidate_labels, scene, transform, style).issues
+        }
+        if not candidate_issues <= baseline:
             rejected.append((issue.element_id, "action introduces hard violations"))
             continue
         current = candidate_labels
-        baseline = hard_count
+        baseline = candidate_issues
         applied.append(issue.element_id)
 
     return ApplyResult(labels=current, applied=tuple(applied), rejected=tuple(rejected))

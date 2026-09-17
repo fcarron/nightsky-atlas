@@ -17,6 +17,9 @@ from nightsky_atlas.layout.labels import _exclusion_radius_mm
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import _symbol_circles
 from nightsky_atlas.render.symbols import (
+    CIRCLE_CROSS_REACH_FACTOR,
+    SPOKED_CIRCLE_INNER_FACTOR,
+    SPOKED_CIRCLE_OUTER_FACTOR,
     DsoShape,
     StarSizeModel,
     dso_shape,
@@ -157,6 +160,14 @@ def test_galaxy_without_axes_has_no_ellipse() -> None:
         make_galaxy(major_axis_arcmin=None), mm_per_deg=60.0, min_axis_mm=0.7
     )
     assert geometry is None
+
+
+def test_decorative_symbol_reach_stays_within_extent() -> None:
+    # The drawn symbol must never exceed the SymbolExtent that label exclusion
+    # and collision detection consume (AGENTS.md section 12).
+    assert CIRCLE_CROSS_REACH_FACTOR <= 1.0
+    assert SPOKED_CIRCLE_OUTER_FACTOR <= 1.0
+    assert SPOKED_CIRCLE_INNER_FACTOR < SPOKED_CIRCLE_OUTER_FACTOR
 
 
 @pytest.mark.parametrize(

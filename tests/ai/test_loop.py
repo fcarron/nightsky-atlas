@@ -9,6 +9,7 @@ from nightsky_atlas.ai.loop import optimize_with_ai, write_history
 from nightsky_atlas.ai.openrouter import ReviewUsage
 from nightsky_atlas.ai.recorded import RecordedReviewer
 from nightsky_atlas.atlas.config import load_style_config
+from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
@@ -24,7 +25,19 @@ CHART = ChartDefinition(
 )
 PAGE = PageGeometry(width_mm=297.0, height_mm=210.0, margin_mm=12.0)
 TRANSFORM = PageTransform(chart=CHART, page=PAGE)
-SCENE = build_scene(CHART, [], [])
+
+
+def _target_star(star_id: str) -> Star:
+    return Star(
+        id=star_id,
+        ra_deg=CHART.center_ra_deg,
+        dec_deg=CHART.center_dec_deg,
+        magnitude=3.0,
+        provenance=Provenance(catalogue="TEST", source_id=star_id),
+    )
+
+
+SCENE = build_scene(CHART, [_target_star("A"), _target_star("B")], [])
 
 
 def make_candidate(
@@ -47,7 +60,7 @@ def make_labels() -> tuple[Label, Label]:
         mandatory=True,
         candidates=(
             make_candidate("label:a", CompassPosition.N, 100.0, 100.0),
-            make_candidate("label:a", CompassPosition.S, 200.0, 200.0),
+            make_candidate("label:a", CompassPosition.S, 100.0, 110.0),
         ),
     )
     second = Label(

@@ -11,7 +11,7 @@ import yaml
 
 from nightsky_atlas.atlas.config import load_atlas_config
 from nightsky_atlas.build.atlas import build_atlas, chart_definitions
-from nightsky_atlas.build.chart import field_query_box
+from nightsky_atlas.build.chart import field_query_box, find_chart
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
 from nightsky_atlas.catalog.openngc import iter_openngc_objects
 from nightsky_atlas.catalog.store import chart_query_box
@@ -66,6 +66,14 @@ def test_chart_definitions_for_tiled_atlas() -> None:
     charts = chart_definitions(load_atlas_config(SHIPPED_ATLAS))
     assert len(charts) > 50
     assert all(chart.neighbours for chart in charts)
+
+
+def test_find_chart_resolves_tiled_id() -> None:
+    atlas = load_atlas_config(SHIPPED_ATLAS)
+    chart = find_chart(atlas, "standard-068")
+    assert chart.id == "standard-068"
+    assert chart.atlas_id == "standard"
+    assert chart.neighbours
 
 
 def test_field_query_box_reaches_projected_corners() -> None:

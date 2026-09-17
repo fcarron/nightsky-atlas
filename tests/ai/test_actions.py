@@ -6,6 +6,7 @@ from pathlib import Path
 
 from nightsky_atlas.ai.actions import apply_review_actions
 from nightsky_atlas.atlas.config import load_style_config
+from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
@@ -20,7 +21,19 @@ CHART = ChartDefinition(
 )
 PAGE = PageGeometry(width_mm=297.0, height_mm=210.0, margin_mm=12.0)
 TRANSFORM = PageTransform(chart=CHART, page=PAGE)
-SCENE = build_scene(CHART, [], [])
+SCENE = build_scene(
+    CHART,
+    [
+        Star(
+            id="X",
+            ra_deg=CHART.center_ra_deg,
+            dec_deg=CHART.center_dec_deg,
+            magnitude=3.0,
+            provenance=Provenance(catalogue="TEST", source_id="X"),
+        )
+    ],
+    [],
+)
 
 
 def make_candidate(
@@ -177,3 +190,41 @@ def test_unknown_element_rejected() -> None:
         STYLE,
     )
     assert outcome.rejected[0][1] == "referenced element is not a label"
+
+
+def _fixed_label(label_id: str, left: float, top: float) -> Label:
+    return Label(
+        id=label_id,
+        target_id="X",
+        text=label_id,
+        priority=50,
+        mandatory=False,
+        candidates=(make_candidate(label_id, CompassPosition.N, left, top),),
+    )
+
+
+def test_action_rejected_when_it_swaps_one_hard_violation_for_another() -> None:
+    # A:N overlaps B; moving A to S overlaps C instead.  The hard-violation
+    # count stays at 1, so a count-only check would wrongly accept the move.
+    a = Label(
+        id="label:a",
+        target_id="X",
+        text="A",
+        priority=50,
+        mandatory=False,
+        candidates=(
+            make_candidate("label:a", CompassPosition.N, 100.0, 100.0),
+            make_candidate("label:a", CompassPosition.S, 100.0, 110.0),
+        ),
+    )
+    b = _fixed_label("label:b", 100.0, 100.0)
+    c = _fixed_label("label:c", 100.0, 110.0)
+    outcome = apply_review_actions(
+        (a, b, c),
+        make_result("label:a", {"type": "select_candidate", "candidate": "S"}),
+        SCENE,
+        TRANSFORM,
+        STYLE,
+    )
+    assert outcome.applied == ()
+    assert outcome.rejected[0][1] == "action introduces hard violations"

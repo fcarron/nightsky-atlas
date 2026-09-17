@@ -6,6 +6,7 @@ reviews and regression tests (``AGENTS.md`` section 14.4).
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -35,6 +36,8 @@ class IssueType(StrEnum):
     LABEL_DSO = "label_dso"
     INVALID_SELECTION = "invalid_selection"
     MISSING_CANDIDATE = "missing_candidate"
+    DUPLICATE_LABEL_ID = "duplicate_label_id"
+    UNKNOWN_TARGET = "unknown_target"
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +89,32 @@ def find_hard_violations(
 ) -> tuple[LayoutIssue, ...]:
     """Return all hard label violations for a layout."""
     issues: list[LayoutIssue] = []
+
+    known_targets = {entry.star.id for entry in scene.stars}
+    known_targets.update(entry.dso.id for entry in scene.deep_sky_objects)
+    known_targets.update(entry.system.id for entry in scene.star_systems)
+
+    id_counts = Counter(label.id for label in labels)
+    first_by_id: dict[str, Label] = {}
+    for label in labels:
+        first_by_id.setdefault(label.id, label)
+    for label_id, label in sorted(first_by_id.items()):
+        if id_counts[label_id] > 1:
+            issues.append(
+                _issue(
+                    IssueType.DUPLICATE_LABEL_ID,
+                    (label_id,),
+                    f"label id {label_id} appears {id_counts[label_id]} times",
+                )
+            )
+        if label.target_id not in known_targets:
+            issues.append(
+                _issue(
+                    IssueType.UNKNOWN_TARGET,
+                    (label.id,),
+                    f"{label.id} references unknown target {label.target_id!r}",
+                )
+            )
 
     for label in labels:
         if label.hidden:

@@ -68,7 +68,7 @@ def scene_with_center_objects():
 
 
 def test_valid_layout_has_no_issues() -> None:
-    scene = build_scene(CHART, [], [])
+    scene = scene_with_center_objects()
     label = make_label("label:a", 20.0, 20.0)
     result = validate_layout((label,), scene, TRANSFORM, STYLE)
     assert result.is_valid
@@ -135,3 +135,28 @@ def test_result_counts_by_type() -> None:
     counts = result.count_by_type()
     assert counts["label_star"] >= 1
     assert counts["label_dso"] >= 1
+
+
+def test_duplicate_label_id_is_reported() -> None:
+    scene = scene_with_center_objects()
+    first = make_label("label:a", 20.0, 20.0)
+    second = make_label("label:a", 60.0, 60.0)
+    issues = find_hard_violations((first, second), scene, TRANSFORM, STYLE)
+    assert IssueType.DUPLICATE_LABEL_ID in {issue.issue_type for issue in issues}
+
+
+def test_unknown_target_is_reported() -> None:
+    scene = build_scene(CHART, [], [])
+    label = make_label("label:a", 20.0, 20.0)
+    issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    assert IssueType.UNKNOWN_TARGET in {issue.issue_type for issue in issues}
+
+
+def test_known_target_is_accepted() -> None:
+    scene = scene_with_center_objects()
+    label = make_label("label:a", 20.0, 20.0)
+    types = {
+        issue.issue_type for issue in find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    }
+    assert IssueType.UNKNOWN_TARGET not in types
+    assert IssueType.DUPLICATE_LABEL_ID not in types

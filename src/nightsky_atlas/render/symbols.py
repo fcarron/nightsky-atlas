@@ -20,6 +20,9 @@ from nightsky_atlas.atlas.config import DsoExtentStyle, StarStyle, StyleConfig
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType
 
 __all__ = [
+    "CIRCLE_CROSS_REACH_FACTOR",
+    "SPOKED_CIRCLE_INNER_FACTOR",
+    "SPOKED_CIRCLE_OUTER_FACTOR",
     "DsoShape",
     "EllipseGeometry",
     "StarSizeModel",
@@ -40,6 +43,15 @@ class DsoShape(StrEnum):
     DASHED_SQUARE = "dashed_square"
     SQUARE = "square"
     DOT = "dot"
+
+
+# Decorative-mark reach as a multiple of the symbol's collision radius.  The
+# drawn symbol must never extend beyond the :class:`SymbolExtent` that label
+# exclusion and collision detection consume, so every outer factor stays <= 1.0
+# (``AGENTS.md`` section 12).
+CIRCLE_CROSS_REACH_FACTOR = 1.0
+SPOKED_CIRCLE_INNER_FACTOR = 0.5
+SPOKED_CIRCLE_OUTER_FACTOR = 1.0
 
 
 _SHAPE_BY_TYPE: dict[DsoType, DsoShape] = {

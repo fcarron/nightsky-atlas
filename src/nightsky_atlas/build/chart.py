@@ -27,6 +27,7 @@ from nightsky_atlas.atlas.observing_config import (
     load_observing_lists_config,
     resolve_edition,
 )
+from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.constellations import (
     DEFAULT_FIXTURE_DIR as CONSTELLATION_FIXTURE_DIR,
@@ -82,10 +83,18 @@ DEFAULT_DOUBLE_STAR_PATH = Path("data/processed/double_stars/wds.json")
 
 
 def find_chart(atlas: AtlasConfig, chart_id: str) -> ChartDefinition:
-    """Return the named chart definition from an atlas."""
+    """Return the named chart definition from an atlas.
+
+    Explicit ``charts`` are checked first; atlases defined by tiling fall back
+    to the generated chart set, so per-chart commands work on tiled ids such as
+    ``standard-068``.
+    """
     for chart in atlas.charts:
         if chart.id == chart_id:
             return chart.to_definition(atlas_id=atlas.id)
+    for chart in chart_definitions(atlas):
+        if chart.id == chart_id:
+            return chart
     raise ConfigError(f"chart {chart_id!r} not found in atlas {atlas.id!r}")
 
 
