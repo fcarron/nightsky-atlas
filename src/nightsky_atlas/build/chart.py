@@ -27,6 +27,7 @@ from nightsky_atlas.atlas.observing_config import (
     load_observing_lists_config,
     resolve_edition,
 )
+from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.constellations import (
     DEFAULT_FIXTURE_DIR as CONSTELLATION_FIXTURE_DIR,
 )
@@ -161,6 +162,7 @@ def build_chart_context(
     double_star_ambiguous_radius_arcsec: float = DEFAULT_AMBIGUOUS_RADIUS_ARCSEC,
     magnitude_limit: float | None = None,
     dso_magnitude_limit: float | None = None,
+    progress: Progress | None = None,
 ) -> ChartContext:
     """Assemble a chart context from configuration and catalogue inputs.
 
@@ -170,77 +172,85 @@ def build_chart_context(
     into the scene; a missing fixture directory or policy file simply disables
     that behaviour.
     """
-    atlas = load_atlas_config(atlas_path)
-    style = load_style_config(style_path)
-    if definition is None:
-        if chart_id is None:
-            raise ConfigError("either chart_id or definition is required")
-        definition = find_chart(atlas, chart_id)
-    page = atlas.page.to_geometry()
+    progress = progress if progress is not None else null_progress()
+    with progress.step("config load", detail=True):
+        atlas = load_atlas_config(atlas_path)
+        style = load_style_config(style_path)
+        if definition is None:
+            if chart_id is None:
+                raise ConfigError("either chart_id or definition is required")
+            definition = find_chart(atlas, chart_id)
+        page = atlas.page.to_geometry()
 
     star_limit = (
         magnitude_limit if magnitude_limit is not None else atlas.stellar_limit_magnitude
     )
-    stars = load_chart_stars(
-        definition,
-        star_store=star_store,
-        stars_csv=stars_csv,
-        magnitude_limit=star_limit,
-    )
-    dsos = load_dsos(dsos_path)
+    with progress.step("star query", detail=True):
+        stars = load_chart_stars(
+            definition,
+            star_store=star_store,
+            stars_csv=stars_csv,
+            magnitude_limit=star_limit,
+        )
+    with progress.step("dso load", detail=True):
+        dsos = load_dsos(dsos_path)
     dso_limit = (
         dso_magnitude_limit
         if dso_magnitude_limit is not None
         else atlas.dso_limit_magnitude
     )
-    constellations = load_constellations(
-        constellations_dir
-        if constellations_dir is not None
-        else CONSTELLATION_FIXTURE_DIR
-    )
-    outlines = load_outlines(
-        outlines_dir if outlines_dir is not None else OUTLINE_FIXTURE_DIR
-    )
+    with progress.step("constellation/outline load", detail=True):
+        constellations = load_constellations(
+            constellations_dir
+            if constellations_dir is not None
+            else CONSTELLATION_FIXTURE_DIR
+        )
+        outlines = load_outlines(
+            outlines_dir if outlines_dir is not None else OUTLINE_FIXTURE_DIR
+        )
 
-    observing_lists = load_observing_lists(
-        observing_lists_dir
-        if observing_lists_dir is not None
-        else OBSERVING_LISTS_FIXTURE_DIR
-    )
-    selection_policy = _selection_policy(
-        atlas,
-        observing_config_path
-        if observing_config_path is not None
-        else OBSERVING_CONFIG_PATH,
-    )
+    with progress.step("observing-list load", detail=True):
+        observing_lists = load_observing_lists(
+            observing_lists_dir
+            if observing_lists_dir is not None
+            else OBSERVING_LISTS_FIXTURE_DIR
+        )
+        selection_policy = _selection_policy(
+            atlas,
+            observing_config_path
+            if observing_config_path is not None
+            else OBSERVING_CONFIG_PATH,
+        )
 
-    all_systems = (
-        list(star_systems) if star_systems is not None else load_star_systems(double_stars_path)
-    )
-    box = chart_query_box(definition, padding_deg=1.0)
-    nearby_systems = [
-        system for system in all_systems if _system_in_box(system, box)
-    ]
-    matched_systems = match_star_systems(
-        nearby_systems,
-        stars,
-        tolerance_arcsec=double_star_match_tolerance_arcsec,
-        companion_tolerance_arcsec=double_star_companion_tolerance_arcsec,
-        ambiguous_radius_arcsec=double_star_ambiguous_radius_arcsec,
-    )
+    with progress.step("double-star match", detail=True):
+        all_systems = (
+            list(star_systems) if star_systems is not None else load_star_systems(double_stars_path)
+        )
+        box = chart_query_box(definition, padding_deg=1.0)
+        nearby_systems = [
+            system for system in all_systems if _system_in_box(system, box)
+        ]
+        matched_systems = match_star_systems(
+            nearby_systems,
+            stars,
+            tolerance_arcsec=double_star_match_tolerance_arcsec,
+            companion_tolerance_arcsec=double_star_companion_tolerance_arcsec,
+            ambiguous_radius_arcsec=double_star_ambiguous_radius_arcsec,
+        )
 
-    scene = build_scene(
-        definition,
-        stars,
-        dsos,
-        dso_magnitude_limit=dso_limit,
-        constellation_lines=constellations.lines,
-        constellation_boundaries=constellations.boundaries,
-        nebula_outlines=outlines,
-        star_systems=matched_systems,
-        observing_index=build_membership_index(observing_lists),
-        selection_policy=selection_policy,
-    )
+    with progress.step("scene build", detail=True):
+        scene = build_scene(
+            definition,
+            stars,
+            dsos,
+            dso_magnitude_limit=dso_limit,
+            constellation_lines=constellations.lines,
+            constellation_boundaries=constellations.boundaries,
+            nebula_outlines=outlines,
+            star_systems=matched_systems,
+            observing_index=build_membership_index(observing_lists),
+            selection_policy=selection_policy,
+        )
     transform = PageTransform(chart=definition, page=page)
     return ChartContext(
         atlas=atlas,

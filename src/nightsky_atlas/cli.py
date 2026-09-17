@@ -31,6 +31,7 @@ from nightsky_atlas.atlas.tiling import (
 )
 from nightsky_atlas.build.atlas import build_atlas
 from nightsky_atlas.build.chart import build_chart_context
+from nightsky_atlas.build.progress import Progress
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
 from nightsky_atlas.catalog.hipparcos import (
     CATALOGUE as HIPPARCOS_CATALOGUE,
@@ -480,6 +481,18 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     build.add_argument("--no-optimize", action="store_true")
     build.add_argument("--no-front-matter", action="store_true")
     build.add_argument("--no-draft-report", action="store_true")
+    build.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="log per-stage timings for every chart (where the time goes)",
+    )
+    build.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="suppress progress output (final summary only)",
+    )
     build.set_defaults(handler=_command_atlas_build)
 
 
@@ -914,6 +927,7 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
     chart_ids = None
     if args.charts:
         chart_ids = tuple(part.strip() for part in args.charts.split(",") if part.strip())
+    progress = Progress(verbose=args.verbose, enabled=not args.quiet)
     result = build_atlas(
         atlas_path=args.atlas,
         style_path=args.style,
@@ -935,6 +949,7 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         png_dpi=args.png_dpi,
         write_front_matter=not args.no_front_matter,
         write_draft_report=not args.no_draft_report,
+        progress=progress,
     )
     print(
         f"{result.atlas_id}: {len(result.pages)} charts, "

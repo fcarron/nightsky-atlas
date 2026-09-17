@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime
 import json
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from nightsky_atlas.atlas.tiling import (
     with_neighbours,
 )
 from nightsky_atlas.build.chart import build_chart_context, load_star_systems
+from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
 )
@@ -240,11 +242,15 @@ def build_atlas(
     png_dpi: float = 150.0,
     write_front_matter: bool = True,
     write_draft_report: bool = True,
+    progress: Progress | None = None,
 ) -> AtlasBuildResult:
     """Build an atlas subset or the whole atlas and write a manifest."""
-    atlas = load_atlas_config(atlas_path)
-    style = load_style_config(style_path)
-    charts = chart_definitions(atlas)
+    progress = progress if progress is not None else null_progress()
+    with progress.step("load atlas/style config"):
+        atlas = load_atlas_config(atlas_path)
+        style = load_style_config(style_path)
+    with progress.step("resolve chart definitions"):
+        charts = chart_definitions(atlas)
     if chart_ids is not None:
         wanted = set(chart_ids)
         charts = tuple(chart for chart in charts if chart.id in wanted)
@@ -256,28 +262,35 @@ def build_atlas(
     )
     applied_chart_ids: set[str] = set()
 
-    star_names = load_star_names(
-        star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
-    )
-    star_systems = load_star_systems(double_stars_path)
+    with progress.step("load shared fixtures"):
+        star_names = load_star_names(
+            star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
+        )
+        star_systems = load_star_systems(double_stars_path)
 
     page = atlas.page.to_geometry()
     outroot = Path(outdir) / atlas.id
     outroot.mkdir(parents=True, exist_ok=True)
     combined_pdf = outroot / "atlas.pdf"
+    progress.info(f"atlas {atlas.id!r}: {len(charts)} charts -> {outroot}")
 
     surface = cairo.PDFSurface(
         str(combined_pdf), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm)
     )
     context = cairo.Context(surface)
     if write_front_matter:
-        _draw_front_matter(context, atlas, style, len(charts))
-        surface.show_page()
+        with progress.step("front matter", detail=True):
+            _draw_front_matter(context, atlas, style, len(charts))
+            surface.show_page()
 
     results: list[ChartPageResult] = []
     observing_lists: dict[str, object] = {}
     forced_lists: list[str] = []
-    for definition in charts:
+    chart_total = len(charts)
+    for index, definition in enumerate(charts, start=1):
+        chart_start = time.perf_counter()
+        progress.detail(f"[{index}/{chart_total}] {definition.id}: start")
+        stage_start = time.perf_counter()
         chart_context = build_chart_context(
             atlas_path=atlas_path,
             style_path=style_path,
@@ -291,10 +304,14 @@ def build_atlas(
             observing_config_path=observing_config_path,
             double_stars_path=double_stars_path,
             star_systems=star_systems,
+            progress=progress,
         )
+        context_s = time.perf_counter() - stage_start
+        stage_start = time.perf_counter()
         labels = build_labels(
             chart_context.scene, chart_context.transform, chart_context.style, star_names
         )
+        labels_s = time.perf_counter() - stage_start
         chart_overrides = library.for_chart(definition.id) if library is not None else None
         if chart_context.observing_lists:
             observing_lists = chart_context.observing_lists
@@ -304,22 +321,32 @@ def build_atlas(
             labels = apply_overrides(labels, chart_overrides)
             applied_chart_ids.add(definition.id)
         overrides_applied = len(chart_overrides) if chart_overrides is not None else 0
+        stage_start = time.perf_counter()
         cost_before = layout_cost(
             labels, chart_context.scene, chart_context.transform, chart_context.style
         )[0]
+        cost_s = time.perf_counter() - stage_start
+        optimize_s = 0.0
         if optimize:
+            stage_start = time.perf_counter()
             optimized = optimize_labels(
                 labels, chart_context.scene, chart_context.transform, chart_context.style
             )
             labels = optimized.labels
+            optimize_s = time.perf_counter() - stage_start
+        stage_start = time.perf_counter()
         cost_after = layout_cost(
             labels, chart_context.scene, chart_context.transform, chart_context.style
         )[0]
+        cost_s += time.perf_counter() - stage_start
+        stage_start = time.perf_counter()
         validation = validate_layout(
             labels, chart_context.scene, chart_context.transform, chart_context.style
         )
+        validate_s = time.perf_counter() - stage_start
 
         page_dir = outroot / "charts" / definition.id
+        stage_start = time.perf_counter()
         render_chart(
             chart_context.scene,
             chart_context.transform,
@@ -329,6 +356,8 @@ def build_atlas(
             png_path=page_dir / "preview.png" if render_png else None,
             png_dpi=png_dpi,
         )
+        render_s = time.perf_counter() - stage_start
+        stage_start = time.perf_counter()
         draw_chart_page(
             context,
             chart_context.scene,
@@ -337,8 +366,24 @@ def build_atlas(
             labels=labels,
         )
         surface.show_page()
+        compose_s = time.perf_counter() - stage_start
 
         placed = sum(1 for label in labels if not label.hidden and label.candidates)
+        total_s = time.perf_counter() - chart_start
+        progress.info(
+            f"[{index}/{chart_total}] {definition.id}: "
+            f"{chart_context.scene.star_count} stars, "
+            f"{chart_context.scene.dso_count} DSOs, "
+            f"{chart_context.scene.star_system_count} systems, "
+            f"{placed}/{len(labels)} labels, "
+            f"{len(validation.issues)} hard issues ({total_s:.2f}s)"
+        )
+        progress.detail(
+            f"context {context_s:.2f}s | labels {labels_s:.2f}s | "
+            f"cost {cost_s:.2f}s | optimize {optimize_s:.2f}s | "
+            f"validate {validate_s:.2f}s | render {render_s:.2f}s | "
+            f"compose {compose_s:.2f}s"
+        )
         results.append(
             ChartPageResult(
                 chart_id=definition.id,
@@ -357,7 +402,8 @@ def build_atlas(
             )
         )
 
-    surface.finish()
+    with progress.step("finish combined PDF"):
+        surface.finish()
 
     unused_chart_ids = (
         sorted(set(library.chart_ids()) - applied_chart_ids) if library is not None else []
@@ -391,20 +437,23 @@ def build_atlas(
         "pages": [page_result.to_dict() for page_result in results],
     }
     manifest_path = outroot / "manifest.json"
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    with progress.step("write manifest", detail=True):
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
     draft_report_path: Path | None = None
     if write_draft_report and atlas.tiling is not None:
-        draft_report = build_draft_report(
-            atlas_path=atlas_path,
-            pages=[page_result.to_dict() for page_result in results],
-        )
-        draft_report_path = outroot / "draft-report.json"
-        draft_report_path.write_text(
-            json.dumps(draft_report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        with progress.step("write draft report", detail=True):
+            draft_report = build_draft_report(
+                atlas_path=atlas_path,
+                pages=[page_result.to_dict() for page_result in results],
+            )
+            draft_report_path = outroot / "draft-report.json"
+            draft_report_path.write_text(
+                json.dumps(draft_report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+        progress.info(f"draft report -> {draft_report_path}")
         print(render_text_summary(draft_report))
 
     return AtlasBuildResult(
