@@ -17,6 +17,7 @@ from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
 from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle, score_candidate
+from nightsky_atlas.layout.spatial import RectIndex
 from nightsky_atlas.render.symbols import StarSizeModel, galaxy_ellipse
 from nightsky_atlas.scene.models import ChartScene
 
@@ -26,6 +27,7 @@ _IMPORTANT_STAR_MAGNITUDE = 6.0
 _CROWDING_RADIUS_MM = 6.0
 _EDGE_MARGIN_MM = 8.0
 _MAX_REPAIR_PASSES = 4
+_GRID_CELL_MM = 8.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +101,22 @@ def _anchor_for(
     return candidate.bounds.center
 
 
+def _symbol_bounds(symbol: SymbolCircle) -> PageRect:
+    return PageRect(
+        left_mm=symbol.center.x_mm - symbol.radius_mm,
+        top_mm=symbol.center.y_mm - symbol.radius_mm,
+        width_mm=2.0 * symbol.radius_mm,
+        height_mm=2.0 * symbol.radius_mm,
+    )
+
+
+def _build_symbol_index(symbols: tuple[SymbolCircle, ...]) -> RectIndex[SymbolCircle]:
+    index: RectIndex[SymbolCircle] = RectIndex(_GRID_CELL_MM)
+    for position, symbol in enumerate(symbols):
+        index.set(f"symbol:{position}", _symbol_bounds(symbol), symbol)
+    return index
+
+
 def _is_valid(
     bounds: PageRect,
     placed_bounds: tuple[PageRect, ...],
@@ -135,6 +153,7 @@ def optimize_labels(
     weights = weights or CostWeights()
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
+    symbols_index = _build_symbol_index(symbols)
     anchors = _target_anchors(labels, scene, transform)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
@@ -152,7 +171,7 @@ def optimize_labels(
     )
 
     placements: dict[str, str | None] = {}
-    placed_bounds: list[PageRect] = []
+    placed_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
     for label in ordered:
         if not label.locked:
             continue
@@ -160,7 +179,7 @@ def optimize_labels(
         candidate = label.candidate(candidate_id) if candidate_id is not None else None
         if candidate is not None:
             placements[label.id] = candidate.id
-            placed_bounds.append(candidate.bounds)
+            placed_index.set(label.id, candidate.bounds, candidate.bounds)
         else:
             placements[label.id] = None
 
@@ -169,12 +188,18 @@ def optimize_labels(
             continue
         best: tuple[tuple[float, float, int], LabelCandidate] | None = None
         for candidate in label.candidates:
-            valid = _is_valid(candidate.bounds, tuple(placed_bounds), printable, symbols)
+            nearby_bounds = tuple(
+                placed_index.query(
+                    candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id
+                )
+            )
+            nearby_symbols = tuple(symbols_index.query(candidate.bounds))
+            valid = _is_valid(candidate.bounds, nearby_bounds, printable, nearby_symbols)
             breakdown = score_candidate(
                 candidate,
                 target_anchor=_anchor_for(label, anchors, candidate),
-                placed_bounds=tuple(placed_bounds),
-                symbols=symbols,
+                placed_bounds=nearby_bounds,
+                symbols=nearby_symbols,
                 printable=printable,
                 crowding_radius_mm=_CROWDING_RADIUS_MM,
                 weights=weights,
@@ -195,10 +220,10 @@ def optimize_labels(
             placements[label.id] = None
             continue
         placements[label.id] = best[1].id
-        placed_bounds.append(best[1].bounds)
+        placed_index.set(label.id, best[1].bounds, best[1].bounds)
 
     placements = _local_repair(
-        ordered, placements, anchors, printable, symbols, weights
+        ordered, placements, anchors, printable, placed_index, symbols_index, weights
     )
     cost_after, totals_after = _evaluate(
         ordered, placements, anchors, printable, symbols, weights
@@ -222,30 +247,15 @@ def optimize_labels(
     )
 
 
-def _others_bounds(
-    label: Label,
-    placements: dict[str, str | None],
-    label_by_id: dict[str, Label],
-) -> tuple[PageRect, ...]:
-    others: list[PageRect] = []
-    for other_id, other_candidate_id in placements.items():
-        if other_id == label.id or other_candidate_id is None:
-            continue
-        other_candidate = label_by_id[other_id].candidate(other_candidate_id)
-        if other_candidate is not None:
-            others.append(other_candidate.bounds)
-    return tuple(others)
-
-
 def _local_repair(
     ordered: tuple[Label, ...],
     placements: dict[str, str | None],
     anchors: dict[str, PagePoint],
     printable: PageRect,
-    symbols: tuple[SymbolCircle, ...],
+    placed_index: RectIndex[PageRect],
+    symbols_index: RectIndex[SymbolCircle],
     weights: CostWeights,
 ) -> dict[str, str | None]:
-    label_by_id = {label.id: label for label in ordered}
     for _ in range(_MAX_REPAIR_PASSES):
         changed = False
         for label in ordered:
@@ -257,14 +267,19 @@ def _local_repair(
             current = label.candidate(current_id)
             if current is None:
                 continue
-            others = _others_bounds(label, placements, label_by_id)
             anchor = _anchor_for(label, anchors, current)
             best_id = current_id
+            nearby_bounds = tuple(
+                placed_index.query(
+                    current.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id
+                )
+            )
+            nearby_symbols = tuple(symbols_index.query(current.bounds))
             best_cost = score_candidate(
                 current,
                 target_anchor=anchor,
-                placed_bounds=others,
-                symbols=symbols,
+                placed_bounds=nearby_bounds,
+                symbols=nearby_symbols,
                 printable=printable,
                 crowding_radius_mm=_CROWDING_RADIUS_MM,
                 weights=weights,
@@ -273,13 +288,21 @@ def _local_repair(
             for candidate in label.candidates:
                 if candidate.id == current_id:
                     continue
-                if not _is_valid(candidate.bounds, others, printable, symbols):
+                cand_bounds = tuple(
+                    placed_index.query(
+                        candidate.bounds,
+                        margin_mm=_CROWDING_RADIUS_MM,
+                        exclude=label.id,
+                    )
+                )
+                cand_symbols = tuple(symbols_index.query(candidate.bounds))
+                if not _is_valid(candidate.bounds, cand_bounds, printable, cand_symbols):
                     continue
                 cost = score_candidate(
                     candidate,
                     target_anchor=anchor,
-                    placed_bounds=others,
-                    symbols=symbols,
+                    placed_bounds=cand_bounds,
+                    symbols=cand_symbols,
                     printable=printable,
                     crowding_radius_mm=_CROWDING_RADIUS_MM,
                     weights=weights,
@@ -290,6 +313,11 @@ def _local_repair(
                     best_id = candidate.id
             if best_id != current_id:
                 placements[label.id] = best_id
+                new_candidate = label.candidate(best_id)
+                if new_candidate is not None:
+                    placed_index.set(
+                        label.id, new_candidate.bounds, new_candidate.bounds
+                    )
                 changed = True
         if not changed:
             break
@@ -305,6 +333,15 @@ def _evaluate(
     weights: CostWeights,
 ) -> tuple[float, dict[str, float]]:
     label_by_id = {label.id: label for label in ordered}
+    placed_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
+    for label_id, candidate_id in placements.items():
+        if candidate_id is None:
+            continue
+        placed_label = label_by_id[label_id]
+        placed_candidate = placed_label.candidate(candidate_id)
+        if placed_candidate is not None:
+            placed_index.set(label_id, placed_candidate.bounds, placed_candidate.bounds)
+    symbols_index = _build_symbol_index(symbols)
     total = 0.0
     totals: dict[str, float] = {}
     for label in ordered:
@@ -314,12 +351,17 @@ def _evaluate(
         candidate = label.candidate(candidate_id)
         if candidate is None:
             continue
-        others = _others_bounds(label, placements, label_by_id)
+        nearby_bounds = tuple(
+            placed_index.query(
+                candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id
+            )
+        )
+        nearby_symbols = tuple(symbols_index.query(candidate.bounds))
         breakdown = score_candidate(
             candidate,
             target_anchor=_anchor_for(label, anchors, candidate),
-            placed_bounds=others,
-            symbols=symbols,
+            placed_bounds=nearby_bounds,
+            symbols=nearby_symbols,
             printable=printable,
             crowding_radius_mm=_CROWDING_RADIUS_MM,
             weights=weights,
