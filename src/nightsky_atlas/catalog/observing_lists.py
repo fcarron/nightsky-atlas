@@ -15,6 +15,7 @@ and Messier numbers (``M 42``) all compare equal.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 from collections.abc import Mapping
@@ -41,12 +42,14 @@ _NGC_IC = re.compile(r"^(NGC|IC)0*(\d+)")
 _MESSIER = re.compile(r"^M0*(\d+)")
 
 
+@functools.lru_cache(maxsize=65536)
 def canonical_designation(designation: str) -> str:
     """Return a comparable form of a catalogue designation.
 
     Whitespace is removed, NGC/IC numbers lose leading zeros and a Messier
     number becomes ``M<n>``.  Anything unrecognized is returned upper-cased so
-    that non-catalogue designations still compare consistently.
+    that non-catalogue designations still compare consistently.  Cached because
+    the same designations are canonicalized for every chart in a build.
     """
     cleaned = re.sub(r"\s+", "", designation).upper()
     if not cleaned:
