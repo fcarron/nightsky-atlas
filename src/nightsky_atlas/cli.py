@@ -54,6 +54,12 @@ from nightsky_atlas.catalog.openngc import (
     iter_openngc_objects,
 )
 from nightsky_atlas.catalog.sample import StarCatalogueError
+from nightsky_atlas.catalog.star_names import (
+    DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
+)
+from nightsky_atlas.catalog.star_names import (
+    load_star_names,
+)
 from nightsky_atlas.catalog.store import StarStore, build_star_store
 from nightsky_atlas.catalog.tycho import (
     CATALOGUE,
@@ -65,7 +71,7 @@ from nightsky_atlas.catalog.tycho import (
 )
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
-from nightsky_atlas.layout.labels import build_dso_labels
+from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.optimizer import OptimizationResult, optimize_labels
 from nightsky_atlas.layout.overrides import apply_overrides, load_override_library
 from nightsky_atlas.layout.validation import validate_layout
@@ -87,6 +93,9 @@ _DEFAULT_DSO_OUT = Path("data/processed/dso/openngc.json")
 _DEFAULT_DSO_MANIFEST = Path("data/processed/dso/openngc.manifest.json")
 _DEFAULT_CONSTELLATIONS = Path("data/fixtures/constellations")
 _DEFAULT_OUTLINES = Path("data/fixtures/outlines")
+_DEFAULT_STAR_NAMES = STAR_NAMES_FIXTURE_DIR
+_DEFAULT_OBSERVING_LISTS = Path("data/fixtures/observing_lists")
+_DEFAULT_OBSERVING_CONFIG = Path("config/observing_lists.yaml")
 _DEFAULT_CASES = Path("benchmarks/ai_review/cases.yaml")
 _DEFAULT_BENCH_OUT = Path("benchmarks/ai_review/results")
 _DEFAULT_OUTDIR = Path("build")
@@ -150,6 +159,24 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         type=Path,
         default=_DEFAULT_OUTLINES,
         help="directory of schematic nebula outline fixtures (empty to omit)",
+    )
+    parser.add_argument(
+        "--star-names",
+        type=Path,
+        default=_DEFAULT_STAR_NAMES,
+        help="directory of star-name fixtures for bright-star labels (empty to omit)",
+    )
+    parser.add_argument(
+        "--observing-lists",
+        type=Path,
+        default=_DEFAULT_OBSERVING_LISTS,
+        help="directory of observing-list fixtures for DSO selection (empty to omit)",
+    )
+    parser.add_argument(
+        "--observing-config",
+        type=Path,
+        default=_DEFAULT_OBSERVING_CONFIG,
+        help="observing-list selection policy YAML",
     )
     parser.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
     parser.add_argument("--png-dpi", type=float, default=300.0)
@@ -353,6 +380,24 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
         help="directory of schematic nebula outline fixtures (empty to omit)",
     )
     build.add_argument(
+        "--star-names",
+        type=Path,
+        default=_DEFAULT_STAR_NAMES,
+        help="directory of star-name fixtures for bright-star labels (empty to omit)",
+    )
+    build.add_argument(
+        "--observing-lists",
+        type=Path,
+        default=_DEFAULT_OBSERVING_LISTS,
+        help="directory of observing-list fixtures for DSO selection (empty to omit)",
+    )
+    build.add_argument(
+        "--observing-config",
+        type=Path,
+        default=_DEFAULT_OBSERVING_CONFIG,
+        help="observing-list selection policy YAML",
+    )
+    build.add_argument(
         "--overrides",
         type=Path,
         default=None,
@@ -380,6 +425,8 @@ def _chart_context(
         dsos_path=args.dsos,
         constellations_dir=args.constellations,
         outlines_dir=args.outlines,
+        observing_lists_dir=args.observing_lists,
+        observing_config_path=args.observing_config,
         magnitude_limit=args.magnitude_limit,
         dso_magnitude_limit=args.dso_magnitude_limit,
     )
@@ -406,11 +453,17 @@ def _parse_debug(value: str) -> DebugOptions | None:
     return DebugOptions(**{flag: flag in flags for flag in _DEBUG_FLAGS})
 
 
+def _star_names(args: argparse.Namespace) -> dict:
+    """Load the bright-star label lookup for a command, if configured."""
+    directory = getattr(args, "star_names", None)
+    return load_star_names(directory if directory is not None else STAR_NAMES_FIXTURE_DIR)
+
+
 def _command_chart_render(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
 
     has_labels = bool(args.labels or args.optimize or args.overrides)
-    labels = build_dso_labels(scene, transform, style) if has_labels else ()
+    labels = build_labels(scene, transform, style, _star_names(args)) if has_labels else ()
     labels = _apply_chart_overrides(args, definition, labels)
     result: OptimizationResult | None = None
     if args.optimize:
@@ -443,7 +496,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
 
 def _command_chart_review(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
-    labels = build_dso_labels(scene, transform, style)
+    labels = build_labels(scene, transform, style, _star_names(args))
     labels = _apply_chart_overrides(args, definition, labels)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style)
@@ -519,6 +572,11 @@ def _write_layout_json(
         "scene": {
             "star_count": scene.star_count,
             "dso_count": scene.dso_count,
+            "deep_sky_objects": [
+                {"id": scene_dso.dso.id, **scene_dso.metadata.to_dict()}
+                for scene_dso in scene.deep_sky_objects
+                if scene_dso.metadata is not None
+            ],
         },
         "labels": [label.to_dict() for label in labels],
     }
@@ -537,7 +595,7 @@ def _write_layout_json(
 
 def _command_chart_validate(args: argparse.Namespace) -> int:
     _atlas, style, definition, _page, scene, transform = _chart_context(args)
-    labels = build_dso_labels(scene, transform, style)
+    labels = build_labels(scene, transform, style, _star_names(args))
     labels = _apply_chart_overrides(args, definition, labels)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style)
@@ -721,6 +779,9 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         dsos_path=args.dsos,
         constellations_dir=args.constellations,
         outlines_dir=args.outlines,
+        star_names_dir=args.star_names,
+        observing_lists_dir=args.observing_lists,
+        observing_config_path=args.observing_config,
         overrides_path=args.overrides,
         chart_ids=chart_ids,
         limit=args.limit,

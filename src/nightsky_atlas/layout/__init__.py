@@ -9,7 +9,7 @@ from nightsky_atlas.layout.collision import (
     find_hard_violations,
     placed_candidates,
 )
-from nightsky_atlas.layout.labels import build_dso_labels
+from nightsky_atlas.layout.labels import build_dso_labels, build_labels, build_star_labels
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import OptimizationResult, optimize_labels
 from nightsky_atlas.layout.overrides import (
@@ -40,6 +40,8 @@ __all__ = [
     "ValidationResult",
     "apply_overrides",
     "build_dso_labels",
+    "build_labels",
+    "build_star_labels",
     "compass_candidates",
     "find_hard_violations",
     "load_override_library",

@@ -20,13 +20,48 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   as faint dashed strokes. First set is Cygnus-centred (Veil NGC6960/NGC6992,
   Pickering's Triangle NGC6979, North America NGC7000, Pelican IC5070); new
   `test-veil` test chart for the Cygnus Loop.
-- `make check`: Ruff clean, 327 tests passing.
+- Bright-star labels added (M9/M14 partial): stars brighter than magnitude 5.5
+  with a common name or Bayer/Flamsteed/variable designation are labelled
+  (`label:star:<id>`), names from the d3-celestial starnames fixture. Tycho-2
+  now records its Hipparcos cross-ID (`hip_id`) so Tycho-stored stars resolve to
+  names. Labels are optional (only the brightest named stars are mandatory), so
+  the optimizer may hide them in crowded fields.
+- Observing-list-driven DSO selection (M21.1–M21.4): deep-sky *rendering* and
+  *labelling* now have separate priorities (`render_priority`, `label_priority`).
+  Membership lives in `data/fixtures/observing_lists/` (Herschel 400 first,
+  402 NGC designations, CC BY-SA 4.0) and never mutates `DeepSkyObject`.
+  `config/observing_lists.yaml` declares forced lists and priority weights per
+  edition; Standard forces the complete resolvable Herschel 400 into every chart.
+- Per-type DSO visibility (M21.4): `catalog/visibility.py` evaluates each object
+  type from integrated magnitude, derived mean surface brightness and angular
+  size. Galaxies are surface-brightness limited, clusters use size/magnitude,
+  planetary nebulae are magnitude-limited with no size penalty, and star /
+  double-star entries are excluded from the DSO layer. Limits live in the atlas
+  `visibility:` block (Standard default: 8-10 inch dark sky, integrated
+  magnitude limit 13.5, surface-brightness limit 23.5, min axis 1.5 arcmin);
+  forced observing-list members override.  Faint DSOs beyond the style's
+  `dso_label_magnitude_limit` (12.5) are rendered without a label; mandatory
+  labels and observing-list members stay labelled.
+- DSO label formatting and hierarchy: a presentation-only layer
+  (`layout/dso_labels.py`) renders catalogue identifiers compactly without
+  touching the data model. The NGC prefix is dropped (a bare number means NGC,
+  `NGC 4411B` -> `4411B`), IC renders as `I3476`, Messier wins over NGC/IC, and
+  other catalogues use short abbreviations (`Sh2-101`, `Cr399`, `B168`).
+  Typography lives under `label.dso_labels`: Messier bold at 1.15x, non-Messier
+  Herschel 400 bold at normal size, ordinary objects regular. Each `Label`
+  carries resolved `font_size_pt`/`font_weight`; common names no longer replace
+  the designation. The corresponding deep-sky *symbol* is drawn with the heavier
+  `dso.bold_line_width_mm` whenever its label is bold, so the map mark matches
+  the name.
+- `make check`: Ruff clean, 446 tests passing.
 
 ## Frozen Standard geometry (M14.1)
 
 - Page A4 landscape 297 x 210 mm, margin 12 mm (printable 273 x 186 mm).
 - Field 27 x 18.5 deg, ~10.05 mm/deg, stereographic, north up / east left.
-- Stellar limit magnitude 9.0; deep-sky limit magnitude 12.0 (unknown-magnitude objects kept).
+- Stellar limit magnitude 9.0; deep-sky selection is per-type (8-10 inch dark
+  sky: integrated magnitude 13.5, surface brightness 23.5, min axis 1.5 arcmin).
+  `dso_limit_magnitude` 12.0 remains only as the no-policy fallback.
 - Tiling: declination bands with 3 deg overlap; coverage sampled at 2 deg; **135 charts**, ids `standard-NNN`, N/S/E/W neighbour references.
 - Coverage: 0 gaps at 1 deg sampling, maximum overlap 6.
 - Star style: min 0.2 / max 2.4 mm, bright magnitude 0.0 / faint magnitude 9.0.
@@ -48,6 +83,15 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Schematic nebula outlines: project-authored (proprietary), vendored as
   `data/fixtures/outlines/nebulae.json` with `SOURCE.md`. 5 Cygnus-region outlines;
   stable IDs `outline:dso:<dso_id>`.
+- Star names: d3-celestial, **BSD-3-Clause**, vendored as
+  `data/fixtures/starnames/starnames.json` with `LICENSE` and `SOURCE.md`.
+  ~4,600 Hipparcos stars keyed by Hipparcos number. The store records a
+  `hip_id` cross-ID (121,059 rows) so Tycho-stored stars resolve to names.
+- Observing lists (atlas metadata, not astronomy): Herschel 400, from Wikipedia
+  (*Herschel 400 Catalogue*, revision 1369720351), **CC BY-SA 4.0**, vendored as
+  `data/fixtures/observing_lists/herschel400.json` with `SOURCE.md`. 402
+  normalized NGC designations; nine have no OpenNGC match (documented in
+  `SOURCE.md`). Policy in `config/observing_lists.yaml`.
 - Git-ignored: `data/raw/`, `data/processed/`, `build/`, `.env`, `benchmarks/ai_review/generated|results/`.
 
 ## AI review
@@ -86,7 +130,11 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 `chart render|validate|review` and `atlas build` accept `--overrides PATH`
 (a single override file or a directory of them), `--constellations DIR`
 (default `data/fixtures/constellations`; point elsewhere or leave empty to omit)
-and `--outlines DIR` (default `data/fixtures/outlines`; empty to omit).
+and `--outlines DIR` (default `data/fixtures/outlines`; empty to omit) and
+`--star-names DIR` (default `data/fixtures/starnames`; empty to omit). DSO
+selection additionally accepts `--observing-lists DIR` (default
+`data/fixtures/observing_lists`; empty to omit) and `--observing-config PATH`
+(default `config/observing_lists.yaml`).
 
 ## Manual overrides (M16.1)
 
@@ -101,4 +149,6 @@ and `--outlines DIR` (default `data/fixtures/outlines`; empty to omit).
 
 1. M15.5 print/field test of representative pages.
 2. M16: M16.2 atlas-wide issue report, M16.3 preflight (`atlas validate --publication`), M16.4 `docs/DATA_SOURCES.md`.
-3. M17 Pocket, M18 Deep data expansion, M19 extended structures, M20 Deep atlas.
+3. M21.5 integrate further observing lists (license decision first); possible
+   later per-chart DSO density budget.
+4. M17 Pocket, M18 Deep data expansion, M19 extended structures, M20 Deep atlas.

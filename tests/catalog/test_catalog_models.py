@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from nightsky_atlas.catalog.models import Provenance, Star
+from nightsky_atlas.catalog.models import (
+    DeepSkyObject,
+    DsoType,
+    Provenance,
+    Star,
+)
 
 
 def make_provenance(**overrides: object) -> Provenance:
@@ -62,3 +67,43 @@ def test_star_serialization_round_trip() -> None:
 def test_provenance_serialization_round_trip() -> None:
     provenance = make_provenance(version="test-1")
     assert Provenance.from_dict(provenance.to_dict()) == provenance
+
+
+def make_dso(**overrides: object) -> DeepSkyObject:
+    values: dict[str, object] = {
+        "id": "NGC0001",
+        "ra_deg": 10.0,
+        "dec_deg": 20.0,
+        "object_type": DsoType.GALAXY,
+        "provenance": make_provenance(),
+        "magnitude": 10.0,
+        "major_axis_arcmin": 2.0,
+        "minor_axis_arcmin": 1.0,
+    }
+    values.update(overrides)
+    return DeepSkyObject(**values)  # type: ignore[arg-type]
+
+
+def test_surface_brightness_derived_from_magnitude_and_axes() -> None:
+    # 2 x 1 arcmin ellipse: area ~ 1.5708 arcmin^2 = 5654 arcsec^2
+    brightness = make_dso().surface_brightness_mag_arcsec2()
+    assert brightness == pytest.approx(10.0 + 2.5 * 3.7524, abs=1e-3)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"magnitude": None},
+        {"minor_axis_arcmin": None},
+        {"major_axis_arcmin": None},
+    ],
+)
+def test_surface_brightness_requires_magnitude_and_axes(
+    overrides: dict[str, object],
+) -> None:
+    assert make_dso(**overrides).surface_brightness_mag_arcsec2() is None
+
+
+def test_dso_serialization_round_trip() -> None:
+    dso = make_dso()
+    assert DeepSkyObject.from_dict(dso.to_dict()) == dso

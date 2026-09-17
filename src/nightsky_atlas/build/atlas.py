@@ -24,8 +24,14 @@ from nightsky_atlas.atlas.config import (
 )
 from nightsky_atlas.atlas.tiling import TilingSpec, tile_sky, with_neighbours
 from nightsky_atlas.build.chart import build_chart_context
+from nightsky_atlas.catalog.star_names import (
+    DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
+)
+from nightsky_atlas.catalog.star_names import (
+    load_star_names,
+)
 from nightsky_atlas.chart.models import ChartDefinition
-from nightsky_atlas.layout.labels import build_dso_labels
+from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.optimizer import layout_cost, layout_hash, optimize_labels
 from nightsky_atlas.layout.overrides import (
     OverridesLibrary,
@@ -180,6 +186,9 @@ def build_atlas(
     dsos_path: str | Path | None = None,
     constellations_dir: str | Path | None = None,
     outlines_dir: str | Path | None = None,
+    star_names_dir: str | Path | None = None,
+    observing_lists_dir: str | Path | None = None,
+    observing_config_path: str | Path | None = None,
     overrides_path: str | Path | None = None,
     chart_ids: tuple[str, ...] | None = None,
     limit: int | None = None,
@@ -203,6 +212,10 @@ def build_atlas(
     )
     applied_chart_ids: set[str] = set()
 
+    star_names = load_star_names(
+        star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
+    )
+
     page = atlas.page.to_geometry()
     outroot = Path(outdir) / atlas.id
     outroot.mkdir(parents=True, exist_ok=True)
@@ -217,6 +230,8 @@ def build_atlas(
         surface.show_page()
 
     results: list[ChartPageResult] = []
+    observing_lists: dict[str, object] = {}
+    forced_lists: list[str] = []
     for definition in charts:
         chart_context = build_chart_context(
             atlas_path=atlas_path,
@@ -227,9 +242,17 @@ def build_atlas(
             dsos_path=dsos_path,
             constellations_dir=constellations_dir,
             outlines_dir=outlines_dir,
+            observing_lists_dir=observing_lists_dir,
+            observing_config_path=observing_config_path,
         )
-        labels = build_dso_labels(chart_context.scene, chart_context.transform, chart_context.style)
+        labels = build_labels(
+            chart_context.scene, chart_context.transform, chart_context.style, star_names
+        )
         chart_overrides = library.for_chart(definition.id) if library is not None else None
+        if chart_context.observing_lists:
+            observing_lists = chart_context.observing_lists
+        if chart_context.selection_policy is not None:
+            forced_lists = sorted(chart_context.selection_policy.forced_lists)
         if chart_overrides is not None:
             labels = apply_overrides(labels, chart_overrides)
             applied_chart_ids.add(definition.id)
@@ -307,6 +330,11 @@ def build_atlas(
         },
         "stellar_limit_magnitude": atlas.stellar_limit_magnitude,
         "dso_limit_magnitude": atlas.dso_limit_magnitude,
+        "visibility": atlas.visibility.model_dump(),
+        "observing_lists": {
+            "lists": sorted(observing_lists),
+            "forced": forced_lists,
+        },
         "chart_count": len(results),
         "total_hard_issues": sum(page_result.hard_issues for page_result in results),
         "data_sources": _data_sources(),

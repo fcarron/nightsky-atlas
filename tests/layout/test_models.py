@@ -52,6 +52,29 @@ def test_label_serialization_round_trip() -> None:
     assert Label.from_dict(label.to_dict()) == label
 
 
+def test_label_typography_round_trip() -> None:
+    label = Label(
+        id="label:dso:M87",
+        target_id="NGC4486",
+        text="M87",
+        priority=100,
+        mandatory=True,
+        candidates=(),
+        font_size_pt=7.475,
+        font_weight="bold",
+    )
+    restored = Label.from_dict(label.to_dict())
+    assert restored == label
+    assert restored.font_size_pt == 7.475
+    assert restored.font_weight == "bold"
+
+
+def test_label_typography_defaults_are_style_agnostic() -> None:
+    label = make_label()
+    assert label.font_size_pt is None
+    assert label.font_weight == "normal"
+
+
 def test_candidate_serialization_round_trip() -> None:
     candidate = make_candidate("label:dso:M87:N", CompassPosition.N)
     assert LabelCandidate.from_dict(candidate.to_dict()) == candidate

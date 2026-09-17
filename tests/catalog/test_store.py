@@ -16,13 +16,16 @@ from nightsky_atlas.catalog.store import (
 from nightsky_atlas.chart.models import ChartDefinition
 
 
-def make_star(star_id: str, ra_deg: float, dec_deg: float, magnitude: float) -> Star:
+def make_star(
+    star_id: str, ra_deg: float, dec_deg: float, magnitude: float, hip_id: str | None = None
+) -> Star:
     return Star(
         id=star_id,
         ra_deg=ra_deg,
         dec_deg=dec_deg,
         magnitude=magnitude,
         provenance=Provenance(catalogue="TEST", source_id=star_id, version="1"),
+        hip_id=hip_id,
     )
 
 
@@ -71,6 +74,17 @@ def test_star_round_trips_through_store(store_path: Path) -> None:
         star = next(item for item in store.query_box(box) if item.id == "s1")
     assert star.provenance.catalogue == "TEST"
     assert star.provenance.version == "1"
+
+
+def test_hip_id_round_trips_through_store(tmp_path: Path) -> None:
+    stars = [make_star("TYC 1-8-1", 10.0, 5.0, 4.0, hip_id="HIP 565")]
+    path = tmp_path / "hip.sqlite"
+    build_star_store(path, stars)
+    with StarStore.open(path) as store:
+        star = store.query_box(
+            QueryBox(ra_min_deg=0.0, ra_max_deg=30.0, dec_min_deg=0.0, dec_max_deg=10.0)
+        )[0]
+    assert star.hip_id == "HIP 565"
 
 
 def test_missing_store_raises(tmp_path: Path) -> None:

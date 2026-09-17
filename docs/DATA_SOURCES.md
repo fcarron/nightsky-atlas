@@ -144,6 +144,31 @@ Hipparcos supplement below adds the bright stars it omits.
 | Transformations | sexagesimal RA/Dec to degrees; V-Mag preferred, B-Mag fallback |
 | Import | `nightsky data fetch-openngc` then `nightsky data import-openngc` |
 
+### Observing-list membership (atlas metadata)
+
+Curated visual observing lists drive DSO selection (forced include plus
+priority bonuses).  Membership is **atlas metadata**, not an astronomical fact:
+it is loaded from vendored fixtures and never merged into the normalized
+catalogue or written back onto a `DeepSkyObject` (see `config/observing_lists.yaml`
+for the per-edition policy).  Designations are normalized at load time, so
+`NGC 869`, `NGC0869` and `M 42` compare equal.
+
+| Field | Value |
+| --- | --- |
+| Source | Wikipedia, *Herschel 400 Catalogue*, revision 1369720351 |
+| Files | `data/fixtures/observing_lists/herschel400.json` |
+| Companion | `SOURCE.md` in the same directory |
+| License | **CC BY-SA 4.0** (compatible with the OpenNGC share-alike terms) |
+| Content | 402 normalized NGC designations for 400 Herschel 400 catalogue rows (three double designations expanded) |
+| Known gaps | nine designations have no OpenNGC object: NGC651, NGC2244, NGC2372, NGC2527, NGC3190, NGC3912, NGC4665, NGC6885, NGC7296 |
+| Committed | yes (~6 kB); build must be reproducible offline |
+
+Additional lists (Messier, Caldwell, RASC, SAC, ASSA, Bennett, NSOG, Herschel II,
+Astronomical League programs, Hickson, Abell) are already named and weighted in
+`config/observing_lists.yaml`; they are integrated one at a time as legally
+clean fixtures become available.  NSOG-derived data is **not** imported until
+its licensing is resolved.
+
 ### Constellation geometry
 
 | Field | Value |
@@ -168,6 +193,18 @@ Hipparcos supplement below adds the bright stars it omits.
 | Stable IDs | `outline:dso:<dso_id>` (e.g. `outline:dso:NGC7000`) |
 | Transformations | edges densified along RA/Dec, projected with the chart projection, clipped to the chart field |
 | Committed | yes; build must be reproducible offline |
+
+### Star names and designations
+
+| Field | Value |
+| --- | --- |
+| Source | d3-celestial (Olaf Frohn), `data/starnames.json`, `master`, fetched 2026-09-16 |
+| Files | `data/fixtures/starnames/starnames.json` |
+| Companion | `LICENSE` (BSD-3-Clause), `SOURCE.md` in the same directory |
+| License | **BSD-3-Clause** |
+| Content | common names plus Bayer/Flamsteed/variable designations for ~4,600 Hipparcos stars, keyed by Hipparcos number |
+| Transformations | derived from the raw d3-celestial file, keeping only name/designation/constellation fields; thin spaces stripped |
+| Committed | yes (~207 kB); build must be reproducible offline |
 
 ## Committed versus ignored
 

@@ -64,6 +64,18 @@ def test_iterates_committed_fixture() -> None:
     assert stars[0].id == "TYC 1-8-1"
 
 
+def test_fixture_records_have_no_hip_cross_id() -> None:
+    assert parse_tycho2_record(first_line()).hip_id is None
+
+
+def test_hip_column_is_parsed() -> None:
+    line = first_line()
+    with_hip = line[:142] + "   565" + line[148:]
+    star = parse_tycho2_record(with_hip)
+    assert star is not None
+    assert star.hip_id == "HIP 565"
+
+
 def test_raw_part_paths_are_deterministic() -> None:
     paths = raw_part_paths("data/raw/tycho2")
     assert len(paths) == 20

@@ -105,11 +105,27 @@ AI output must never directly mutate astronomical objects.
   `definition`, `stars`, `deep_sky_objects`, `constellation_boundaries`,
   `constellation_lines`, `nebula_outlines`. Contains chart-plane coordinates but
   no final typesetting decisions.
+- `DsoMetadata` (attached to each `SceneDso`) — atlas selection metadata:
+  `list_memberships`, `visual_score`, `importance_score`, `render_priority`,
+  `label_priority`, `forced`, `visible`, `visibility_reasons`. Observing-list
+  membership and priorities are atlas metadata, so they never mutate
+  `DeepSkyObject`.
 - `ChartLayout` — complete machine-readable page description: symbol positions
   and visual properties; label objects; selected candidate; text metrics; grid
   paths; borders; title; neighbour references; optional legend; diagnostics;
   optimizer metadata. Must be serializable; the serialized layout is a
   first-class build artifact.
+
+Whether a deep-sky object is *rendered* and whether it is *labelled* are
+separate decisions. The scene builder keeps an object when its per-type
+`VisibilityEvaluator` (`catalog/visibility.py`) calls it visible or it is on an
+edition's forced observing list; star/double-star catalogue entries are excluded
+from the DSO layer. Each evaluator combines integrated magnitude, mean surface
+brightness and angular size with type-specific rules and returns a deterministic
+`VisibilityAssessment` (`visible`, 0-100 `score`, reasons). The label builder
+then uses `label_priority` (observing-list bonus plus the catalogue ordering in
+section 14.3) and lets the optimizer hide optional labels.
+
 
 Build artifact layout:
 
@@ -143,8 +159,12 @@ These rules are encoded in tests.
 
 ## Configuration
 
-- `atlas/*.yaml` controls content and tiling.
+- `atlas/*.yaml` controls content and tiling, including the per-edition
+  `visibility:` limits used by the type-specific deep-sky selection.
 - `styles/*.yaml` controls visual appearance.
+- `config/observing_lists.yaml` controls observing-list selection policy
+  (per-edition forced lists, priority weights, inheritance).  Membership data
+  itself lives in `data/fixtures/observing_lists/`.
 - Do not mix those concerns.
 - YAML is schema-validated by typed pydantic models (`extra="forbid"`,
   frozen). Unknown keys fail fast; physical quantities carry explicit units in
@@ -165,6 +185,9 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
   support it, with a minimum printable size while preserving orientation.
 - Large nebula outlines (later) must use true vector paths from source geometry,
   never raster backgrounds.
+- Emphasized symbols (Messier, Herschel 400) use `dso.bold_line_width_mm` so the
+  mark is bold wherever its label is. The renderer derives the set of bold
+  targets from the labels' `font_weight`; it never re-derives catalogue facts.
 
 ## Typography
 
@@ -190,6 +213,17 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
   relevance (not a giant global magic-number list): major/common name, Messier,
   bright NGC/IC, prominent named star, ordinary NGC/IC, fainter optional DSO,
   minor star designation.
+- Deep-sky label *text* is produced by a dedicated formatting layer
+  (`layout/dso_labels.py`), never by rewriting catalogue data. A bare number
+  means NGC (`NGC 4565` -> `4565`); IC renders compactly (`IC 3476` ->
+  `I3476`); Messier takes priority over NGC/IC; other catalogues use short
+  abbreviations (`Sh2-101`, `Cr399`, `B168`, `Mel111`, `Abell426`, `HCG92`).
+  Common names are additional information and do not replace the designation.
+- Deep-sky labels form a typographic hierarchy configured under
+  `label.dso_labels`: Messier is bold at `size_factor` 1.15, a non-Messier
+  Herschel 400 object is bold at the normal size, ordinary objects are regular.
+  Each `Label` carries its resolved `font_size_pt`/`font_weight`, so the
+  renderer draws typography exactly as the layout specifies.
 - Required deterministic collision checks: label vs label; label vs page
   border; label vs important star symbol; label vs DSO symbol; label vs its own
   exclusion zone; label vs title/metadata; leader line vs labels; leader line

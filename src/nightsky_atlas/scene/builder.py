@@ -7,11 +7,12 @@ projects them onto the chart plane.  It performs no label or layout work.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.outlines import NebulaOutline
+from nightsky_atlas.catalog.selection import SelectionPolicy, select_dso
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection.base import ChartPoint, ProjectionError
 from nightsky_atlas.projection.stereographic import StereographicProjection
@@ -57,13 +58,20 @@ def build_scene(
     constellation_lines: Iterable[ConstellationSegment] = (),
     constellation_boundaries: Iterable[ConstellationSegment] = (),
     nebula_outlines: Iterable[NebulaOutline] = (),
+    observing_index: Mapping[str, frozenset[str]] | None = None,
+    selection_policy: SelectionPolicy | None = None,
 ) -> ChartScene:
     """Select and project stars, deep-sky objects and constellation geometry.
 
     Objects outside the chart field are excluded, as is a star at the projection
-    antipode.  Deep-sky objects fainter than ``dso_magnitude_limit`` are
-    excluded; objects with no known magnitude are always retained.  Input order
-    is preserved so the scene is deterministic for a given catalogue.
+    antipode.  Input order is preserved so the scene is deterministic for a
+    given catalogue.
+
+    When ``selection_policy`` is given, each deep-sky object receives atlas
+    metadata (observing-list memberships, per-type visibility and render/label
+    priorities) and is kept only if its type evaluator calls it visible or an
+    observing-list forces it.  ``dso_magnitude_limit`` is the fallback rule used
+    only when no policy is supplied.
 
     Constellation segments and nebula outlines are densified along RA/Dec,
     projected and clipped to the chart field, so long constant-declination
@@ -79,7 +87,15 @@ def build_scene(
 
     scene_dsos: list[SceneDso] = []
     for dso in deep_sky_objects:
-        if (
+        metadata = (
+            select_dso(dso, index=observing_index, policy=selection_policy)
+            if selection_policy is not None
+            else None
+        )
+        if metadata is not None:
+            if not (metadata.visible or metadata.forced):
+                continue
+        elif (
             dso_magnitude_limit is not None
             and dso.magnitude is not None
             and dso.magnitude > dso_magnitude_limit
@@ -87,7 +103,7 @@ def build_scene(
             continue
         point = _project_inside(projector, definition, dso.ra_deg, dso.dec_deg)
         if point is not None:
-            scene_dsos.append(SceneDso(dso=dso, chart_point=point))
+            scene_dsos.append(SceneDso(dso=dso, chart_point=point, metadata=metadata))
 
     return ChartScene(
         definition=definition,

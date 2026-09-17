@@ -138,6 +138,7 @@ def parse_hipparcos_record(line: str) -> Star | None:
         provenance=Provenance(
             catalogue=CATALOGUE, source_id=f"{identifier:06d}", version=VERSION
         ),
+        hip_id=f"HIP {identifier}",
     )
 
 

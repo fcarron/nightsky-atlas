@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
 from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.sample import load_sample_stars
+from nightsky_atlas.catalog.selection import SelectionPolicy
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection import ChartPoint
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
@@ -187,3 +189,78 @@ def test_outline_partly_outside_field_is_clipped() -> None:
     for run in scene.nebula_outlines:
         for point in run.points:
             assert DEFINITION.contains(point)
+
+
+FORCED_POLICY = SelectionPolicy(forced_lists=frozenset({"herschel400"}))
+OBSERVING_INDEX = {"NGC869": frozenset({"herschel400"})}
+
+
+def test_forced_observing_list_bypasses_magnitude_limit() -> None:
+    dso = make_dso("NGC0869", 187.5, 12.0, 15.0)
+    scene = build_scene(
+        DEFINITION,
+        (),
+        [dso],
+        dso_magnitude_limit=12.0,
+        observing_index=OBSERVING_INDEX,
+        selection_policy=FORCED_POLICY,
+    )
+    assert scene.dso_count == 1
+    metadata = scene.deep_sky_objects[0].metadata
+    assert metadata is not None
+    assert metadata.forced is True
+    assert metadata.list_memberships == {"herschel400"}
+
+
+def test_non_member_faint_dso_is_still_excluded() -> None:
+    dsos = [
+        make_dso("NGC0869", 187.5, 12.0, 15.0),
+        make_dso("NGC9999", 187.6, 12.0, 15.0),
+    ]
+    scene = build_scene(
+        DEFINITION,
+        (),
+        dsos,
+        dso_magnitude_limit=12.0,
+        observing_index=OBSERVING_INDEX,
+        selection_policy=FORCED_POLICY,
+    )
+    assert {item.dso.id for item in scene.deep_sky_objects} == {"NGC0869"}
+    assert scene.deep_sky_objects[0].metadata is not None
+
+
+def test_scene_without_policy_has_no_metadata() -> None:
+    scene = build_scene(DEFINITION, (), [make_dso("d-in", 187.5, 12.0, 8.0)])
+    assert scene.deep_sky_objects[0].metadata is None
+
+
+def test_policy_keeps_surface_bright_object_beyond_magnitude_limit() -> None:
+    galaxy = make_dso("NGC9998", 187.5, 12.0, 13.8)
+    galaxy = replace(
+        galaxy,
+        major_axis_arcmin=1.5,
+        minor_axis_arcmin=1.5,
+    )
+    policy = SelectionPolicy()
+    scene = build_scene(
+        DEFINITION,
+        (),
+        [galaxy],
+        dso_magnitude_limit=12.0,
+        selection_policy=policy,
+    )
+    assert scene.dso_count == 1
+    metadata = scene.deep_sky_objects[0].metadata
+    assert metadata is not None
+    assert metadata.visible is True
+
+
+def test_policy_excludes_star_typed_objects() -> None:
+    star_entry = replace(make_dso("STAR1", 187.5, 12.0, 6.0), object_type=DsoType.STAR)
+    scene = build_scene(
+        DEFINITION,
+        (),
+        [star_entry],
+        selection_policy=SelectionPolicy(),
+    )
+    assert scene.dso_count == 0

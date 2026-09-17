@@ -17,9 +17,22 @@ tiling:
   overlap_deg: 3.0
   coverage_step_deg: 2.0
 
-# Deep-sky objects fainter than this are omitted unless they have no known
-# magnitude, in which case they are kept.
+# Deep-sky objects fainter than this are omitted only when no selection policy
+# is active (per-type visibility below is the normal path).
 dso_limit_magnitude: 12.0
+
+# Per-type deep-sky visibility limits.  Target: an 8-10 inch instrument under a
+# dark sky.  Galaxies are surface-brightness limited; clusters and planetary
+# nebulae use magnitude and size; tiny faint objects are dropped unless bright
+# or forced by an observing list.
+visibility:
+  integrated_magnitude_limit: 13.5
+  surface_brightness_limit: 23.5
+  min_axis_arcmin: 1.5
+  bright_magnitude_limit: 10.5
+  reference_magnitude: 8.0
+  reference_surface_brightness: 21.0
+  reference_axis_arcmin: 10.0
 
 page:
   width_mm: 297.0

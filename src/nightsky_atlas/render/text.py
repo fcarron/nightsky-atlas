@@ -21,6 +21,7 @@ from gi.repository import Pango, PangoCairo  # noqa: E402
 from nightsky_atlas.units import pt_to_mm  # noqa: E402
 
 __all__ = [
+    "FontWeight",
     "TextMetrics",
     "TextMeasurer",
     "draw_centered_text",
@@ -30,6 +31,20 @@ __all__ = [
 ]
 
 _RESOLUTION_DPI = 72.0
+
+FontWeight = str
+
+_WEIGHTS: dict[str, Pango.Weight] = {
+    "normal": Pango.Weight.NORMAL,
+    "bold": Pango.Weight.BOLD,
+}
+
+
+def _pango_weight(weight: FontWeight) -> Pango.Weight:
+    try:
+        return _WEIGHTS[weight]
+    except KeyError:
+        raise ValueError(f"unknown font weight {weight!r}; expected normal or bold") from None
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +56,10 @@ class TextMetrics:
 
 
 def make_layout(
-    cr: cairo.Context[cairo.Surface], font_family: str, font_size_pt: float
+    cr: cairo.Context[cairo.Surface],
+    font_family: str,
+    font_size_pt: float,
+    font_weight: FontWeight = "normal",
 ) -> Pango.Layout:
     """Create a Pango layout configured for physical point sizes."""
     layout = PangoCairo.create_layout(cr)
@@ -49,6 +67,7 @@ def make_layout(
     description = Pango.FontDescription()
     description.set_family(font_family)
     description.set_size(int(round(font_size_pt * Pango.SCALE)))
+    description.set_weight(_pango_weight(font_weight))
     layout.set_font_description(description)
     return layout
 
@@ -58,9 +77,10 @@ def measure_point_size(
     text: str,
     font_family: str,
     font_size_pt: float,
+    font_weight: FontWeight = "normal",
 ) -> tuple[float, float]:
     """Measure text and return its logical size in points."""
-    layout = make_layout(cr, font_family, font_size_pt)
+    layout = make_layout(cr, font_family, font_size_pt, font_weight)
     layout.set_text(text, -1)
     width, height = layout.get_pixel_size()
     return float(width), float(height)
@@ -73,9 +93,10 @@ def draw_centered_text(
     center_y_pt: float,
     font_family: str,
     font_size_pt: float,
+    font_weight: FontWeight = "normal",
 ) -> None:
     """Draw text centred on a point using the same metrics as :class:`TextMeasurer`."""
-    layout = make_layout(cr, font_family, font_size_pt)
+    layout = make_layout(cr, font_family, font_size_pt, font_weight)
     layout.set_text(text, -1)
     width, height = layout.get_pixel_size()
     cr.move_to(center_x_pt - width / 2.0, center_y_pt - height / 2.0)
@@ -89,9 +110,10 @@ def draw_text(
     y_pt: float,
     font_family: str,
     font_size_pt: float,
+    font_weight: FontWeight = "normal",
 ) -> None:
     """Draw text with its logical box top-left at ``(x_pt, y_pt)``."""
-    layout = make_layout(cr, font_family, font_size_pt)
+    layout = make_layout(cr, font_family, font_size_pt, font_weight)
     layout.set_text(text, -1)
     cr.move_to(x_pt, y_pt)
     PangoCairo.show_layout(cr, layout)
@@ -105,12 +127,18 @@ class TextMeasurer:
     bounds match rendered text.
     """
 
-    def __init__(self, font_family: str, font_size_pt: float) -> None:
+    def __init__(
+        self,
+        font_family: str,
+        font_size_pt: float,
+        font_weight: FontWeight = "normal",
+    ) -> None:
         self.font_family = font_family
         self.font_size_pt = font_size_pt
+        self.font_weight = font_weight
         self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 4, 4)
         self._context = cairo.Context(self._surface)
-        self._layout = make_layout(self._context, font_family, font_size_pt)
+        self._layout = make_layout(self._context, font_family, font_size_pt, font_weight)
 
     def measure_pt(self, text: str) -> tuple[float, float]:
         """Return the logical text extent in points."""

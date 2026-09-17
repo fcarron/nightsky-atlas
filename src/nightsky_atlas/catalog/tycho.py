@@ -49,6 +49,7 @@ _RA_MEAN = slice(15, 27)
 _DEC_MEAN = slice(28, 40)
 _BT_MAG = slice(110, 116)
 _VT_MAG = slice(123, 129)
+_HIP = slice(142, 148)
 _RA_OBSERVED = slice(152, 164)
 _DEC_OBSERVED = slice(165, 177)
 
@@ -122,12 +123,14 @@ def parse_tycho2_record(line: str) -> Star | None:
         return None
 
     source_id = f"{tyc1:04d}-{tyc2:05d}-{tyc3}"
+    hip = _parse_int(line[_HIP])
     return Star(
         id=f"TYC {tyc1}-{tyc2}-{tyc3}",
         ra_deg=ra_deg,
         dec_deg=dec_deg,
         magnitude=magnitude,
         provenance=Provenance(catalogue=CATALOGUE, source_id=source_id, version=VERSION),
+        hip_id=None if hip is None else f"HIP {hip}",
     )
 
 

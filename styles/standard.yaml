@@ -9,18 +9,38 @@ star:
   max_diameter_mm: 2.4
   bright_magnitude: 0.0
   faint_magnitude: 9.0
+  label_magnitude_limit: 5.5
 
 label:
   font_family: "DejaVu Sans"
   font_size_pt: 6.0
   candidate_rings: 3
   ring_gap_mm: 3.0
+  # Faint selected objects are drawn but not labelled (Messier, common names,
+  # bright DSOs and observing-list members are exempt).
+  dso_label_magnitude_limit: 12.5
+  # Deep-sky label hierarchy.  The catalogue prefix is dropped for NGC (a bare
+  # number means NGC); Messier is bold and larger, Herschel 400 is bold.
+  dso_labels:
+    normal_size_pt: 6.5
+    messier:
+      size_factor: 1.15
+      weight: bold
+    herschel400:
+      size_factor: 1.0
+      weight: bold
+    normal:
+      size_factor: 1.0
+      weight: normal
 
 dso:
   size_mm: 1.4
   min_axis_mm: 0.7
   max_axis_mm: 12.0
   line_width_mm: 0.15
+  # Heavier stroke for emphasized symbols (Messier, Herschel 400), matching
+  # those objects' bold labels.
+  bold_line_width_mm: 0.3
   dash_mm: 0.4
   outline_line_width_mm: 0.18
   outline_dash_mm: 0.8

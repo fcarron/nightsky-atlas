@@ -26,6 +26,7 @@ CREATE TABLE stars (
     ra_deg    REAL NOT NULL,
     dec_deg   REAL NOT NULL,
     magnitude REAL NOT NULL,
+    hip_id    TEXT,
     source_id TEXT NOT NULL,
     catalogue TEXT NOT NULL,
     version   TEXT
@@ -34,8 +35,8 @@ CREATE TABLE stars (
 
 _INSERT = (
     "INSERT OR REPLACE INTO stars "
-    "(id, ra_deg, dec_deg, magnitude, source_id, catalogue, version) "
-    "VALUES (?, ?, ?, ?, ?, ?, ?)"
+    "(id, ra_deg, dec_deg, magnitude, hip_id, source_id, catalogue, version) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 )
 
 
@@ -118,7 +119,7 @@ class StarStore:
     ) -> list[Star]:
         """Return stars inside a query box brighter than a magnitude limit."""
         sql = (
-            "SELECT id, ra_deg, dec_deg, magnitude, source_id, catalogue, version "
+            "SELECT id, ra_deg, dec_deg, magnitude, hip_id, source_id, catalogue, version "
             "FROM stars WHERE dec_deg >= ? AND dec_deg <= ? AND magnitude <= ?"
         )
         params: list[float] = [box.dec_min_deg, box.dec_max_deg, magnitude_limit]
@@ -138,10 +139,11 @@ def _row_to_star(row: tuple[object, ...]) -> Star:
         dec_deg=float(row[2]),  # type: ignore[arg-type]
         magnitude=float(row[3]),  # type: ignore[arg-type]
         provenance=Provenance(
-            catalogue=str(row[5]),
-            source_id=str(row[4]),
-            version=None if row[6] is None else str(row[6]),
+            catalogue=str(row[6]),
+            source_id=str(row[5]),
+            version=None if row[7] is None else str(row[7]),
         ),
+        hip_id=None if row[4] is None else str(row[4]),
     )
 
 
@@ -195,6 +197,7 @@ def _star_to_row(star: Star) -> tuple[object, ...]:
         star.ra_deg,
         star.dec_deg,
         star.magnitude,
+        star.hip_id,
         star.provenance.source_id,
         star.provenance.catalogue,
         star.provenance.version,

@@ -27,6 +27,7 @@ from pydantic import (
     model_validator,
 )
 
+from nightsky_atlas.catalog.visibility import VisibilityLimits
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 
 __all__ = [
@@ -36,12 +37,15 @@ __all__ = [
     "ConstellationBoundaryStyle",
     "ConstellationLineStyle",
     "ConstellationStyle",
+    "DsoLabelStyle",
+    "DsoLabelTierStyle",
     "DsoStyle",
     "FurnitureStyle",
     "GridStyle",
     "PageConfig",
     "StyleConfig",
     "TilingConfig",
+    "VisibilityConfig",
     "load_atlas_config",
     "load_style_config",
 ]
@@ -120,6 +124,50 @@ class TilingConfig(_StrictModel):
     coverage_step_deg: PositiveFloat = 2.0
 
 
+class VisibilityConfig(_StrictModel):
+    """Per-type deep-sky selection limits for one edition.
+
+    Defaults describe the Standard target (an 8-10 inch instrument under a dark
+    sky).  ``reference_*`` values are the comfortably-visible ends of the
+    scoring ramps.
+    """
+
+    integrated_magnitude_limit: float = 13.5
+    surface_brightness_limit: float = 23.5
+    min_axis_arcmin: PositiveFloat = 1.5
+    bright_magnitude_limit: float = 10.5
+    reference_magnitude: float = 8.0
+    reference_surface_brightness: float = 21.0
+    reference_axis_arcmin: PositiveFloat = 10.0
+
+    @model_validator(mode="after")
+    def _references_sit_inside_limits(self) -> VisibilityConfig:
+        if self.reference_magnitude >= self.integrated_magnitude_limit:
+            raise ValueError(
+                "reference_magnitude must be brighter than integrated_magnitude_limit"
+            )
+        if self.reference_surface_brightness >= self.surface_brightness_limit:
+            raise ValueError(
+                "reference_surface_brightness must be darker than "
+                "surface_brightness_limit"
+            )
+        if self.reference_axis_arcmin <= self.min_axis_arcmin:
+            raise ValueError("reference_axis_arcmin must exceed min_axis_arcmin")
+        return self
+
+    def to_limits(self) -> VisibilityLimits:
+        """Convert this validated configuration to domain limits."""
+        return VisibilityLimits(
+            integrated_magnitude_limit=self.integrated_magnitude_limit,
+            surface_brightness_limit=self.surface_brightness_limit,
+            min_axis_arcmin=self.min_axis_arcmin,
+            bright_magnitude_limit=self.bright_magnitude_limit,
+            reference_magnitude=self.reference_magnitude,
+            reference_surface_brightness=self.reference_surface_brightness,
+            reference_axis_arcmin=self.reference_axis_arcmin,
+        )
+
+
 class AtlasConfig(_StrictModel):
     """An atlas edition: page geometry plus explicit chart definitions."""
 
@@ -129,6 +177,7 @@ class AtlasConfig(_StrictModel):
     tiling: TilingConfig | None = None
     stellar_limit_magnitude: PositiveFloat | None = None
     dso_limit_magnitude: PositiveFloat | None = None
+    visibility: VisibilityConfig = Field(default_factory=VisibilityConfig)
 
 
 class StarStyle(_StrictModel):
@@ -137,13 +186,15 @@ class StarStyle(_StrictModel):
     ``bright_magnitude`` is the magnitude at which the maximum diameter is
     reached; ``faint_magnitude`` is the magnitude at which the minimum diameter
     is reached.  Stars between the two are sized linearly.  ``bright_magnitude``
-    must be numerically smaller than ``faint_magnitude``.
+    must be numerically smaller than ``faint_magnitude``.  ``label_magnitude_limit``
+    is the faintest magnitude at which a named/designated star receives a label.
     """
 
     min_diameter_mm: PositiveFloat
     max_diameter_mm: PositiveFloat
     bright_magnitude: float
     faint_magnitude: float
+    label_magnitude_limit: float = 4.0
 
     @field_validator("max_diameter_mm")
     @classmethod
@@ -162,13 +213,58 @@ class StarStyle(_StrictModel):
         return value
 
 
+class DsoLabelTierStyle(_StrictModel):
+    """Typography for one deep-sky label tier.
+
+    ``size_factor`` multiplies the normal DSO label size; ``weight`` is
+    ``normal`` or ``bold`` (``regular`` is accepted as an alias for ``normal``).
+    Tiers express the visual hierarchy (Messier, Herschel 400, ordinary object)
+    without changing label text.
+    """
+
+    size_factor: PositiveFloat = 1.0
+    weight: Literal["normal", "bold", "regular"] = "normal"
+
+    @field_validator("weight")
+    @classmethod
+    def _normalise_weight(cls, value: str) -> str:
+        return "normal" if value == "regular" else value
+
+
+class DsoLabelStyle(_StrictModel):
+    """Deep-sky label hierarchy and base size.
+
+    ``normal_size_pt`` is the base size for ordinary deep-sky labels; the
+    per-tier ``size_factor`` values scale from it.  The tier is chosen by the
+    label formatter from the object's designations and observing-list
+    membership; this model only describes appearance.
+    """
+
+    normal_size_pt: PositiveFloat = 6.0
+    messier: DsoLabelTierStyle = Field(
+        default_factory=lambda: DsoLabelTierStyle(size_factor=1.15, weight="bold")
+    )
+    herschel400: DsoLabelTierStyle = Field(
+        default_factory=lambda: DsoLabelTierStyle(size_factor=1.0, weight="bold")
+    )
+    normal: DsoLabelTierStyle = Field(default_factory=DsoLabelTierStyle)
+
+
 class LabelStyle(_StrictModel):
-    """Label typography and candidate generation."""
+    """Label typography and candidate generation.
+
+    ``dso_label_magnitude_limit`` omits labels for faint deep-sky objects that
+    are still rendered; ``None`` labels every selected object.  Mandatory labels
+    (Messier, common name, bright DSO) and observing-list members are exempt.
+    ``dso_labels`` carries the deep-sky label size/weight hierarchy.
+    """
 
     font_family: str
     font_size_pt: PositiveFloat
     candidate_rings: int = Field(default=2, ge=1)
     ring_gap_mm: PositiveFloat = 2.5
+    dso_label_magnitude_limit: float | None = None
+    dso_labels: DsoLabelStyle = Field(default_factory=DsoLabelStyle)
 
 
 class DsoStyle(_StrictModel):
@@ -176,7 +272,9 @@ class DsoStyle(_StrictModel):
 
     ``size_mm`` is the default symbol diameter for non-galaxy classes.
     ``min_axis_mm`` is the smallest printable galaxy axis; ``max_axis_mm`` caps
-    very large objects so they do not swamp a page.  Outline fields control the
+    very large objects so they do not swamp a page.  ``bold_line_width_mm`` is
+    the heavier stroke used for emphasized symbols (Messier, Herschel 400), so
+    the map mark is bold whenever the label is.  Outline fields control the
     schematic stroke drawn around extended objects that have an authored
     outline.
     """
@@ -185,10 +283,19 @@ class DsoStyle(_StrictModel):
     min_axis_mm: PositiveFloat = 0.7
     max_axis_mm: PositiveFloat = 12.0
     line_width_mm: PositiveFloat = 0.15
+    bold_line_width_mm: PositiveFloat = 0.3
     dash_mm: PositiveFloat = 0.4
     outline_line_width_mm: PositiveFloat = 0.18
     outline_dash_mm: PositiveFloat = 0.8
     outline_gray: float = 0.45
+
+    @field_validator("bold_line_width_mm")
+    @classmethod
+    def _bold_not_thinner_than_normal(cls, value: float, info: object) -> float:
+        normal = getattr(info, "data", {}).get("line_width_mm")
+        if normal is not None and value < normal:
+            raise ValueError("bold_line_width_mm must be >= line_width_mm")
+        return value
 
 
 class GridStyle(_StrictModel):

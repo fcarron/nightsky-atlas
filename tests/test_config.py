@@ -72,6 +72,7 @@ def test_shipped_style_fixture_loads() -> None:
     config = load_style_config(STYLE_FIXTURE)
     assert config.id == "standard"
     assert config.star.min_diameter_mm == pytest.approx(0.2)
+    assert config.star.label_magnitude_limit == pytest.approx(5.5)
     assert config.label.font_size_pt == pytest.approx(6.0)
     assert config.constellation.lines.enabled is True
     assert config.constellation.boundaries.enabled is True
@@ -152,6 +153,87 @@ def test_grid_label_step_multiple_is_valid(tmp_path: Path) -> None:
     config = load_style_config(path)
     assert config.grid.label_ra_step_deg == pytest.approx(10.0)
     assert config.grid.label_dec_step_deg is None
+
+
+def test_shipped_atlas_declares_visibility_limits() -> None:
+    config = load_atlas_config(ATLAS_FIXTURE)
+    limits = config.visibility.to_limits()
+    assert limits.integrated_magnitude_limit == pytest.approx(13.5)
+    assert limits.surface_brightness_limit == pytest.approx(23.5)
+    assert limits.min_axis_arcmin == pytest.approx(1.5)
+
+
+def test_shipped_style_declares_dso_label_limit() -> None:
+    config = load_style_config(STYLE_FIXTURE)
+    assert config.label.dso_label_magnitude_limit == pytest.approx(12.5)
+
+
+def test_shipped_style_declares_dso_label_hierarchy() -> None:
+    config = load_style_config(STYLE_FIXTURE)
+    labels = config.label.dso_labels
+    assert labels.normal_size_pt == pytest.approx(6.5)
+    assert labels.messier.size_factor == pytest.approx(1.15)
+    assert labels.messier.weight == "bold"
+    assert labels.herschel400.weight == "bold"
+    assert labels.normal.weight == "normal"
+
+
+def test_dso_label_invalid_weight_fails(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["label"]["dso_labels"] = {"messier": {"weight": "heavy"}}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError) as excinfo:
+        load_style_config(path)
+    assert "weight" in str(excinfo.value)
+
+
+def test_dso_label_regular_weight_alias(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["label"]["dso_labels"] = {"herschel400": {"weight": "regular"}}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    config = load_style_config(path)
+    assert config.label.dso_labels.herschel400.weight == "normal"
+
+
+def test_dso_bold_line_width_must_not_be_thinner(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["dso"] = {"line_width_mm": 0.3, "bold_line_width_mm": 0.2}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError):
+        load_style_config(path)
+
+
+def test_shipped_style_declares_bold_dso_stroke() -> None:
+    config = load_style_config(STYLE_FIXTURE)
+    assert config.dso.bold_line_width_mm > config.dso.line_width_mm
+
+
+def test_dso_label_unknown_key_fails(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["label"]["dso_labels"] = {"messier": {"font_size": 8.0}}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError) as excinfo:
+        load_style_config(path)
+    assert "font_size" in str(excinfo.value)
+
+
+def test_visibility_reference_outside_limit_fails(tmp_path: Path) -> None:
+    data = valid_atlas_dict()
+    data["visibility"] = {
+        "integrated_magnitude_limit": 10.0,
+        "reference_magnitude": 11.0,
+    }
+    path = write_yaml(tmp_path / "atlas.yaml", data)
+    with pytest.raises(ConfigError):
+        load_atlas_config(path)
+
+
+def test_visibility_unknown_key_fails(tmp_path: Path) -> None:
+    data = valid_atlas_dict()
+    data["visibility"] = {"aperture_inches": 12.0}
+    path = write_yaml(tmp_path / "atlas.yaml", data)
+    with pytest.raises(ConfigError):
+        load_atlas_config(path)
 
 
 def test_missing_file_fails(tmp_path: Path) -> None:

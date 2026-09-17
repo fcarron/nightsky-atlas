@@ -1,0 +1,74 @@
+# NightSky Atlas — observing-list selection policy.
+#
+# Membership data lives in vendored fixtures under
+# data/fixtures/observing_lists/*.json (source and license per list in that
+# directory).  Only lists that have a fixture contribute membership; the
+# registry below documents the intended full set so typos in an edition policy
+# are obvious.  Forced lists are always rendered regardless of magnitude;
+# list_weights add to an object's render and label priority.
+
+lists:
+  messier:
+    name: Messier
+  herschel400:
+    name: Herschel 400
+  caldwell:
+    name: Caldwell
+  rasc_finest_ngc:
+    name: RASC Finest NGC
+  rasc_deep_sky_gems:
+    name: RASC Deep-Sky Gems
+  sac_best_110:
+    name: SAC Best 110 NGC
+  assa_top100:
+    name: ASSA Top 100
+  bennett:
+    name: Bennett Catalogue
+  nsog_best:
+    name: Night Sky Observer's Guide Best Objects
+  herschel2:
+    name: Herschel II / Herschel 400 II
+  planetary_nebula_al:
+    name: Astronomical League Planetary Nebula Program
+  bright_nebula_al:
+    name: Astronomical League Bright Nebula Program
+  dark_nebula_al:
+    name: Astronomical League Dark Nebula Program
+  globular_cluster_al:
+    name: Astronomical League Globular Cluster Program
+  open_cluster_al:
+    name: Astronomical League Open Cluster Program
+  sac_beyond_ngc:
+    name: SAC Beyond the NGC
+  hickson:
+    name: Hickson Compact Groups
+  abell:
+    name: Abell Galaxy Clusters
+
+editions:
+  standard:
+    forced_lists:
+      - herschel400
+    list_weights:
+      messier: 60
+      herschel400: 50
+      caldwell: 40
+      rasc_finest_ngc: 35
+      rasc_deep_sky_gems: 30
+      nsog_best: 30
+      sac_best_110: 25
+      assa_top100: 25
+      bennett: 25
+  deep:
+    inherit: standard
+    forced_lists:
+      - herschel2
+      - planetary_nebula_al
+      - bright_nebula_al
+      - dark_nebula_al
+      - globular_cluster_al
+      - open_cluster_al
+    list_weights:
+      sac_beyond_ngc: 25
+      hickson: 20
+      abell: 15

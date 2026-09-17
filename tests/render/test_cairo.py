@@ -16,7 +16,13 @@ from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
-from nightsky_atlas.render.cairo import render_chart, render_magnitude_scale
+from nightsky_atlas.layout.models import Label
+from nightsky_atlas.render.cairo import (
+    _bold_symbol_ids,
+    _dso_line_width_mm,
+    render_chart,
+    render_magnitude_scale,
+)
 from nightsky_atlas.scene.builder import build_star_scene
 from nightsky_atlas.units import mm_to_pt
 
@@ -95,3 +101,34 @@ def test_render_magnitude_scale(tmp_path: Path) -> None:
 def test_render_magnitude_scale_requires_magnitudes(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         render_magnitude_scale(PAGE, STYLE, magnitudes=[], pdf_path=tmp_path / "x.pdf")
+
+
+def make_label(label_id: str, target_id: str, weight: str) -> Label:
+    return Label(
+        id=label_id,
+        target_id=target_id,
+        text="X",
+        priority=100,
+        mandatory=True,
+        candidates=(),
+        font_weight=weight,
+    )
+
+
+def test_bold_symbol_ids_follow_bold_labels() -> None:
+    labels = (
+        make_label("label:dso:NGC4486", "NGC4486", "bold"),
+        make_label("label:dso:NGC4565", "NGC4565", "normal"),
+        make_label("label:star:HIP1", "HIP 1", "bold"),
+    )
+    assert _bold_symbol_ids(labels) == frozenset({"NGC4486", "HIP 1"})
+
+
+def test_dso_line_width_uses_bold_width_for_emphasized_objects() -> None:
+    assert _dso_line_width_mm(STYLE, bold=True) == pytest.approx(
+        STYLE.dso.bold_line_width_mm
+    )
+    assert _dso_line_width_mm(STYLE, bold=False) == pytest.approx(
+        STYLE.dso.line_width_mm
+    )
+    assert STYLE.dso.bold_line_width_mm > STYLE.dso.line_width_mm

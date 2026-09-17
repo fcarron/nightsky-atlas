@@ -40,3 +40,14 @@ def test_expected_size_at_72_dpi() -> None:
     metrics = TextMeasurer("DejaVu Sans", 10.0).measure_mm("M31")
     assert metrics.width_mm == pytest.approx(7.4, abs=0.5)
     assert metrics.height_mm == pytest.approx(4.6, abs=0.5)
+
+
+def test_bold_is_at_least_as_wide_as_normal() -> None:
+    normal = TextMeasurer("DejaVu Sans", 8.0, "normal").measure_mm("M87")
+    bold = TextMeasurer("DejaVu Sans", 8.0, "bold").measure_mm("M87")
+    assert bold.width_mm >= normal.width_mm
+
+
+def test_unknown_weight_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        TextMeasurer("DejaVu Sans", 8.0, "heavy")

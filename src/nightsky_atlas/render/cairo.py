@@ -94,17 +94,19 @@ def draw_chart_page(
     Used both for standalone page rendering and for multi-page atlas PDFs.
     """
     size_model = StarSizeModel.from_style(style.star)
+    label_list = tuple(labels)
+    bold_symbol_ids = _bold_symbol_ids(label_list)
     _draw_background(cr, transform.page)
     grid_lines = _draw_grid(cr, transform, scene.definition, style)
     _draw_constellations(cr, transform, scene, style)
     _draw_chart_border(cr, transform, style)
     _draw_outlines(cr, transform, scene, style)
     _draw_stars(cr, transform, scene, size_model)
-    _draw_dsos(cr, transform, scene, style)
+    _draw_dsos(cr, transform, scene, style, bold_symbol_ids)
     _draw_grid_labels(cr, grid_lines, transform, style)
-    _draw_labels(cr, labels, style)
+    _draw_labels(cr, label_list, style)
     if debug is not None:
-        _draw_debug(cr, transform, scene, labels, style, debug)
+        _draw_debug(cr, transform, scene, label_list, style, debug)
     _draw_title(cr, scene, transform.page, style)
     _draw_scale_bar(cr, transform, scene.definition, style)
     _draw_neighbours(cr, scene.definition, transform.page, style)
@@ -249,16 +251,28 @@ def _draw_stars(
         cr.fill()
 
 
+def _bold_symbol_ids(labels: Iterable[Label]) -> frozenset[str]:
+    """Return target IDs whose label is bold, so their symbols are bold too."""
+    return frozenset(label.target_id for label in labels if label.font_weight == "bold")
+
+
+def _dso_line_width_mm(style: StyleConfig, *, bold: bool) -> float:
+    """Return the deep-sky symbol stroke width for a bold or ordinary object."""
+    return style.dso.bold_line_width_mm if bold else style.dso.line_width_mm
+
+
 def _draw_dsos(
     cr: cairo.Context[cairo.Surface],
     transform: PageTransform,
     scene: ChartScene,
     style: StyleConfig,
+    bold_symbol_ids: frozenset[str] = frozenset(),
 ) -> None:
     cr.set_source_rgb(0.0, 0.0, 0.0)
-    cr.set_line_width(mm_to_pt(style.dso.line_width_mm))
     for scene_dso in scene.deep_sky_objects:
         dso = scene_dso.dso
+        bold = dso.id in bold_symbol_ids
+        cr.set_line_width(mm_to_pt(_dso_line_width_mm(style, bold=bold)))
         point = transform.to_page(scene_dso.chart_point)
         x = mm_to_pt(point.x_mm)
         y = mm_to_pt(point.y_mm)
@@ -352,7 +366,8 @@ def _draw_labels(
             mm_to_pt(candidate.bounds.left_mm),
             mm_to_pt(candidate.bounds.top_mm),
             style.label.font_family,
-            style.label.font_size_pt,
+            label.font_size_pt if label.font_size_pt is not None else style.label.font_size_pt,
+            label.font_weight,
         )
 
 

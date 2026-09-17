@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
+from nightsky_atlas.catalog.selection import DsoMetadata
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection.base import ChartPoint
 
@@ -27,10 +28,16 @@ class SceneStar:
 
 @dataclass(frozen=True, slots=True)
 class SceneDso:
-    """A deep-sky object placed on the chart plane."""
+    """A deep-sky object placed on the chart plane.
+
+    ``metadata`` carries the atlas selection state (observing-list memberships
+    and render/label priorities).  It is presentation metadata, so it lives on
+    the scene entry rather than on the immutable astronomical object.
+    """
 
     dso: DeepSkyObject
     chart_point: ChartPoint
+    metadata: DsoMetadata | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -35,6 +35,8 @@ page is visible.
 - M0–M14 complete. M15.1–M15.4 complete. **M15.5 in progress** (alpha built,
   field test pending).
 - M16.1 complete. M16.2–M16.4 not started (M16.4 document now seeded).
+- M21.1–M21.4 complete (observing-list-driven DSO selection with per-type
+  visibility; Herschel 400 forced into Standard). M21.5 not started.
 - M11.4 and M13.3 complete (live OpenRouter review and model selection).
 - Live snapshot of progress, artifacts and open issues: `docs/STATE.md`.
 
@@ -155,6 +157,13 @@ page is visible.
   out of code into typed style config.
   **Human checkpoint:** standard test pages should look like an intentional
   atlas, not a plotting-library output.
+- [x] **M9.5 Deep-sky label formatting and hierarchy** — presentation-only
+  formatter drops the NGC prefix (a bare number means NGC), compacts IC and
+  other catalogues, gives Messier precedence over NGC/IC, and applies configured
+  bold/size tiers (`label.dso_labels`).  Each `Label` carries resolved
+  `font_size_pt`/`font_weight`; emphasized symbols use the heavier
+  `dso.bold_line_width_mm` so the mark is bold wherever the name is.  Catalogue
+  data is never mutated.
 
 ## M10 — Review artifacts
 
@@ -290,6 +299,36 @@ Only begin after Standard/Pocket architecture proves stable.
 - [ ] **M20.4 Generate Deep alpha**.
 - [ ] **M20.5 Telescope field testing** — difficult galaxy fields and dense Milky
   Way regions.
+
+## M21 — Observing-list-driven DSO selection
+
+Deep-sky selection must not be a single global magnitude cut.  Curated visual
+observing lists act as forced-include/priority metadata, and object rendering is
+decided separately from object labelling.  Membership, scores and priorities are
+atlas metadata and never modify the astronomical model (`AGENTS.md` section 5).
+
+- [x] **M21.1 DSO metadata model** — separate `DsoMetadata` carrying
+  `list_memberships`, `visual_score`, `importance_score`, `render_priority` and
+  `label_priority`; `SceneDso` carries it; `DeepSkyObject` stays pure astronomy.
+- [x] **M21.2 Observing-list import/mapping** — fixture format, designation
+  normalization (NGC/IC leading zeros, Messier), membership index, and a strict
+  `config/observing_lists.yaml` policy with per-edition forced lists, weights and
+  inheritance.
+- [x] **M21.3 Herschel 400 integration** — vendored CC BY-SA fixture; Herschel 400
+  is a Standard forced list and all resolvable members render regardless of
+  magnitude.  `render_priority`/`label_priority` are used separately by the scene
+  builder and label builder.
+- [x] **M21.4 Per-type visibility evaluators** — `catalog/visibility.py` provides
+  a `VisibilityEvaluator` per `DsoType` behind one interface, returning a
+  `VisibilityAssessment` (`visible`, 0-100 `score`, reasons) from surface
+  brightness, angular size and type-specific rules.  `SelectionPolicy` carries
+  the edition `VisibilityLimits` (default: 8-10 inch dark sky) sourced from the
+  atlas `visibility:` block, and the scene builder keeps an object when it is
+  visible or forced.  Star/double-star entries are excluded from the DSO layer.
+  A per-chart density budget remains a possible later refinement.
+- [ ] **M21.5 Additional lists** — Messier, Caldwell, RASC, SAC, ASSA, Bennett and
+  (licensing permitting) NSOG; Deep adds Herschel II and the Astronomical League
+  programs.  Each needs a license/provenance decision before ingestion.
 
 ## Human decision checkpoints
 

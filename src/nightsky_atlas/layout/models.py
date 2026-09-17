@@ -86,7 +86,8 @@ class Label:
     picks a candidate.  ``mandatory`` labels must be placed; optional labels may
     remain hidden if no candidate is acceptable.  ``locked`` labels come from a
     manual override and must not be moved by later optimizers (``AGENTS.md``
-    section 22).
+    section 22).  ``font_size_pt`` and ``font_weight`` carry the per-label
+    typography; ``None``/``normal`` fall back to the style default.
     """
 
     id: str
@@ -98,6 +99,8 @@ class Label:
     selected_candidate_id: str | None = None
     hidden: bool = False
     locked: bool = False
+    font_size_pt: float | None = None
+    font_weight: str = "normal"
 
     def candidate(self, candidate_id: str) -> LabelCandidate | None:
         """Return the candidate with the given ID, if present."""
@@ -124,6 +127,8 @@ class Label:
             selected_candidate_id=candidate_id,
             hidden=self.hidden,
             locked=self.locked,
+            font_size_pt=self.font_size_pt,
+            font_weight=self.font_weight,
         )
 
     def with_placement(
@@ -144,6 +149,8 @@ class Label:
             selected_candidate_id=candidate_id,
             hidden=hidden,
             locked=self.locked if locked is None else locked,
+            font_size_pt=self.font_size_pt,
+            font_weight=self.font_weight,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -156,6 +163,8 @@ class Label:
             "mandatory": self.mandatory,
             "hidden": self.hidden,
             "locked": self.locked,
+            "font_size_pt": self.font_size_pt,
+            "font_weight": self.font_weight,
             "selected_candidate_id": self.selected_candidate_id,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
@@ -175,4 +184,8 @@ class Label:
             selected_candidate_id=data.get("selected_candidate_id"),
             hidden=bool(data.get("hidden", False)),
             locked=bool(data.get("locked", False)),
+            font_size_pt=(
+                None if data.get("font_size_pt") is None else float(data["font_size_pt"])
+            ),
+            font_weight=str(data.get("font_weight", "normal")),
         )

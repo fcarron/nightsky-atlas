@@ -174,7 +174,10 @@ Symbols are semantic (`star`, `open_cluster`, `globular_cluster`, `galaxy`,
 commands. Star size is a configurable monotonic function of magnitude, stable
 across PDF/PNG. Galaxies use major/minor axis and position angle where
 available, with a minimum printable size preserving orientation. Large nebula
-outlines (later) are true vector paths.
+outlines (later) are true vector paths. Emphasized objects (Messier, Herschel
+400) use a heavier configurable stroke, so the symbol is bold wherever its label
+is; the renderer takes that emphasis from the layout's bold labels rather than
+re-deriving catalogue facts.
 
 ## 13. Typography
 
@@ -198,6 +201,14 @@ redistribution/embedding rights.
   star, DSO, own exclusion zone, title/metadata; leader line vs labels and
   important symbols; excessive leader-line crossing. Grid lines have lower
   priority than labels and may be interrupted.
+- **14.5 Deep-sky label text and hierarchy** — a presentation-only formatting
+  layer renders catalogue identifiers compactly without mutating catalogue data:
+  a bare number means NGC (`NGC 4565` → `4565`), `IC 3476` → `I3476`, Messier
+  wins over NGC/IC, other catalogues use short abbreviations (`Sh2-101`,
+  `Cr399`, `B168`). Common names do not replace the designation. Tiers are style
+  config (`label.dso_labels`): Messier bold at 1.15×, non-Messier Herschel 400
+  bold at normal size, ordinary regular. Each `Label` carries its resolved
+  `font_size_pt`/`font_weight`.
 
 ## 15. Deterministic layout optimizer
 
@@ -351,8 +362,11 @@ nightsky benchmark ai-review
 
 `chart render|validate|review` and `atlas build` accept `--overrides PATH`
 (file or directory), `--constellations DIR` (default
-`data/fixtures/constellations`; empty to omit) and `--outlines DIR` (default
-`data/fixtures/outlines`; empty to omit).
+`data/fixtures/constellations`; empty to omit), `--outlines DIR` (default
+`data/fixtures/outlines`; empty to omit), `--star-names DIR` (default
+`data/fixtures/starnames`; empty to omit), `--observing-lists DIR` (default
+`data/fixtures/observing_lists`; empty to omit) and `--observing-config PATH`
+(default `config/observing_lists.yaml`).
 
 ## 29. Configuration principles
 
@@ -440,6 +454,9 @@ Full plan, acceptance criteria and checkpoints: `docs/DEVELOPMENT_PLAN.md`.
   progress**.
 - [x] M16.1 overrides; [ ] M16.2 atlas-wide issue report; [ ] M16.3 publication
   preflight; [~] M16.4 data-source/license documentation.
+- [x] M21.1–M21.4 observing-list-driven DSO selection (separate render/label
+  priorities; Herschel 400 forced into Standard; per-type visibility evaluators
+  decide which objects are drawn); [ ] M21.5 further observing lists.
 - [ ] M17 Pocket, M18 Deep data expansion, M19 extended structures, M20 Deep
   atlas.
 

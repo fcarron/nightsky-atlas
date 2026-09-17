@@ -75,6 +75,7 @@ class Star:
     magnitude: float
     provenance: Provenance
     epoch: str = "J2000"
+    hip_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -83,6 +84,8 @@ class Star:
             raise ValueError("provenance must be a Provenance instance")
         if not self.epoch.strip():
             raise ValueError("epoch must not be blank")
+        if self.hip_id is not None and not self.hip_id.strip():
+            raise ValueError("hip_id must not be blank when present")
         for name in ("ra_deg", "dec_deg", "magnitude"):
             if not math.isfinite(getattr(self, name)):
                 raise ValueError(f"{name} must be finite")
@@ -154,6 +157,28 @@ class DeepSkyObject:
         payload["object_type"] = self.object_type.value
         payload["cross_ids"] = list(self.cross_ids)
         return payload
+
+    def surface_brightness_mag_arcsec2(self) -> float | None:
+        """Mean surface brightness in mag/arcsec^2, when derivable.
+
+        Derived from the display magnitude and the ellipse area
+        ``pi/4 * major * minor``; ``None`` when magnitude or both axes are
+        unknown.  This is a selection aid for extended objects, not a
+        scientifically exact visibility prediction.
+        """
+        if (
+            self.magnitude is None
+            or self.major_axis_arcmin is None
+            or self.minor_axis_arcmin is None
+        ):
+            return None
+        area_arcmin2 = (
+            math.pi / 4.0 * self.major_axis_arcmin * self.minor_axis_arcmin
+        )
+        if area_arcmin2 <= 0.0:
+            return None
+        area_arcsec2 = area_arcmin2 * 60.0**2
+        return self.magnitude + 2.5 * math.log10(area_arcsec2)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DeepSkyObject:
