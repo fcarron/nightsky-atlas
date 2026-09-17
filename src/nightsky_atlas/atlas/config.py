@@ -352,8 +352,8 @@ class GridStyle(_StrictModel):
     ra_step_deg: PositiveFloat = 2.0
     dec_step_deg: PositiveFloat = 2.0
     polar_ra_step_deg: PositiveFloat = 10.0
-    line_width_mm: PositiveFloat = 0.12
-    gray: float = 0.78
+    line_width_mm: PositiveFloat = 0.1
+    gray: float = 0.8
     labels_enabled: bool = True
     label_placement: Literal["inside", "outside"] = "inside"
     label_font_size_pt: PositiveFloat = 5.0
@@ -392,8 +392,8 @@ class ConstellationLineStyle(_StrictModel):
     """
 
     enabled: bool = True
-    gray: float = 0.6
-    line_width_mm: PositiveFloat = 0.2
+    gray: float = 0.5
+    line_width_mm: PositiveFloat = 0.22
     star_gap_extra_mm: NonNegativeFloat = 0.2
     star_match_tolerance_mm: PositiveFloat = 0.6
 
@@ -402,8 +402,8 @@ class ConstellationBoundaryStyle(_StrictModel):
     """Dotted constellation boundary appearance."""
 
     enabled: bool = True
-    gray: float = 0.7
-    line_width_mm: PositiveFloat = 0.12
+    gray: float = 0.82
+    line_width_mm: PositiveFloat = 0.1
     dash_mm: PositiveFloat = 1.0
     gap_mm: PositiveFloat = 1.2
 
