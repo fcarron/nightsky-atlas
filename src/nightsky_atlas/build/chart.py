@@ -279,7 +279,16 @@ def build_chart_context(
             stars_csv=stars_csv,
             magnitude_limit=star_limit,
         )
-    dsos = inputs.dsos
+    # The scene builder only keeps objects whose centre projects into the
+    # field; pre-filtering the shared catalogue to a radial box around the
+    # field (which reaches the corners) keeps selection exact while avoiding a
+    # full-catalogue scan per chart.
+    dso_box = field_query_box(definition, padding_deg=2.0)
+    dsos = tuple(
+        dso
+        for dso in inputs.dsos
+        if _coordinates_in_box(dso.ra_deg, dso.dec_deg, dso_box)
+    )
     dso_limit = (
         dso_magnitude_limit
         if dso_magnitude_limit is not None
@@ -333,15 +342,46 @@ def build_chart_context(
     )
 
 
+def field_query_box(definition: ChartDefinition, *, padding_deg: float = 2.0) -> QueryBox:
+    """Return a radial query box that reaches the projected field corners.
+
+    :func:`nightsky_atlas.catalog.store.chart_query_box` sizes the declination
+    range from half the chart height, but the projected field reaches further
+    at its corners.  Using the corner radius as both half-extents yields a
+    superset of the field, so pre-filtering a catalogue never drops an object
+    the scene builder would keep.
+    """
+    radius = (
+        math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0) + padding_deg
+    )
+    dec_min = max(-90.0, definition.center_dec_deg - radius)
+    dec_max = min(90.0, definition.center_dec_deg + radius)
+    worst_dec = min(89.9, max(abs(dec_min), abs(dec_max)))
+    cos_dec = math.cos(math.radians(worst_dec))
+    if cos_dec < 0.02:
+        return QueryBox(0.0, 360.0, dec_min, dec_max)
+    half_width = radius / cos_dec
+    if half_width >= 180.0:
+        return QueryBox(0.0, 360.0, dec_min, dec_max)
+    ra_min = (definition.center_ra_deg - half_width) % 360.0
+    ra_max = (definition.center_ra_deg + half_width) % 360.0
+    return QueryBox(ra_min, ra_max, dec_min, dec_max)
+
+
+def _coordinates_in_box(ra_deg: float, dec_deg: float, box: QueryBox) -> bool:
+    """Return whether a position falls inside a catalogue query box."""
+    if not box.dec_min_deg <= dec_deg <= box.dec_max_deg:
+        return False
+    if box.wraps_ra:
+        return ra_deg >= box.ra_min_deg or ra_deg <= box.ra_max_deg
+    return box.ra_min_deg <= ra_deg <= box.ra_max_deg
+
+
 def _system_in_box(system: StarSystem, box: QueryBox) -> bool:
     """Return whether a system position falls inside a catalogue query box."""
     if system.ra_deg is None or system.dec_deg is None:
         return False
-    if not box.dec_min_deg <= system.dec_deg <= box.dec_max_deg:
-        return False
-    if box.wraps_ra:
-        return system.ra_deg >= box.ra_min_deg or system.ra_deg <= box.ra_max_deg
-    return box.ra_min_deg <= system.ra_deg <= box.ra_max_deg
+    return _coordinates_in_box(system.ra_deg, system.dec_deg, box)
 
 
 def _selection_policy(atlas: AtlasConfig, config_path: str | Path) -> SelectionPolicy:

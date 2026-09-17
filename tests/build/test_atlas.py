@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
+import pytest
 import yaml
 
 from nightsky_atlas.atlas.config import load_atlas_config
 from nightsky_atlas.build.atlas import build_atlas, chart_definitions
+from nightsky_atlas.build.chart import field_query_box
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
 from nightsky_atlas.catalog.openngc import iter_openngc_objects
+from nightsky_atlas.catalog.store import chart_query_box
+from nightsky_atlas.chart.models import ChartDefinition
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = REPO_ROOT / "styles" / "standard.yaml"
@@ -61,6 +66,21 @@ def test_chart_definitions_for_tiled_atlas() -> None:
     charts = chart_definitions(load_atlas_config(SHIPPED_ATLAS))
     assert len(charts) > 50
     assert all(chart.neighbours for chart in charts)
+
+
+def test_field_query_box_reaches_projected_corners() -> None:
+    definition = ChartDefinition(
+        id="c", center_ra_deg=187.5, center_dec_deg=12.0, width_deg=27.0, height_deg=18.5
+    )
+    star_box = chart_query_box(definition, padding_deg=0.0)
+    field_box = field_query_box(definition, padding_deg=0.0)
+    corner_radius = math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0)
+    assert field_box.dec_min_deg <= star_box.dec_min_deg
+    assert field_box.dec_max_deg >= star_box.dec_max_deg
+    assert field_box.dec_max_deg == pytest.approx(12.0 + corner_radius)
+    assert field_box.dec_min_deg == pytest.approx(12.0 - corner_radius)
+    assert field_box.ra_min_deg < star_box.ra_min_deg
+    assert field_box.ra_max_deg > star_box.ra_max_deg
 
 
 def test_build_atlas_subset(tmp_path: Path) -> None:
