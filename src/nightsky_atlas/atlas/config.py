@@ -21,6 +21,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    NonNegativeFloat,
     PositiveFloat,
     ValidationError,
     field_validator,
@@ -381,18 +382,27 @@ class GridStyle(_StrictModel):
 
 
 class ConstellationLineStyle(_StrictModel):
-    """Stick-figure constellation line appearance."""
+    """Stick-figure constellation line appearance.
+
+    Lines are drawn straight in the two-dimensional chart plane (symbolic
+    connections, not great circles).  At a segment endpoint the line is
+    shortened by the plotted star's radius plus ``star_gap_extra_mm`` so it does
+    not run under the symbol to its centre; ``star_match_tolerance_mm`` is the
+    page distance within which an endpoint is treated as that star.
+    """
 
     enabled: bool = True
-    gray: float = 0.55
-    line_width_mm: PositiveFloat = 0.15
+    gray: float = 0.6
+    line_width_mm: PositiveFloat = 0.2
+    star_gap_extra_mm: NonNegativeFloat = 0.2
+    star_match_tolerance_mm: PositiveFloat = 0.6
 
 
 class ConstellationBoundaryStyle(_StrictModel):
     """Dotted constellation boundary appearance."""
 
     enabled: bool = True
-    gray: float = 0.6
+    gray: float = 0.7
     line_width_mm: PositiveFloat = 0.12
     dash_mm: PositiveFloat = 1.0
     gap_mm: PositiveFloat = 1.2

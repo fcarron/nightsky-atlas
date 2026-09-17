@@ -14,7 +14,7 @@ from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.selection import SelectionPolicy
 from nightsky_atlas.catalog.systems import MatchStatus, StarSystem
 from nightsky_atlas.chart.models import ChartDefinition
-from nightsky_atlas.projection import ChartPoint
+from nightsky_atlas.projection import ChartPoint, StereographicProjection
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -146,6 +146,81 @@ def test_constellation_boundaries_tracked_separately() -> None:
     )
     assert len(scene.constellation_boundaries) == 1
     assert len(scene.constellation_lines) == 1
+
+
+REGION_CASES = [
+    ("equator", 30.0, 0.0, 20.0, 0.0, 40.0, 0.0),
+    ("mid", 187.5, 45.0, 178.0, 42.0, 198.0, 47.0),
+    ("north-pole", 90.0, 82.0, 70.0, 85.0, 110.0, 85.0),
+    ("south-pole", 90.0, -82.0, 70.0, -85.0, 110.0, -85.0),
+    ("long", 90.0, 0.0, 40.0, -20.0, 140.0, 20.0),
+]
+
+
+@pytest.mark.parametrize("label,center_ra,center_dec,ra1,dec1,ra2,dec2", REGION_CASES)
+def test_constellation_line_is_a_straight_two_point_segment(
+    label: str,
+    center_ra: float,
+    center_dec: float,
+    ra1: float,
+    dec1: float,
+    ra2: float,
+    dec2: float,
+) -> None:
+    definition = ChartDefinition(
+        id=label,
+        center_ra_deg=center_ra,
+        center_dec_deg=center_dec,
+        width_deg=27.0,
+        height_deg=18.5,
+    )
+    segment = make_segment(ra1, dec1, ra2, dec2)
+    scene = build_scene(definition, [], [], constellation_lines=[segment])
+    assert scene.constellation_lines
+    for line in scene.constellation_lines:
+        assert len(line.points) == 2
+        for point in line.points:
+            assert definition.contains(point)
+
+
+def test_constellation_line_projects_only_endpoints() -> None:
+    definition = ChartDefinition(
+        id="eq", center_ra_deg=30.0, center_dec_deg=0.0, width_deg=27.0, height_deg=18.5
+    )
+    segment = make_segment(20.0, 0.0, 40.0, 0.0)
+    scene = build_scene(definition, [], [], constellation_lines=[segment])
+    line = scene.constellation_lines[0]
+    projector = StereographicProjection(30.0, 0.0)
+    start = projector.project(20.0, 0.0)
+    end = projector.project(40.0, 0.0)
+    assert line.points[0].xi_deg == pytest.approx(start.xi_deg)
+    assert line.points[0].eta_deg == pytest.approx(start.eta_deg)
+    assert line.points[1].xi_deg == pytest.approx(end.xi_deg)
+    assert line.points[1].eta_deg == pytest.approx(end.eta_deg)
+
+
+def test_polar_constellation_line_does_not_follow_the_curved_parallel() -> None:
+    definition = ChartDefinition(
+        id="np", center_ra_deg=90.0, center_dec_deg=82.0, width_deg=27.0, height_deg=18.5
+    )
+    segment = make_segment(60.0, 85.0, 120.0, 85.0)
+    scene = build_scene(definition, [], [], constellation_lines=[segment])
+    line = scene.constellation_lines[0]
+    assert len(line.points) == 2
+    projector = StereographicProjection(90.0, 82.0)
+    parallel_mid = projector.project(90.0, 85.0)
+    chord_mid_eta = (line.points[0].eta_deg + line.points[1].eta_deg) / 2.0
+    assert abs(parallel_mid.eta_deg - chord_mid_eta) > 0.5
+
+
+def test_constellation_boundary_is_still_densified_and_curved() -> None:
+    definition = ChartDefinition(
+        id="eq", center_ra_deg=30.0, center_dec_deg=0.0, width_deg=27.0, height_deg=18.5
+    )
+    boundary = make_segment(10.0, 0.0, 50.0, 0.0)
+    scene = build_scene(definition, [], [], constellation_boundaries=[boundary])
+    assert scene.constellation_boundaries
+    assert all(len(run.points) > 2 for run in scene.constellation_boundaries)
 
 
 def make_outline(dso_id: str, points: tuple[tuple[float, float], ...]) -> NebulaOutline:

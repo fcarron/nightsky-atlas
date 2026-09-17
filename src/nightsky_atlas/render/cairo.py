@@ -22,6 +22,7 @@ from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.models import Label
+from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
 from nightsky_atlas.render.symbols import (
@@ -506,14 +507,46 @@ def _draw_constellations(
             dash_mm=(config.boundaries.dash_mm, config.boundaries.gap_mm),
         )
     if config.lines.enabled and scene.constellation_lines:
-        _draw_segments(
+        _draw_constellation_lines(
             cr,
             transform,
-            scene.constellation_lines,
+            scene,
+            style,
             gray=config.lines.gray,
             line_width_mm=config.lines.line_width_mm,
-            dash_mm=None,
         )
+
+
+def _draw_constellation_lines(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    scene: ChartScene,
+    style: StyleConfig,
+    *,
+    gray: float,
+    line_width_mm: float,
+) -> None:
+    """Draw straight stick-figure lines, trimmed clear of their star symbols."""
+    strokes = resolve_constellation_lines(scene, transform, style)
+    if not strokes:
+        return
+    rect = transform.chart_rect
+    tone = min(max(gray, 0.0), 1.0)
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
+    cr.set_source_rgb(tone, tone, tone)
+    cr.set_line_width(mm_to_pt(line_width_mm))
+    for stroke in strokes:
+        cr.move_to(mm_to_pt(stroke.start.x_mm), mm_to_pt(stroke.start.y_mm))
+        cr.line_to(mm_to_pt(stroke.end.x_mm), mm_to_pt(stroke.end.y_mm))
+        cr.stroke()
+    cr.restore()
 
 
 def _draw_outlines(

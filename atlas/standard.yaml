@@ -71,3 +71,8 @@ charts:
     center_dec_deg: -1.0
     width_deg: 27.0
     height_deg: 18.5
+  - id: test-pole
+    center_ra_deg: 0.0
+    center_dec_deg: 82.0
+    width_deg: 27.0
+    height_deg: 18.5

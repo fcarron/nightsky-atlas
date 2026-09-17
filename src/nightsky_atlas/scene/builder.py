@@ -76,9 +76,12 @@ def build_scene(
     observing-list forces it.  ``dso_magnitude_limit`` is the fallback rule used
     only when no policy is supplied.
 
-    Constellation segments and nebula outlines are densified along RA/Dec,
-    projected and clipped to the chart field, so long constant-declination
-    boundaries and closed outlines curve correctly.
+    Constellation stick-figure lines are **not** densified: both endpoints are
+    projected and the renderer draws a straight segment between them, because
+    the figures are symbolic connections rather than physical great circles.
+    Constellation boundaries and nebula outlines are still densified along
+    RA/Dec before projection, so long constant-declination boundaries and
+    closed outlines curve correctly.
     """
     projector = projection if projection is not None else default_projection(definition)
 
@@ -140,8 +143,8 @@ def build_scene(
         stars=tuple(scene_stars),
         deep_sky_objects=tuple(scene_dsos),
         star_systems=tuple(scene_systems),
-        constellation_lines=_project_segments(
-            constellation_lines, projector, definition, "line"
+        constellation_lines=_project_constellation_lines(
+            constellation_lines, projector, definition
         ),
         constellation_boundaries=_project_segments(
             constellation_boundaries, projector, definition, "boundary"
@@ -239,13 +242,60 @@ def _polyline_runs(
     return runs
 
 
+def _project_constellation_lines(
+    sources: Iterable[ConstellationSegment],
+    projector: StereographicProjection,
+    definition: ChartDefinition,
+) -> tuple[SceneSegment, ...]:
+    """Project stick-figure lines as straight two-point chart segments.
+
+    Constellation lines are symbolic connections, so only the two endpoint
+    coordinates are projected; the renderer then draws a direct straight line
+    in the two-dimensional chart plane.  There is deliberately no spherical
+    interpolation and no great-circle densification, which would curve the
+    printed figure near the poles.  The projected chord is clipped to the
+    chart field with a straight-line clip, so a partially visible segment is
+    shown correctly rather than dropped.
+    """
+    half_width = definition.width_deg / 2.0
+    half_height = definition.height_deg / 2.0
+    segments: list[SceneSegment] = []
+    for source in sources:
+        try:
+            start = projector.project(source.ra1_deg % 360.0, source.dec1_deg)
+            end = projector.project(source.ra2_deg % 360.0, source.dec2_deg)
+        except ProjectionError:
+            continue
+        clipped = _clip_segment(
+            (start.xi_deg, start.eta_deg),
+            (end.xi_deg, end.eta_deg),
+            half_width,
+            half_height,
+        )
+        if clipped is None:
+            continue
+        clip_start, clip_end = clipped
+        if clip_start == clip_end:
+            continue
+        segments.append(
+            SceneSegment(
+                source_id=source.id,
+                points=(
+                    ChartPoint(xi_deg=clip_start[0], eta_deg=clip_start[1]),
+                    ChartPoint(xi_deg=clip_end[0], eta_deg=clip_end[1]),
+                ),
+            )
+        )
+    return tuple(segments)
+
+
 def _project_segments(
     sources: Iterable[ConstellationSegment],
     projector: StereographicProjection,
     definition: ChartDefinition,
     kind: str,
 ) -> tuple[SceneSegment, ...]:
-    """Project, densify and clip constellation segments for one chart."""
+    """Project, densify and clip curved constellation boundary segments."""
     half_width = definition.width_deg / 2.0
     half_height = definition.height_deg / 2.0
     segments: list[SceneSegment] = []

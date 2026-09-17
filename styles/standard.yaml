@@ -64,12 +64,13 @@ double_stars:
 constellation:
   lines:
     enabled: true
-    gray: 0.5
-    line_width_mm: 0.15
+    gray: 0.6
+    line_width_mm: 0.2
+    star_gap_extra_mm: 0.2
   boundaries:
     enabled: true
-    gray: 0.55
-    line_width_mm: 0.14
+    gray: 0.7
+    line_width_mm: 0.12
     dash_mm: 0.5
     gap_mm: 1.0
 

@@ -111,6 +111,13 @@ AI output must never directly mutate astronomical objects.
   `definition`, `stars`, `deep_sky_objects`, `star_systems`,
   `constellation_boundaries`, `constellation_lines`, `nebula_outlines`.
   Contains chart-plane coordinates but no final typesetting decisions.
+  Constellation stick figures are **symbolic** connections, not physical great
+  circles: the builder projects only their two endpoints and the renderer draws
+  a straight segment in the chart plane. Constellation boundaries and nebula
+  outlines are densified along RA/Dec before projection so they curve
+  correctly. The renderer shortens a stick-figure end by the radius of the star
+  symbol it meets plus `constellation.lines.star_gap_extra_mm`, so the line
+  stops at the symbol edge rather than its centre.
 - `DsoMetadata` (attached to each `SceneDso`) — atlas selection metadata:
   `list_memberships`, `visual_score`, `importance_score`, `render_priority`,
   `label_priority`, `forced`, `visible`, `visibility_reasons`. Observing-list

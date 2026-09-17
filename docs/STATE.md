@@ -11,7 +11,9 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Grid coordinate edge labels added (RA along top/bottom, Dec along left/right),
   configurable and independent of grid line spacing.
 - Constellation stick figures (solid) and dotted IAU boundaries added, from a
-  vendored BSD-3-Clause fixture.
+  vendored BSD-3-Clause fixture. Stick figures are drawn as straight segments
+  between the projected endpoint stars (no spherical interpolation), with a
+  small gap at each star symbol; boundaries remain densified and curved.
 - Bright-star gap fixed: the star store now merges Tycho-2 with the Hipparcos
   main catalogue, adding 1,319 stars that Tycho-2 omits (Deneb, Vega, Sirius,
   ...). Store count 2,539,913 -> 2,541,232.

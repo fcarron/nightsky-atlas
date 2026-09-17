@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 
 from nightsky_atlas.atlas.config import load_style_config
+from nightsky_atlas.catalog.constellations import ConstellationSegment
+from nightsky_atlas.catalog.models import Provenance
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
@@ -23,7 +25,7 @@ from nightsky_atlas.render.cairo import (
     render_chart,
     render_magnitude_scale,
 )
-from nightsky_atlas.scene.builder import build_star_scene
+from nightsky_atlas.scene.builder import build_scene, build_star_scene
 from nightsky_atlas.units import mm_to_pt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -81,6 +83,31 @@ def test_render_chart_requires_an_output() -> None:
     scene, transform = build_artifacts()
     with pytest.raises(ValueError):
         render_chart(scene, transform, STYLE)
+
+
+def test_render_chart_with_constellation_lines(tmp_path: Path) -> None:
+    stars = load_sample_stars(REPO_ROOT / "data" / "fixtures" / "stars" / "test_virgo.csv")
+    segment = ConstellationSegment(
+        id="constellation-line:test",
+        ra1_deg=187.5,
+        dec1_deg=12.0,
+        ra2_deg=183.0,
+        dec2_deg=8.0,
+        provenance=Provenance(catalogue="TEST", source_id="line"),
+    )
+    scene = build_scene(CHART, stars, constellation_lines=[segment])
+    assert scene.constellation_lines
+    pdf_path = tmp_path / "chart.pdf"
+    png_path = tmp_path / "preview.png"
+    render_chart(
+        scene,
+        PageTransform(chart=CHART, page=PAGE),
+        STYLE,
+        pdf_path=pdf_path,
+        png_path=png_path,
+    )
+    assert pdf_path.read_bytes().startswith(b"%PDF")
+    assert png_path.exists()
 
 
 def test_render_magnitude_scale(tmp_path: Path) -> None:

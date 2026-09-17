@@ -65,6 +65,7 @@ def test_shipped_atlas_fixture_loads() -> None:
         "test-veil",
         "test-sparse",
         "test-orion",
+        "test-pole",
     ]
     assert config.charts[0].projection == "stereographic"
 
