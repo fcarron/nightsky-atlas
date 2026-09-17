@@ -150,10 +150,16 @@ def build_draft_report(
     report: dict[str, Any] = {
         "atlas_id": atlas.id,
         "chart_count": len(charts),
+        "chart_order": "north-to-south",
         "charts_per_declination": {
-            f"{dec:+.0f}": count for dec, count in sorted(by_dec.items())
+            f"{dec:+.0f}": count
+            for dec, count in sorted(by_dec.items(), reverse=True)
         },
-        "polar_charts": sorted(chart.id for chart in charts if abs(chart.center_dec_deg) >= 89.0),
+        "polar_charts": [
+            chart.id
+            for chart in sorted(charts, key=lambda item: item.center_dec_deg, reverse=True)
+            if abs(chart.center_dec_deg) >= 89.0
+        ],
         "coverage": {
             "step_deg": step,
             "sample_count": coverage.sample_count,
@@ -174,11 +180,18 @@ def build_draft_report(
         "review_regions": regions,
     }
     if atlas.tiling is not None and spec.is_ring_mode:
+        centers = sorted(spec.declination_centers, reverse=True)
+        counts = resolve_ring_counts(spec)
+        ascending = dict(
+            zip(sorted(spec.declination_centers), counts, strict=True)
+        )
         report["ring_layout"] = [
-            {"center_dec_deg": center, "chart_count": count}
-            for center, count in zip(
-                sorted(spec.declination_centers), resolve_ring_counts(spec), strict=True
-            )
+            {
+                "center_dec_deg": center,
+                "chart_count": ascending[center],
+                "ra_step_deg": round(360.0 / ascending[center], 3),
+            }
+            for center in centers
         ]
     return report
 
@@ -195,10 +208,17 @@ def render_text_summary(report: dict[str, Any]) -> str:
         f"{coverage['sample_count']} samples at {coverage['step_deg']} deg, "
         f"gaps={coverage['gap_count']}, "
         f"overlap {coverage['min_overlap']}..{coverage['max_overlap']}",
+    ]
+    for ring in report.get("ring_layout", []):
+        lines.append(
+            f"  ring dec {ring['center_dec_deg']:+.0f}: "
+            f"{ring['chart_count']} charts, RA step {ring['ra_step_deg']:.2f} deg"
+        )
+    lines.append(
         "neighbours: "
         f"{report['neighbours']['checked_pairs']} pairs checked, "
-        f"{report['neighbours']['missing_overlaps']} without overlap",
-    ]
+        f"{report['neighbours']['missing_overlaps']} without overlap"
+    )
     density = report.get("density", {})
     for key in ("dso_count", "label_count", "star_count"):
         entry = density.get(key)

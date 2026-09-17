@@ -209,6 +209,13 @@ def test_avoid_rect_drops_overlapping_labels() -> None:
 
 
 def test_label_step_reduces_label_count() -> None:
+    every_line = STYLE.model_copy(
+        update={
+            "grid": STYLE.grid.model_copy(
+                update={"label_ra_step_deg": 2.0, "label_dec_step_deg": 2.0}
+            )
+        }
+    )
     sparse_style = STYLE.model_copy(
         update={
             "grid": STYLE.grid.model_copy(
@@ -216,10 +223,52 @@ def test_label_step_reduces_label_count() -> None:
             )
         }
     )
-    every_line = STYLE
     sparse = build_grid_labels(CHART, TRANSFORM, sparse_style)
     dense = build_grid_labels(CHART, TRANSFORM, every_line)
     assert 0 < len(sparse) < len(dense)
+
+
+def test_min_spacing_thins_crowded_polar_labels() -> None:
+    """Near a pole, meridians converge and adjacent labels must be skipped."""
+    chart = ChartDefinition(
+        id="near-pole", center_ra_deg=0.0, center_dec_deg=72.0, width_deg=27.0, height_deg=18.5
+    )
+    transform = PageTransform(chart=chart, page=PAGE)
+    dense = STYLE.model_copy(
+        update={"grid": STYLE.grid.model_copy(update={"label_min_spacing_mm": 0.0})}
+    )
+    thinned = STYLE.model_copy(
+        update={"grid": STYLE.grid.model_copy(update={"label_min_spacing_mm": 13.0})}
+    )
+    dense_labels = build_grid_labels(chart, transform, dense)
+    thinned_labels = build_grid_labels(chart, transform, thinned)
+    assert 0 < len(thinned_labels) < len(dense_labels)
+    # Labels on the same edge are at least the minimum spacing apart.
+    by_edge: dict[str, list[float]] = {}
+    for label in thinned_labels:
+        edge = label.id.rsplit(":", 1)[-1]
+        along = label.bounds.left_mm if label.kind == "ra" else label.bounds.top_mm
+        by_edge.setdefault(edge, []).append(along)
+    for positions in by_edge.values():
+        ordered = sorted(positions)
+        assert all(
+            later - earlier >= 13.0 - 1e-6
+            for earlier, later in zip(ordered, ordered[1:], strict=False)
+        )
+
+
+def test_polar_ra_labels_use_polar_step() -> None:
+    chart = ChartDefinition(
+        id="polar", center_ra_deg=0.0, center_dec_deg=90.0, width_deg=27.0, height_deg=18.5
+    )
+    transform = PageTransform(chart=chart, page=PAGE)
+    labels = build_grid_labels(chart, transform, STYLE)
+    ra_labels = [label for label in labels if label.kind == "ra"]
+    assert ra_labels
+    step = STYLE.grid.label_polar_ra_step_deg
+    assert step is not None
+    for label in ra_labels:
+        assert label.value_deg % step == pytest.approx(0.0, abs=1e-9)
 
 
 def test_disabled_grid_labels_are_empty() -> None:

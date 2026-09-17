@@ -86,9 +86,9 @@ def test_tile_sky_is_deterministic_and_unique() -> None:
 
 def test_ring_tiling_has_polar_caps_and_staggering() -> None:
     charts = tile_sky("standard", standard_spec())
-    assert len(charts) == 120
-    assert charts[0].center_dec_deg == pytest.approx(-90.0)
-    assert charts[-1].center_dec_deg == pytest.approx(90.0)
+    assert len(charts) == 116
+    assert charts[0].center_dec_deg == pytest.approx(90.0)
+    assert charts[-1].center_dec_deg == pytest.approx(-90.0)
     rings = {chart.center_dec_deg for chart in charts}
     assert -72.0 in rings and 72.0 in rings
     # Alternate rings are offset by half a chart spacing.
@@ -96,6 +96,46 @@ def test_ring_tiling_has_polar_caps_and_staggering() -> None:
     second = [chart for chart in charts if chart.center_dec_deg == -56.0]
     assert first[0].center_ra_deg == pytest.approx(0.0)
     assert second[0].center_ra_deg == pytest.approx(0.5 * 360.0 / len(second))
+
+
+def test_atlas_order_runs_north_to_south_and_ra_ascending() -> None:
+    charts = tile_sky("standard", standard_spec())
+    declinations = [chart.center_dec_deg for chart in charts]
+    assert declinations[0] == pytest.approx(90.0)
+    assert declinations[-1] == pytest.approx(-90.0)
+    # Declination is non-increasing from north to south (caps at the ends).
+    assert all(
+        later <= earlier + 1e-9
+        for earlier, later in zip(declinations, declinations[1:], strict=False)
+    )
+    # Within each ring charts run in increasing right ascension (0h -> 24h).
+    ring_centers = {
+        chart.center_dec_deg for chart in charts if abs(chart.center_dec_deg) < 89.0
+    }
+    for center in sorted(ring_centers):
+        ring = [chart for chart in charts if chart.center_dec_deg == center]
+        ras = [chart.center_ra_deg for chart in ring]
+        assert ras == sorted(ras)
+
+
+def test_frozen_ring_counts_match_declination_rings() -> None:
+    spec = standard_spec()
+    charts = tile_sky("standard", spec)
+    per_ring: dict[float, int] = {}
+    for chart in charts:
+        per_ring[chart.center_dec_deg] = per_ring.get(chart.center_dec_deg, 0) + 1
+    assert per_ring[72.0] == 10
+    assert per_ring[56.0] == 9
+    assert per_ring[40.0] == 12
+    assert per_ring[24.0] == 13
+    assert per_ring[8.0] == 14
+    assert per_ring[-8.0] == 14
+    assert per_ring[-24.0] == 13
+    assert per_ring[-40.0] == 12
+    assert per_ring[-56.0] == 9
+    assert per_ring[-72.0] == 8
+    assert per_ring[90.0] == 1
+    assert per_ring[-90.0] == 1
 
 
 def test_tiling_covers_sky_with_overlap() -> None:

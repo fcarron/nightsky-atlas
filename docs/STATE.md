@@ -80,13 +80,15 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   label exclusion and collision detection all consume the same extent. Config
   lives under `dso.<class>` in `styles/standard.yaml`.
 - `make check`: Ruff clean, 549 tests passing.
-- Standard v0.1 full-sky tiling (draft): explicit declination rings every 16 deg
-  (-72 ... +72), stereographic polar caps, RA staggering, config-driven with
-  automatic per-ring count resolution. Start counts `5/8/11/13/14` resolve to
-  `10/10/12/13/14` per hemisphere -> **120 charts** (`standard-001` south cap,
-  `standard-120` north cap). Numeric coverage at 0.5 deg: 0 gaps, overlap 1..4;
-  every N/S/E/W neighbour pair shares covered sky. Tiling code:
-  `atlas/tiling.py`; draft report: `atlas/report.py`.
+- Standard v0.2 full-sky tiling (draft): explicit declination rings every
+  16 deg (-72 ... +72), stereographic polar caps, RA staggering, frozen
+  config-driven counts.  Ordering is north-to-south (reading order):
+  `standard-001` north cap, then +72 ... -72 rings each sorted by RA (0h -> 24h),
+  `standard-116` south cap.  The requested 14/13/11/8/5 per hemisphere does not
+  cover; the frozen minimum that passes a 0.25 deg sweep is
+  `8/9/12/13/14/14/13/12/9/10` -> **116 charts**.  Numeric coverage at 0.5 deg:
+  0 gaps, overlap 1..4; 458 N/S/E/W neighbour pairs, 0 without overlap.  Tiling
+  code: `atlas/tiling.py`; draft report: `atlas/report.py`.
 
 ## Frozen Standard geometry (M14.1)
 
@@ -95,16 +97,21 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Stellar limit magnitude 9.0; deep-sky selection is per-type (8-10 inch dark
   sky: integrated magnitude 13.5, surface brightness 23.5, min axis 1.5 arcmin).
   `dso_limit_magnitude` 12.0 remains only as the no-policy fallback.
-- Tiling (Standard v0.1): declination-ring tiling, ring step 16 deg, nominal
-  vertical overlap 2 deg, staggered RA, stereographic polar caps; coverage
-  sampled at 0.5 deg; **120 charts**, ids `standard-NNN`, N/S/E/W neighbour
-  references (caps have no E/W).
+- Tiling (Standard v0.2): declination-ring tiling, ring step 16 deg, nominal
+  vertical overlap 2 deg, staggered RA, stereographic polar caps; frozen counts
+  `8/9/12/13/14/14/13/12/9/10` (south->north) -> **116 charts**, ids
+  `standard-NNN` numbered north-to-south, N/S/E/W neighbour references (caps
+  have no E/W).
 - Coverage: 0 gaps at 0.5 deg sampling, overlap 1..4, 259,200 samples.
 - Star style: min 0.2 / max 2.4 mm, bright magnitude 0.0 / faint magnitude 9.0.
 - Label candidates: 3 concentric rings, ring gap 3.0 mm.
-- Grid labels: RA/Dec every 10 deg (lines every 2 deg), drawn as furniture
-  outside the frame (`grid.label_placement: outside`) in the page margin,
-  beneath sky labels.
+- Grid labels: RA/Dec lines every 2 deg, but coordinate *labels* are a sparser
+  layer: every second line (`label_ra_step_deg`/`label_dec_step_deg` 4 deg),
+  a physical minimum spacing of 13 mm (`label_min_spacing_mm`) that drops
+  crowded labels on the same page edge, and a 30 deg RA label step on polar
+  charts (`label_polar_ra_step_deg`).  Drawn as furniture outside the frame
+  (`grid.label_placement: outside`), beneath sky labels.  ~48% fewer coordinate
+  labels than the every-line v0.1 draft.
 
 ## Data
 
@@ -137,19 +144,22 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Benchmark: 12 cases, schema compliance 1.00, detected 118/556, 40 false positives, $0.0073.
 - Replay via `RecordedReviewer`; the loop records per-iteration layout hashes, review results and cost.
 
-## Full-sky Standard v0.1 draft
+## Full-sky Standard v0.2 draft
 
-- `build/fullsky-draft/standard/atlas.pdf` (120 charts + front matter, 9.0 MB),
-  per-page artifacts under `build/fullsky-draft/standard/charts/<id>/`
+- `build/fullsky-v0.2/standard/atlas.pdf` (116 charts + front matter, 8.7 MB),
+  per-page artifacts under `build/fullsky-v0.2/standard/charts/<id>/`
   (`chart.pdf` + `preview.png` at 100 dpi), `manifest.json` (with per-chart
-  neighbours and resolved tiling) and `draft-report.json`.
-- Build result: 120 charts, **0 hard violations**, 0 coverage gaps
-  (259,200 samples at 0.5 deg), overlap 1..4, all 474 neighbour pairs overlap.
-- Density: DSO mean 52 (max 255, `standard-068` Virgo; min 9), label mean 60
-  (max 214), star mean 1,575 (max 3,672). Densest pages flagged in the report.
-- Region review list: Virgo `standard-068`, Cygnus `standard-098`, Sagittarius
-  `standard-044`, Orion `standard-050`, LMC `standard-004`, SMC `standard-002`,
-  poles `standard-120` / `standard-001`.
+  neighbours and frozen tiling) and `draft-report.json`.
+- Order: north-to-south.  `standard-001` north cap, then +72 ... -72 rings each
+  sorted by RA, `standard-116` south cap.
+- Build result: 116 charts, **2 hard violations** (LMC field: `standard-109`,
+  `standard-110`), 0 coverage gaps (259,200 samples at 0.5 deg), overlap 1..4,
+  all 458 neighbour pairs overlap.
+- Density: DSO mean 52 (max 255, `standard-053` Virgo; min 9), label mean 59
+  (max 211), star mean 1,569 (max 3,467). Densest pages flagged in the report.
+- Region review list: Virgo `standard-053`, Cygnus `standard-031`, Sagittarius
+  `standard-084`, Orion `standard-063`, LMC `standard-110`, SMC `standard-108`,
+  poles `standard-001` (north) / `standard-116` (south).
 
 ## Alpha artifacts (M15.5)
 
@@ -170,15 +180,19 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - The alpha artifacts predate the Hipparcos bright-star supplement and must be
   rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page
   already includes Deneb.
-- The full-sky v0.1 draft reports 0 hard violations, but "0 hard issues" only
-  means no unresolved *hard* label constraint; dense pages still need visual
-  review (see `draft-report.json`). The earlier alpha's 14 hard violations on
+- The full-sky v0.2 draft reports 2 hard violations on the LMC pages
+  (`standard-109`, `standard-110`); "hard issues" means unresolved *hard* label
+  constraints, and dense pages still need visual review (see
+  `draft-report.json`). They are a consequence of the coarser `-72` ring (8
+  charts instead of 10), which moves the LMC to a chart with more crowded
+  content. DSO/star label prioritisation in dense fields is the next work
+  package. The earlier alpha's 14 hard violations on
   standard-007/008/009/020/059/060 belong to the superseded 135-chart band
-  tiling and numbering, not the v0.1 ring tiling.
-- The 120-chart count is geometry-driven: the outer rings need 10 charts each to
-  close the seams between rings and the polar caps. A later optional pass may
-  nudge individual chart centres by +-1-2 deg or reduce counts where a neighbour
-  ring already covers the seam; the draft deliberately uses a clean geometric
+  tiling and numbering, not the v0.2 ring tiling.
+- The 116-chart count is geometry-driven: a coverage sweep at 0.25 deg fixed the
+  minimum counts; the requested 14/13/11/8/5 per hemisphere leaves gaps. A later
+  optional pass may nudge individual chart centres by +-1-2 deg or move important
+  regions away from page edges; the draft deliberately uses a clean geometric
   grid only.
 - Polar pages reuse the standard field and stereographic projection; coverage is
   complete but distortion near the pole is larger. The dec-parallel sampling bug
@@ -188,18 +202,16 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   meridians as projected great-circle arcs converging on the pole image, filtered
   to those crossing the frame, at the coarser `grid.polar_ra_step_deg` (10 deg by
   default) instead of `ra_step_deg`, with RA labels picked up by the normal edge
-  label pass. Remaining polar item: the meridian fan is still dense close to the
-  pole, so a minimum-spacing rule may be wanted after field testing.
+  label pass.  The former open item (dense meridian fan) is now handled by
+  `label_polar_ra_step_deg` (30 deg) and the physical minimum label spacing.
 - The alpha manifest predates the first git commit, so its `git_commit` is null; a rebuild records the real commit.
 - Every safe WDS match whose companion is observable currently gets a
   double-star marker (roughly 2-3% of plotted stars in dense fields after the
   `companion_magnitude_limit` filter). A curated `visual_priority` and, if
   needed, a per-chart cap are the M22.4 refinement.
-- Coordinate labels now sit outside the frame (`grid.label_placement: outside`)
-  and label every grid line (`label_ra_step_deg`/`label_dec_step_deg: null`).
-  Placements overlapping the title or scale bar are dropped via the renderer's
-  furniture obstacle rectangles; if dense fields still look busy, raise the line
-  step or set an explicit label step.
+- Coordinate labels: the v0.2 thinning (4 deg label step, 13 mm minimum
+  spacing, 30 deg polar RA label step) resolved the "every 8 minutes" density
+  from the v0.1 draft; no follow-up needed unless field testing disagrees.
 
 ## CLI
 

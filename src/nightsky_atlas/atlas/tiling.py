@@ -274,27 +274,40 @@ def _charts_in_ring(
 
 
 def _tile_rings(atlas_id: str, spec: TilingSpec) -> list[ChartDefinition]:
+    """Tile declination rings north to south.
+
+    The chart order is the reading order of the atlas: the north polar cap
+    first, then each declination ring from the north down to the south, and the
+    south polar cap last.  Within a ring the charts run in increasing right
+    ascension (0h -> 24h); the per-ring RA stagger is a half chart and never
+    breaks that order.  Phases are tied to the *ascending* ring index so the
+    stagger pattern is independent of the reading direction.
+    """
     centers = sorted(spec.declination_centers)
     counts = resolve_ring_counts(spec)
     charts: list[ChartDefinition] = []
     if spec.polar_caps:
         charts.append(
             ChartDefinition(
-                id="ring-south-cap",
+                id="ring-north-cap",
                 center_ra_deg=0.0,
-                center_dec_deg=-90.0,
+                center_dec_deg=90.0,
                 width_deg=spec.width_deg,
                 height_deg=spec.height_deg,
             )
         )
-    for index, (center, count) in enumerate(zip(centers, counts, strict=True)):
-        charts.extend(_charts_in_ring(spec, center, count, _ring_phase(spec, index)))
+    for index in reversed(range(len(centers))):
+        charts.extend(
+            _charts_in_ring(
+                spec, centers[index], counts[index], _ring_phase(spec, index)
+            )
+        )
     if spec.polar_caps:
         charts.append(
             ChartDefinition(
-                id="ring-north-cap",
+                id="ring-south-cap",
                 center_ra_deg=0.0,
-                center_dec_deg=90.0,
+                center_dec_deg=-90.0,
                 width_deg=spec.width_deg,
                 height_deg=spec.height_deg,
             )

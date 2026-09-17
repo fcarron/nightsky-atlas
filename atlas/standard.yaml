@@ -10,20 +10,25 @@ id: standard
 stellar_limit_magnitude: 9.0
 
 # Standard page/FOV target frozen at M14.1: A4 landscape, 27 x 18.5 deg at
-# ~10 mm/deg.  Standard v0.1 uses explicit declination rings with polar caps,
-# RA staggering and numeric coverage validation.  The chart counts below are
-# *start* values; auto_adjust_counts raises a ring's count until it covers its
-# declination slice at every right ascension (resolved: 10/10/12/13/14 per
-# hemisphere, 120 charts including the two polar caps).
+# ~10 mm/deg.  Standard v0.2 uses explicit declination rings with polar caps,
+# RA staggering and numeric coverage validation.  The requested start counts
+# 14/13/11/8/5 per hemisphere do not cover the sky: the tangent-plane field is
+# a rectangle, so its declination extent shrinks away from the central
+# meridian and the outer rings need more charts than a cos(dec) estimate
+# suggests.  The counts below are the *frozen* minimum that passes a 0.25 deg
+# coverage sweep (14/13/12/9/10 per hemisphere, 116 charts including the two
+# polar caps); see docs/CARTOGRAPHY.md.  auto_adjust_counts is off because the
+# conservative per-ring resolver would demand 10 charts in both +/-72 rings
+# (120 charts), while the assembled tiling covers at 8/10.
 tiling:
   width_deg: 27.0
   height_deg: 18.5
   coverage_step_deg: 0.5
   declination_centers: [-72.0, -56.0, -40.0, -24.0, -8.0, 8.0, 24.0, 40.0, 56.0, 72.0]
-  chart_counts: [5, 8, 11, 13, 14, 14, 13, 11, 8, 5]
+  chart_counts: [8, 9, 12, 13, 14, 14, 13, 12, 9, 10]
   polar_caps: true
   stagger_ra_centers: true
-  auto_adjust_counts: true
+  auto_adjust_counts: false
   target_overlap:
     vertical_deg: 2.0
     horizontal_min_deg: 1.5

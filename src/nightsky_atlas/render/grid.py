@@ -287,10 +287,15 @@ def build_grid_labels(
 
     RA labels sit against the top and bottom edges; Dec labels against the left
     and right edges.  The set of labelled lines is controlled by
-    ``grid.label_ra_step_deg`` / ``grid.label_dec_step_deg`` and the side by
-    ``grid.label_placement``.  These are furniture, not sky labels, so they are
-    not collision-routed against sky labels, but any placement overlapping one
-    of the ``avoid`` rectangles (title, scale bar, ...) is dropped.
+    ``grid.label_ra_step_deg`` / ``grid.label_dec_step_deg`` (with
+    ``grid.label_polar_ra_step_deg`` replacing the RA step on polar fields, so
+    the converging meridian fan is labelled sparsely) and the side by
+    ``grid.label_placement``.  Independently of those steps,
+    ``grid.label_min_spacing_mm`` drops labels that would print closer than that
+    many millimetres to a neighbour on the same edge.  These are furniture, not
+    sky labels, so they are not collision-routed against sky labels, but any
+    placement overlapping one of the ``avoid`` rectangles (title, scale bar,
+    ...) is dropped.
     """
     grid = style.grid
     if not grid.enabled or not grid.labels_enabled:
@@ -301,16 +306,28 @@ def build_grid_labels(
     rect = transform.chart_rect
     page = transform.page
     measurer = TextMeasurer(style.label.font_family, grid.label_font_size_pt)
-    ra_step = grid.label_ra_step_deg or grid.ra_step_deg
+    polar = _is_polar_field(definition)
+    if polar and grid.label_polar_ra_step_deg is not None:
+        ra_step = grid.label_polar_ra_step_deg
+    else:
+        ra_step = grid.label_ra_step_deg or grid.ra_step_deg
     dec_step = grid.label_dec_step_deg or grid.dec_step_deg
     pad = grid.label_padding_mm
     outside = grid.label_placement == "outside"
 
-    labels: list[GridLabel] = []
+    labels: list[tuple[str, float, GridLabel]] = []
     seen_ids: set[str] = set()
     obstacles = tuple(avoid)
 
-    def add(edge: str, kind: str, value_deg: float, text: str, left: float, top: float) -> None:
+    def add(
+        edge: str,
+        kind: str,
+        value_deg: float,
+        text: str,
+        left: float,
+        top: float,
+        along: float,
+    ) -> None:
         label_id = f"grid:{kind}:{value_deg:g}:{edge}"
         if label_id in seen_ids:
             return
@@ -326,19 +343,18 @@ def build_grid_labels(
             for obstacle in obstacles
         ):
             return
-        if any(
-            _overlaps(bounds, placed.bounds, margin_mm=_OBSTACLE_CLEARANCE_MM)
-            for placed in labels
-        ):
-            return
         seen_ids.add(label_id)
         labels.append(
-            GridLabel(
-                id=label_id,
-                kind=kind,
-                value_deg=value_deg,
-                text=text,
-                bounds=bounds,
+            (
+                edge,
+                along,
+                GridLabel(
+                    id=label_id,
+                    kind=kind,
+                    value_deg=value_deg,
+                    text=text,
+                    bounds=bounds,
+                ),
             )
         )
 
@@ -379,7 +395,7 @@ def build_grid_labels(
                             rect.left_mm + pad,
                             rect.right_mm - pad - metrics.width_mm,
                         )
-                    add(edge, "ra", line.value_deg, text, left, top)
+                    add(edge, "ra", line.value_deg, text, left, top, x)
         else:
             if not _is_multiple(line.value_deg, dec_step):
                 continue
@@ -416,6 +432,59 @@ def build_grid_labels(
                             rect.top_mm + pad,
                             rect.bottom_mm - pad - metrics.height_mm,
                         )
-                    add(edge, "dec", line.value_deg, text, left, top)
+                    add(edge, "dec", line.value_deg, text, left, top, y)
 
-    return tuple(labels)
+    return _thin_labels(labels, spacing_mm=grid.label_min_spacing_mm)
+
+
+_LABEL_TIER_STEPS = (30.0, 10.0, 5.0, 2.0)
+
+
+def _label_tier(kind: str, value_deg: float) -> int:
+    """Priority tier of a coordinate value (0 = roundest, kept first).
+
+    Round values (whole hours, tens of degrees) survive the spacing filter
+    before odd ones, so thinning removes the forgettable lines rather than the
+    navigation anchors.
+    """
+    value = abs(value_deg % 360.0) if kind == "ra" else abs(value_deg)
+    for tier, step in enumerate(_LABEL_TIER_STEPS):
+        ratio = value / step
+        if abs(ratio - round(ratio)) < _MULTIPLE_TOL:
+            return tier
+    return len(_LABEL_TIER_STEPS)
+
+
+def _thin_labels(
+    candidates: list[tuple[str, float, GridLabel]], *, spacing_mm: float
+) -> tuple[GridLabel, ...]:
+    """Drop coordinate labels too close together along the same page edge.
+
+    Grid *line* density is independent of label density: when meridians
+    converge toward a pole, or a chart is far from the inner meridian, adjacent
+    grid lines would print their values almost on top of each other.  Labels
+    are grouped by edge, sorted roundest-first, and kept only when they clear
+    ``spacing_mm`` from every label already kept on that edge (and do not
+    overlap any kept label anywhere).
+    """
+    by_edge: dict[str, list[tuple[float, GridLabel]]] = {}
+    for edge, along, label in candidates:
+        by_edge.setdefault(edge, []).append((along, label))
+
+    placed: list[GridLabel] = []
+    for items in by_edge.values():
+        items.sort(key=lambda item: (_label_tier(item[1].kind, item[1].value_deg), item[0]))
+        kept_along: list[float] = []
+        for along, label in items:
+            if spacing_mm > 0.0 and any(
+                abs(along - other) < spacing_mm for other in kept_along
+            ):
+                continue
+            if any(
+                _overlaps(label.bounds, other.bounds, margin_mm=_OBSTACLE_CLEARANCE_MM)
+                for other in placed
+            ):
+                continue
+            kept_along.append(along)
+            placed.append(label)
+    return tuple(placed)
