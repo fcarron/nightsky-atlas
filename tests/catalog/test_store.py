@@ -69,6 +69,20 @@ def test_query_respects_magnitude_limit(store_path: Path) -> None:
     assert found == {"s1"}
 
 
+def test_query_is_ordered_by_stable_id(tmp_path: Path) -> None:
+    stars = [
+        make_star("s9", 10.0, 5.0, 4.0),
+        make_star("s1", 11.0, 5.0, 4.0),
+        make_star("s5", 12.0, 5.0, 4.0),
+    ]
+    path = tmp_path / "ordered.sqlite"
+    build_star_store(path, stars)
+    with StarStore.open(path) as store:
+        box = QueryBox(ra_min_deg=0.0, ra_max_deg=360.0, dec_min_deg=-90.0, dec_max_deg=90.0)
+        ids = [star.id for star in store.query_box(box)]
+    assert ids == ["s1", "s5", "s9"]
+
+
 def test_star_round_trips_through_store(store_path: Path) -> None:
     with StarStore.open(store_path) as store:
         box = QueryBox(ra_min_deg=0.0, ra_max_deg=30.0, dec_min_deg=0.0, dec_max_deg=10.0)

@@ -114,6 +114,7 @@ def build_dso_labels(
                 priority=priority,
                 mandatory=mandatory,
                 candidates=candidates,
+                selected_candidate_id=candidates[0].id if candidates else None,
                 font_size_pt=size_pt,
                 font_weight=formatted.weight,
             )
@@ -183,6 +184,7 @@ def build_star_labels(
                 priority=priority,
                 mandatory=mandatory,
                 candidates=candidates,
+                selected_candidate_id=candidates[0].id if candidates else None,
             )
         )
     return tuple(labels)

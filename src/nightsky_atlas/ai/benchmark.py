@@ -21,10 +21,12 @@ from nightsky_atlas.ai.actions import apply_review_actions
 from nightsky_atlas.ai.base import ChartReviewer
 from nightsky_atlas.atlas.config import ConfigError
 from nightsky_atlas.build.chart import ChartContext, build_chart_context
+from nightsky_atlas.chart.presentation import presentation_from_edition
 from nightsky_atlas.layout.collision import find_hard_violations
 from nightsky_atlas.layout.labels import build_dso_labels
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.optimizer import optimize_labels
+from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.review import render_review_png
 from nightsky_atlas.review.build import build_review_request
 from nightsky_atlas.review.schema import ReviewValidationError, validate_review
@@ -49,7 +51,6 @@ class BenchmarkCase:
     chart: str
     mode: str = "optimized"
     magnitude_limit: float | None = None
-    dso_magnitude_limit: float | None = None
     forbidden_actions: tuple[str, ...] = ()
     notes: str = ""
 
@@ -64,7 +65,6 @@ class BenchmarkCase:
             chart=str(data["chart"]),
             mode=str(data.get("mode", "optimized")),
             magnitude_limit=_optional_float(data.get("magnitude_limit")),
-            dso_magnitude_limit=_optional_float(data.get("dso_magnitude_limit")),
             forbidden_actions=tuple(data.get("forbidden_actions", ())),
             notes=str(data.get("notes", "")),
         )
@@ -159,6 +159,15 @@ class BenchmarkReport:
         }
 
 
+def _furniture_obstacles(context: ChartContext) -> tuple:
+    presentation = presentation_from_edition(
+        context.definition, context.atlas.resolved_edition()
+    )
+    return furniture_obstacles(
+        context.transform, context.definition, context.style, presentation
+    )
+
+
 def _case_labels(
     case: BenchmarkCase,
     *,
@@ -176,12 +185,15 @@ def _case_labels(
         stars_csv=stars_csv,
         dsos_path=dsos_path,
         magnitude_limit=case.magnitude_limit,
-        dso_magnitude_limit=case.dso_magnitude_limit,
     )
     labels = build_dso_labels(context.scene, context.transform, context.style)
     if case.mode == "optimized":
         labels = optimize_labels(
-            labels, context.scene, context.transform, context.style
+            labels,
+            context.scene,
+            context.transform,
+            context.style,
+            furniture=_furniture_obstacles(context),
         ).labels
     return context, labels
 
@@ -189,7 +201,13 @@ def _case_labels(
 def _known_label_problems(
     labels: tuple[Label, ...], context: ChartContext
 ) -> set[str]:
-    issues = find_hard_violations(labels, context.scene, context.transform, context.style)
+    issues = find_hard_violations(
+        labels,
+        context.scene,
+        context.transform,
+        context.style,
+        furniture=_furniture_obstacles(context),
+    )
     return {
         element_id
         for issue in issues

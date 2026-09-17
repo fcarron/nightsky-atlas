@@ -93,6 +93,7 @@ from nightsky_atlas.layout.optimizer import OptimizationResult, optimize_labels
 from nightsky_atlas.layout.overrides import apply_overrides, load_override_library
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import DebugOptions, render_chart, render_magnitude_scale
+from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.review import render_review_png
 from nightsky_atlas.review.build import build_review_request
 from nightsky_atlas.review.models import ReviewRequest
@@ -161,12 +162,6 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         type=Path,
         default=None,
         help="processed deep-sky catalogue JSON (default: processed OpenNGC if present)",
-    )
-    parser.add_argument(
-        "--dso-magnitude-limit",
-        type=float,
-        default=None,
-        help="faintest deep-sky magnitude to render (default: atlas setting)",
     )
     parser.add_argument(
         "--constellations",
@@ -520,7 +515,6 @@ def _chart_context(
         double_stars_path=args.double_stars,
         double_star_match_tolerance_arcsec=args.double_star_match_tolerance_arcsec,
         magnitude_limit=args.magnitude_limit,
-        dso_magnitude_limit=args.dso_magnitude_limit,
     )
     return (
         context.atlas,
@@ -557,9 +551,13 @@ def _command_chart_render(args: argparse.Namespace) -> int:
     has_labels = bool(args.labels or args.optimize or args.overrides)
     labels = build_labels(scene, transform, style, _star_names(args)) if has_labels else ()
     labels = _apply_chart_overrides(args, definition, labels)
+    presentation = presentation_from_edition(definition, atlas.resolved_edition())
+    furniture = furniture_obstacles(transform, definition, style, presentation)
     result: OptimizationResult | None = None
     if args.optimize:
-        result = optimize_labels(labels, scene, transform, style)
+        result = optimize_labels(
+            labels, scene, transform, style, furniture=furniture
+        )
         labels = result.labels
         print(
             f"optimized: cost {result.cost_before:.1f} -> {result.cost_after:.1f}, "
@@ -573,7 +571,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
         style,
         labels=labels,
         debug=_parse_debug(args.debug),
-        presentation=presentation_from_edition(definition, atlas.resolved_edition()),
+        presentation=presentation,
         pdf_path=outdir / "chart.pdf",
         png_path=outdir / "preview.png",
         png_dpi=args.png_dpi,
@@ -591,10 +589,14 @@ def _command_chart_review(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
     labels = build_labels(scene, transform, style, _star_names(args))
     labels = _apply_chart_overrides(args, definition, labels)
+    presentation = presentation_from_edition(definition, atlas.resolved_edition())
+    furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
-        result = optimize_labels(labels, scene, transform, style)
+        result = optimize_labels(
+            labels, scene, transform, style, furniture=furniture
+        )
         labels = result.labels
-    validation = validate_layout(labels, scene, transform, style)
+    validation = validate_layout(labels, scene, transform, style, furniture=furniture)
 
     placed = sum(1 for label in labels if not label.hidden and label.candidates)
     diagnostics = {
@@ -691,17 +693,23 @@ def _write_layout_json(
 
 
 def _command_chart_validate(args: argparse.Namespace) -> int:
-    _atlas, style, definition, _page, scene, transform = _chart_context(args)
+    atlas, style, definition, _page, scene, transform = _chart_context(args)
     labels = build_labels(scene, transform, style, _star_names(args))
     labels = _apply_chart_overrides(args, definition, labels)
+    presentation = presentation_from_edition(definition, atlas.resolved_edition())
+    furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
-        result = optimize_labels(labels, scene, transform, style)
+        result = optimize_labels(
+            labels, scene, transform, style, furniture=furniture
+        )
         labels = result.labels
         print(
             f"optimized: cost {result.cost_before:.1f} -> {result.cost_after:.1f}, "
             f"{result.placed_count} placed, {result.hidden_count} hidden"
         )
-    result_validation = validate_layout(labels, scene, transform, style)
+    result_validation = validate_layout(
+        labels, scene, transform, style, furniture=furniture
+    )
 
     print(f"{definition.id}: {len(labels)} labels")
     if result_validation.is_valid:

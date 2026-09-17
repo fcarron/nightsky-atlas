@@ -160,3 +160,23 @@ def test_known_target_is_accepted() -> None:
     }
     assert IssueType.UNKNOWN_TARGET not in types
     assert IssueType.DUPLICATE_LABEL_ID not in types
+
+
+def test_label_overlapping_furniture_is_reported() -> None:
+    scene = build_scene(CHART, [], [])
+    label = make_label("label:a", 20.0, 20.0)
+    obstacle = PageRect(left_mm=18.0, top_mm=19.0, width_mm=10.0, height_mm=5.0)
+    issues = find_hard_violations(
+        (label,), scene, TRANSFORM, STYLE, furniture=(obstacle,)
+    )
+    assert IssueType.FURNITURE_OVERLAP in {issue.issue_type for issue in issues}
+
+
+def test_label_clear_of_furniture_is_valid() -> None:
+    scene = build_scene(CHART, [], [])
+    label = make_label("label:a", 20.0, 20.0)
+    obstacle = PageRect(left_mm=150.0, top_mm=150.0, width_mm=10.0, height_mm=5.0)
+    issues = find_hard_violations(
+        (label,), scene, TRANSFORM, STYLE, furniture=(obstacle,)
+    )
+    assert IssueType.FURNITURE_OVERLAP not in {issue.issue_type for issue in issues}

@@ -69,6 +69,18 @@ def test_resolve_ring_counts_raises_start_values() -> None:
     assert resolve_ring_counts(spec) == (10, 10, 12, 13, 14, 14, 13, 12, 10, 10)
 
 
+def test_ring_counts_follow_their_centres_when_unsorted() -> None:
+    # chart_counts is parallel to declination_centers, which need not be
+    # ascending; sorting the centres must not shuffle the counts.
+    spec = ring_spec(
+        declination_centers=(24.0, -24.0),
+        chart_counts=(3, 7),
+        polar_caps=False,
+        auto_adjust_counts=False,
+    )
+    assert resolve_ring_counts(spec) == (7, 3)
+
+
 def test_resolve_ring_counts_respects_auto_adjust_off() -> None:
     spec = ring_spec(auto_adjust_counts=False)
     assert resolve_ring_counts(spec) == (5, 8, 11, 13, 14, 14, 13, 11, 8, 5)

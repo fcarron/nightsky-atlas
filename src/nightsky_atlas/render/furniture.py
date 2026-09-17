@@ -21,7 +21,11 @@ import cairo
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
-from nightsky_atlas.chart.presentation import ChartPresentation, neighbour_code
+from nightsky_atlas.chart.presentation import (
+    ChartPresentation,
+    neighbour_code,
+    presentation_for,
+)
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.render.text import TextMeasurer, draw_centered_text, draw_text
 from nightsky_atlas.units import mm_to_pt
@@ -30,6 +34,7 @@ __all__ = [
     "FurniturePlan",
     "build_furniture_plan",
     "draw_furniture",
+    "furniture_obstacles",
 ]
 
 Align = Literal["left", "center", "right"]
@@ -157,9 +162,9 @@ def _navigation(
             placed.append(
                 PlacedText(
                     text,
-                    page.width_mm - nav.side_inset_mm - metrics.width_mm,
+                    page.width_mm - nav.side_inset_mm,
                     page.height_mm / 2.0 - metrics.height_mm / 2.0,
-                    "left",
+                    "right",
                     nav.font_size_pt,
                 )
             )
@@ -317,6 +322,22 @@ def build_furniture_plan(
         legend=legend,
         obstacles=tuple(obstacles),
     )
+
+
+def furniture_obstacles(
+    transform: PageTransform,
+    definition: ChartDefinition,
+    style: StyleConfig,
+    presentation: ChartPresentation | None = None,
+) -> tuple[PageRect, ...]:
+    """Return the furniture rectangles a label must avoid.
+
+    Convenience for the layout pipeline: when no ``presentation`` is supplied
+    the bare chart definition drives the visible naming.
+    """
+    if presentation is None:
+        presentation = presentation_for(definition)
+    return build_furniture_plan(transform, definition, style, presentation).obstacles
 
 
 def _draw_placed_text(

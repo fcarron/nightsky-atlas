@@ -275,6 +275,19 @@ _EDITION_DEFAULTS: dict[str, EditionConfig] = {
 }
 
 
+def default_edition(edition_id: str) -> EditionConfig:
+    """Return the built-in visible edition identity for an atlas id.
+
+    This is the single edition registry: both :meth:`AtlasConfig.resolved_edition`
+    and the chart presentation layer read it, so the printed names and codes
+    cannot drift apart.
+    """
+    return _EDITION_DEFAULTS.get(
+        edition_id,
+        EditionConfig(name=edition_id.title(), code=edition_id[:1].upper() or "?"),
+    )
+
+
 class AtlasConfig(_StrictModel):
     """An atlas edition: page geometry plus explicit chart definitions."""
 
@@ -284,16 +297,13 @@ class AtlasConfig(_StrictModel):
     charts: list[ChartConfig] = Field(default_factory=list)
     tiling: TilingConfig | None = None
     stellar_limit_magnitude: PositiveFloat | None = None
-    dso_limit_magnitude: PositiveFloat | None = None
     visibility: VisibilityConfig = Field(default_factory=VisibilityConfig)
 
     def resolved_edition(self) -> EditionConfig:
         """Return the visible edition identity, falling back to the registry."""
         if self.edition is not None:
             return self.edition
-        return _EDITION_DEFAULTS.get(
-            self.id, EditionConfig(name=self.id.title(), code=self.id[:1].upper() or "?")
-        )
+        return default_edition(self.id)
 
 
 class StarStyle(_StrictModel):
@@ -664,13 +674,18 @@ class NavigationStyle(_StrictModel):
     Navigation sits outside the chart frame, further out than the coordinate
     labels, is smaller and mid-grey, and always prints short chart codes.  It is
     purely navigational furniture and is drawn beneath nothing sky-related.
+    ``frame_gap_mm`` is the gap to the chart frame for the N/S references;
+    ``side_inset_mm`` is the distance of the E/W references from the paper edge
+    and must stay clear of the printer's unprintable margin (a few millimetres),
+    not just the chart frame, which on a full-width field nearly touches the
+    page edge.
     """
 
     enabled: bool = True
     font_size_pt: PositiveFloat = 5.0
     gray: float = 0.5
     frame_gap_mm: PositiveFloat = 4.2
-    side_inset_mm: PositiveFloat = 2.0
+    side_inset_mm: PositiveFloat = 5.0
 
 
 class MagnitudeLegendStyle(_StrictModel):

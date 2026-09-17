@@ -17,9 +17,11 @@ from nightsky_atlas.ai.actions import apply_review_actions
 from nightsky_atlas.ai.base import ChartReviewer
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.presentation import presentation_for
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.optimizer import layout_cost, layout_hash
 from nightsky_atlas.layout.validation import validate_layout
+from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.review.build import build_review_request
 from nightsky_atlas.review.models import ReviewRequest
 from nightsky_atlas.review.schema import ReviewValidationError
@@ -224,7 +226,15 @@ def _default_request_factory(
     images: tuple[str, ...],
 ) -> RequestFactory:
     def factory(labels: tuple[Label, ...], iteration: int) -> ReviewRequest:
-        validation = validate_layout(labels, scene, transform, style)
+        validation = validate_layout(
+            labels,
+            scene,
+            transform,
+            style,
+            furniture=furniture_obstacles(
+                transform, scene.definition, style, presentation_for(scene.definition)
+            ),
+        )
         diagnostics = {
             "hard_issue_count": float(len(validation.issues)),
             "iteration": float(iteration),

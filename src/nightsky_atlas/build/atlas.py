@@ -52,6 +52,7 @@ from nightsky_atlas.layout.overrides import (
 )
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
+from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.text import draw_centered_text, draw_text
 from nightsky_atlas.units import mm_to_pt
 
@@ -324,12 +325,20 @@ def build_atlas(
             labels = apply_overrides(labels, chart_overrides)
             applied_chart_ids.add(definition.id)
         overrides_applied = len(chart_overrides) if chart_overrides is not None else 0
+        presentation = presentation_from_edition(definition, edition)
+        furniture = furniture_obstacles(
+            chart_context.transform, definition, chart_context.style, presentation
+        )
         optimize_s = 0.0
         cost_s = 0.0
         if optimize:
             stage_start = time.perf_counter()
             optimized = optimize_labels(
-                labels, chart_context.scene, chart_context.transform, chart_context.style
+                labels,
+                chart_context.scene,
+                chart_context.transform,
+                chart_context.style,
+                furniture=furniture,
             )
             labels = optimized.labels
             optimize_s = time.perf_counter() - stage_start
@@ -344,12 +353,15 @@ def build_atlas(
             cost_s = time.perf_counter() - stage_start
         stage_start = time.perf_counter()
         validation = validate_layout(
-            labels, chart_context.scene, chart_context.transform, chart_context.style
+            labels,
+            chart_context.scene,
+            chart_context.transform,
+            chart_context.style,
+            furniture=furniture,
         )
         validate_s = time.perf_counter() - stage_start
 
         page_dir = outroot / "charts" / definition.id
-        presentation = presentation_from_edition(definition, edition)
         stage_start = time.perf_counter()
         render_chart(
             chart_context.scene,
@@ -430,7 +442,6 @@ def build_atlas(
             "margin_mm": page.margin_mm,
         },
         "stellar_limit_magnitude": atlas.stellar_limit_magnitude,
-        "dso_limit_magnitude": atlas.dso_limit_magnitude,
         "visibility": atlas.visibility.model_dump(),
         "tiling": _tiling_manifest(atlas),
         "observing_lists": {

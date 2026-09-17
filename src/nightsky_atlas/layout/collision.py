@@ -7,6 +7,7 @@ reviews and regression tests (``AGENTS.md`` section 14.4).
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -34,6 +35,7 @@ class IssueType(StrEnum):
     LABEL_PAGE = "label_page"
     LABEL_STAR = "label_star"
     LABEL_DSO = "label_dso"
+    FURNITURE_OVERLAP = "furniture_overlap"
     INVALID_SELECTION = "invalid_selection"
     MISSING_CANDIDATE = "missing_candidate"
     DUPLICATE_LABEL_ID = "duplicate_label_id"
@@ -53,16 +55,14 @@ class LayoutIssue:
 def placed_candidates(labels: tuple[Label, ...]) -> list[tuple[Label, LabelCandidate]]:
     """Return the effectively placed candidate for every label.
 
-    Uses the explicit selection when present, otherwise the fixed preference
-    order (the first candidate), matching the renderer's default.
+    Uses :meth:`Label.effective_candidate`, the same definition the renderer
+    and optimizer use, so validation checks exactly what would be printed.
     """
     placed: list[tuple[Label, LabelCandidate]] = []
     for label in labels:
         if label.hidden:
             continue
-        candidate = label.selected_candidate()
-        if candidate is None and label.candidates:
-            candidate = label.candidates[0]
+        candidate = label.effective_candidate()
         if candidate is not None:
             placed.append((label, candidate))
     return placed
@@ -86,9 +86,17 @@ def find_hard_violations(
     style: StyleConfig,
     *,
     important_magnitude: float = _IMPORTANT_STAR_MAGNITUDE,
+    furniture: Iterable[PageRect] = (),
 ) -> tuple[LayoutIssue, ...]:
-    """Return all hard label violations for a layout."""
+    """Return all hard label violations for a layout.
+
+    ``furniture`` holds the mandatory page-furniture rectangles (title,
+    navigation, scale bar, legend) that a label must never overlap
+    (``AGENTS.md`` sections 14.4 and 15.1).  It defaults to empty so callers
+    that only exercise sky collisions can omit it.
+    """
     issues: list[LayoutIssue] = []
+    furniture_rects = tuple(furniture)
 
     known_targets = {entry.star.id for entry in scene.stars}
     known_targets.update(entry.dso.id for entry in scene.deep_sky_objects)
@@ -159,6 +167,17 @@ def find_hard_violations(
                     f"{label.id} at {candidate.position.value} falls outside the printable area",
                 )
             )
+
+    for label, candidate in placed:
+        for index, obstacle in enumerate(furniture_rects):
+            if rects_overlap(candidate.bounds, obstacle):
+                issues.append(
+                    _issue(
+                        IssueType.FURNITURE_OVERLAP,
+                        (label.id, f"furniture:{index}"),
+                        f"{label.id} overlaps mandatory page furniture",
+                    )
+                )
 
     for index, (label_a, candidate_a) in enumerate(placed):
         for label_b, candidate_b in placed[index + 1 :]:

@@ -91,7 +91,7 @@ def test_load_single_override(tmp_path: Path) -> None:
     spec = overrides.labels["label:dso:M87"]
     assert spec.candidate == "SW"
     assert spec.locked is True
-    assert spec.hidden is False
+    assert spec.hidden is None
 
 
 def test_unknown_label_key_rejected(tmp_path: Path) -> None:
@@ -171,6 +171,28 @@ def test_locked_without_candidate_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(OverrideError, match="must specify a candidate"):
         apply_overrides((make_label(),), load_overrides(path))
+
+
+def test_override_without_candidate_preserves_lock(tmp_path: Path) -> None:
+    path = write_override(
+        tmp_path,
+        {"chart": "c1", "labels": {"label:a": {"hidden": False}}},
+    )
+    locked = make_label("label:a").with_placement("label:a:N", locked=True)
+    labels = apply_overrides((locked,), load_overrides(path))
+    assert labels[0].locked is True
+    assert labels[0].selected_candidate_id == "label:a:N"
+    assert labels[0].hidden is False
+
+
+def test_empty_override_is_a_no_op(tmp_path: Path) -> None:
+    path = write_override(
+        tmp_path,
+        {"chart": "c1", "labels": {"label:a": {}}},
+    )
+    locked = make_label("label:a").with_placement("label:a:N", locked=True)
+    labels = apply_overrides((locked,), load_overrides(path))
+    assert labels[0] == locked
 
 
 def test_optimizer_respects_locked_placement(tmp_path: Path) -> None:

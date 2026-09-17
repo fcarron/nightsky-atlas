@@ -9,7 +9,6 @@
 #   chart               chart id from atlas/standard.yaml
 #   mode                raw | optimized
 #   magnitude_limit     optional stellar limit override
-#   dso_magnitude_limit optional deep-sky limit override
 #   forbidden_actions   actions this case must not use
 #   notes               human quality notes
 

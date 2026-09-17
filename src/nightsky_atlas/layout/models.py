@@ -115,6 +115,19 @@ class Label:
             return None
         return self.candidate(self.selected_candidate_id)
 
+    def effective_candidate(self) -> LabelCandidate | None:
+        """Return the placement actually printed for this label.
+
+        The explicit selection wins; a label that has not been through the
+        optimizer falls back to its preferred (first) candidate.  This is the
+        single definition shared by the renderer, the collision system and the
+        optimizer, so a serialized layout and the printed page cannot disagree.
+        """
+        candidate = self.selected_candidate()
+        if candidate is not None:
+            return candidate
+        return self.candidates[0] if self.candidates else None
+
     def with_selection(self, candidate_id: str | None) -> Label:
         """Return a copy with a different selected candidate."""
         return Label(

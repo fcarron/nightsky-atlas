@@ -53,9 +53,16 @@ def resolve_double_stars(
 ) -> tuple[DoubleStarMark, ...]:
     """Return the systems that must collapse to one symbol plus a marker.
 
-    Only safe matches influence the chart.  A system is left alone when its
-    components are already separable on the page (they are plotted as normal
-    stars at their real positions) or when the marking is disabled by style.
+    The decision is made **per pair**, not per system: a companion whose printed
+    separation is below ``min_component_separation_mm`` collapses into the
+    primary's marker, while a companion that is separable on the page is left at
+    its real position.  Several WDS records can share one primary (A-B, A-C);
+    every unseparable companion of that primary is folded into a single marker,
+    so a close A-B pair is never printed as two stars just because A-C is wide
+    (``AGENTS.md`` section 12).
+
+    Only safe matches influence the chart.  A system is left alone when none of
+    its components are unseparable or when the marking is disabled by style.
     """
     config = style.double_stars
     if not config.enabled or not scene.star_systems:
@@ -63,7 +70,13 @@ def resolve_double_stars(
 
     size_model = StarSizeModel.from_style(style.star)
     magnitude_by_star = {entry.star.id: entry.star.magnitude for entry in scene.stars}
-    candidates: list[tuple[int, float, str, DoubleStarMark]] = []
+    page_by_star = {
+        entry.star.id: transform.to_page(entry.chart_point) for entry in scene.stars
+    }
+
+    # primary star -> one entry per unseparable WDS record, carrying the
+    # unseparable companion ids so they can be merged into one marker.
+    groups: dict[str, list[tuple[int, float, str, float | None, frozenset[str]]]] = {}
     for scene_system in scene.star_systems:
         system = scene_system.system
         if not system.is_safe_match:
@@ -81,48 +94,73 @@ def resolve_double_stars(
         if not companion_observable:
             continue
 
-        primary_page = transform.to_page(scene_system.chart_point)
-        if scene_system.component_points:
-            separation_mm = max(
-                _page_distance_mm(primary_page, transform.to_page(point))
-                for point in scene_system.component_points
-            )
-        elif system.separation_arcsec is not None:
-            separation_mm = system.separation_arcsec / 3600.0 * transform.mm_per_deg
-        else:
-            separation_mm = 0.0
+        primary_page = page_by_star.get(primary_id)
+        if primary_page is None:
+            primary_page = transform.to_page(scene_system.chart_point)
 
-        if separation_mm >= config.min_component_separation_mm:
+        unseparable: set[str] = set()
+        widest_unseparable_mm = 0.0
+        for index, star_id in enumerate(system.component_star_ids):
+            point = page_by_star.get(star_id)
+            if point is not None:
+                separation_mm = _page_distance_mm(primary_page, point)
+            elif index == 0 and system.separation_arcsec is not None:
+                separation_mm = system.separation_arcsec / 3600.0 * transform.mm_per_deg
+            else:
+                continue
+            if separation_mm < config.min_component_separation_mm:
+                unseparable.add(star_id)
+                widest_unseparable_mm = max(widest_unseparable_mm, separation_mm)
+
+        if not unseparable and not system.component_star_ids:
+            # The companion is not in the plotted star base; the catalogue
+            # separation is all we have to decide whether to mark the primary.
+            if system.separation_arcsec is None:
+                continue
+            separation_mm = system.separation_arcsec / 3600.0 * transform.mm_per_deg
+            if separation_mm >= config.min_component_separation_mm:
+                continue
+            widest_unseparable_mm = separation_mm
+
+        if not unseparable and widest_unseparable_mm == 0.0:
             continue
 
-        magnitude = system.combined_magnitude
+        groups.setdefault(primary_id, []).append(
+            (
+                len(system.component_star_ids),
+                widest_unseparable_mm,
+                system.id,
+                system.combined_magnitude,
+                frozenset(unseparable),
+            )
+        )
+
+    marks: list[DoubleStarMark] = []
+    for primary_id in sorted(groups):
+        entries = groups[primary_id]
+        # Prefer the record that links the most catalogued companions, then the
+        # widest still-unseparable one, then the lowest ID, so the printed
+        # magnitude is taken from a stable representative record.
+        entries.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        _count, _separation_mm, representative_id, combined, _components = entries[0]
+        suppress: set[str] = {primary_id}
+        for entry in entries:
+            suppress |= entry[4]
+        magnitude = combined
         if magnitude is None:
             magnitude = magnitude_by_star[primary_id]
         marker_length_mm = max(
             config.min_marker_length_mm,
             config.marker_length_factor * size_model.diameter_mm(magnitude),
         )
-        mark = DoubleStarMark(
-            system_id=system.id,
-            page_point=primary_page,
-            magnitude=magnitude,
-            suppress_star_ids=frozenset(system.linked_star_ids()),
-            marker_length_mm=marker_length_mm,
-            marker_line_width_mm=config.marker_line_width_mm,
+        marks.append(
+            DoubleStarMark(
+                system_id=representative_id,
+                page_point=page_by_star[primary_id],
+                magnitude=magnitude,
+                suppress_star_ids=frozenset(suppress),
+                marker_length_mm=marker_length_mm,
+                marker_line_width_mm=config.marker_line_width_mm,
+            )
         )
-        candidates.append(
-            (len(system.component_star_ids), separation_mm, system.id, mark)
-        )
-
-    # A star can appear in several WDS records (A-B, A-C, Aa,Ab, ...).  Draw one
-    # marker per star: prefer the record that links the most catalogued
-    # companions, then the widest still-unseparable one, then the lowest ID.
-    candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
-    suppressed: set[str] = set()
-    marks: list[DoubleStarMark] = []
-    for _companion_count, _separation_mm, _system_id, mark in candidates:
-        if mark.suppress_star_ids & suppressed:
-            continue
-        suppressed |= mark.suppress_star_ids
-        marks.append(mark)
     return tuple(marks)

@@ -37,8 +37,8 @@ class _LabelOverrideModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     candidate: str | None = None
-    locked: bool = False
-    hidden: bool = False
+    locked: bool | None = None
+    hidden: bool | None = None
 
     @field_validator("candidate")
     @classmethod
@@ -64,11 +64,16 @@ class _OverrideFileModel(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class LabelOverride:
-    """Override for a single label, referenced by its stable ID."""
+    """Override for a single label, referenced by its stable ID.
+
+    ``locked`` and ``hidden`` are tri-state: ``None`` leaves the current value
+    untouched, so an override that only moves a candidate never silently
+    unlocks a manually locked label (``AGENTS.md`` section 22).
+    """
 
     candidate: str | None = None
-    locked: bool = False
-    hidden: bool = False
+    locked: bool | None = None
+    hidden: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,20 +207,28 @@ def apply_overrides(
         if spec is None:
             updated.append(label)
             continue
-        if spec.hidden:
+        if spec.hidden is True:
             updated.append(label.with_placement(None, hidden=True, locked=spec.locked))
             continue
         candidate_id = _resolve_candidate_id(label, spec.candidate)
         if candidate_id is None:
-            if spec.locked:
+            if spec.locked is True:
                 raise OverrideError(
                     f"{label.id}: locked override must specify a candidate"
                 )
             updated.append(
                 label.with_placement(
-                    label.selected_candidate_id, hidden=label.hidden, locked=False
+                    label.selected_candidate_id,
+                    hidden=label.hidden if spec.hidden is None else spec.hidden,
+                    locked=spec.locked,
                 )
             )
             continue
-        updated.append(label.with_placement(candidate_id, hidden=False, locked=spec.locked))
+        updated.append(
+            label.with_placement(
+                candidate_id,
+                hidden=False if spec.hidden is None else spec.hidden,
+                locked=spec.locked,
+            )
+        )
     return tuple(updated)

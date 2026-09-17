@@ -96,7 +96,8 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Field 27 x 18.5 deg, ~10.05 mm/deg, stereographic, north up / east left.
 - Stellar limit magnitude 9.0; deep-sky selection is per-type (8-10 inch dark
   sky: integrated magnitude 13.5, surface brightness 23.5, min axis 1.5 arcmin).
-  `dso_limit_magnitude` 12.0 remains only as the no-policy fallback.
+  There is no global deep-sky magnitude cut in the atlas config; per-type
+  visibility is the only production path.
 - Tiling (Standard v0.2): declination-ring tiling, ring step 16 deg, nominal
   vertical overlap 2 deg, staggered RA, stereographic polar caps; frozen counts
   `8/9/12/13/14/14/13/12/9/10` (south->north) -> **116 charts**, ids

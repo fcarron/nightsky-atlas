@@ -139,7 +139,13 @@ class StarStore:
         *,
         magnitude_limit: float = math.inf,
     ) -> list[Star]:
-        """Return stars inside a query box brighter than a magnitude limit."""
+        """Return stars inside a query box brighter than a magnitude limit.
+
+        Results are ordered by stable ID.  The scene builder preserves input
+        order, so without an explicit order SQLite could return rows in any
+        index-dependent order and the scene would not be reproducible across
+        store versions (``AGENTS.md`` section 0.4).
+        """
         sql = (
             "SELECT id, ra_deg, dec_deg, magnitude, hip_id, source_id, catalogue, version "
             "FROM stars WHERE dec_deg >= ? AND dec_deg <= ? AND magnitude <= ?"
@@ -150,6 +156,7 @@ class StarStore:
         else:
             sql += " AND ra_deg >= ? AND ra_deg <= ?"
         params.extend([box.ra_min_deg, box.ra_max_deg])
+        sql += " ORDER BY id"
         rows = self._connection.execute(sql, params).fetchall()
         return [_row_to_star(row) for row in rows]
 

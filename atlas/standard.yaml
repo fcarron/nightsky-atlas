@@ -39,10 +39,6 @@ tiling:
     vertical_deg: 2.0
     horizontal_min_deg: 1.5
 
-# Deep-sky objects fainter than this are omitted only when no selection policy
-# is active (per-type visibility below is the normal path).
-dso_limit_magnitude: 12.0
-
 # Per-type deep-sky visibility limits.  Target: an 8-10 inch instrument under a
 # dark sky.  Galaxies are surface-brightness limited; clusters and planetary
 # nebulae use magnitude and size; tiny faint objects are dropped unless bright

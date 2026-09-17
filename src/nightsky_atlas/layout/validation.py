@@ -7,10 +7,11 @@ module turns hard collision checks into a verdict (``AGENTS.md`` section 23).
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import StyleConfig
-from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.collision import IssueType, LayoutIssue, find_hard_violations
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.scene.models import ChartScene
@@ -40,9 +41,13 @@ def validate_layout(
     scene: ChartScene,
     transform: PageTransform,
     style: StyleConfig,
+    *,
+    furniture: Iterable[PageRect] = (),
 ) -> ValidationResult:
     """Validate a label layout against hard constraints."""
-    issues = find_hard_violations(labels, scene, transform, style)
+    issues = find_hard_violations(
+        labels, scene, transform, style, furniture=furniture
+    )
     return ValidationResult(issues=issues)
 
 

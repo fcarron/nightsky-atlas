@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import StyleConfig
@@ -119,6 +120,7 @@ def _is_valid(
     placed_bounds: tuple[PageRect, ...],
     printable: PageRect,
     symbols: tuple[SymbolCircle, ...],
+    furniture: tuple[PageRect, ...] = (),
 ) -> bool:
     if (
         bounds.left_mm < printable.left_mm
@@ -128,6 +130,8 @@ def _is_valid(
     ):
         return False
     if any(rects_overlap(bounds, other) for other in placed_bounds):
+        return False
+    if any(rects_overlap(bounds, obstacle) for obstacle in furniture):
         return False
     return not any(
         circle_intersects_rect(symbol.center, symbol.radius_mm, bounds) for symbol in symbols
@@ -145,24 +149,29 @@ def optimize_labels(
     style: StyleConfig,
     *,
     weights: CostWeights | None = None,
+    furniture: Iterable[PageRect] = (),
 ) -> OptimizationResult:
-    """Optimize label placement deterministically."""
+    """Optimize label placement deterministically.
+
+    ``furniture`` holds the mandatory page-furniture rectangles that no label
+    may overlap, so the optimizer never places a label onto the title,
+    navigation, scale bar or legend (``AGENTS.md`` sections 15.1 and 16).
+    """
     weights = weights or CostWeights()
+    furniture_rects = tuple(furniture)
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
     symbols_index = _build_symbol_index(symbols)
     anchors = _target_anchors(labels, scene, transform)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
-    # Initial layout: fixed preference order (first candidate), as rendered
-    # without optimization.  Locked labels start from their override so the
-    # "before" diagnostics already reflect the manual placement.
+    # Initial layout: the placement that would be printed without optimization
+    # (the explicit selection, else the preferred candidate).  Locked labels
+    # start from their override so the "before" diagnostics already reflect it.
     before: dict[str, str | None] = {}
     for label in ordered:
-        if label.locked:
-            before[label.id] = label.selected_candidate_id
-        else:
-            before[label.id] = label.candidates[0].id if label.candidates else None
+        candidate = label.effective_candidate()
+        before[label.id] = candidate.id if candidate is not None else None
     cost_before, totals_before = _evaluate(
         ordered, before, anchors, printable, symbols, weights
     )
@@ -191,7 +200,13 @@ def optimize_labels(
                 )
             )
             nearby_symbols = tuple(symbols_index.query(candidate.bounds))
-            valid = _is_valid(candidate.bounds, nearby_bounds, printable, nearby_symbols)
+            valid = _is_valid(
+                candidate.bounds,
+                nearby_bounds,
+                printable,
+                nearby_symbols,
+                furniture_rects,
+            )
             breakdown = score_candidate(
                 candidate,
                 target_anchor=_anchor_for(label, anchors, candidate),
@@ -220,7 +235,14 @@ def optimize_labels(
         placed_index.set(label.id, best[1].bounds, best[1].bounds)
 
     placements = _local_repair(
-        ordered, placements, anchors, printable, placed_index, symbols_index, weights
+        ordered,
+        placements,
+        anchors,
+        printable,
+        placed_index,
+        symbols_index,
+        weights,
+        furniture_rects,
     )
     cost_after, totals_after = _evaluate(
         ordered, placements, anchors, printable, symbols, weights
@@ -252,6 +274,7 @@ def _local_repair(
     placed_index: RectIndex[PageRect],
     symbols_index: RectIndex[SymbolCircle],
     weights: CostWeights,
+    furniture: tuple[PageRect, ...] = (),
 ) -> dict[str, str | None]:
     for _ in range(_MAX_REPAIR_PASSES):
         changed = False
@@ -293,7 +316,9 @@ def _local_repair(
                     )
                 )
                 cand_symbols = tuple(symbols_index.query(candidate.bounds))
-                if not _is_valid(candidate.bounds, cand_bounds, printable, cand_symbols):
+                if not _is_valid(
+                    candidate.bounds, cand_bounds, printable, cand_symbols, furniture
+                ):
                     continue
                 cost = score_candidate(
                     candidate,
@@ -396,8 +421,6 @@ def layout_cost(
 
     placements: dict[str, str | None] = {}
     for label in labels:
-        if label.hidden or not label.candidates:
-            placements[label.id] = None
-        else:
-            placements[label.id] = label.selected_candidate_id or label.candidates[0].id
+        candidate = None if label.hidden else label.effective_candidate()
+        placements[label.id] = candidate.id if candidate is not None else None
     return _evaluate(ordered, placements, anchors, printable, symbols, weights)

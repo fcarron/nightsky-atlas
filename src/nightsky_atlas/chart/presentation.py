@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from nightsky_atlas.atlas.config import EditionConfig
+from nightsky_atlas.atlas.config import EditionConfig, default_edition
 from nightsky_atlas.chart.models import ChartDefinition
 
 __all__ = [
@@ -24,12 +24,6 @@ __all__ = [
 ]
 
 PRODUCT_NAME = "NightSky Atlas"
-
-_DEFAULT_EDITIONS: dict[str, tuple[str, str]] = {
-    "pocket": ("Pocket", "P"),
-    "standard": ("Standard", "S"),
-    "deep": ("Deep", "D"),
-}
 
 
 def chart_index(chart_id: str) -> int | None:
@@ -94,12 +88,9 @@ def presentation_for(
     when omitted they fall back to the built-in edition registry so a renderer
     can be driven by a bare :class:`ChartDefinition`.
     """
-    default_name, default_code = _DEFAULT_EDITIONS.get(
-        definition.atlas_id,
-        (definition.atlas_id.title(), definition.atlas_id[:1].upper() or "?"),
-    )
-    resolved_name = edition_name if edition_name is not None else default_name
-    resolved_code = edition_code if edition_code is not None else default_code
+    default = default_edition(definition.atlas_id)
+    resolved_name = edition_name if edition_name is not None else default.name
+    resolved_code = edition_code if edition_code is not None else default.code
     return ChartPresentation(
         edition_name=resolved_name,
         edition_code=resolved_code,

@@ -12,6 +12,7 @@ from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_for
 from nightsky_atlas.render.furniture import build_furniture_plan
 from nightsky_atlas.render.symbols import StarSizeModel
+from nightsky_atlas.render.text import TextMeasurer
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = load_style_config(REPO_ROOT / "styles" / "standard.yaml")
@@ -61,6 +62,23 @@ def test_east_west_navigation_follows_east_left_orientation() -> None:
     by_direction = {text.text.split(":")[0]: text for text in plan.navigation}
     assert by_direction["E"].x_mm < rect.left_mm
     assert by_direction["W"].x_mm > rect.right_mm
+
+
+def test_east_west_navigation_stays_clear_of_paper_edge_and_frame() -> None:
+    plan, transform = build_plan((("E", "standard-067"), ("W", "standard-069")))
+    rect = transform.chart_rect
+    inset = STYLE.furniture.navigation.side_inset_mm
+    for text in plan.navigation:
+        metrics = TextMeasurer(
+            STYLE.label.font_family, text.font_size_pt
+        ).measure_mm(text.text)
+        if text.align == "left":
+            left, right = text.x_mm, text.x_mm + metrics.width_mm
+        else:
+            left, right = text.x_mm - metrics.width_mm, text.x_mm
+        assert left >= inset - 1e-9
+        assert right <= PAGE.width_mm - inset + 1e-9
+        assert right <= rect.left_mm or left >= rect.right_mm
 
 
 def test_navigation_is_smaller_than_coordinate_labels() -> None:

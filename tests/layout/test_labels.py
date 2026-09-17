@@ -79,11 +79,13 @@ def test_build_dso_labels() -> None:
     )
     assert len(messier.candidates) == 8 * STYLE.label.candidate_rings
     assert messier.candidates[0].id == "label:dso:NGC4486:N"
+    assert messier.selected_candidate_id == messier.candidates[0].id
     ordinary = by_id["label:dso:NGC9999"]
     assert ordinary.text == "9999"
     assert ordinary.mandatory is False
     assert ordinary.font_weight == "normal"
     assert ordinary.font_size_pt == pytest.approx(STYLE.label.dso_labels.normal_size_pt)
+    assert ordinary.selected_candidate_id == ordinary.candidates[0].id
 
 
 def make_star(star_id: str, magnitude: float, *, hip_id: str | None) -> Star:
@@ -155,7 +157,6 @@ def test_build_dso_labels_uses_metadata_priority() -> None:
         CHART,
         (),
         [make_dso("NGC0869", magnitude=13.0)],
-        dso_magnitude_limit=12.0,
         observing_index={"NGC869": frozenset({"herschel400"})},
         selection_policy=policy,
     )

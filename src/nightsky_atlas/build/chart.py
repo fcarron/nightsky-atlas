@@ -246,7 +246,6 @@ def build_chart_context(
     double_star_companion_tolerance_arcsec: float = DEFAULT_COMPANION_TOLERANCE_ARCSEC,
     double_star_ambiguous_radius_arcsec: float = DEFAULT_AMBIGUOUS_RADIUS_ARCSEC,
     magnitude_limit: float | None = None,
-    dso_magnitude_limit: float | None = None,
     progress: Progress | None = None,
     inputs: ChartInputs | None = None,
 ) -> ChartContext:
@@ -298,11 +297,8 @@ def build_chart_context(
         for dso in inputs.dsos
         if _coordinates_in_box(dso.ra_deg, dso.dec_deg, dso_box)
     )
-    dso_limit = (
-        dso_magnitude_limit
-        if dso_magnitude_limit is not None
-        else atlas.dso_limit_magnitude
-    )
+    # Deep-sky selection is governed entirely by the edition's per-type
+    # visibility rules; there is no global magnitude cut in the atlas config.
     constellations = inputs.constellations
     outlines = inputs.outlines
     observing_lists = inputs.observing_lists
@@ -329,7 +325,6 @@ def build_chart_context(
             definition,
             stars,
             dsos,
-            dso_magnitude_limit=dso_limit,
             constellation_lines=constellations.lines,
             constellation_boundaries=constellations.boundaries,
             nebula_outlines=outlines,

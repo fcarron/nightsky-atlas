@@ -11,8 +11,10 @@ from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.presentation import presentation_for
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.validation import validate_layout
+from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.review.schema import ReviewAction, ReviewActionType, ReviewResult
 from nightsky_atlas.scene.models import ChartScene
 
@@ -35,12 +37,10 @@ def _apply_one(label: Label, action: ReviewAction) -> Label | None:
             return None
         return label.with_placement(candidate_id)
     if action.type == ReviewActionType.SHOW_OPTIONAL_LABEL:
-        candidate_id = label.selected_candidate_id
-        if candidate_id is None and label.candidates:
-            candidate_id = label.candidates[0].id
-        if candidate_id is None:
+        candidate = label.effective_candidate()
+        if candidate is None:
             return None
-        return label.with_placement(candidate_id, hidden=False)
+        return label.with_placement(candidate.id, hidden=False)
     if action.type == ReviewActionType.HIDE_OPTIONAL_LABEL:
         if label.mandatory:
             return None
@@ -65,8 +65,14 @@ def apply_review_actions(
     current = labels
     applied: list[str] = []
     rejected: list[tuple[str, str]] = []
+    furniture = furniture_obstacles(
+        transform, scene.definition, style, presentation_for(scene.definition)
+    )
     baseline = {
-        issue.id for issue in validate_layout(current, scene, transform, style).issues
+        issue.id
+        for issue in validate_layout(
+            current, scene, transform, style, furniture=furniture
+        ).issues
     }
 
     for issue in result.issues:
@@ -91,7 +97,9 @@ def apply_review_actions(
         )
         candidate_issues = {
             item.id
-            for item in validate_layout(candidate_labels, scene, transform, style).issues
+            for item in validate_layout(
+                candidate_labels, scene, transform, style, furniture=furniture
+            ).issues
         }
         if not candidate_issues <= baseline:
             rejected.append((issue.element_id, "action introduces hard violations"))

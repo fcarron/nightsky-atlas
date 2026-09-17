@@ -170,3 +170,49 @@ def test_plotted_companion_is_marked_even_without_magnitudes() -> None:
     )
     marks = resolve_double_stars(scene, TRANSFORM, STYLE)
     assert len(marks) == 1
+
+
+def make_pair_scene(specs: list[tuple[str, str, float, float]]) -> ChartScene:
+    """Build a scene where several WDS records share primary ``A``."""
+    stars = [SceneStar(make_star("A", 6.0), ChartPoint(0.0, 0.0))]
+    systems = []
+    for system_id, star_id, eta_deg, magnitude in specs:
+        stars.append(SceneStar(make_star(star_id, magnitude), ChartPoint(eta_deg, 0.0)))
+        system = StarSystem(
+            id=f"system:wds:{system_id}",
+            source="wds",
+            source_id=system_id,
+            ra_deg=10.0,
+            dec_deg=0.0,
+            primary_star_id="A",
+            component_star_ids=(star_id,),
+            component_magnitudes=(6.0, magnitude),
+            combined_magnitude=None,
+            match_status=MatchStatus.POSITIONAL,
+        )
+        systems.append(
+            SceneStarSystem(
+                system,
+                ChartPoint(0.0, 0.0),
+                component_points=(ChartPoint(eta_deg, 0.0),),
+            )
+        )
+    return ChartScene(
+        definition=CHART, stars=tuple(stars), star_systems=tuple(systems)
+    )
+
+
+def test_all_close_companions_of_one_primary_collapse_together() -> None:
+    scene = make_pair_scene([("CLOSE", "B", 0.01, 8.0), ("OTHER", "C", 0.02, 8.0)])
+    marks = resolve_double_stars(scene, TRANSFORM, STYLE)
+    assert len(marks) == 1
+    assert marks[0].suppress_star_ids == {"A", "B", "C"}
+
+
+def test_wide_companion_is_left_plotted_beside_a_close_pair() -> None:
+    # A-B is unseparable, A-C is separable: C must stay a real star while the
+    # close pair collapses (per-pair decision, AGENTS.md section 12).
+    scene = make_pair_scene([("CLOSE", "B", 0.01, 8.0), ("WIDE", "C", 0.5, 8.0)])
+    marks = resolve_double_stars(scene, TRANSFORM, STYLE)
+    assert len(marks) == 1
+    assert marks[0].suppress_star_ids == {"A", "B"}

@@ -32,7 +32,6 @@ def make_atlas_file(tmp_path: Path) -> Path:
                 "id": "test",
                 "page": {"width_mm": 297.0, "height_mm": 210.0, "margin_mm": 12.0},
                 "stellar_limit_magnitude": 9.0,
-                "dso_limit_magnitude": 12.0,
                 "charts": [
                     {
                         "id": "c1",

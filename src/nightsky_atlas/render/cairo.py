@@ -277,6 +277,15 @@ def _draw_stars(
     for mark in marks:
         suppressed |= mark.suppress_star_ids
 
+    rect = transform.chart_rect
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
     cr.set_source_rgb(0.0, 0.0, 0.0)
     for scene_star in scene.stars:
         if scene_star.star.id in suppressed:
@@ -288,6 +297,7 @@ def _draw_stars(
 
     for mark in marks:
         _draw_double_star_mark(cr, mark, size_model)
+    cr.restore()
 
 
 def _draw_double_star_mark(
@@ -326,6 +336,15 @@ def _draw_dsos(
     bold_symbol_ids: frozenset[str] = frozenset(),
 ) -> None:
     cr.set_source_rgb(0.0, 0.0, 0.0)
+    rect = transform.chart_rect
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
     for scene_dso in scene.deep_sky_objects:
         dso = scene_dso.dso
         bold = dso.id in bold_symbol_ids
@@ -335,6 +354,7 @@ def _draw_dsos(
         _draw_dso_symbol(
             cr, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), extent, style.dso.dash_mm
         )
+    cr.restore()
 
 
 def _draw_dso_symbol(
@@ -413,12 +433,10 @@ def _draw_labels(
     labels: Iterable[Label],
     style: StyleConfig,
 ) -> None:
-    for label in sorted(labels, key=lambda item: (item.priority, item.id)):
+    for label in labels:
         if label.hidden:
             continue
-        candidate = label.selected_candidate()
-        if candidate is None and label.candidates:
-            candidate = label.candidates[0]
+        candidate = label.effective_candidate()
         if candidate is None:
             continue
         cr.set_source_rgb(0.0, 0.0, 0.0)
@@ -480,9 +498,7 @@ def _draw_debug(
         for label in label_list:
             if label.hidden:
                 continue
-            candidate = label.selected_candidate()
-            if candidate is None and label.candidates:
-                candidate = label.candidates[0]
+            candidate = label.effective_candidate()
             if candidate is None:
                 continue
             bounds = candidate.bounds
@@ -499,9 +515,7 @@ def _draw_debug(
         for label in label_list:
             if label.hidden:
                 continue
-            candidate = label.selected_candidate()
-            if candidate is None and label.candidates:
-                candidate = label.candidates[0]
+            candidate = label.effective_candidate()
             if candidate is None:
                 continue
             draw_text(

@@ -10,22 +10,26 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
+import cairo
 import pytest
 
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.constellations import ConstellationSegment
-from nightsky_atlas.catalog.models import Provenance
+from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.models import Label
+from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.cairo import (
     _bold_symbol_ids,
     _dso_line_width_mm,
+    draw_chart_page,
     render_chart,
     render_magnitude_scale,
 )
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
+from nightsky_atlas.scene.models import ChartScene, SceneStar
 from nightsky_atlas.units import mm_to_pt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -159,3 +163,39 @@ def test_dso_line_width_uses_bold_width_for_emphasized_objects() -> None:
         STYLE.dso.line_width_mm
     )
     assert STYLE.dso.bold_line_width_mm > STYLE.dso.line_width_mm
+
+
+def _pixel_rgb(surface: cairo.ImageSurface, x_pt: float, y_pt: float) -> tuple[int, int, int]:
+    surface.flush()
+    stride = surface.get_stride()
+    data = surface.get_data()
+    offset = round(y_pt) * stride + round(x_pt) * 4
+    return data[offset], data[offset + 1], data[offset + 2]
+
+
+def test_stars_are_clipped_to_the_chart_frame() -> None:
+    transform = PageTransform(chart=CHART, page=PAGE)
+    star = Star(
+        id="edge",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        magnitude=0.0,
+        provenance=Provenance(catalogue="TEST", source_id="edge"),
+    )
+    scene = ChartScene(
+        definition=CHART,
+        stars=(SceneStar(star, ChartPoint(-CHART.width_deg / 2.0, 0.0)),),
+    )
+    surface = cairo.ImageSurface(
+        cairo.FORMAT_ARGB32,
+        round(mm_to_pt(PAGE.width_mm)),
+        round(mm_to_pt(PAGE.height_mm)),
+    )
+    draw_chart_page(cairo.Context(surface), scene, transform, STYLE)
+
+    rect = transform.chart_rect
+    y_pt = mm_to_pt(transform.center_page.y_mm)
+    inside = _pixel_rgb(surface, mm_to_pt(rect.right_mm) - mm_to_pt(0.3), y_pt)
+    outside = _pixel_rgb(surface, mm_to_pt(rect.right_mm) + mm_to_pt(0.6), y_pt)
+    assert sum(inside) < 200
+    assert sum(outside) > 700

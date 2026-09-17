@@ -235,11 +235,15 @@ def resolve_ring_counts(spec: TilingSpec) -> tuple[int, ...]:
     """
     if not spec.is_ring_mode:
         raise ValueError("resolve_ring_counts requires declination_centers")
-    centers = sorted(spec.declination_centers)
+    # Pair each ring with its own start count *before* sorting: chart_counts is
+    # parallel to declination_centers, not to the sorted centers, so sorting the
+    # centers alone would silently assign counts to the wrong rings whenever the
+    # configuration is not already ascending.
+    starts = spec.chart_counts or (1,) * len(spec.declination_centers)
+    rings = sorted(zip(spec.declination_centers, starts, strict=True))
     bounds = _slice_bounds(spec)
     resolved: list[int] = []
-    for index, center in enumerate(centers):
-        start = spec.chart_counts[index] if spec.chart_counts else 1
+    for index, (center, start) in enumerate(rings):
         required = _required_ring_count(spec, center, *bounds[index])
         if spec.auto_adjust_counts:
             if required is None:

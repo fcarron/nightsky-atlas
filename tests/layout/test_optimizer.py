@@ -74,6 +74,21 @@ def test_greedy_avoids_overlap_between_mandatory_labels() -> None:
     assert not (bounds_a.left_mm < bounds_b.right_mm and bounds_b.left_mm < bounds_a.right_mm)
 
 
+def test_optimizer_avoids_furniture() -> None:
+    label = make_label(
+        "label:a",
+        (
+            make_candidate("label:a", CompassPosition.N, 100.0, 100.0),
+            make_candidate("label:a", CompassPosition.S, 100.0, 130.0),
+        ),
+    )
+    furniture = (PageRect(left_mm=98.0, top_mm=99.0, width_mm=12.0, height_mm=5.0),)
+    result = optimize_labels(
+        (label,), EMPTY_SCENE, TRANSFORM, STYLE, furniture=furniture
+    )
+    assert result.labels[0].selected_candidate_id == "label:a:S"
+
+
 def test_optional_label_outside_page_is_hidden() -> None:
     label = make_label(
         "label:out",
