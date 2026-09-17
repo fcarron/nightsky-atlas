@@ -339,6 +339,12 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     counter.add_argument("--store", type=Path, default=_DEFAULT_STORE)
     counter.set_defaults(handler=_command_star_count)
 
+    reindex = data_subparsers.add_parser(
+        "reindex-stars", help="rebuild star-store indexes in place (safe to re-run)"
+    )
+    reindex.add_argument("--store", type=Path, default=_DEFAULT_STORE)
+    reindex.set_defaults(handler=_command_reindex_stars)
+
     dso_fetch = data_subparsers.add_parser(
         "fetch-openngc", help="download raw OpenNGC CSVs (network access)"
     )
@@ -787,6 +793,13 @@ def _command_import_stars(args: argparse.Namespace) -> int:
 def _command_star_count(args: argparse.Namespace) -> int:
     with StarStore.open(args.store) as store:
         print(f"{store.count()} stars in {args.store}")
+    return 0
+
+
+def _command_reindex_stars(args: argparse.Namespace) -> int:
+    with StarStore.open(args.store) as store:
+        store.reindex()
+    print(f"reindexed star store -> {args.store}")
     return 0
 
 

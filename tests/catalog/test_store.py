@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -111,3 +112,34 @@ def test_chart_query_box_near_pole_uses_full_ra() -> None:
     box = chart_query_box(definition)
     assert box.ra_min_deg == 0.0
     assert box.ra_max_deg == 360.0
+
+
+def _index_names(path: Path) -> set[str]:
+    connection = sqlite3.connect(path)
+    try:
+        return {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index'"
+            )
+            if not str(row[0]).startswith("sqlite_autoindex")
+        }
+    finally:
+        connection.close()
+
+
+def test_build_creates_combined_index(store_path: Path) -> None:
+    assert _index_names(store_path) == {"stars_dec_mag_ra_idx"}
+
+
+def test_reindex_is_idempotent_and_drops_legacy(store_path: Path) -> None:
+    connection = sqlite3.connect(store_path)
+    try:
+        connection.execute("CREATE INDEX stars_ra_idx ON stars(ra_deg)")
+        connection.commit()
+    finally:
+        connection.close()
+    with StarStore.open(store_path) as store:
+        store.reindex()
+        store.reindex()
+    assert _index_names(store_path) == {"stars_dec_mag_ra_idx"}
