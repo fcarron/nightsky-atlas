@@ -130,8 +130,31 @@ grid:
   label_dec_step_deg: 4.0
 
 furniture:
-  title_font_size_pt: 9.0
-  scale_font_size_pt: 6.0
-  scale_bar_length_deg: 5.0
-  scale_bar_thickness_mm: 0.4
+  title_font_size_pt: 8.0
+  title_gray: 0.15
   chart_border_width_mm: 0.25
+  # Angular scale: thin, mid-grey and quiet.  A per-edition angular value keeps
+  # the printed bar roughly 40-50 mm long whatever the chart scale.
+  scale_bar:
+    enabled: true
+    length_deg: 5.0
+    thickness_mm: 0.13
+    gray: 0.5
+    font_size_pt: 6.5
+    tick_mm: 1.2
+  # Adjacent-chart navigation, outside the coordinate labels and always with
+  # short visible codes (S068), never internal ids.
+  navigation:
+    enabled: true
+    font_size_pt: 4.5
+    gray: 0.5
+    frame_gap_mm: 3.8
+    side_inset_mm: 2.0
+  # Compact magnitude reference using the real star size model.
+  magnitude_legend:
+    enabled: true
+    magnitudes: [2.0, 4.0, 6.0, 8.0]
+    font_size_pt: 5.5
+    gray: 0.55
+    spacing_mm: 6.0
+    label: "mag"

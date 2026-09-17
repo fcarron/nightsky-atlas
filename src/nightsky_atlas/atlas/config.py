@@ -44,10 +44,14 @@ __all__ = [
     "DsoLabelStyle",
     "DsoLabelTierStyle",
     "DsoStyle",
+    "EditionConfig",
     "FurnitureStyle",
     "GridStyle",
+    "MagnitudeLegendStyle",
+    "NavigationStyle",
     "OverlapTargetConfig",
     "PageConfig",
+    "ScaleBarStyle",
     "StyleConfig",
     "TilingConfig",
     "VisibilityConfig",
@@ -244,16 +248,52 @@ class VisibilityConfig(_StrictModel):
         )
 
 
+class EditionConfig(_StrictModel):
+    """Visible identity of an atlas edition.
+
+    ``name`` is printed on the page footer (``Standard``) and ``code`` is the
+    short visible prefix used for chart codes and navigation (``S``).  Internal
+    identifiers keep the full lowercase edition id (``standard-068``); this block
+    only affects what the printed atlas shows.
+    """
+
+    name: str
+    code: str
+
+    @field_validator("name", "code")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("edition name and code must not be blank")
+        return value
+
+
+_EDITION_DEFAULTS: dict[str, EditionConfig] = {
+    "pocket": EditionConfig(name="Pocket", code="P"),
+    "standard": EditionConfig(name="Standard", code="S"),
+    "deep": EditionConfig(name="Deep", code="D"),
+}
+
+
 class AtlasConfig(_StrictModel):
     """An atlas edition: page geometry plus explicit chart definitions."""
 
     id: str
     page: PageConfig
+    edition: EditionConfig | None = None
     charts: list[ChartConfig] = Field(default_factory=list)
     tiling: TilingConfig | None = None
     stellar_limit_magnitude: PositiveFloat | None = None
     dso_limit_magnitude: PositiveFloat | None = None
     visibility: VisibilityConfig = Field(default_factory=VisibilityConfig)
+
+    def resolved_edition(self) -> EditionConfig:
+        """Return the visible edition identity, falling back to the registry."""
+        if self.edition is not None:
+            return self.edition
+        return _EDITION_DEFAULTS.get(
+            self.id, EditionConfig(name=self.id.title(), code=self.id[:1].upper() or "?")
+        )
 
 
 class StarStyle(_StrictModel):
@@ -602,14 +642,68 @@ class ConstellationStyle(_StrictModel):
     boundaries: ConstellationBoundaryStyle = Field(default_factory=ConstellationBoundaryStyle)
 
 
-class FurnitureStyle(_StrictModel):
-    """Chart title, scale bar and neighbour navigation styling."""
+class ScaleBarStyle(_StrictModel):
+    """Subtle linear angular scale drawn in the page footer.
 
-    title_font_size_pt: PositiveFloat = 9.0
-    scale_font_size_pt: PositiveFloat = 6.0
-    scale_bar_length_deg: PositiveFloat = 5.0
-    scale_bar_thickness_mm: PositiveFloat = 0.4
+    The bar is deliberately quiet: a thin mid-grey line with short end ticks and
+    a compact ``5°`` label, sized so that its physical length stays roughly
+    constant across editions even though the angular value differs.
+    """
+
+    enabled: bool = True
+    length_deg: PositiveFloat = 5.0
+    thickness_mm: PositiveFloat = 0.15
+    gray: float = 0.5
+    font_size_pt: PositiveFloat = 6.5
+    tick_mm: PositiveFloat = 1.2
+
+
+class NavigationStyle(_StrictModel):
+    """Adjacent-chart navigation references.
+
+    Navigation sits outside the chart frame, further out than the coordinate
+    labels, is smaller and mid-grey, and always prints short chart codes.  It is
+    purely navigational furniture and is drawn beneath nothing sky-related.
+    """
+
+    enabled: bool = True
+    font_size_pt: PositiveFloat = 5.0
+    gray: float = 0.5
+    frame_gap_mm: PositiveFloat = 4.2
+    side_inset_mm: PositiveFloat = 2.0
+
+
+class MagnitudeLegendStyle(_StrictModel):
+    """Compact star-magnitude reference for the footer.
+
+    The reference dots use the same :class:`StarSizeModel` as the chart, so the
+    legend shows the real printed symbol sizes rather than a symbolic redraw.
+    """
+
+    enabled: bool = True
+    magnitudes: tuple[float, ...] = (2.0, 4.0, 6.0, 8.0)
+    font_size_pt: PositiveFloat = 6.0
+    gray: float = 0.55
+    spacing_mm: PositiveFloat = 6.0
+    label: str = "mag"
+
+    @field_validator("magnitudes")
+    @classmethod
+    def _at_least_one(cls, value: tuple[float, ...]) -> tuple[float, ...]:
+        if not value:
+            raise ValueError("magnitude legend needs at least one reference value")
+        return value
+
+
+class FurnitureStyle(_StrictModel):
+    """Chart title/footer, scale bar, magnitude legend and navigation styling."""
+
+    title_font_size_pt: PositiveFloat = 8.0
+    title_gray: float = 0.15
     chart_border_width_mm: PositiveFloat = 0.25
+    scale_bar: ScaleBarStyle = Field(default_factory=ScaleBarStyle)
+    navigation: NavigationStyle = Field(default_factory=NavigationStyle)
+    magnitude_legend: MagnitudeLegendStyle = Field(default_factory=MagnitudeLegendStyle)
 
 
 class StyleConfig(_StrictModel):

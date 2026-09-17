@@ -6,6 +6,12 @@
 
 id: standard
 
+# Visible edition identity.  Internal ids stay long (standard-068); the printed
+# atlas shows the edition name and short chart code (Standard, S068).
+edition:
+  name: Standard
+  code: S
+
 # Provisional standard-edition stellar limiting magnitude (chosen at M4.3).
 stellar_limit_magnitude: 9.0
 

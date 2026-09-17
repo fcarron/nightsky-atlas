@@ -87,6 +87,7 @@ from nightsky_atlas.catalog.wds import (
 )
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.presentation import presentation_from_edition
 from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.optimizer import OptimizationResult, optimize_labels
 from nightsky_atlas.layout.overrides import apply_overrides, load_override_library
@@ -572,6 +573,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
         style,
         labels=labels,
         debug=_parse_debug(args.debug),
+        presentation=presentation_from_edition(definition, atlas.resolved_edition()),
         pdf_path=outdir / "chart.pdf",
         png_path=outdir / "preview.png",
         png_dpi=args.png_dpi,

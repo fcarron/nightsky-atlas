@@ -41,6 +41,10 @@ from nightsky_atlas.catalog.star_names import (
     load_star_names,
 )
 from nightsky_atlas.chart.models import ChartDefinition
+from nightsky_atlas.chart.presentation import (
+    presentation_from_edition,
+    product_edition_title,
+)
 from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.optimizer import layout_cost, layout_hash, optimize_labels
 from nightsky_atlas.layout.overrides import (
@@ -188,7 +192,7 @@ def _draw_front_matter(
     family = style.label.font_family
     draw_centered_text(
         cr,
-        f"NightSky Atlas - {atlas.id}",
+        product_edition_title(atlas.resolved_edition().name),
         mm_to_pt(page.width_mm / 2.0),
         mm_to_pt(page.margin_mm + 12.0),
         family,
@@ -261,6 +265,7 @@ def build_atlas(
         )
     atlas = inputs.atlas
     style = inputs.style
+    edition = atlas.resolved_edition()
     with progress.step("resolve chart definitions"):
         charts = chart_definitions(atlas)
     if chart_ids is not None:
@@ -354,12 +359,14 @@ def build_atlas(
         validate_s = time.perf_counter() - stage_start
 
         page_dir = outroot / "charts" / definition.id
+        presentation = presentation_from_edition(definition, edition)
         stage_start = time.perf_counter()
         render_chart(
             chart_context.scene,
             chart_context.transform,
             chart_context.style,
             labels=labels,
+            presentation=presentation,
             pdf_path=page_dir / "chart.pdf",
             png_path=page_dir / "preview.png" if render_png else None,
             png_dpi=png_dpi,
@@ -372,6 +379,7 @@ def build_atlas(
             chart_context.transform,
             chart_context.style,
             labels=labels,
+            presentation=presentation,
         )
         surface.show_page()
         compose_s = time.perf_counter() - stage_start

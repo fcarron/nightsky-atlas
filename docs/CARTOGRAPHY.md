@@ -107,6 +107,37 @@ Grid **lines** stay fine (`ra_step_deg`/`dec_step_deg` 2 deg).  Coordinate
 Across the 116 charts this removes about half the coordinate text versus the
 every-line v0.1 draft while keeping the grid itself unchanged.
 
+## Visible notation and page furniture
+
+Internal ids stay long (`standard-068`) but the printed atlas uses a short,
+consistent notation built centrally in `chart/presentation.py`:
+
+| Edition | Name | Code | Visible chart code |
+| --- | --- | --- | --- |
+| Pocket | Pocket | P | P001 |
+| Standard | Standard | S | S001 … S116 |
+| Deep | Deep | D | D001 |
+
+The edition name and code come from the atlas `edition:` block and fall back to
+this registry when omitted.  The footer title is
+`NightSky Atlas — Standard · S068`; navigation references neighbouring charts as
+`N: S082`, never with the internal id.
+
+Furniture sits outside the chart frame and is deliberately quiet
+(`styles/standard.yaml` → `furniture:`):
+
+- **Navigation** is smaller than the coordinate labels, mid-grey, and placed
+  further out than the RA/Dec labels (east left, west right, per the printed
+  orientation).  Coordinate labels treat navigation rectangles as obstacles.
+- **Scale bar** is a thin (~0.13 mm) mid-grey line with end ticks and a compact
+  `5°` label; the angular value is chosen per edition so the printed bar stays
+  roughly 40–50 mm long (Pocket 10°, Standard 5°, Deep 2°).
+- **Magnitude legend** is a compact `mag 2 4 6 8` reference whose dots use the
+  real `StarSizeModel`, so the printed sizes match the chart exactly.
+- **Title** is right-aligned in the footer.  The footer row is magnitude legend
+  (left), scale bar (centre), title (right); nothing is stacked in the middle of
+  the chart.
+
 ## Open items
 
 - Residual hard violations on dense pages (Milky Way / Virgo-Coma fields,

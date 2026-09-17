@@ -1,0 +1,401 @@
+"""Page furniture: footer, scale bar, magnitude legend and navigation.
+
+Everything here is *furniture*: quiet, outside the chart field, and always
+drawn last so it can never compete with the map.  The precise placement is
+centralised so the renderer and the coordinate-label obstacle system agree on
+where the furniture sits (``AGENTS.md`` sections 16 and 27).
+
+Visual order (from the chart frame outward): coordinate labels, then
+navigation, then the footer tools along the page edge.  All visible strings are
+built from :mod:`nightsky_atlas.chart.presentation`.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from typing import Literal
+
+import cairo
+
+from nightsky_atlas.atlas.config import StyleConfig
+from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
+from nightsky_atlas.chart.page import PageRect, PageTransform
+from nightsky_atlas.chart.presentation import ChartPresentation, neighbour_code
+from nightsky_atlas.render.symbols import StarSizeModel
+from nightsky_atlas.render.text import TextMeasurer, draw_centered_text, draw_text
+from nightsky_atlas.units import mm_to_pt
+
+__all__ = [
+    "FurniturePlan",
+    "build_furniture_plan",
+    "draw_furniture",
+]
+
+Align = Literal["left", "center", "right"]
+
+_FOOTER_DOT_CENTER_FROM_BOTTOM_MM = 4.2
+_FOOTER_TEXT_FROM_BOTTOM_MM = 2.4
+_FOOTER_TITLE_CENTER_FROM_BOTTOM_MM = 3.3
+_LEGEND_LABEL_GAP_MM = 2.0
+
+
+@dataclass(frozen=True, slots=True)
+class PlacedText:
+    """One furniture string, positioned by its logical text box."""
+
+    text: str
+    x_mm: float
+    y_mm: float
+    align: Align
+    font_size_pt: float
+
+
+@dataclass(frozen=True, slots=True)
+class ScaleBar:
+    """A linear angular scale with the bar line and its ``5°`` label."""
+
+    left_mm: float
+    right_mm: float
+    line_y_mm: float
+    label_x_mm: float
+    label_y_mm: float
+    label: str
+    font_size_pt: float
+    tick_mm: float
+
+
+@dataclass(frozen=True, slots=True)
+class LegendDot:
+    """One reference star symbol in the magnitude legend."""
+
+    x_mm: float
+    y_mm: float
+    diameter_mm: float
+
+
+@dataclass(frozen=True, slots=True)
+class MagnitudeLegend:
+    """Compact ``mag 2 4 6 8`` reference built from the real star size model."""
+
+    label: PlacedText
+    numbers: tuple[PlacedText, ...]
+    dots: tuple[LegendDot, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class FurniturePlan:
+    """Resolved furniture for one chart page, in millimetres."""
+
+    title: PlacedText | None
+    navigation: tuple[PlacedText, ...]
+    scale_bar: ScaleBar | None
+    legend: MagnitudeLegend | None
+    obstacles: tuple[PageRect, ...]
+
+
+def _text_bounds(
+    text: str, x_mm: float, y_mm: float, align: Align, width_mm: float, height_mm: float
+) -> PageRect:
+    if align == "center":
+        left = x_mm - width_mm / 2.0
+    elif align == "right":
+        left = x_mm - width_mm
+    else:
+        left = x_mm
+    return PageRect(left_mm=left, top_mm=y_mm, width_mm=width_mm, height_mm=height_mm)
+
+
+def _navigation(
+    definition: ChartDefinition,
+    transform: PageTransform,
+    style: StyleConfig,
+    presentation: ChartPresentation,
+) -> tuple[PlacedText, ...]:
+    nav = style.furniture.navigation
+    if not nav.enabled or not definition.neighbours:
+        return ()
+    page = transform.page
+    rect = transform.chart_rect
+    family = style.label.font_family
+    measurer = TextMeasurer(family, nav.font_size_pt)
+    placed: list[PlacedText] = []
+    for direction, neighbour_id in definition.neighbours:
+        text = f"{direction}: {neighbour_code(neighbour_id, presentation.edition_code)}"
+        metrics = measurer.measure_mm(text)
+        if direction == "N":
+            placed.append(
+                PlacedText(
+                    text,
+                    page.width_mm / 2.0,
+                    rect.top_mm - nav.frame_gap_mm - metrics.height_mm,
+                    "center",
+                    nav.font_size_pt,
+                )
+            )
+        elif direction == "S":
+            placed.append(
+                PlacedText(
+                    text,
+                    page.width_mm / 2.0,
+                    rect.bottom_mm + nav.frame_gap_mm,
+                    "center",
+                    nav.font_size_pt,
+                )
+            )
+        elif direction == "E":
+            placed.append(
+                PlacedText(
+                    text,
+                    nav.side_inset_mm,
+                    page.height_mm / 2.0 - metrics.height_mm / 2.0,
+                    "left",
+                    nav.font_size_pt,
+                )
+            )
+        elif direction == "W":
+            placed.append(
+                PlacedText(
+                    text,
+                    page.width_mm - nav.side_inset_mm - metrics.width_mm,
+                    page.height_mm / 2.0 - metrics.height_mm / 2.0,
+                    "left",
+                    nav.font_size_pt,
+                )
+            )
+    return tuple(placed)
+
+
+def _scale_bar(
+    transform: PageTransform, style: StyleConfig
+) -> ScaleBar | None:
+    bar = style.furniture.scale_bar
+    if not bar.enabled:
+        return None
+    page = transform.page
+    length_mm = bar.length_deg * transform.mm_per_deg
+    if length_mm <= 0.0:
+        return None
+    label = f"{bar.length_deg:g}\N{DEGREE SIGN}"
+    line_y = page.height_mm - _FOOTER_DOT_CENTER_FROM_BOTTOM_MM
+    return ScaleBar(
+        left_mm=page.width_mm / 2.0 - length_mm / 2.0,
+        right_mm=page.width_mm / 2.0 + length_mm / 2.0,
+        line_y_mm=line_y,
+        label_x_mm=page.width_mm / 2.0,
+        label_y_mm=page.height_mm - _FOOTER_TEXT_FROM_BOTTOM_MM,
+        label=label,
+        font_size_pt=bar.font_size_pt,
+        tick_mm=bar.tick_mm,
+    )
+
+
+def _magnitude_legend(
+    page: PageGeometry, style: StyleConfig
+) -> MagnitudeLegend | None:
+    legend = style.furniture.magnitude_legend
+    if not legend.enabled:
+        return None
+    family = style.label.font_family
+    size_model = StarSizeModel.from_style(style.star)
+    measurer = TextMeasurer(family, legend.font_size_pt)
+    label_metrics = measurer.measure_mm(legend.label)
+    number_top = page.height_mm - _FOOTER_TEXT_FROM_BOTTOM_MM
+    dot_center = page.height_mm - _FOOTER_DOT_CENTER_FROM_BOTTOM_MM
+    first_cell = page.margin_mm + label_metrics.width_mm + _LEGEND_LABEL_GAP_MM
+    numbers = tuple(
+        PlacedText(
+            f"{magnitude:g}",
+            first_cell + legend.spacing_mm * (index + 0.5),
+            number_top,
+            "center",
+            legend.font_size_pt,
+        )
+        for index, magnitude in enumerate(legend.magnitudes)
+    )
+    dots = tuple(
+        LegendDot(
+            x_mm=first_cell + legend.spacing_mm * (index + 0.5),
+            y_mm=dot_center,
+            diameter_mm=size_model.diameter_mm(magnitude),
+        )
+        for index, magnitude in enumerate(legend.magnitudes)
+    )
+    return MagnitudeLegend(
+        label=PlacedText(
+            legend.label, page.margin_mm, number_top, "left", legend.font_size_pt
+        ),
+        numbers=numbers,
+        dots=dots,
+    )
+
+
+def _obstacle_for_text(
+    text: PlacedText, family: str
+) -> PageRect:
+    metrics = TextMeasurer(family, text.font_size_pt).measure_mm(text.text)
+    return _text_bounds(
+        text.text, text.x_mm, text.y_mm, text.align, metrics.width_mm, metrics.height_mm
+    )
+
+
+def build_furniture_plan(
+    transform: PageTransform,
+    definition: ChartDefinition,
+    style: StyleConfig,
+    presentation: ChartPresentation,
+) -> FurniturePlan:
+    """Resolve all furniture geometry and the rectangles labels must avoid."""
+    family = style.label.font_family
+    page = transform.page
+    obstacles: list[PageRect] = []
+
+    title: PlacedText | None = None
+    title_metrics = TextMeasurer(family, style.furniture.title_font_size_pt).measure_mm(
+        presentation.title
+    )
+    if presentation.title:
+        title = PlacedText(
+            presentation.title,
+            page.width_mm - page.margin_mm,
+            page.height_mm - _FOOTER_TITLE_CENTER_FROM_BOTTOM_MM - title_metrics.height_mm / 2.0,
+            "right",
+            style.furniture.title_font_size_pt,
+        )
+        obstacles.append(
+            _text_bounds(
+                title.text,
+                title.x_mm,
+                title.y_mm,
+                title.align,
+                title_metrics.width_mm,
+                title_metrics.height_mm,
+            )
+        )
+
+    navigation = _navigation(definition, transform, style, presentation)
+    for nav_text in navigation:
+        obstacles.append(_obstacle_for_text(nav_text, family))
+
+    scale_bar = _scale_bar(transform, style)
+    if scale_bar is not None:
+        scale_metrics = TextMeasurer(family, scale_bar.font_size_pt).measure_mm(
+            scale_bar.label
+        )
+        obstacles.append(
+            PageRect(
+                left_mm=scale_bar.left_mm,
+                top_mm=scale_bar.line_y_mm - scale_bar.tick_mm / 2.0,
+                width_mm=scale_bar.right_mm - scale_bar.left_mm,
+                height_mm=(scale_bar.label_y_mm + scale_metrics.height_mm)
+                - (scale_bar.line_y_mm - scale_bar.tick_mm / 2.0),
+            )
+        )
+
+    legend = _magnitude_legend(page, style)
+    if legend is not None:
+        legend_metrics = TextMeasurer(family, legend.numbers[0].font_size_pt).measure_mm(
+            legend.numbers[-1].text
+        )
+        max_diameter = max(dot.diameter_mm for dot in legend.dots)
+        first_x = min(dot.x_mm for dot in legend.dots) - max_diameter / 2.0
+        last_x = max(dot.x_mm for dot in legend.dots) + max_diameter / 2.0
+        obstacles.append(
+            PageRect(
+                left_mm=page.margin_mm,
+                top_mm=(legend.dots[0].y_mm - max_diameter / 2.0),
+                width_mm=max(last_x, first_x + legend_metrics.width_mm) - page.margin_mm,
+                height_mm=(legend.numbers[0].y_mm + legend_metrics.height_mm)
+                - (legend.dots[0].y_mm - max_diameter / 2.0),
+            )
+        )
+
+    return FurniturePlan(
+        title=title,
+        navigation=navigation,
+        scale_bar=scale_bar,
+        legend=legend,
+        obstacles=tuple(obstacles),
+    )
+
+
+def _draw_placed_text(
+    cr: cairo.Context[cairo.Surface],
+    text: PlacedText,
+    family: str,
+    gray: float,
+) -> None:
+    cr.set_source_rgb(gray, gray, gray)
+    if text.align == "center":
+        metrics = TextMeasurer(family, text.font_size_pt).measure_mm(text.text)
+        draw_centered_text(
+            cr,
+            text.text,
+            mm_to_pt(text.x_mm),
+            mm_to_pt(text.y_mm + metrics.height_mm / 2.0),
+            family,
+            text.font_size_pt,
+        )
+        return
+    x = text.x_mm
+    if text.align == "right":
+        width_mm = TextMeasurer(family, text.font_size_pt).measure_mm(text.text).width_mm
+        x = text.x_mm - width_mm
+    draw_text(cr, text.text, mm_to_pt(x), mm_to_pt(text.y_mm), family, text.font_size_pt)
+
+
+def draw_furniture(
+    cr: cairo.Context[cairo.Surface], plan: FurniturePlan, style: StyleConfig
+) -> None:
+    """Draw a resolved furniture plan; always after all sky content."""
+    family = style.label.font_family
+    cr.set_line_cap(cairo.LINE_CAP_BUTT)
+
+    scale = plan.scale_bar
+    if scale is not None:
+        bar = style.furniture.scale_bar
+        cr.set_source_rgb(bar.gray, bar.gray, bar.gray)
+        cr.set_line_width(mm_to_pt(bar.thickness_mm))
+        tick = mm_to_pt(scale.tick_mm) / 2.0
+        cr.move_to(mm_to_pt(scale.left_mm), mm_to_pt(scale.line_y_mm))
+        cr.line_to(mm_to_pt(scale.right_mm), mm_to_pt(scale.line_y_mm))
+        cr.move_to(mm_to_pt(scale.left_mm), mm_to_pt(scale.line_y_mm) - tick)
+        cr.line_to(mm_to_pt(scale.left_mm), mm_to_pt(scale.line_y_mm) + tick)
+        cr.move_to(mm_to_pt(scale.right_mm), mm_to_pt(scale.line_y_mm) - tick)
+        cr.line_to(mm_to_pt(scale.right_mm), mm_to_pt(scale.line_y_mm) + tick)
+        cr.stroke()
+        cr.set_source_rgb(bar.gray, bar.gray, bar.gray)
+        label_metrics = TextMeasurer(family, scale.font_size_pt).measure_mm(scale.label)
+        draw_centered_text(
+            cr,
+            scale.label,
+            mm_to_pt(scale.label_x_mm),
+            mm_to_pt(scale.label_y_mm + label_metrics.height_mm / 2.0),
+            family,
+            scale.font_size_pt,
+        )
+
+    legend = plan.legend
+    if legend is not None:
+        gray = style.furniture.magnitude_legend.gray
+        cr.set_source_rgb(gray, gray, gray)
+        for dot in legend.dots:
+            cr.arc(
+                mm_to_pt(dot.x_mm),
+                mm_to_pt(dot.y_mm),
+                mm_to_pt(dot.diameter_mm) / 2.0,
+                0.0,
+                2.0 * math.pi,
+            )
+            cr.fill()
+        _draw_placed_text(cr, legend.label, family, gray)
+        for number in legend.numbers:
+            _draw_placed_text(cr, number, family, gray)
+
+    if plan.title is not None:
+        title_gray = style.furniture.title_gray
+        _draw_placed_text(cr, plan.title, family, title_gray)
+
+    nav_gray = style.furniture.navigation.gray
+    for nav_text in plan.navigation:
+        _draw_placed_text(cr, nav_text, family, nav_gray)

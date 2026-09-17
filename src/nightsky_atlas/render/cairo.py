@@ -20,9 +20,15 @@ import cairo
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
+from nightsky_atlas.chart.presentation import (
+    PRODUCT_NAME,
+    ChartPresentation,
+    presentation_for,
+)
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
+from nightsky_atlas.render.furniture import build_furniture_plan, draw_furniture
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
 from nightsky_atlas.render.symbols import (
     DsoShape,
@@ -30,7 +36,7 @@ from nightsky_atlas.render.symbols import (
     SymbolExtent,
     dso_symbol_extent,
 )
-from nightsky_atlas.render.text import TextMeasurer, draw_centered_text, draw_text
+from nightsky_atlas.render.text import draw_centered_text, draw_text
 from nightsky_atlas.scene.models import ChartScene, SceneOutline, SceneSegment
 from nightsky_atlas.units import mm_to_pt
 
@@ -38,7 +44,6 @@ __all__ = ["DebugOptions", "draw_chart_page", "render_chart", "render_magnitude_
 
 _DEFAULT_PNG_DPI = 300.0
 _POINTS_PER_INCH = 72.0
-_SCALE_BAR_LABEL_OFFSET_MM = 4.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +63,7 @@ def render_chart(
     *,
     labels: Iterable[Label] = (),
     debug: DebugOptions | None = None,
+    presentation: ChartPresentation | None = None,
     pdf_path: str | Path | None = None,
     png_path: str | Path | None = None,
     png_dpi: float = _DEFAULT_PNG_DPI,
@@ -70,7 +76,15 @@ def render_chart(
     """
 
     def draw(cr: cairo.Context[cairo.Surface]) -> None:
-        draw_chart_page(cr, scene, transform, style, labels=labels, debug=debug)
+        draw_chart_page(
+            cr,
+            scene,
+            transform,
+            style,
+            labels=labels,
+            debug=debug,
+            presentation=presentation,
+        )
 
     _render_outputs(
         transform.page,
@@ -89,6 +103,7 @@ def draw_chart_page(
     *,
     labels: Iterable[Label] = (),
     debug: DebugOptions | None = None,
+    presentation: ChartPresentation | None = None,
 ) -> None:
     """Draw one chart page into an existing context, in point units.
 
@@ -97,6 +112,9 @@ def draw_chart_page(
     size_model = StarSizeModel.from_style(style.star)
     label_list = tuple(labels)
     bold_symbol_ids = _bold_symbol_ids(label_list)
+    if presentation is None:
+        presentation = presentation_for(scene.definition)
+    plan = build_furniture_plan(transform, scene.definition, style, presentation)
     _draw_background(cr, transform.page)
     grid_lines = _draw_grid(cr, transform, scene.definition, style)
     _draw_constellations(cr, transform, scene, style)
@@ -104,13 +122,13 @@ def draw_chart_page(
     _draw_outlines(cr, transform, scene, style)
     _draw_stars(cr, transform, scene, size_model, style)
     _draw_dsos(cr, transform, scene, style, bold_symbol_ids)
-    _draw_grid_labels(cr, grid_lines, transform, style, scene.definition)
+    _draw_grid_labels(
+        cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles
+    )
     _draw_labels(cr, label_list, style)
     if debug is not None:
         _draw_debug(cr, transform, scene, label_list, style, debug)
-    _draw_title(cr, scene, transform.page, style)
-    _draw_scale_bar(cr, transform, scene.definition, style)
-    _draw_neighbours(cr, scene.definition, transform.page, style)
+    draw_furniture(cr, plan, style)
 
 
 def render_magnitude_scale(
@@ -149,7 +167,7 @@ def render_magnitude_scale(
 
         _draw_centered_text(
             cr,
-            "NightSky Atlas - star magnitude scale",
+            f"{PRODUCT_NAME} \N{EM DASH} star magnitude scale",
             (left + right) / 2.0,
             mm_to_pt(page.margin_mm / 2.0),
             style.label.font_family,
@@ -636,66 +654,17 @@ def _draw_grid(
     return lines
 
 
-def _title_text(definition: ChartDefinition) -> str:
-    return f"NightSky Atlas - {definition.atlas_id} - {definition.id}"
-
-
-def _scale_bar_length_mm(transform: PageTransform, style: StyleConfig) -> float:
-    return style.furniture.scale_bar_length_deg * transform.mm_per_deg
-
-
-def _grid_label_obstacles(
-    transform: PageTransform, definition: ChartDefinition, style: StyleConfig
-) -> tuple[PageRect, ...]:
-    """Furniture rectangles that coordinate edge labels must not overlap."""
-    page = transform.page
-    obstacles: list[PageRect] = []
-
-    title = _title_text(definition)
-    title_metrics = TextMeasurer(
-        style.label.font_family, style.furniture.title_font_size_pt
-    ).measure_mm(title)
-    title_center_x = page.width_mm / 2.0
-    title_center_y = page.margin_mm / 2.0
-    obstacles.append(
-        PageRect(
-            left_mm=title_center_x - title_metrics.width_mm / 2.0,
-            top_mm=title_center_y - title_metrics.height_mm / 2.0,
-            width_mm=title_metrics.width_mm,
-            height_mm=title_metrics.height_mm,
-        )
-    )
-
-    length_mm = _scale_bar_length_mm(transform, style)
-    if length_mm > 0.0:
-        bar_left = page.width_mm / 2.0 - length_mm / 2.0
-        bar_y = page.height_mm - page.margin_mm / 2.0
-        label = f"{style.furniture.scale_bar_length_deg:g} deg"
-        label_metrics = TextMeasurer(
-            style.label.font_family, style.furniture.scale_font_size_pt
-        ).measure_mm(label)
-        top = bar_y - _SCALE_BAR_LABEL_OFFSET_MM - label_metrics.height_mm
-        obstacles.append(
-            PageRect(
-                left_mm=bar_left,
-                top_mm=top,
-                width_mm=length_mm,
-                height_mm=(bar_y + 1.0) - top,
-            )
-        )
-    return tuple(obstacles)
-
-
 def _draw_grid_labels(
     cr: cairo.Context[cairo.Surface],
     lines: tuple[GridLine, ...],
     transform: PageTransform,
     style: StyleConfig,
     definition: ChartDefinition,
+    *,
+    obstacles: tuple[PageRect, ...] = (),
 ) -> None:
     if not lines:
         return
-    obstacles = _grid_label_obstacles(transform, definition, style)
     labels = build_grid_labels(
         transform.chart, transform, style, lines=lines, avoid=obstacles
     )
@@ -712,105 +681,6 @@ def _draw_grid_labels(
             style.label.font_family,
             style.grid.label_font_size_pt,
         )
-
-
-def _draw_scale_bar(
-    cr: cairo.Context[cairo.Surface],
-    transform: PageTransform,
-    definition: ChartDefinition,
-    style: StyleConfig,
-) -> None:
-    length_mm = _scale_bar_length_mm(transform, style)
-    if length_mm <= 0.0:
-        return
-    page = transform.page
-    bar_left = mm_to_pt(page.width_mm / 2.0) - mm_to_pt(length_mm) / 2.0
-    bar_right = bar_left + mm_to_pt(length_mm)
-    bar_y = mm_to_pt(page.height_mm - page.margin_mm / 2.0)
-    tick = mm_to_pt(1.2)
-    cr.set_source_rgb(0.0, 0.0, 0.0)
-    cr.set_line_width(mm_to_pt(style.furniture.scale_bar_thickness_mm))
-    cr.move_to(bar_left, bar_y)
-    cr.line_to(bar_right, bar_y)
-    cr.move_to(bar_left, bar_y - tick / 2.0)
-    cr.line_to(bar_left, bar_y + tick / 2.0)
-    cr.move_to(bar_right, bar_y - tick / 2.0)
-    cr.line_to(bar_right, bar_y + tick / 2.0)
-    cr.stroke()
-    draw_text(
-        cr,
-        f"{style.furniture.scale_bar_length_deg:g} deg",
-        bar_left,
-        bar_y - mm_to_pt(_SCALE_BAR_LABEL_OFFSET_MM),
-        style.label.font_family,
-        style.furniture.scale_font_size_pt,
-    )
-
-
-def _draw_neighbours(
-    cr: cairo.Context[cairo.Surface],
-    definition: ChartDefinition,
-    page: PageGeometry,
-    style: StyleConfig,
-) -> None:
-    neighbours = definition.neighbours
-    if not neighbours:
-        return
-    size = style.furniture.scale_font_size_pt
-    family = style.label.font_family
-    measurer = TextMeasurer(family, size)
-    margin = page.margin_mm
-    inset = 2.0
-    for direction, label in neighbours:
-        text = f"{direction}: {label}"
-        if direction == "N":
-            draw_centered_text(
-                cr, text, mm_to_pt(page.width_mm / 2.0), mm_to_pt(margin + inset), family, size
-            )
-        elif direction == "S":
-            draw_centered_text(
-                cr,
-                text,
-                mm_to_pt(page.width_mm / 2.0),
-                mm_to_pt(page.height_mm - margin - inset),
-                family,
-                size,
-            )
-        elif direction == "E":
-            draw_text(
-                cr,
-                text,
-                mm_to_pt(margin + inset),
-                mm_to_pt(page.height_mm / 2.0),
-                family,
-                size,
-            )
-        elif direction == "W":
-            width_mm = measurer.measure_mm(text).width_mm
-            draw_text(
-                cr,
-                text,
-                mm_to_pt(page.width_mm - margin - inset - width_mm),
-                mm_to_pt(page.height_mm / 2.0),
-                family,
-                size,
-            )
-
-
-def _draw_title(
-    cr: cairo.Context[cairo.Surface],
-    scene: ChartScene,
-    page: PageGeometry,
-    style: StyleConfig,
-) -> None:
-    _draw_centered_text(
-        cr,
-        _title_text(scene.definition),
-        mm_to_pt(page.width_mm / 2.0),
-        mm_to_pt(page.margin_mm / 2.0),
-        style.label.font_family,
-        style.furniture.title_font_size_pt,
-    )
 
 
 def _draw_centered_text(

@@ -70,6 +70,38 @@ def test_shipped_atlas_fixture_loads() -> None:
     assert config.charts[0].projection == "stereographic"
 
 
+def test_shipped_atlas_declares_visible_edition() -> None:
+    config = load_atlas_config(ATLAS_FIXTURE)
+    edition = config.resolved_edition()
+    assert edition.name == "Standard"
+    assert edition.code == "S"
+
+
+def test_missing_edition_falls_back_to_registry(tmp_path: Path) -> None:
+    path = write_yaml(tmp_path / "atlas.yaml", valid_atlas_dict())
+    config = load_atlas_config(path)
+    assert config.resolved_edition().name == "Standard"
+    assert config.resolved_edition().code == "S"
+
+
+def test_edition_rejects_blank_code(tmp_path: Path) -> None:
+    data = valid_atlas_dict()
+    data["edition"] = {"name": "Standard", "code": "  "}
+    path = write_yaml(tmp_path / "atlas.yaml", data)
+    with pytest.raises(ConfigError) as excinfo:
+        load_atlas_config(path)
+    assert "code" in str(excinfo.value)
+
+
+def test_edition_rejects_unknown_key(tmp_path: Path) -> None:
+    data = valid_atlas_dict()
+    data["edition"] = {"name": "Standard", "code": "S", "colour": "blue"}
+    path = write_yaml(tmp_path / "atlas.yaml", data)
+    with pytest.raises(ConfigError) as excinfo:
+        load_atlas_config(path)
+    assert "colour" in str(excinfo.value)
+
+
 def test_shipped_style_fixture_loads() -> None:
     config = load_style_config(STYLE_FIXTURE)
     assert config.id == "standard"
@@ -80,6 +112,24 @@ def test_shipped_style_fixture_loads() -> None:
     assert config.constellation.boundaries.enabled is True
     assert config.dso.outline_line_width_mm > 0.0
     assert config.dso.outline_dash_mm > 0.0
+
+
+def test_shipped_style_declares_subdued_furniture() -> None:
+    config = load_style_config(STYLE_FIXTURE)
+    furniture = config.furniture
+    assert furniture.scale_bar.length_deg == pytest.approx(5.0)
+    assert furniture.scale_bar.thickness_mm <= 0.2
+    assert furniture.navigation.font_size_pt < config.grid.label_font_size_pt
+    assert furniture.magnitude_legend.magnitudes == pytest.approx((2.0, 4.0, 6.0, 8.0))
+
+
+def test_magnitude_legend_needs_a_reference(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["furniture"] = {"magnitude_legend": {"magnitudes": []}}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError) as excinfo:
+        load_style_config(path)
+    assert "magnitudes" in str(excinfo.value)
 
 
 def test_valid_dict_loads(tmp_path: Path) -> None:
