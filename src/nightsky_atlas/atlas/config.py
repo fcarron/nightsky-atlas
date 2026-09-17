@@ -28,6 +28,7 @@ from pydantic import (
     model_validator,
 )
 
+from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.catalog.visibility import VisibilityLimits
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 
@@ -39,6 +40,7 @@ __all__ = [
     "ConstellationLineStyle",
     "ConstellationStyle",
     "DoubleStarStyle",
+    "DsoExtentStyle",
     "DsoLabelStyle",
     "DsoLabelTierStyle",
     "DsoStyle",
@@ -341,27 +343,108 @@ class LabelStyle(_StrictModel):
     dso_labels: DsoLabelStyle = Field(default_factory=DsoLabelStyle)
 
 
-class DsoStyle(_StrictModel):
-    """Deep-sky symbol sizing, in millimetres.
+class DsoExtentStyle(_StrictModel):
+    """Symbol extent rules for one deep-sky object class, in millimetres.
 
-    ``size_mm`` is the default symbol diameter for non-galaxy classes.
-    ``min_axis_mm`` is the smallest printable galaxy axis; ``max_axis_mm`` caps
-    very large objects so they do not swamp a page.  ``bold_line_width_mm`` is
+    ``use_angular_size`` opts the class into true-scale symbols: when the
+    catalogue carries a usable angular size it is scaled by the chart's
+    ``mm_per_deg``; otherwise ``fallback_diameter_mm`` is used.  Every symbol is
+    floored at ``min_diameter_mm`` for printability and, when set, capped at
+    ``max_diameter_mm``.  For galaxies the diameters act on the major axis and
+    the minor axis follows proportionally, preserving the catalogue position
+    angle.
+    """
+
+    use_angular_size: bool = False
+    fallback_diameter_mm: PositiveFloat
+    min_diameter_mm: PositiveFloat
+    max_diameter_mm: PositiveFloat | None = None
+
+    @model_validator(mode="after")
+    def _limits_are_consistent(self) -> DsoExtentStyle:
+        if self.min_diameter_mm > self.fallback_diameter_mm:
+            raise ValueError("min_diameter_mm must be <= fallback_diameter_mm")
+        if self.max_diameter_mm is not None and self.max_diameter_mm < self.min_diameter_mm:
+            raise ValueError("max_diameter_mm must be >= min_diameter_mm")
+        return self
+
+
+def _extent(
+    *,
+    fallback_diameter_mm: float,
+    min_diameter_mm: float,
+    max_diameter_mm: float | None = None,
+    use_angular_size: bool = False,
+) -> DsoExtentStyle:
+    return DsoExtentStyle(
+        use_angular_size=use_angular_size,
+        fallback_diameter_mm=fallback_diameter_mm,
+        min_diameter_mm=min_diameter_mm,
+        max_diameter_mm=max_diameter_mm,
+    )
+
+
+class DsoStyle(_StrictModel):
+    """Deep-sky symbol appearance, in millimetres.
+
+    Symbol size is centralised in
+    :func:`nightsky_atlas.render.symbols.dso_symbol_extent`, which reads the
+    per-class :class:`DsoExtentStyle` blocks below.  ``use_angular_size`` is
+    enabled for galaxies, globular clusters and open clusters; the remaining
+    classes are semantic fixed-size symbols until individually reviewed, but
+    already carry their own fallback/minimum sizes.  ``bold_line_width_mm`` is
     the heavier stroke used for emphasized symbols (Messier, Herschel 400), so
     the map mark is bold whenever the label is.  Outline fields control the
     schematic stroke drawn around extended objects that have an authored
     outline.
     """
 
-    size_mm: PositiveFloat = 1.4
-    min_axis_mm: PositiveFloat = 0.7
-    max_axis_mm: PositiveFloat = 12.0
     line_width_mm: PositiveFloat = 0.15
     bold_line_width_mm: PositiveFloat = 0.3
     dash_mm: PositiveFloat = 0.4
     outline_line_width_mm: PositiveFloat = 0.18
     outline_dash_mm: PositiveFloat = 0.8
     outline_gray: float = 0.45
+
+    galaxy: DsoExtentStyle = Field(
+        default_factory=lambda: _extent(
+            fallback_diameter_mm=1.4,
+            min_diameter_mm=0.7,
+            max_diameter_mm=12.0,
+            use_angular_size=True,
+        )
+    )
+    globular_cluster: DsoExtentStyle = Field(
+        default_factory=lambda: _extent(
+            fallback_diameter_mm=1.5,
+            min_diameter_mm=1.2,
+            max_diameter_mm=20.0,
+            use_angular_size=True,
+        )
+    )
+    open_cluster: DsoExtentStyle = Field(
+        default_factory=lambda: _extent(
+            fallback_diameter_mm=2.0,
+            min_diameter_mm=1.4,
+            max_diameter_mm=30.0,
+            use_angular_size=True,
+        )
+    )
+    planetary_nebula: DsoExtentStyle = Field(
+        default_factory=lambda: _extent(fallback_diameter_mm=1.4, min_diameter_mm=1.0)
+    )
+    bright_nebula: DsoExtentStyle = Field(
+        default_factory=lambda: _extent(fallback_diameter_mm=1.6, min_diameter_mm=1.2)
+    )
+    dark_nebula: DsoExtentStyle = Field(
+        default_factory=lambda: _extent(fallback_diameter_mm=1.6, min_diameter_mm=1.2)
+    )
+    galaxy_cluster: DsoExtentStyle = Field(
+        default_factory=lambda: _extent(fallback_diameter_mm=1.6, min_diameter_mm=1.2)
+    )
+    other: DsoExtentStyle = Field(
+        default_factory=lambda: _extent(fallback_diameter_mm=1.4, min_diameter_mm=1.0)
+    )
 
     @field_validator("bold_line_width_mm")
     @classmethod
@@ -370,6 +453,28 @@ class DsoStyle(_StrictModel):
         if normal is not None and value < normal:
             raise ValueError("bold_line_width_mm must be >= line_width_mm")
         return value
+
+    def extent_style(self, object_type: DsoType) -> DsoExtentStyle:
+        """Return the extent rules for a deep-sky object class.
+
+        Classes without a dedicated block (stars, double stars, unknown types)
+        fall back to ``other``.
+        """
+        if object_type == DsoType.GALAXY:
+            return self.galaxy
+        if object_type == DsoType.GLOBULAR_CLUSTER:
+            return self.globular_cluster
+        if object_type == DsoType.OPEN_CLUSTER:
+            return self.open_cluster
+        if object_type == DsoType.PLANETARY_NEBULA:
+            return self.planetary_nebula
+        if object_type == DsoType.BRIGHT_NEBULA:
+            return self.bright_nebula
+        if object_type == DsoType.DARK_NEBULA:
+            return self.dark_nebula
+        if object_type == DsoType.GALAXY_CLUSTER:
+            return self.galaxy_cluster
+        return self.other
 
 
 class DoubleStarStyle(_StrictModel):
@@ -418,6 +523,13 @@ class GridStyle(_StrictModel):
     frame: ``inside`` places them in the margin band within the frame,
     ``outside`` places them beyond the frame (RA against the top/bottom page
     margin, Dec against the left/right page margin).
+
+    Grid *lines* and coordinate *labels* are independent: a fine grid may carry
+    a much sparser label set.  ``label_min_spacing_mm`` is the smallest physical
+    distance two labels may have along the same page edge; when grid lines
+    crowd together (meridians converging toward a pole, or a field far from the
+    inner chart) the renderer automatically skips every second/third/... line so
+    the printed labels keep breathing room.  A value of ``0`` disables the rule.
     """
 
     enabled: bool = True
@@ -431,14 +543,17 @@ class GridStyle(_StrictModel):
     label_font_size_pt: PositiveFloat = 5.0
     label_gray: float = 0.35
     label_padding_mm: PositiveFloat = 1.5
+    label_min_spacing_mm: NonNegativeFloat = 13.0
     label_ra_step_deg: PositiveFloat | None = None
     label_dec_step_deg: PositiveFloat | None = None
+    label_polar_ra_step_deg: PositiveFloat | None = 30.0
 
     @model_validator(mode="after")
     def _label_steps_align_with_lines(self) -> GridStyle:
         for label_name, line_name in (
             ("label_ra_step_deg", "ra_step_deg"),
             ("label_dec_step_deg", "dec_step_deg"),
+            ("label_polar_ra_step_deg", "polar_ra_step_deg"),
         ):
             label_step = getattr(self, label_name)
             if label_step is None:

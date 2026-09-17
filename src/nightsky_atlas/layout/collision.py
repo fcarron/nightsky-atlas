@@ -13,7 +13,7 @@ from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
 from nightsky_atlas.layout.models import Label, LabelCandidate
-from nightsky_atlas.render.symbols import StarSizeModel, galaxy_ellipse
+from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
 __all__ = [
@@ -160,17 +160,13 @@ def find_hard_violations(
 
         for scene_dso in scene.deep_sky_objects:
             dso = scene_dso.dso
-            radius = style.dso.size_mm / 2.0
-            geometry = galaxy_ellipse(
-                dso,
-                mm_per_deg=transform.mm_per_deg,
-                min_axis_mm=style.dso.min_axis_mm,
-                max_axis_mm=style.dso.max_axis_mm,
+            extent = dso_symbol_extent(
+                dso, mm_per_deg=transform.mm_per_deg, style=style
             )
-            if geometry is not None:
-                radius = geometry.major_mm / 2.0
             dso_point = transform.to_page(scene_dso.chart_point)
-            if circle_intersects_rect(dso_point, radius, candidate.bounds):
+            if circle_intersects_rect(
+                dso_point, extent.collision_radius_mm, candidate.bounds
+            ):
                 issues.append(
                     _issue(
                         IssueType.LABEL_DSO,

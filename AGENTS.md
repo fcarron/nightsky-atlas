@@ -178,8 +178,17 @@ geometry/tiling: `docs/CARTOGRAPHY.md`.
 Symbols are semantic (`star`, `open_cluster`, `globular_cluster`, `galaxy`,
 `planetary_nebula`, `bright_nebula`, `dark_nebula`, `galaxy_cluster`), not draw
 commands. Star size is a configurable monotonic function of magnitude, stable
-across PDF/PNG. Galaxies use major/minor axis and position angle where
-available, with a minimum printable size preserving orientation. Large nebula
+across PDF/PNG. Extended deep-sky symbols use the catalogue angular extent where
+it is sufficiently reliable (galaxies, globular clusters, open clusters; more
+classes only after review). The semantic shape represents the object type; the
+printed extent represents angular size. Missing or unreliable sizes fall back to
+the class-specific `fallback_diameter_mm`, floored by `min_diameter_mm` for
+printability and capped by `max_diameter_mm` where genuinely required; large
+objects must not be shrunk back to a fixed size. Galaxies use major/minor axis
+and position angle where available, preserving orientation; their diameter
+fields act on the major axis. All DSO symbol geometry is centralised in
+`render/symbols.py:dso_symbol_extent`, and rendering, label exclusion and
+collision detection must consume that same `SymbolExtent`. Large nebula
 outlines (later) are true vector paths. Emphasized objects (Messier, Herschel
 400) use a heavier configurable stroke, so the symbol is bold wherever its label
 is; the renderer takes that emphasis from the layout's bold labels rather than

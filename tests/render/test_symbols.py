@@ -1,4 +1,4 @@
-"""Tests for star symbol sizing."""
+"""Tests for star and deep-sky symbol sizing."""
 
 from __future__ import annotations
 
@@ -10,15 +10,29 @@ import pytest
 
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
+from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
+from nightsky_atlas.chart.page import PageRect, PageTransform
+from nightsky_atlas.layout.collision import IssueType, find_hard_violations
+from nightsky_atlas.layout.labels import _exclusion_radius_mm
+from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
+from nightsky_atlas.layout.optimizer import _symbol_circles
 from nightsky_atlas.render.symbols import (
     DsoShape,
     StarSizeModel,
     dso_shape,
+    dso_symbol_extent,
     galaxy_ellipse,
 )
+from nightsky_atlas.scene.builder import build_scene
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-STYLE = REPO_ROOT / "styles" / "standard.yaml"
+STYLE_PATH = REPO_ROOT / "styles" / "standard.yaml"
+STYLE = load_style_config(STYLE_PATH)
+CHART = ChartDefinition(
+    id="test", center_ra_deg=187.5, center_dec_deg=12.0, width_deg=20.0, height_deg=14.0
+)
+PAGE = PageGeometry(width_mm=297.0, height_mm=210.0, margin_mm=12.0)
+TRANSFORM = PageTransform(chart=CHART, page=PAGE)
 
 
 def make_model(**overrides: float) -> StarSizeModel:
@@ -33,7 +47,7 @@ def make_model(**overrides: float) -> StarSizeModel:
 
 
 def test_from_style_matches_configuration() -> None:
-    style = load_style_config(STYLE).star
+    style = load_style_config(STYLE_PATH).star
     model = StarSizeModel.from_style(style)
     assert model.max_diameter_mm == pytest.approx(style.max_diameter_mm)
     assert model.min_diameter_mm == pytest.approx(style.min_diameter_mm)
@@ -163,3 +177,177 @@ def test_galaxy_rotation_is_axis_angle() -> None:
     geometry = galaxy_ellipse(make_galaxy(position_angle_deg=0.0), mm_per_deg=60.0, min_axis_mm=0.7)
     assert geometry is not None
     assert geometry.rotation_rad == pytest.approx(-pi / 2.0)
+
+
+def make_dso(
+    object_type: DsoType,
+    *,
+    major_axis_arcmin: float | None = None,
+    minor_axis_arcmin: float | None = None,
+    position_angle_deg: float | None = 0.0,
+    object_id: str = "NGC0001",
+) -> DeepSkyObject:
+    return DeepSkyObject(
+        id=object_id,
+        ra_deg=CHART.center_ra_deg,
+        dec_deg=CHART.center_dec_deg,
+        object_type=object_type,
+        provenance=Provenance(catalogue="TEST", source_id=object_id),
+        major_axis_arcmin=major_axis_arcmin,
+        minor_axis_arcmin=minor_axis_arcmin,
+        position_angle_deg=position_angle_deg,
+    )
+
+
+def extent_for(dso: DeepSkyObject, *, mm_per_deg: float = 10.0):
+    return dso_symbol_extent(dso, mm_per_deg=mm_per_deg, style=STYLE)
+
+
+@pytest.mark.parametrize(
+    ("arcmin", "expected_mm"),
+    [
+        (5.0, 1.2),
+        (10.0, 1.6667),
+        (20.0, 3.3333),
+        (36.0, 6.0),
+    ],
+)
+def test_globular_cluster_uses_angular_diameter(
+    arcmin: float, expected_mm: float
+) -> None:
+    extent = extent_for(make_dso(DsoType.GLOBULAR_CLUSTER, major_axis_arcmin=arcmin))
+    assert extent.uses_angular_size is True
+    assert extent.shape == DsoShape.CIRCLE_CROSS
+    assert extent.width_mm == pytest.approx(expected_mm, abs=1e-3)
+    assert extent.height_mm == pytest.approx(expected_mm, abs=1e-3)
+
+
+def test_globular_cluster_falls_back_without_size() -> None:
+    extent = extent_for(make_dso(DsoType.GLOBULAR_CLUSTER))
+    assert extent.uses_angular_size is False
+    assert extent.width_mm == pytest.approx(
+        STYLE.dso.globular_cluster.fallback_diameter_mm
+    )
+
+
+def test_globular_cluster_uses_minor_axis_when_major_missing() -> None:
+    extent = extent_for(make_dso(DsoType.GLOBULAR_CLUSTER, minor_axis_arcmin=10.0))
+    assert extent.uses_angular_size is True
+    assert extent.width_mm == pytest.approx(10.0 / 60.0 * 10.0)
+
+
+def test_globular_cluster_rejects_implausible_size() -> None:
+    extent = extent_for(make_dso(DsoType.GLOBULAR_CLUSTER, major_axis_arcmin=5000.0))
+    assert extent.uses_angular_size is False
+    assert extent.width_mm == pytest.approx(
+        STYLE.dso.globular_cluster.fallback_diameter_mm
+    )
+
+
+@pytest.mark.parametrize(
+    ("arcmin", "expected_mm"),
+    [
+        (3.0, 1.4),
+        (60.0, 10.0),
+        (95.0, 15.8333),
+        (110.0, 18.3333),
+    ],
+)
+def test_open_cluster_uses_angular_diameter(arcmin: float, expected_mm: float) -> None:
+    extent = extent_for(make_dso(DsoType.OPEN_CLUSTER, major_axis_arcmin=arcmin))
+    assert extent.uses_angular_size is True
+    assert extent.shape == DsoShape.DASHED_CIRCLE
+    assert extent.width_mm == pytest.approx(expected_mm, abs=1e-3)
+
+
+def test_open_cluster_maximum_size_caps_extent() -> None:
+    extent = extent_for(make_dso(DsoType.OPEN_CLUSTER, major_axis_arcmin=330.0))
+    assert extent.width_mm == pytest.approx(STYLE.dso.open_cluster.max_diameter_mm)
+
+
+def test_fixed_size_type_ignores_angular_size() -> None:
+    extent = extent_for(make_dso(DsoType.PLANETARY_NEBULA, major_axis_arcmin=30.0))
+    assert extent.uses_angular_size is False
+    assert extent.width_mm == pytest.approx(
+        STYLE.dso.planetary_nebula.fallback_diameter_mm
+    )
+
+
+def test_galaxy_extent_matches_true_scale() -> None:
+    extent = extent_for(
+        make_galaxy(major_axis_arcmin=2.0, minor_axis_arcmin=1.0), mm_per_deg=60.0
+    )
+    assert extent.uses_angular_size is True
+    assert extent.shape == DsoShape.CIRCLE
+    assert extent.is_elliptical is True
+    assert extent.width_mm == pytest.approx(2.0)
+    assert extent.height_mm == pytest.approx(1.0)
+    assert extent.rotation_rad == pytest.approx(-pi / 2.0)
+
+
+def test_galaxy_without_axes_uses_fallback_circle() -> None:
+    extent = extent_for(make_galaxy(major_axis_arcmin=None))
+    assert extent.uses_angular_size is False
+    assert extent.is_elliptical is False
+    assert extent.width_mm == pytest.approx(STYLE.dso.galaxy.fallback_diameter_mm)
+
+
+def test_galaxy_minimum_axis_is_preserved() -> None:
+    extent = extent_for(
+        make_galaxy(major_axis_arcmin=0.01, minor_axis_arcmin=0.005), mm_per_deg=60.0
+    )
+    assert extent.width_mm == pytest.approx(STYLE.dso.galaxy.min_diameter_mm)
+    assert extent.height_mm == pytest.approx(STYLE.dso.galaxy.min_diameter_mm / 2.0)
+
+
+def test_extent_shared_by_label_exclusion_and_optimizer() -> None:
+    dso = make_dso(DsoType.GLOBULAR_CLUSTER, major_axis_arcmin=20.0)
+    scene = build_scene(CHART, (), [dso])
+    extent = dso_symbol_extent(dso, mm_per_deg=TRANSFORM.mm_per_deg, style=STYLE)
+
+    assert _exclusion_radius_mm(dso, TRANSFORM, STYLE) == pytest.approx(
+        extent.collision_radius_mm
+    )
+    circles = _symbol_circles(scene, TRANSFORM, STYLE)
+    assert len(circles) == 1
+    assert circles[0].radius_mm == pytest.approx(extent.collision_radius_mm)
+
+
+def test_collision_detection_uses_real_symbol_extent() -> None:
+    dso = make_dso(DsoType.GLOBULAR_CLUSTER, major_axis_arcmin=30.0)
+    scene = build_scene(CHART, (), [dso])
+    extent = dso_symbol_extent(dso, mm_per_deg=TRANSFORM.mm_per_deg, style=STYLE)
+    center = TRANSFORM.center_page
+    radius = extent.collision_radius_mm
+
+    def label_at(left_mm: float) -> Label:
+        bounds = PageRect(
+            left_mm=left_mm,
+            top_mm=center.y_mm - 1.0,
+            width_mm=8.0,
+            height_mm=2.0,
+        )
+        candidate = LabelCandidate(
+            id="label:x:N",
+            position=CompassPosition.N,
+            anchor=center,
+            bounds=bounds,
+        )
+        return Label(
+            id="label:x",
+            target_id=dso.id,
+            text="X",
+            priority=50,
+            mandatory=True,
+            candidates=(candidate,),
+        )
+
+    outside = find_hard_violations(
+        (label_at(center.x_mm + radius + 0.5),), scene, TRANSFORM, STYLE
+    )
+    assert IssueType.LABEL_DSO not in {issue.issue_type for issue in outside}
+
+    inside = find_hard_violations(
+        (label_at(center.x_mm + radius - 0.5),), scene, TRANSFORM, STYLE
+    )
+    assert IssueType.LABEL_DSO in {issue.issue_type for issue in inside}

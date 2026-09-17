@@ -18,7 +18,7 @@ from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle, score_candidate
 from nightsky_atlas.layout.spatial import RectIndex
-from nightsky_atlas.render.symbols import StarSizeModel, galaxy_ellipse
+from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
 __all__ = ["OptimizationResult", "layout_cost", "layout_hash", "optimize_labels"]
@@ -57,17 +57,14 @@ def _symbol_circles(
                 )
             )
     for scene_dso in scene.deep_sky_objects:
-        radius = style.dso.size_mm / 2.0
-        geometry = galaxy_ellipse(
-            scene_dso.dso,
-            mm_per_deg=transform.mm_per_deg,
-            min_axis_mm=style.dso.min_axis_mm,
-            max_axis_mm=style.dso.max_axis_mm,
+        extent = dso_symbol_extent(
+            scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style
         )
-        if geometry is not None:
-            radius = geometry.major_mm / 2.0
         symbols.append(
-            SymbolCircle(center=transform.to_page(scene_dso.chart_point), radius_mm=radius)
+            SymbolCircle(
+                center=transform.to_page(scene_dso.chart_point),
+                radius_mm=extent.collision_radius_mm,
+            )
         )
     return tuple(symbols)
 

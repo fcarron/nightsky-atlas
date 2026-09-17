@@ -1,8 +1,13 @@
 """Semantic symbol geometry, independent of any renderer.
 
 Symbols are defined by meaning (``AGENTS.md`` section 12), not by draw calls.
-The star diameter model here is shared by the renderer and, later, the collision
-system, so both agree on how large a star will print.
+The star diameter model here is shared by the renderer and the collision and
+label-exclusion systems, so every consumer agrees on how large a symbol prints.
+
+Deep-sky extent is centralised in :func:`dso_symbol_extent`: it is the single
+source of truth for DSO symbol size.  The renderer, debug overlays, label
+exclusion zones and collision detection all call it instead of recomputing an
+ellipse or a fixed diameter.
 """
 
 from __future__ import annotations
@@ -11,10 +16,18 @@ import math
 from dataclasses import dataclass
 from enum import StrEnum
 
-from nightsky_atlas.atlas.config import StarStyle
+from nightsky_atlas.atlas.config import DsoExtentStyle, StarStyle, StyleConfig
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType
 
-__all__ = ["DsoShape", "EllipseGeometry", "StarSizeModel", "dso_shape", "galaxy_ellipse"]
+__all__ = [
+    "DsoShape",
+    "EllipseGeometry",
+    "StarSizeModel",
+    "SymbolExtent",
+    "dso_shape",
+    "dso_symbol_extent",
+    "galaxy_ellipse",
+]
 
 
 class DsoShape(StrEnum):
@@ -100,6 +113,134 @@ def galaxy_ellipse(
     direction_y = -math.cos(position_angle)
     rotation_rad = math.atan2(direction_y, direction_x)
     return EllipseGeometry(major_mm=major_mm, minor_mm=minor_mm, rotation_rad=rotation_rad)
+
+
+# Beyond this an angular extent is treated as a catalogue error and the
+# type-specific fallback is used instead (60 deg).
+_MAX_PLAUSIBLE_EXTENT_ARCMIN = 3600.0
+
+
+@dataclass(frozen=True, slots=True)
+class SymbolExtent:
+    """Printed extent of one deep-sky symbol, in page millimetres.
+
+    This is the shared geometry contract between rendering, label exclusion and
+    collision detection.  ``width_mm``/``height_mm`` are the full axis lengths
+    (equal for circular symbols), ``rotation_rad`` is the page-space rotation of
+    the width axis, ``shape`` is the semantic type mark and
+    ``uses_angular_size`` records whether a real catalogue size was used.
+    """
+
+    shape: DsoShape
+    width_mm: float
+    height_mm: float
+    rotation_rad: float = 0.0
+    uses_angular_size: bool = False
+
+    def __post_init__(self) -> None:
+        for name in ("width_mm", "height_mm"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
+
+    @property
+    def radius_x_mm(self) -> float:
+        """Half the extent along the (possibly rotated) width axis."""
+        return self.width_mm / 2.0
+
+    @property
+    def radius_y_mm(self) -> float:
+        """Half the extent along the (possibly rotated) height axis."""
+        return self.height_mm / 2.0
+
+    @property
+    def collision_radius_mm(self) -> float:
+        """Conservative bounding-circle radius for collision and exclusion.
+
+        The farthest point of an ellipse from its centre lies on the major axis,
+        so the largest semi-axis is a safe, rotation-independent bound.
+        """
+        return max(self.radius_x_mm, self.radius_y_mm)
+
+    @property
+    def is_elliptical(self) -> bool:
+        """Whether the symbol should be drawn as an oriented ellipse."""
+        return not math.isclose(self.width_mm, self.height_mm, rel_tol=1e-9, abs_tol=1e-9)
+
+
+def _usable_axis_arcmin(dso: DeepSkyObject) -> float | None:
+    """Return a catalogue diameter in arcminutes, or ``None`` when unusable.
+
+    The major axis is the symbol diameter; the minor axis is used only when the
+    major axis is absent.  Missing, non-finite, non-positive or implausibly
+    large values are rejected so the caller can fall back to the type-specific
+    default.  Catalogue data itself is never modified.
+    """
+    for value in (dso.major_axis_arcmin, dso.minor_axis_arcmin):
+        if value is None:
+            continue
+        if math.isfinite(value) and 0.0 < value <= _MAX_PLAUSIBLE_EXTENT_ARCMIN:
+            return value
+        return None
+    return None
+
+
+def _clamped_diameter_mm(diameter_mm: float, extent: DsoExtentStyle) -> float:
+    diameter_mm = max(diameter_mm, extent.min_diameter_mm)
+    if extent.max_diameter_mm is not None:
+        diameter_mm = min(diameter_mm, extent.max_diameter_mm)
+    return diameter_mm
+
+
+def dso_symbol_extent(
+    dso: DeepSkyObject,
+    *,
+    mm_per_deg: float,
+    style: StyleConfig,
+) -> SymbolExtent:
+    """Return the printed extent of a deep-sky symbol.
+
+    This is the **only** place DSO symbol size is computed.  Galaxies keep their
+    true major/minor axis and position angle; classes opted into
+    ``use_angular_size`` (globular clusters, open clusters) scale their diameter
+    from the catalogue angular size.  When a size is missing or unreliable, the
+    class-specific ``fallback_diameter_mm`` is used, always clamped by
+    ``min_diameter_mm`` and any ``max_diameter_mm``.
+    """
+    shape = dso_shape(dso.object_type)
+    extent = style.dso.extent_style(dso.object_type)
+
+    if extent.use_angular_size:
+        if dso.object_type == DsoType.GALAXY:
+            ellipse = galaxy_ellipse(
+                dso,
+                mm_per_deg=mm_per_deg,
+                min_axis_mm=extent.min_diameter_mm,
+                max_axis_mm=extent.max_diameter_mm,
+            )
+            if ellipse is not None:
+                return SymbolExtent(
+                    shape=shape,
+                    width_mm=ellipse.major_mm,
+                    height_mm=ellipse.minor_mm,
+                    rotation_rad=ellipse.rotation_rad,
+                    uses_angular_size=True,
+                )
+        else:
+            axis_arcmin = _usable_axis_arcmin(dso)
+            if axis_arcmin is not None:
+                diameter_mm = _clamped_diameter_mm(
+                    axis_arcmin / 60.0 * mm_per_deg, extent
+                )
+                return SymbolExtent(
+                    shape=shape,
+                    width_mm=diameter_mm,
+                    height_mm=diameter_mm,
+                    uses_angular_size=True,
+                )
+
+    diameter_mm = _clamped_diameter_mm(extent.fallback_diameter_mm, extent)
+    return SymbolExtent(shape=shape, width_mm=diameter_mm, height_mm=diameter_mm)
 
 
 @dataclass(frozen=True, slots=True)

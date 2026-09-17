@@ -194,8 +194,21 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
 - Star symbol size is a monotonic function of magnitude, configurable per
   style: distinct bright stars, printable faintest stars, no absurd discs,
   stable across PDF and PNG. Covered by reference tests.
-- Galaxies use major axis, minor axis and position angle where source data
-  support it, with a minimum printable size while preserving orientation.
+- Extended deep-sky symbols use the catalogue angular extent where sufficiently
+  reliable: galaxies keep major/minor axis and position angle; globular and open
+  clusters use their catalogued diameter. The semantic shape represents the
+  object type; the printed extent represents angular size. Missing or
+  unreliable sizes fall back to the class-specific `fallback_diameter_mm`,
+  floored by `min_diameter_mm` and capped by `max_diameter_mm` only where
+  genuinely required. Large objects are not shrunk back to a fixed size.
+- **Single source of truth:** all DSO symbol geometry is computed by
+  `render/symbols.py:dso_symbol_extent`, returning a `SymbolExtent`
+  (`width_mm`, `height_mm`, `radius_x_mm`, `radius_y_mm`, `rotation_rad`,
+  `collision_radius_mm`). Rendering, debug exclusion zones, label exclusion and
+  collision detection all consume that same extent; no parallel size
+  computation is permitted. Per-class fallback/min/max rules live in the style
+  (`dso.galaxy`, `dso.globular_cluster`, `dso.open_cluster`, ...) under
+  `use_angular_size`, so a class is only switched to true scale after review.
 - Large nebula outlines (later) must use true vector paths from source geometry,
   never raster backgrounds.
 - Emphasized symbols (Messier, Herschel 400) use `dso.bold_line_width_mm` so the

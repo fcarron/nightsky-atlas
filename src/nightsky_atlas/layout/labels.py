@@ -7,14 +7,14 @@ Priority and mandatory status follow the conceptual ordering in section 14.3.
 from __future__ import annotations
 
 from nightsky_atlas.atlas.config import StyleConfig
-from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
+from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.selection import base_label_priority
 from nightsky_atlas.catalog.star_names import StarName, hip_number
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.candidates import compass_candidates
 from nightsky_atlas.layout.dso_labels import format_dso_label
 from nightsky_atlas.layout.models import Label
-from nightsky_atlas.render.symbols import StarSizeModel, galaxy_ellipse
+from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
 from nightsky_atlas.render.text import TextMeasurer
 from nightsky_atlas.scene.models import ChartScene
 
@@ -39,16 +39,13 @@ def label_priority(dso: DeepSkyObject) -> tuple[int, bool]:
 def _exclusion_radius_mm(
     dso: DeepSkyObject, transform: PageTransform, style: StyleConfig
 ) -> float:
-    if dso.object_type == DsoType.GALAXY:
-        geometry = galaxy_ellipse(
-            dso,
-            mm_per_deg=transform.mm_per_deg,
-            min_axis_mm=style.dso.min_axis_mm,
-            max_axis_mm=style.dso.max_axis_mm,
-        )
-        if geometry is not None:
-            return geometry.major_mm / 2.0
-    return style.dso.size_mm / 2.0
+    """Return the label exclusion radius from the central symbol extent.
+
+    This is exactly the same geometry the renderer draws and collision detects,
+    so a label can never be placed inside a symbol it thinks is smaller.
+    """
+    extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
+    return extent.collision_radius_mm
 
 
 def build_dso_labels(

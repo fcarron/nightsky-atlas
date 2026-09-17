@@ -34,9 +34,6 @@ label:
       weight: normal
 
 dso:
-  size_mm: 1.4
-  min_axis_mm: 0.7
-  max_axis_mm: 12.0
   line_width_mm: 0.15
   # Heavier stroke for emphasized symbols (Messier, Herschel 400), matching
   # those objects' bold labels.
@@ -45,6 +42,41 @@ dso:
   outline_line_width_mm: 0.18
   outline_dash_mm: 0.8
   outline_gray: 0.45
+  # Per-class symbol extent.  Extended classes use the catalogue angular size
+  # (scaled by the chart's mm-per-degree) when available; fallback_diameter_mm
+  # covers missing/unreliable sizes, min_diameter_mm keeps small marks
+  # printable and max_diameter_mm caps genuinely huge fields.  Galaxies preserve
+  # their axis ratio and position angle; the diameters act on the major axis.
+  galaxy:
+    use_angular_size: true
+    fallback_diameter_mm: 1.4
+    min_diameter_mm: 0.7
+    max_diameter_mm: 12.0
+  globular_cluster:
+    use_angular_size: true
+    fallback_diameter_mm: 1.5
+    min_diameter_mm: 1.2
+    max_diameter_mm: 20.0
+  open_cluster:
+    use_angular_size: true
+    fallback_diameter_mm: 2.0
+    min_diameter_mm: 1.4
+    max_diameter_mm: 30.0
+  planetary_nebula:
+    fallback_diameter_mm: 1.4
+    min_diameter_mm: 1.0
+  bright_nebula:
+    fallback_diameter_mm: 1.6
+    min_diameter_mm: 1.2
+  dark_nebula:
+    fallback_diameter_mm: 1.6
+    min_diameter_mm: 1.2
+  galaxy_cluster:
+    fallback_diameter_mm: 1.6
+    min_diameter_mm: 1.2
+  other:
+    fallback_diameter_mm: 1.4
+    min_diameter_mm: 1.0
 
 # Visual double/multiple stars (WDS overlay).  A pair is drawn as one symbol
 # plus a short horizontal marker only when its components cannot be separated on
@@ -86,8 +118,16 @@ grid:
   label_font_size_pt: 5.0
   label_gray: 0.35
   label_padding_mm: 1.5
-  label_ra_step_deg: null
-  label_dec_step_deg: null
+  # Coordinate *labels* are deliberately sparser than the grid *lines*: a label
+  # every second line (label_*_step_deg = 4 deg vs 2 deg lines), and the
+  # renderer additionally skips any label that would sit closer than
+  # label_min_spacing_mm to its neighbour on the same page edge.
+  label_min_spacing_mm: 13.0
+  # On polar charts the meridian fan is dense near the frame edge; RA labels
+  # are thinned to every 30 deg (the grid itself stays at polar_ra_step_deg).
+  label_polar_ra_step_deg: 30.0
+  label_ra_step_deg: 4.0
+  label_dec_step_deg: 4.0
 
 furniture:
   title_font_size_pt: 9.0

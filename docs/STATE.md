@@ -68,7 +68,18 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   `marker_line_width_mm` (0.15) and `companion_magnitude_limit` (9.0: a system is
   marked only when the companion is plotted or catalogued bright enough to
   observe). The marker is a map symbol, not the real position angle.
-- `make check`: Ruff clean, 514 tests passing.
+- Central DSO symbol extent: `render/symbols.py:dso_symbol_extent` is now the
+  single source of DSO symbol geometry, returning a `SymbolExtent`
+  (width/height/radii/rotation/collision radius). Globular and open clusters use
+  the catalogue angular size (like galaxies) instead of fixed ~1.4 mm marks;
+  galaxies still preserve axis ratio and position angle. Missing/unreliable
+  sizes fall back to per-class `fallback_diameter_mm`, floored by
+  `min_diameter_mm` and capped by `max_diameter_mm` only where required
+  (`use_angular_size` opts a class in; planetary/bright/dark nebulae and galaxy
+  clusters remain semantic fixed-size until reviewed). Renderer, debug zones,
+  label exclusion and collision detection all consume the same extent. Config
+  lives under `dso.<class>` in `styles/standard.yaml`.
+- `make check`: Ruff clean, 549 tests passing.
 - Standard v0.1 full-sky tiling (draft): explicit declination rings every 16 deg
   (-72 ... +72), stereographic polar caps, RA staggering, config-driven with
   automatic per-ring count resolution. Start counts `5/8/11/13/14` resolve to

@@ -210,6 +210,60 @@ def test_shipped_style_declares_bold_dso_stroke() -> None:
     assert config.dso.bold_line_width_mm > config.dso.line_width_mm
 
 
+def test_shipped_style_declares_dso_extent_classes() -> None:
+    config = load_style_config(STYLE_FIXTURE)
+    assert config.dso.galaxy.use_angular_size is True
+    assert config.dso.globular_cluster.use_angular_size is True
+    assert config.dso.open_cluster.use_angular_size is True
+    assert config.dso.planetary_nebula.use_angular_size is False
+    assert (
+        config.dso.globular_cluster.min_diameter_mm
+        <= config.dso.globular_cluster.fallback_diameter_mm
+    )
+
+
+def test_dso_extent_min_above_fallback_fails(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["dso"] = {
+        "globular_cluster": {
+            "fallback_diameter_mm": 1.0,
+            "min_diameter_mm": 2.0,
+        }
+    }
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError):
+        load_style_config(path)
+
+
+def test_dso_extent_max_below_min_fails(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["dso"] = {
+        "open_cluster": {
+            "fallback_diameter_mm": 2.0,
+            "min_diameter_mm": 1.4,
+            "max_diameter_mm": 1.0,
+        }
+    }
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError):
+        load_style_config(path)
+
+
+def test_dso_extent_unknown_key_fails(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["dso"] = {
+        "globular_cluster": {
+            "fallback_diameter_mm": 1.5,
+            "min_diameter_mm": 1.2,
+            "radius_mm": 1.0,
+        }
+    }
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError) as excinfo:
+        load_style_config(path)
+    assert "radius_mm" in str(excinfo.value)
+
+
 def test_dso_label_unknown_key_fails(tmp_path: Path) -> None:
     data = valid_style_dict()
     data["label"]["dso_labels"] = {"messier": {"font_size": 8.0}}

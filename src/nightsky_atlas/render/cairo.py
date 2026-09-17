@@ -18,7 +18,6 @@ from pathlib import Path
 import cairo
 
 from nightsky_atlas.atlas.config import StyleConfig
-from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.models import Label
@@ -27,10 +26,9 @@ from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_st
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
 from nightsky_atlas.render.symbols import (
     DsoShape,
-    EllipseGeometry,
     StarSizeModel,
-    dso_shape,
-    galaxy_ellipse,
+    SymbolExtent,
+    dso_symbol_extent,
 )
 from nightsky_atlas.render.text import TextMeasurer, draw_centered_text, draw_text
 from nightsky_atlas.scene.models import ChartScene, SceneOutline, SceneSegment
@@ -312,31 +310,34 @@ def _draw_dsos(
         bold = dso.id in bold_symbol_ids
         cr.set_line_width(mm_to_pt(_dso_line_width_mm(style, bold=bold)))
         point = transform.to_page(scene_dso.chart_point)
-        x = mm_to_pt(point.x_mm)
-        y = mm_to_pt(point.y_mm)
-        if dso.object_type == DsoType.GALAXY:
-            geometry = galaxy_ellipse(
-                dso,
-                mm_per_deg=transform.mm_per_deg,
-                min_axis_mm=style.dso.min_axis_mm,
-                max_axis_mm=style.dso.max_axis_mm,
-            )
-            if geometry is not None:
-                _draw_ellipse(cr, x, y, geometry)
-                continue
-        _draw_dso_shape(
-            cr, x, y, mm_to_pt(style.dso.size_mm), dso_shape(dso.object_type), style.dso.dash_mm
+        extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
+        _draw_dso_symbol(
+            cr, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), extent, style.dso.dash_mm
         )
 
 
-def _draw_ellipse(
-    cr: cairo.Context[cairo.Surface], x: float, y: float, geometry: EllipseGeometry
+def _draw_dso_symbol(
+    cr: cairo.Context[cairo.Surface],
+    x: float,
+    y: float,
+    extent: SymbolExtent,
+    dash_mm: float,
 ) -> None:
-    major_pt = mm_to_pt(geometry.major_mm)
-    minor_pt = mm_to_pt(geometry.minor_mm)
+    """Draw one deep-sky symbol from its central extent description."""
+    if extent.is_elliptical:
+        _draw_ellipse(cr, x, y, extent)
+    else:
+        _draw_dso_shape(cr, x, y, mm_to_pt(extent.width_mm), extent.shape, dash_mm)
+
+
+def _draw_ellipse(
+    cr: cairo.Context[cairo.Surface], x: float, y: float, extent: SymbolExtent
+) -> None:
+    major_pt = mm_to_pt(extent.width_mm)
+    minor_pt = mm_to_pt(extent.height_mm)
     cr.save()
     cr.translate(x, y)
-    cr.rotate(geometry.rotation_rad)
+    cr.rotate(extent.rotation_rad)
     cr.scale(major_pt / 2.0, minor_pt / 2.0)
     cr.arc(0.0, 0.0, 1.0, 0.0, 2.0 * math.pi)
     cr.restore()
@@ -423,16 +424,16 @@ def _draw_debug(
         cr.set_source_rgb(0.15, 0.35, 0.9)
         for scene_dso in scene.deep_sky_objects:
             point = transform.to_page(scene_dso.chart_point)
-            radius = style.dso.size_mm / 2.0
-            geometry = galaxy_ellipse(
-                scene_dso.dso,
-                mm_per_deg=transform.mm_per_deg,
-                min_axis_mm=style.dso.min_axis_mm,
-                max_axis_mm=style.dso.max_axis_mm,
+            extent = dso_symbol_extent(
+                scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style
             )
-            if geometry is not None:
-                radius = geometry.major_mm / 2.0
-            cr.arc(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), mm_to_pt(radius), 0.0, 2.0 * math.pi)
+            cr.arc(
+                mm_to_pt(point.x_mm),
+                mm_to_pt(point.y_mm),
+                mm_to_pt(extent.collision_radius_mm),
+                0.0,
+                2.0 * math.pi,
+            )
             cr.stroke()
 
     label_list = tuple(labels)
