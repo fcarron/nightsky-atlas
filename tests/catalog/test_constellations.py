@@ -37,7 +37,8 @@ def test_segments_have_finite_in_range_coordinates() -> None:
     for segment in (*catalogue.lines, *catalogue.boundaries):
         assert -90.0 <= segment.dec1_deg <= 90.0
         assert -90.0 <= segment.dec2_deg <= 90.0
-        assert segment.provenance.catalogue == "d3-celestial"
+    assert {segment.provenance.catalogue for segment in catalogue.lines} == {"IAU/MacRobert"}
+    assert {segment.provenance.catalogue for segment in catalogue.boundaries} == {"d3-celestial"}
 
 
 def test_missing_directory_yields_empty_catalogue(tmp_path: Path) -> None:

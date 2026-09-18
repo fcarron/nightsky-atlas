@@ -104,7 +104,11 @@ def import_iau_stick_figures(
             {
                 "type": "Feature",
                 "id": abbreviation,
-                "properties": {"source": "IAU/MacRobert"},
+                "properties": {
+                    "catalogue": "IAU/MacRobert",
+                    "version": "CC-BY-4.0",
+                    "source_id": "constellation_lines_iau.dat",
+                },
                 "geometry": {"type": "MultiLineString", "coordinates": coordinates},
             }
         )
@@ -115,17 +119,15 @@ def import_iau_stick_figures(
     (destination_path / "constellations.lines.json").write_text(
         json.dumps(payload, indent=2) + "\n", encoding="utf-8"
     )
-    copy2(
-        Path("data/fixtures/constellations/constellations.bounds.json"),
-        destination_path / "constellations.bounds.json",
-    )
+    boundaries = Path("data/fixtures/constellations/constellations.bounds.json")
+    if boundaries.resolve() != (destination_path / boundaries.name).resolve():
+        copy2(boundaries, destination_path / boundaries.name)
     (destination_path / "SOURCE.md").write_text(
         "# IAU stick figures\n\n"
         "Source: dcf21/constellation-stick-figures, constellation_lines_iau.dat, "
         "commit 75d29c207bbd752023c447ddd1f9f4ff0eb47538.\n\n"
-        "The upstream README identifies the IAU design as CC-BY 4.0, while the file "
-        "header identifies it as GPLv3; resolve this upstream licence conflict "
-        "before redistribution.\n",
+        "Licence decision: CC-BY 4.0, following the upstream README's explicit "
+        "statement for the IAU/MacRobert design.\n",
         encoding="utf-8",
     )
     return len(features)

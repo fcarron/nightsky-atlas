@@ -1,9 +1,8 @@
 """Constellation line and boundary geometry.
 
 Constellation geometry is observing furniture, not catalogue objects: it is
-loaded from a small, permissively licensed fixture and normalized to
-straight RA/Dec segments before projection.  The source (d3-celestial,
-BSD-3-Clause) is documented in ``data/fixtures/constellations/SOURCE.md``.
+loaded from documented source fixtures and normalized to straight RA/Dec
+segments before projection.
 
 Coordinate fields are ``[ra_deg, dec_deg]`` and RA increases eastward, matching
 the internal convention.
@@ -208,12 +207,17 @@ def _vertices(polyline: list[Any], source: str) -> list[tuple[float, float]]:
 
 
 def _line_segments(data: dict[str, Any]) -> tuple[ConstellationSegment, ...]:
-    provenance = Provenance(catalogue=CATALOGUE, version=VERSION, source_id="lines")
     segments: list[ConstellationSegment] = []
     for feature_index, feature in enumerate(data.get("features", ())):
         geometry = feature.get("geometry", {})
         if geometry.get("type") != "MultiLineString":
             continue
+        properties = feature.get("properties", {})
+        provenance = Provenance(
+            catalogue=str(properties.get("catalogue", CATALOGUE)),
+            version=str(properties.get("version", VERSION)),
+            source_id=str(properties.get("source_id", "lines")),
+        )
         constellation_id = str(feature.get("id", ""))
         for path_index, polyline in enumerate(geometry.get("coordinates", ())):
             vertices = _vertices(polyline, LINES_FILENAME)
