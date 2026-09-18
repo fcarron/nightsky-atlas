@@ -134,6 +134,7 @@ _DEFAULT_OBSERVING_CONFIG = Path("config/observing_lists.yaml")
 _DEFAULT_CASES = Path("benchmarks/ai_review/cases.yaml")
 _DEFAULT_BENCH_OUT = Path("benchmarks/ai_review/results")
 _DEFAULT_OUTDIR = Path("build")
+_EDITIONS = ("pocket", "standard", "deep")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -155,7 +156,36 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _option_was_supplied(arguments: Sequence[str], option: str) -> bool:
+    return any(argument == option or argument.startswith(f"{option}=") for argument in arguments)
+
+
+def _apply_edition_preset(args: argparse.Namespace, arguments: Sequence[str]) -> None:
+    """Resolve an edition to matching preset paths without overriding explicit paths."""
+    edition = getattr(args, "edition", None)
+    if edition is None:
+        return
+    if hasattr(args, "atlas") and not _option_was_supplied(arguments, "--atlas"):
+        args.atlas = Path("atlas") / f"{edition}.yaml"
+    if hasattr(args, "style") and not _option_was_supplied(arguments, "--style"):
+        args.style = Path("styles") / f"{edition}.yaml"
+
+
+def _apply_disabled_inputs(args: argparse.Namespace) -> None:
+    """Turn explicit CLI opt-outs into the false sentinel understood by builders."""
+    for flag, attribute in (
+        ("no_constellations", "constellations"),
+        ("no_outlines", "outlines"),
+        ("no_star_names", "star_names"),
+        ("no_observing_lists", "observing_lists"),
+        ("no_double_stars", "double_stars"),
+    ):
+        if getattr(args, flag, False):
+            setattr(args, attribute, False)
+
+
 def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
+    _add_edition_argument(parser)
     parser.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     parser.add_argument("--style", type=Path, default=_DEFAULT_STYLE)
     parser.add_argument("--stars", type=Path, default=_DEFAULT_STARS)
@@ -181,25 +211,33 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         "--constellations",
         type=Path,
         default=_DEFAULT_CONSTELLATIONS,
-        help="directory of constellation geometry fixtures (empty to omit)",
+        help="directory of constellation geometry fixtures",
+    )
+    parser.add_argument(
+        "--no-constellations", action="store_true", help="omit constellation geometry"
     )
     parser.add_argument(
         "--outlines",
         type=Path,
         default=_DEFAULT_OUTLINES,
-        help="directory of schematic nebula outline fixtures (empty to omit)",
+        help="directory of schematic nebula outline fixtures",
     )
+    parser.add_argument("--no-outlines", action="store_true", help="omit nebula outlines")
     parser.add_argument(
         "--star-names",
         type=Path,
         default=_DEFAULT_STAR_NAMES,
-        help="directory of star-name fixtures for bright-star labels (empty to omit)",
+        help="directory of star-name fixtures for bright-star labels",
     )
+    parser.add_argument("--no-star-names", action="store_true", help="omit star-name labels")
     parser.add_argument(
         "--observing-lists",
         type=Path,
         default=_DEFAULT_OBSERVING_LISTS,
-        help="directory of observing-list fixtures for DSO selection (empty to omit)",
+        help="directory of observing-list fixtures for DSO selection",
+    )
+    parser.add_argument(
+        "--no-observing-lists", action="store_true", help="disable observing-list selection"
     )
     parser.add_argument(
         "--observing-config",
@@ -214,6 +252,7 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         help="processed WDS double/multiple star overlay JSON "
         "(default: processed WDS if present)",
     )
+    parser.add_argument("--no-double-stars", action="store_true", help="omit the WDS overlay")
     parser.add_argument(
         "--double-star-match-tolerance-arcsec",
         type=float,
@@ -227,6 +266,15 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         type=Path,
         default=None,
         help="manual override file or directory (stable-ID label overrides)",
+    )
+
+
+def _add_edition_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--edition",
+        choices=_EDITIONS,
+        default=None,
+        help="select matching atlas and style presets (Pocket, Standard or Deep)",
     )
 
 
@@ -313,7 +361,10 @@ def _add_chart_commands(subparsers: argparse._SubParsersAction) -> None:
     render.add_argument(
         "--debug",
         default="",
-        help="comma-separated overlays: label_boxes,exclusion_zones,element_ids,candidate_points",
+        help=(
+            "comma-separated overlays: label_boxes,exclusion_zones,element_ids,"
+            "candidate_points,line_knockouts"
+        ),
     )
     render.set_defaults(handler=_command_chart_render)
 
@@ -350,6 +401,7 @@ def _add_chart_commands(subparsers: argparse._SubParsersAction) -> None:
     scale = chart_subparsers.add_parser(
         "magnitude-scale", help="render a star magnitude diagnostic page"
     )
+    _add_edition_argument(scale)
     scale.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     scale.add_argument("--style", type=Path, default=_DEFAULT_STYLE)
     scale.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
@@ -443,6 +495,7 @@ def _add_benchmark_commands(subparsers: argparse._SubParsersAction) -> None:
     run = benchmark_subparsers.add_parser(
         "ai-review", help="run benchmark cases against a reviewer"
     )
+    _add_edition_argument(run)
     run.add_argument("--cases", type=Path, default=_DEFAULT_CASES)
     run.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     run.add_argument("--style", type=Path, default=_DEFAULT_STYLE)
@@ -463,6 +516,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     atlas_subparsers = atlas.add_subparsers(dest="atlas_command")
 
     tile = atlas_subparsers.add_parser("tile", help="generate chart definitions")
+    _add_edition_argument(tile)
     tile.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     tile.add_argument("--out", type=Path, default=None)
     tile.add_argument("--no-neighbours", action="store_true")
@@ -471,6 +525,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     coverage = atlas_subparsers.add_parser(
         "coverage", help="check sky coverage of the tiling"
     )
+    _add_edition_argument(coverage)
     coverage.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     coverage.add_argument("--step", type=float, default=2.0)
     coverage.set_defaults(handler=_command_atlas_coverage)
@@ -478,6 +533,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     report = atlas_subparsers.add_parser(
         "report", help="summarize a tiled atlas draft (coverage, density, review list)"
     )
+    _add_edition_argument(report)
     report.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     report.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
     report.add_argument(
@@ -491,6 +547,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     report.set_defaults(handler=_command_atlas_report)
 
     build = atlas_subparsers.add_parser("build", help="build pages and a combined PDF")
+    _add_edition_argument(build)
     build.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     build.add_argument("--style", type=Path, default=_DEFAULT_STYLE)
     build.add_argument("--star-store", type=Path, default=_DEFAULT_STORE)
@@ -500,25 +557,33 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
         "--constellations",
         type=Path,
         default=_DEFAULT_CONSTELLATIONS,
-        help="directory of constellation geometry fixtures (empty to omit)",
+        help="directory of constellation geometry fixtures",
+    )
+    build.add_argument(
+        "--no-constellations", action="store_true", help="omit constellation geometry"
     )
     build.add_argument(
         "--outlines",
         type=Path,
         default=_DEFAULT_OUTLINES,
-        help="directory of schematic nebula outline fixtures (empty to omit)",
+        help="directory of schematic nebula outline fixtures",
     )
+    build.add_argument("--no-outlines", action="store_true", help="omit nebula outlines")
     build.add_argument(
         "--star-names",
         type=Path,
         default=_DEFAULT_STAR_NAMES,
-        help="directory of star-name fixtures for bright-star labels (empty to omit)",
+        help="directory of star-name fixtures for bright-star labels",
     )
+    build.add_argument("--no-star-names", action="store_true", help="omit star-name labels")
     build.add_argument(
         "--observing-lists",
         type=Path,
         default=_DEFAULT_OBSERVING_LISTS,
-        help="directory of observing-list fixtures for DSO selection (empty to omit)",
+        help="directory of observing-list fixtures for DSO selection",
+    )
+    build.add_argument(
+        "--no-observing-lists", action="store_true", help="disable observing-list selection"
     )
     build.add_argument(
         "--observing-config",
@@ -533,6 +598,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
         help="processed WDS double/multiple star overlay JSON "
         "(default: processed WDS if present)",
     )
+    build.add_argument("--no-double-stars", action="store_true", help="omit the WDS overlay")
     build.add_argument(
         "--overrides",
         type=Path,
@@ -595,7 +661,13 @@ def _chart_context(
     )
 
 
-_DEBUG_FLAGS = ("label_boxes", "exclusion_zones", "element_ids", "candidate_points")
+_DEBUG_FLAGS = (
+    "label_boxes",
+    "exclusion_zones",
+    "element_ids",
+    "candidate_points",
+    "line_knockouts",
+)
 
 
 def _parse_debug(value: str) -> DebugOptions | None:
@@ -610,6 +682,8 @@ def _parse_debug(value: str) -> DebugOptions | None:
 
 def _star_names(args: argparse.Namespace) -> dict:
     """Load the bright-star label lookup for a command, if configured."""
+    if getattr(args, "no_star_names", False):
+        return {}
     directory = getattr(args, "star_names", None)
     return load_star_names(directory if directory is not None else STAR_NAMES_FIXTURE_DIR)
 
@@ -624,6 +698,8 @@ def _locator_inset(
     if not style.locator.enabled:
         return None
     directory = getattr(args, "constellations", None)
+    if directory is False:
+        return None
     constellations = load_constellations(
         directory if directory is not None else _DEFAULT_CONSTELLATIONS
     )
@@ -1146,7 +1222,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the command-line interface and return a process exit code."""
     load_env_file()
     parser = build_parser()
-    args = parser.parse_args(argv)
+    argument_list = tuple(sys.argv[1:] if argv is None else argv)
+    args = parser.parse_args(argument_list)
+    _apply_edition_preset(args, argument_list)
+    _apply_disabled_inputs(args)
     handler = getattr(args, "handler", None)
     if handler is None:
         parser.print_help()

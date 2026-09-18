@@ -109,6 +109,11 @@ def load_chart_stars(
 ) -> list[Star]:
     """Load stars for a chart from a processed store or a sample CSV."""
     if star_store is not None:
+        if not Path(star_store).exists():
+            raise FileNotFoundError(
+                f"star store not found: {star_store}; run 'nightsky data import-stars' "
+                "or pass --stars for a small fixture"
+            )
         with StarStore.open(star_store) as store:
             box = chart_query_box(definition)
             return store.query_box(
@@ -116,6 +121,8 @@ def load_chart_stars(
             )
     if stars_csv is None:
         return []
+    if not Path(stars_csv).exists():
+        raise FileNotFoundError(f"star CSV not found: {stars_csv}")
     stars = load_sample_stars(stars_csv)
     if magnitude_limit is not None:
         stars = [star for star in stars if star.magnitude <= magnitude_limit]
@@ -132,8 +139,10 @@ def load_dsos(dsos_path: str | Path | None = None) -> list[DeepSkyObject]:
     return load_dso_catalog(path)
 
 
-def load_star_systems(systems_path: str | Path | None = None) -> list[StarSystem]:
+def load_star_systems(systems_path: str | Path | bool | None = None) -> list[StarSystem]:
     """Load the processed double/multiple star overlay, or none."""
+    if systems_path is False:
+        return []
     path = Path(systems_path) if systems_path is not None else DEFAULT_DOUBLE_STAR_PATH
     if not path.exists():
         if systems_path is not None:
@@ -165,9 +174,9 @@ def load_chart_inputs(
     atlas_path: str | Path,
     style_path: str | Path,
     dsos_path: str | Path | None = None,
-    constellations_dir: str | Path | None = None,
-    outlines_dir: str | Path | None = None,
-    observing_lists_dir: str | Path | None = None,
+    constellations_dir: str | Path | bool | None = None,
+    outlines_dir: str | Path | bool | None = None,
+    observing_lists_dir: str | Path | bool | None = None,
     observing_config_path: str | Path | None = None,
     atlas: AtlasConfig | None = None,
     style: StyleConfig | None = None,
@@ -183,22 +192,38 @@ def load_chart_inputs(
     with progress.step("dso load", detail=True):
         dsos = tuple(load_dsos(dsos_path))
     with progress.step("constellation/outline load", detail=True):
-        constellations = load_constellations(
-            constellations_dir if constellations_dir is not None else CONSTELLATION_FIXTURE_DIR
+        constellations = (
+            ConstellationCatalogue()
+            if constellations_dir is False
+            else load_constellations(
+                constellations_dir
+                if constellations_dir is not None
+                else CONSTELLATION_FIXTURE_DIR
+            )
         )
-        selected_outline_dir = (
-            Path(outlines_dir) if outlines_dir is not None else OUTLINE_FIXTURE_DIR
-        )
-        fallback_outlines = load_outlines(selected_outline_dir)
-        openngc_outlines = (
-            load_outlines(OPENNGC_OUTLINE_DIR)
-            if selected_outline_dir == OUTLINE_FIXTURE_DIR
-            else ()
-        )
+        if outlines_dir is False:
+            fallback_outlines = ()
+            openngc_outlines = ()
+        else:
+            selected_outline_dir = (
+                Path(outlines_dir) if outlines_dir is not None else OUTLINE_FIXTURE_DIR
+            )
+            fallback_outlines = load_outlines(selected_outline_dir)
+            openngc_outlines = (
+                load_outlines(OPENNGC_OUTLINE_DIR)
+                if selected_outline_dir == OUTLINE_FIXTURE_DIR
+                else ()
+            )
         outlines = _prefer_openngc_outlines(dsos, fallback_outlines, openngc_outlines)
     with progress.step("observing-list load", detail=True):
-        observing_lists = load_observing_lists(
-            observing_lists_dir if observing_lists_dir is not None else OBSERVING_LISTS_FIXTURE_DIR
+        observing_lists = (
+            {}
+            if observing_lists_dir is False
+            else load_observing_lists(
+                observing_lists_dir
+                if observing_lists_dir is not None
+                else OBSERVING_LISTS_FIXTURE_DIR
+            )
         )
         selection_policy = _selection_policy(
             atlas,
@@ -257,7 +282,7 @@ def build_chart_context(
     outlines_dir: str | Path | None = None,
     observing_lists_dir: str | Path | None = None,
     observing_config_path: str | Path | None = None,
-    double_stars_path: str | Path | None = None,
+    double_stars_path: str | Path | bool | None = None,
     star_systems: Sequence[StarSystem] | None = None,
     double_star_match_tolerance_arcsec: float = DEFAULT_MATCH_TOLERANCE_ARCSEC,
     double_star_companion_tolerance_arcsec: float = DEFAULT_COMPANION_TOLERANCE_ARCSEC,

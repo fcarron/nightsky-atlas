@@ -258,12 +258,12 @@ def build_atlas(
     star_store: str | Path | None = None,
     stars_csv: str | Path | None = None,
     dsos_path: str | Path | None = None,
-    constellations_dir: str | Path | None = None,
-    outlines_dir: str | Path | None = None,
-    star_names_dir: str | Path | None = None,
-    observing_lists_dir: str | Path | None = None,
+    constellations_dir: str | Path | bool | None = None,
+    outlines_dir: str | Path | bool | None = None,
+    star_names_dir: str | Path | bool | None = None,
+    observing_lists_dir: str | Path | bool | None = None,
     observing_config_path: str | Path | None = None,
-    double_stars_path: str | Path | None = None,
+    double_stars_path: str | Path | bool | None = None,
     overrides_path: str | Path | None = None,
     chart_ids: tuple[str, ...] | None = None,
     limit: int | None = None,
@@ -306,8 +306,12 @@ def build_atlas(
     applied_chart_ids: set[str] = set()
 
     with progress.step("load shared fixtures"):
-        star_names = load_star_names(
-            star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
+        star_names = (
+            {}
+            if star_names_dir is False
+            else load_star_names(
+                star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
+            )
         )
         star_systems = load_star_systems(double_stars_path)
 

@@ -74,6 +74,68 @@ def test_edition_magnitude_scale_command_writes_artifacts(tmp_path: Path) -> Non
     assert (diagnostics / "edition-star-curves.png").exists()
 
 
+def test_edition_selects_matching_atlas_and_style(tmp_path: Path) -> None:
+    code = main(
+        [
+            "chart",
+            "magnitude-scale",
+            "--edition",
+            "pocket",
+            "--outdir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 0
+    assert (tmp_path / "pocket" / "diagnostics" / "magnitude-scale.pdf").exists()
+
+
+def test_explicit_paths_override_edition_preset(tmp_path: Path) -> None:
+    code = main(
+        [
+            "chart",
+            "magnitude-scale",
+            "--edition",
+            "pocket",
+            "--atlas",
+            str(ATLAS),
+            "--style",
+            str(STYLE),
+            "--outdir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 0
+    assert (tmp_path / "standard" / "diagnostics" / "magnitude-scale.pdf").exists()
+
+
+def test_chart_render_accepts_explicit_optional_input_opt_outs(tmp_path: Path) -> None:
+    code = main(
+        [
+            "chart",
+            "render",
+            "--chart",
+            "test-virgo",
+            "--atlas",
+            str(ATLAS),
+            "--style",
+            str(STYLE),
+            "--stars",
+            str(STARS),
+            "--no-constellations",
+            "--no-outlines",
+            "--no-star-names",
+            "--no-observing-lists",
+            "--no-double-stars",
+            "--debug",
+            "line_knockouts",
+            "--outdir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 0
+    assert (tmp_path / "standard" / "charts" / "test-virgo" / "chart.pdf").exists()
+
+
 def test_unknown_chart_reports_error(tmp_path: Path, capsys) -> None:
     code = main(
         [

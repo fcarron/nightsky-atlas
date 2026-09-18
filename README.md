@@ -49,6 +49,12 @@ curves, use:
 .venv/bin/nightsky chart magnitude-scale --edition-comparison --outdir build
 ```
 
+All chart and atlas commands accept `--edition pocket`, `--edition standard`,
+or `--edition deep` to select matching atlas and style presets. Explicit
+`--atlas` and `--style` paths remain available for custom definitions. Optional
+layers can be omitted explicitly, for example `--no-constellations` or
+`--no-outlines`.
+
 ### Real star catalogue (Tycho-2)
 
 ```bash
