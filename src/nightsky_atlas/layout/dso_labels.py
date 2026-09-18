@@ -21,7 +21,7 @@ from enum import StrEnum
 
 from nightsky_atlas.atlas.config import DsoLabelStyle
 from nightsky_atlas.catalog.models import DeepSkyObject
-from nightsky_atlas.catalog.selection import messier_id
+from nightsky_atlas.catalog.priority import HERSCHEL_400, messier_id
 
 __all__ = [
     "HERSCHEL_400_LIST",
@@ -33,7 +33,7 @@ __all__ = [
     "primary_designation",
 ]
 
-HERSCHEL_400_LIST = "herschel400"
+HERSCHEL_400_LIST = HERSCHEL_400
 
 _WHITESPACE = re.compile(r"\s+")
 

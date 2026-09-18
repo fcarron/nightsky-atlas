@@ -26,6 +26,7 @@ from nightsky_atlas.layout.collision import find_hard_violations
 from nightsky_atlas.layout.labels import build_dso_labels
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.optimizer import optimize_labels
+from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.review import render_review_png
 from nightsky_atlas.review.build import build_review_request
@@ -187,6 +188,9 @@ def _case_labels(
         magnitude_limit=case.magnitude_limit,
     )
     labels = build_dso_labels(context.scene, context.transform, context.style)
+    labels = select_labels(
+        labels, context.scene, context.transform, context.style
+    )
     if case.mode == "optimized":
         labels = optimize_labels(
             labels,

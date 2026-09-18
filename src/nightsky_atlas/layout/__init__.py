@@ -22,6 +22,7 @@ from nightsky_atlas.layout.overrides import (
     load_overrides,
 )
 from nightsky_atlas.layout.scoring import CostBreakdown, CostWeights
+from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import ValidationResult, validate_layout
 
 __all__ = [
@@ -48,5 +49,6 @@ __all__ = [
     "load_overrides",
     "optimize_labels",
     "placed_candidates",
+    "select_labels",
     "validate_layout",
 ]

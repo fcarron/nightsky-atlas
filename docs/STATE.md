@@ -79,7 +79,26 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   clusters remain semantic fixed-size until reviewed). Renderer, debug zones,
   label exclusion and collision detection all consume the same extent. Config
   lives under `dso.<class>` in `styles/standard.yaml`.
-- `make check`: Ruff clean, 549 tests passing.
+- Deterministic label selection and central priorities: `catalog/priority.py`
+  is the single priority scale (Messier, common name, prominent/other Herschel
+  400, important NGC/IC, ordinary DSO; star name > bright Bayer main star >
+  Bayer/Flamsteed > variable). `layout/selection.py` runs before placement:
+  semantic de-duplication (one primary label per printed name, keeping the
+  higher priority then brighter target) plus a local density selection that
+  always keeps high-tier labels and thins medium/low labels by printed label
+  area within `label.selection.density_radius_mm` (15 mm). A merely bright DSO
+  is now high priority but not mandatory, so the optimizer hides it rather than
+  forcing a collision. Standard Virgo (`standard-053`) drops from 211 labels to
+  81 with 0 hard violations; `standard-109` also reaches 0. `standard-110`
+  (LMC) keeps one known `label_dso` overlap where the mandatory LMC label has
+  no valid candidate in the dense field. Review previews for the acceptance
+  fields: `build/label-selection/standard/charts/{standard-001,021,031,053,
+  063,083,116}/preview.png`.
+- Footer/navigation: chart title is 8.5 pt with a bold chart code, and
+  neighbour navigation is 7.5 pt with a bold code. E/W references are rotated
+  along the narrow side margin so they stay outside the chart field without
+  colliding with the Dec labels; N/S remain outside the top/bottom frame.
+- `make check`: Ruff clean, 597 tests passing.
 - Standard v0.2 full-sky tiling (draft): explicit declination rings every
   16 deg (-72 ... +72), stereographic polar caps, RA staggering, frozen
   config-driven counts.  Ordering is north-to-south (reading order):
@@ -181,13 +200,12 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - The alpha artifacts predate the Hipparcos bright-star supplement and must be
   rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page
   already includes Deneb.
-- The full-sky v0.2 draft reports 2 hard violations on the LMC pages
-  (`standard-109`, `standard-110`); "hard issues" means unresolved *hard* label
-  constraints, and dense pages still need visual review (see
-  `draft-report.json`). They are a consequence of the coarser `-72` ring (8
-  charts instead of 10), which moves the LMC to a chart with more crowded
-  content. DSO/star label prioritisation in dense fields is the next work
-  package. The earlier alpha's 14 hard violations on
+- Label prioritisation/selection in dense fields is implemented (see Progress),
+  which resolved the `standard-109` violation and the Virgo density problem.
+  One known hard violation remains on `standard-110` (LMC): the mandatory
+  large-Magellanic-Cloud label has no valid candidate among the configured
+  candidate rings in that dense field. Options are more mandatory candidate
+  rings or a curated override; the earlier alpha's 14 hard violations on
   standard-007/008/009/020/059/060 belong to the superseded 135-chart band
   tiling and numbering, not the v0.2 ring tiling.
 - The 116-chart count is geometry-driven: a coverage sweep at 0.25 deg fixed the
@@ -246,6 +264,6 @@ tolerance; the companion tolerance is 3.0 arcsec inside the builder).
 
 1. M15.5 print/field test of representative pages.
 2. M16: M16.2 atlas-wide issue report, M16.3 preflight (`atlas validate --publication`), M16.4 `docs/DATA_SOURCES.md`.
-3. M21.5 integrate further observing lists (license decision first); possible
-   later per-chart DSO density budget.
+3. M21.5 integrate further observing lists (license decision first). The
+   per-chart label density budget is implemented as local density selection.
 4. M17 Pocket, M18 Deep data expansion, M19 extended structures, M20 Deep atlas.

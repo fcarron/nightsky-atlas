@@ -69,23 +69,40 @@ def test_east_west_navigation_stays_clear_of_paper_edge_and_frame() -> None:
     rect = transform.chart_rect
     inset = STYLE.furniture.navigation.side_inset_mm
     for text in plan.navigation:
+        assert text.rotation_rad != 0.0
         metrics = TextMeasurer(
             STYLE.label.font_family, text.font_size_pt
-        ).measure_mm(text.text)
-        if text.align == "left":
-            left, right = text.x_mm, text.x_mm + metrics.width_mm
-        else:
-            left, right = text.x_mm - metrics.width_mm, text.x_mm
-        assert left >= inset - 1e-9
-        assert right <= PAGE.width_mm - inset + 1e-9
-        assert right <= rect.left_mm or left >= rect.right_mm
+        ).measure_markup_mm(text.markup if text.markup else text.text)
+        half_width = metrics.height_mm / 2.0
+        assert text.x_mm - half_width >= inset - 1e-9
+        assert text.x_mm + half_width <= PAGE.width_mm - inset + 1e-9
+        assert (
+            text.x_mm + half_width <= rect.left_mm
+            or text.x_mm - half_width >= rect.right_mm
+        )
 
 
-def test_navigation_is_smaller_than_coordinate_labels() -> None:
+def test_navigation_is_larger_than_coordinate_labels() -> None:
     plan, _ = build_plan((("N", "standard-082"),))
     assert plan.navigation
     for text in plan.navigation:
-        assert text.font_size_pt < STYLE.grid.label_font_size_pt
+        assert text.font_size_pt > STYLE.grid.label_font_size_pt
+
+
+def test_navigation_is_mid_grey_and_subordinate_to_sky_labels() -> None:
+    nav = STYLE.furniture.navigation
+    assert nav.gray >= STYLE.grid.label_gray
+    assert nav.gray <= STYLE.furniture.title_gray + 0.5
+    assert nav.font_size_pt <= STYLE.label.dso_labels.normal_size_pt * 1.3
+
+
+def test_title_chart_code_is_bold_and_prefix_regular() -> None:
+    plan, _ = build_plan()
+    assert plan.title is not None
+    assert plan.title.markup is not None
+    assert "<b>S068</b>" in plan.title.markup
+    assert plan.title.markup.startswith("NightSky Atlas")
+    assert plan.title.font_size_pt == pytest.approx(8.5)
 
 
 def test_navigation_rectangles_are_label_obstacles() -> None:

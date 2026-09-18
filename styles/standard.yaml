@@ -32,6 +32,17 @@ label:
     normal:
       size_factor: 1.0
       weight: normal
+  # Deterministic selection before placement.  A drawn object is not
+  # necessarily a labelled object: high-priority labels (Messier, prominent
+  # Herschel 400, named stars) always survive, while medium/low labels are
+  # thinned by *local* printed-label density so crowded fields (Virgo) stay
+  # readable and sparse fields keep their labels.  This is never a global
+  # percentage.
+  selection:
+    enabled: true
+    density_radius_mm: 15.0
+    medium_density_budget: 0.12
+    low_density_budget: 0.05
 
 dso:
   line_width_mm: 0.15
@@ -130,7 +141,7 @@ grid:
   label_dec_step_deg: 4.0
 
 furniture:
-  title_font_size_pt: 8.0
+  title_font_size_pt: 8.5
   title_gray: 0.15
   chart_border_width_mm: 0.25
   # Angular scale: thin, mid-grey and quiet.  A per-edition angular value keeps
@@ -143,11 +154,14 @@ furniture:
     font_size_pt: 6.5
     tick_mm: 1.2
   # Adjacent-chart navigation, outside the coordinate labels and always with
-  # short visible codes (S068), never internal ids.  E/W sit side_inset_mm from
-  # the paper edge (print-safe), N/S frame_gap_mm outside the chart frame.
+  # short visible codes (S068), never internal ids.  The chart code is bold and
+  # the reference is larger than before so it can be found while flipping
+  # pages; E/W are rotated along the narrow side margin.  E/W sit
+  # side_inset_mm from the paper edge (print-safe), N/S frame_gap_mm outside
+  # the chart frame.
   navigation:
     enabled: true
-    font_size_pt: 4.5
+    font_size_pt: 7.5
     gray: 0.5
     frame_gap_mm: 3.8
     side_inset_mm: 5.0

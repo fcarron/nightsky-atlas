@@ -24,10 +24,20 @@ from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.chart.presentation import (
     ChartPresentation,
     neighbour_code,
+    neighbour_markup,
     presentation_for,
 )
 from nightsky_atlas.render.symbols import StarSizeModel
-from nightsky_atlas.render.text import TextMeasurer, draw_centered_text, draw_text
+from nightsky_atlas.render.text import (
+    TextMeasurer,
+    TextMetrics,
+    draw_centered_text,
+    draw_markup_centered_text,
+    draw_markup_text,
+    draw_rotated_markup_centered_text,
+    draw_text,
+    escape_markup,
+)
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = [
@@ -43,17 +53,26 @@ _FOOTER_DOT_CENTER_FROM_BOTTOM_MM = 4.2
 _FOOTER_TEXT_FROM_BOTTOM_MM = 2.4
 _FOOTER_TITLE_CENTER_FROM_BOTTOM_MM = 3.3
 _LEGEND_LABEL_GAP_MM = 2.0
+_SIDE_NAVIGATION_ANGLE_RAD = math.pi / 2.0
 
 
 @dataclass(frozen=True, slots=True)
 class PlacedText:
-    """One furniture string, positioned by its logical text box."""
+    """One furniture string, positioned by its logical text box.
+
+    ``markup`` carries the mixed-weight Pango markup when the string has an
+    emphasized part (the chart code); ``text`` stays the plain visible string.
+    A non-zero ``rotation_rad`` rotates the string about ``(x_mm, y_mm)`` and
+    ignores ``align`` -- used for the side-margin navigation.
+    """
 
     text: str
     x_mm: float
     y_mm: float
     align: Align
     font_size_pt: float
+    markup: str | None = None
+    rotation_rad: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +118,14 @@ class FurniturePlan:
     obstacles: tuple[PageRect, ...]
 
 
+def _measure_placed(text: PlacedText, family: str) -> TextMetrics:
+    """Measure a furniture string exactly as it will be drawn."""
+    measurer = TextMeasurer(family, text.font_size_pt)
+    if text.markup is not None:
+        return measurer.measure_markup_mm(text.markup)
+    return measurer.measure_mm(text.text)
+
+
 def _text_bounds(
     text: str, x_mm: float, y_mm: float, align: Align, width_mm: float, height_mm: float
 ) -> PageRect:
@@ -123,11 +150,12 @@ def _navigation(
     page = transform.page
     rect = transform.chart_rect
     family = style.label.font_family
-    measurer = TextMeasurer(family, nav.font_size_pt)
     placed: list[PlacedText] = []
     for direction, neighbour_id in definition.neighbours:
-        text = f"{direction}: {neighbour_code(neighbour_id, presentation.edition_code)}"
-        metrics = measurer.measure_mm(text)
+        code = neighbour_code(neighbour_id, presentation.edition_code)
+        text = f"{direction}: {code}"
+        markup = neighbour_markup(direction, neighbour_id, presentation.edition_code)
+        metrics = TextMeasurer(family, nav.font_size_pt).measure_markup_mm(markup)
         if direction == "N":
             placed.append(
                 PlacedText(
@@ -136,6 +164,7 @@ def _navigation(
                     rect.top_mm - nav.frame_gap_mm - metrics.height_mm,
                     "center",
                     nav.font_size_pt,
+                    markup,
                 )
             )
         elif direction == "S":
@@ -146,26 +175,34 @@ def _navigation(
                     rect.bottom_mm + nav.frame_gap_mm,
                     "center",
                     nav.font_size_pt,
+                    markup,
                 )
             )
         elif direction == "E":
+            # East is left (north up, east left).  The side margin is narrower
+            # than the enlarged reference, so it is rotated to read bottom-to-top
+            # and centred on the page edge; (x_mm, y_mm) is the rotation centre.
             placed.append(
                 PlacedText(
                     text,
-                    nav.side_inset_mm,
-                    page.height_mm / 2.0 - metrics.height_mm / 2.0,
-                    "left",
+                    nav.side_inset_mm + metrics.height_mm / 2.0,
+                    page.height_mm / 2.0,
+                    "center",
                     nav.font_size_pt,
+                    markup,
+                    -_SIDE_NAVIGATION_ANGLE_RAD,
                 )
             )
         elif direction == "W":
             placed.append(
                 PlacedText(
                     text,
-                    page.width_mm - nav.side_inset_mm,
-                    page.height_mm / 2.0 - metrics.height_mm / 2.0,
-                    "right",
+                    page.width_mm - nav.side_inset_mm - metrics.height_mm / 2.0,
+                    page.height_mm / 2.0,
+                    "center",
                     nav.font_size_pt,
+                    markup,
+                    _SIDE_NAVIGATION_ANGLE_RAD,
                 )
             )
     return tuple(placed)
@@ -235,10 +272,16 @@ def _magnitude_legend(
     )
 
 
-def _obstacle_for_text(
-    text: PlacedText, family: str
-) -> PageRect:
-    metrics = TextMeasurer(family, text.font_size_pt).measure_mm(text.text)
+def _obstacle_for_text(text: PlacedText, family: str) -> PageRect:
+    """Return the page rectangle a string occupies, honouring rotation."""
+    metrics = _measure_placed(text, family)
+    if text.rotation_rad != 0.0:
+        return PageRect(
+            left_mm=text.x_mm - metrics.height_mm / 2.0,
+            top_mm=text.y_mm - metrics.width_mm / 2.0,
+            width_mm=metrics.height_mm,
+            height_mm=metrics.width_mm,
+        )
     return _text_bounds(
         text.text, text.x_mm, text.y_mm, text.align, metrics.width_mm, metrics.height_mm
     )
@@ -256,9 +299,8 @@ def build_furniture_plan(
     obstacles: list[PageRect] = []
 
     title: PlacedText | None = None
-    title_metrics = TextMeasurer(family, style.furniture.title_font_size_pt).measure_mm(
-        presentation.title
-    )
+    title_measurer = TextMeasurer(family, style.furniture.title_font_size_pt)
+    title_metrics = title_measurer.measure_markup_mm(presentation.title_markup)
     if presentation.title:
         title = PlacedText(
             presentation.title,
@@ -266,17 +308,9 @@ def build_furniture_plan(
             page.height_mm - _FOOTER_TITLE_CENTER_FROM_BOTTOM_MM - title_metrics.height_mm / 2.0,
             "right",
             style.furniture.title_font_size_pt,
+            presentation.title_markup,
         )
-        obstacles.append(
-            _text_bounds(
-                title.text,
-                title.x_mm,
-                title.y_mm,
-                title.align,
-                title_metrics.width_mm,
-                title_metrics.height_mm,
-            )
-        )
+        obstacles.append(_obstacle_for_text(title, family))
 
     navigation = _navigation(definition, transform, style, presentation)
     for nav_text in navigation:
@@ -347,6 +381,37 @@ def _draw_placed_text(
     gray: float,
 ) -> None:
     cr.set_source_rgb(gray, gray, gray)
+    if text.rotation_rad != 0.0:
+        markup = text.markup if text.markup is not None else escape_markup(text.text)
+        draw_rotated_markup_centered_text(
+            cr,
+            markup,
+            mm_to_pt(text.x_mm),
+            mm_to_pt(text.y_mm),
+            family,
+            text.font_size_pt,
+            text.rotation_rad,
+        )
+        return
+    if text.markup is not None:
+        metrics = _measure_placed(text, family)
+        if text.align == "center":
+            draw_markup_centered_text(
+                cr,
+                text.markup,
+                mm_to_pt(text.x_mm),
+                mm_to_pt(text.y_mm + metrics.height_mm / 2.0),
+                family,
+                text.font_size_pt,
+            )
+            return
+        x = text.x_mm
+        if text.align == "right":
+            x = text.x_mm - metrics.width_mm
+        draw_markup_text(
+            cr, text.markup, mm_to_pt(x), mm_to_pt(text.y_mm), family, text.font_size_pt
+        )
+        return
     if text.align == "center":
         metrics = TextMeasurer(family, text.font_size_pt).measure_mm(text.text)
         draw_centered_text(

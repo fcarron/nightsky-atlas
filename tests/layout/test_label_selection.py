@@ -1,0 +1,142 @@
+"""Tests for the deterministic label selection pass."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from nightsky_atlas.atlas.config import LabelSelectionStyle, load_style_config
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
+from nightsky_atlas.catalog.star_names import StarName
+from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
+from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.layout.labels import build_dso_labels, build_star_labels
+from nightsky_atlas.layout.selection import select_labels
+from nightsky_atlas.scene.builder import build_scene
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+STYLE = load_style_config(REPO_ROOT / "styles" / "standard.yaml")
+
+CHART = ChartDefinition(
+    id="test", center_ra_deg=187.5, center_dec_deg=12.0, width_deg=20.0, height_deg=14.0
+)
+PAGE = PageGeometry(width_mm=297.0, height_mm=210.0, margin_mm=12.0)
+TRANSFORM = PageTransform(chart=CHART, page=PAGE)
+
+
+def make_dso(
+    object_id: str,
+    ra_deg: float,
+    dec_deg: float,
+    *,
+    magnitude: float = 11.0,
+    cross_ids: tuple[str, ...] = (),
+) -> DeepSkyObject:
+    return DeepSkyObject(
+        id=object_id,
+        ra_deg=ra_deg,
+        dec_deg=dec_deg,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance(catalogue="TEST", source_id=object_id),
+        magnitude=magnitude,
+        cross_ids=cross_ids,
+    )
+
+
+def clustered_scene() -> tuple:
+    dsos = [make_dso("NGC4486", 187.5, 12.0, magnitude=9.0, cross_ids=("M87",))]
+    for index in range(24):
+        dsos.append(
+            make_dso(f"NGC{9000 + index}", 187.5 + 0.02 * index, 12.0 + 0.01 * index)
+        )
+    scene = build_scene(CHART, (), dsos)
+    return scene, build_dso_labels(scene, TRANSFORM, STYLE)
+
+
+def test_high_priority_labels_survive_dense_field() -> None:
+    scene, labels = clustered_scene()
+    selected = select_labels(labels, scene, TRANSFORM, STYLE)
+    ids = {label.id for label in selected}
+    assert "label:dso:NGC4486" in ids
+    assert len(selected) < len(labels)
+
+
+def test_dense_field_thins_ordinary_labels_but_sparse_field_keeps_them() -> None:
+    _scene, dense_labels = clustered_scene()
+    dense = select_labels(dense_labels, _scene, TRANSFORM, STYLE)
+
+    sparse_dsos = [
+        make_dso("NGC1000", 183.0, 8.0),
+        make_dso("NGC2000", 192.0, 16.0),
+    ]
+    sparse_scene = build_scene(CHART, (), sparse_dsos)
+    sparse_labels = build_dso_labels(sparse_scene, TRANSFORM, STYLE)
+    sparse = select_labels(sparse_labels, sparse_scene, TRANSFORM, STYLE)
+
+    assert len(dense) < len(dense_labels) / 2
+    assert len(sparse) == len(sparse_labels)
+
+
+def test_semantic_duplicates_collapse_to_one_label() -> None:
+    stars = [
+        Star(
+            id="TYC 1-1-1",
+            ra_deg=187.5,
+            dec_deg=12.0,
+            magnitude=3.0,
+            provenance=Provenance(catalogue="TEST", source_id="a"),
+            hip_id="HIP 1",
+        ),
+        Star(
+            id="HIP 2",
+            ra_deg=187.6,
+            dec_deg=12.1,
+            magnitude=5.0,
+            provenance=Provenance(catalogue="TEST", source_id="b"),
+            hip_id="HIP 2",
+        ),
+    ]
+    names = {
+        1: StarName(hip_number=1, name="Ruchba"),
+        2: StarName(hip_number=2, name="Ruchba"),
+    }
+    scene = build_scene(CHART, stars)
+    labels = build_star_labels(scene, TRANSFORM, STYLE, names)
+    assert len(labels) == 2
+    selected = select_labels(labels, scene, TRANSFORM, STYLE)
+    assert len(selected) == 1
+    assert selected[0].target_id == "TYC 1-1-1"
+
+
+def test_selection_can_be_disabled() -> None:
+    scene, labels = clustered_scene()
+    style = STYLE.model_copy(
+        update={
+            "label": STYLE.label.model_copy(
+                update={"selection": LabelSelectionStyle(enabled=False)}
+            )
+        }
+    )
+    selected = select_labels(labels, scene, TRANSFORM, style)
+    assert selected == labels
+
+
+def test_protected_ids_are_always_kept() -> None:
+    scene, labels = clustered_scene()
+    unprotected = select_labels(labels, scene, TRANSFORM, STYLE)
+    unprotected_ids = {label.id for label in unprotected}
+    dropped = [
+        label.id for label in labels if label.id not in unprotected_ids
+    ]
+    assert dropped, "expected the dense field to drop some ordinary labels"
+    protected = dropped[0]
+    selected = select_labels(
+        labels, scene, TRANSFORM, STYLE, protected_ids=[protected]
+    )
+    assert protected in {label.id for label in selected}
+
+
+def test_selection_is_deterministic() -> None:
+    scene, labels = clustered_scene()
+    first = select_labels(labels, scene, TRANSFORM, STYLE)
+    second = select_labels(labels, scene, TRANSFORM, STYLE)
+    assert [label.id for label in first] == [label.id for label in second]

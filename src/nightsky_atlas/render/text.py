@@ -25,8 +25,13 @@ __all__ = [
     "TextMetrics",
     "TextMeasurer",
     "draw_centered_text",
+    "draw_markup_centered_text",
+    "draw_markup_text",
+    "draw_rotated_markup_centered_text",
     "draw_text",
+    "escape_markup",
     "make_layout",
+    "make_markup_layout",
     "measure_point_size",
 ]
 
@@ -69,6 +74,29 @@ def make_layout(
     description.set_size(int(round(font_size_pt * Pango.SCALE)))
     description.set_weight(_pango_weight(font_weight))
     layout.set_font_description(description)
+    return layout
+
+
+def escape_markup(text: str) -> str:
+    """Escape text so it can be embedded verbatim in a Pango markup string."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def make_markup_layout(
+    cr: cairo.Context[cairo.Surface],
+    markup: str,
+    font_family: str,
+    font_size_pt: float,
+    font_weight: FontWeight = "normal",
+) -> Pango.Layout:
+    """Create a Pango layout from markup, keeping the base font description.
+
+    Markup is the single source of mixed-weight furniture (a regular title
+    prefix with a bold chart code): one layout carries both weights, so the
+    measured width and the drawn glyphs cannot disagree.
+    """
+    layout = make_layout(cr, font_family, font_size_pt, font_weight)
+    layout.set_markup(markup, -1)
     return layout
 
 
@@ -119,6 +147,62 @@ def draw_text(
     PangoCairo.show_layout(cr, layout)
 
 
+def draw_markup_centered_text(
+    cr: cairo.Context[cairo.Surface],
+    markup: str,
+    center_x_pt: float,
+    center_y_pt: float,
+    font_family: str,
+    font_size_pt: float,
+    font_weight: FontWeight = "normal",
+) -> None:
+    """Draw Pango markup centred on a point."""
+    layout = make_markup_layout(cr, markup, font_family, font_size_pt, font_weight)
+    width, height = layout.get_pixel_size()
+    cr.move_to(center_x_pt - width / 2.0, center_y_pt - height / 2.0)
+    PangoCairo.show_layout(cr, layout)
+
+
+def draw_markup_text(
+    cr: cairo.Context[cairo.Surface],
+    markup: str,
+    x_pt: float,
+    y_pt: float,
+    font_family: str,
+    font_size_pt: float,
+    font_weight: FontWeight = "normal",
+) -> None:
+    """Draw Pango markup with its logical box top-left at ``(x_pt, y_pt)``."""
+    layout = make_markup_layout(cr, markup, font_family, font_size_pt, font_weight)
+    cr.move_to(x_pt, y_pt)
+    PangoCairo.show_layout(cr, layout)
+
+
+def draw_rotated_markup_centered_text(
+    cr: cairo.Context[cairo.Surface],
+    markup: str,
+    center_x_pt: float,
+    center_y_pt: float,
+    font_family: str,
+    font_size_pt: float,
+    angle_rad: float,
+    font_weight: FontWeight = "normal",
+) -> None:
+    """Draw Pango markup rotated about its centre by ``angle_rad``.
+
+    Used for side-margin navigation, where the printable side band is too
+    narrow for horizontal text once it is enlarged.
+    """
+    layout = make_markup_layout(cr, markup, font_family, font_size_pt, font_weight)
+    width, height = layout.get_pixel_size()
+    cr.save()
+    cr.translate(center_x_pt, center_y_pt)
+    cr.rotate(angle_rad)
+    cr.move_to(-width / 2.0, -height / 2.0)
+    PangoCairo.show_layout(cr, layout)
+    cr.restore()
+
+
 class TextMeasurer:
     """Measure label text in physical page millimetres.
 
@@ -150,3 +234,14 @@ class TextMeasurer:
         """Return the logical text extent in millimetres."""
         width_pt, height_pt = self.measure_pt(text)
         return TextMetrics(width_mm=pt_to_mm(width_pt), height_mm=pt_to_mm(height_pt))
+
+    def measure_markup_mm(self, markup: str) -> TextMetrics:
+        """Return the extent of a Pango markup string in millimetres.
+
+        Mixed-weight furniture (a regular prefix and a bold chart code) must be
+        measured exactly as it is drawn, so the obstacle and the printed glyphs
+        use the same layout.
+        """
+        self._layout.set_markup(markup, -1)
+        width, height = self._layout.get_pixel_size()
+        return TextMetrics(width_mm=pt_to_mm(width), height_mm=pt_to_mm(height))

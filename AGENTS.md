@@ -216,7 +216,10 @@ redistribution/embedding rights.
   the anchor exclusion zone. Later: radial, along-path, leader-line candidates.
 - **14.3 Priorities** — category weights plus local relevance: major/common
   name, Messier, bright NGC/IC, prominent named star, ordinary NGC/IC, fainter
-  optional DSO, minor star designation.
+  optional DSO, minor star designation. The single numeric scale lives in
+  `catalog/priority.py`; `tier_for` maps it onto HIGH/MEDIUM/LOW. Herschel 400
+  is split by visual significance (prominent members are high, the rest
+  medium). A merely bright DSO is high priority but **not** mandatory.
 - **14.4 Required collision checks** — label vs label, page border, important
   star, DSO, own exclusion zone, title/metadata; leader line vs labels and
   important symbols; excessive leader-line crossing. Grid lines have lower
@@ -229,6 +232,14 @@ redistribution/embedding rights.
   config (`label.dso_labels`): Messier bold at 1.15×, non-Messier Herschel 400
   bold at normal size, ordinary regular. Each `Label` carries its resolved
   `font_size_pt`/`font_weight`.
+- **14.6 Deterministic selection before placement** — `object visible != label
+  visible`. Candidate labels pass semantic de-duplication (one primary visible
+  label per printed name; catalogue aliases and duplicated star names collapse
+  to the higher priority, then the brighter target, then the stable id) and a
+  local density selection (`layout/selection.py`) before placement: high-tier
+  labels are always kept, medium/low labels are thinned by the printed label
+  area within a local neighbourhood. It is a local rule, never a global label
+  percentage. Manual overrides are protected from selection.
 
 ## 15. Deterministic layout optimizer
 

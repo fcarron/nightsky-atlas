@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
-from nightsky_atlas.catalog.selection import base_label_priority
+from nightsky_atlas.catalog.priority import (
+    base_label_priority,
+    star_label_priority,
+)
 from nightsky_atlas.catalog.star_names import StarName, hip_number
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.candidates import compass_candidates
@@ -24,11 +27,6 @@ __all__ = [
     "build_star_labels",
     "label_priority",
 ]
-
-_STAR_NAME_PRIORITY = 85
-_STAR_BAYER_PRIORITY = 70
-_STAR_DESIGNATION_PRIORITY = 50
-_STAR_MANDATORY_MAGNITUDE = 2.0
 
 
 def label_priority(dso: DeepSkyObject) -> tuple[int, bool]:
@@ -123,15 +121,12 @@ def build_dso_labels(
 
 
 def _star_label_priority(star: Star, star_name: StarName) -> tuple[int, bool]:
-    """Return ``(priority, mandatory)`` for a named/designated star."""
-    if star_name.name:
-        priority = _STAR_NAME_PRIORITY
-    elif star_name.bayer:
-        priority = _STAR_BAYER_PRIORITY
-    else:
-        priority = _STAR_DESIGNATION_PRIORITY
-    mandatory = star.magnitude <= _STAR_MANDATORY_MAGNITUDE
-    return priority, mandatory
+    """Return ``(priority, mandatory)`` for a named/designated star.
+
+    Delegates to the central priority scale so the star and deep-sky orderings
+    cannot diverge.
+    """
+    return star_label_priority(star, star_name)
 
 
 def build_star_labels(

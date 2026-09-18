@@ -90,7 +90,12 @@ from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
 from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.optimizer import OptimizationResult, optimize_labels
-from nightsky_atlas.layout.overrides import apply_overrides, load_override_library
+from nightsky_atlas.layout.overrides import (
+    ChartOverrides,
+    apply_overrides,
+    load_override_library,
+)
+from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import DebugOptions, render_chart, render_magnitude_scale
 from nightsky_atlas.render.furniture import furniture_obstacles
@@ -216,17 +221,62 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _load_chart_overrides(
+    args: argparse.Namespace, definition: ChartDefinition
+) -> ChartOverrides | None:
+    """Load explicit chart overrides, if any, for this chart."""
+    path = getattr(args, "overrides", None)
+    if path is None:
+        return None
+    overrides = load_override_library(path).for_chart(definition.id)
+    if overrides is None:
+        raise ConfigError(f"no overrides found for chart {definition.id!r} in {path}")
+    return overrides
+
+
+def _protected_label_ids(overrides: ChartOverrides | None) -> frozenset[str]:
+    """Return label IDs a manual override refers to, so selection keeps them.
+
+    A hidden override may be dropped; every other override (a moved candidate,
+    a lock, an explicit un-hide) must survive the density selection pass so the
+    override contract is not silently broken.
+    """
+    if overrides is None:
+        return frozenset()
+    return frozenset(
+        label_id
+        for label_id, spec in overrides.labels.items()
+        if spec.hidden is not True
+    )
+
+
 def _apply_chart_overrides(
     args: argparse.Namespace, definition: ChartDefinition, labels: tuple
 ) -> tuple:
     """Apply explicit chart overrides, if given, after initial label layout."""
-    path = getattr(args, "overrides", None)
-    if path is None:
-        return labels
-    overrides = load_override_library(path).for_chart(definition.id)
+    overrides = _load_chart_overrides(args, definition)
     if overrides is None:
-        raise ConfigError(f"no overrides found for chart {definition.id!r} in {path}")
+        return labels
     return apply_overrides(labels, overrides)
+
+
+def _select_labels(
+    args: argparse.Namespace,
+    definition: ChartDefinition,
+    labels: tuple,
+    scene: ChartScene,
+    transform: PageTransform,
+    style,
+) -> tuple:
+    """Run deterministic label selection, protecting overridden labels."""
+    overrides = _load_chart_overrides(args, definition)
+    return select_labels(
+        labels,
+        scene,
+        transform,
+        style,
+        protected_ids=_protected_label_ids(overrides),
+    )
 
 
 def _add_chart_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -549,8 +599,12 @@ def _command_chart_render(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
 
     has_labels = bool(args.labels or args.optimize or args.overrides)
-    labels = build_labels(scene, transform, style, _star_names(args)) if has_labels else ()
-    labels = _apply_chart_overrides(args, definition, labels)
+    if has_labels:
+        labels = build_labels(scene, transform, style, _star_names(args))
+        labels = _select_labels(args, definition, labels, scene, transform, style)
+        labels = _apply_chart_overrides(args, definition, labels)
+    else:
+        labels = ()
     presentation = presentation_from_edition(definition, atlas.resolved_edition())
     furniture = furniture_obstacles(transform, definition, style, presentation)
     result: OptimizationResult | None = None
@@ -588,6 +642,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
 def _command_chart_review(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
     labels = build_labels(scene, transform, style, _star_names(args))
+    labels = _select_labels(args, definition, labels, scene, transform, style)
     labels = _apply_chart_overrides(args, definition, labels)
     presentation = presentation_from_edition(definition, atlas.resolved_edition())
     furniture = furniture_obstacles(transform, definition, style, presentation)
@@ -695,6 +750,7 @@ def _write_layout_json(
 def _command_chart_validate(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
     labels = build_labels(scene, transform, style, _star_names(args))
+    labels = _select_labels(args, definition, labels, scene, transform, style)
     labels = _apply_chart_overrides(args, definition, labels)
     presentation = presentation_from_edition(definition, atlas.resolved_edition())
     furniture = furniture_obstacles(transform, definition, style, presentation)

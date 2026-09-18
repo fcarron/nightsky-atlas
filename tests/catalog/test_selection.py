@@ -13,6 +13,7 @@ from nightsky_atlas.catalog.observing_lists import (
     dso_memberships,
     load_observing_lists,
 )
+from nightsky_atlas.catalog.priority import HERSCHEL_PRIORITY
 from nightsky_atlas.catalog.selection import (
     SelectionPolicy,
     base_label_priority,
@@ -48,7 +49,7 @@ def make_dso(
 def test_base_label_priority_unchanged() -> None:
     assert base_label_priority(make_dso("NGC4486", cross_ids=("M87",))) == (100, True)
     assert base_label_priority(make_dso("X", common_name="Named")) == (90, True)
-    assert base_label_priority(make_dso("Y", magnitude=8.0)) == (60, True)
+    assert base_label_priority(make_dso("Y", magnitude=8.0)) == (60, False)
     assert base_label_priority(make_dso("Z", magnitude=13.0)) == (30, False)
 
 
@@ -68,7 +69,7 @@ def test_select_dso_forced_membership() -> None:
     assert metadata.forced is True
     assert metadata.list_memberships == {"herschel400"}
     assert metadata.render_priority == FORCED.forced_render_priority
-    assert metadata.label_priority >= FORCED.forced_label_priority
+    assert metadata.label_priority >= HERSCHEL_PRIORITY
 
 
 def test_select_dso_membership_bonus_without_force() -> None:

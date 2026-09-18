@@ -47,6 +47,8 @@ __all__ = [
     "EditionConfig",
     "FurnitureStyle",
     "GridStyle",
+    "LabelSelectionStyle",
+    "LabelStyle",
     "MagnitudeLegendStyle",
     "NavigationStyle",
     "OverlapTargetConfig",
@@ -376,6 +378,24 @@ class DsoLabelStyle(_StrictModel):
     normal: DsoLabelTierStyle = Field(default_factory=DsoLabelTierStyle)
 
 
+class LabelSelectionStyle(_StrictModel):
+    """Deterministic label selection before placement.
+
+    Not every drawn object should carry a label.  Candidate labels are ranked by
+    the central priority tiers and the lower tiers are thinned by *local* label
+    density: within ``density_radius_mm`` of a candidate anchor, the printed
+    label area may not exceed a fraction of the neighbourhood area.  High-tier
+    labels (Messier, prominent Herschel 400, named stars) are never suppressed,
+    so dense fields lose ordinary labels rather than important ones.  This is a
+    local rule, never a global label percentage.
+    """
+
+    enabled: bool = True
+    density_radius_mm: PositiveFloat = 15.0
+    medium_density_budget: PositiveFloat = 0.12
+    low_density_budget: PositiveFloat = 0.05
+
+
 class LabelStyle(_StrictModel):
     """Label typography and candidate generation.
 
@@ -383,6 +403,7 @@ class LabelStyle(_StrictModel):
     are still rendered; ``None`` labels every selected object.  Mandatory labels
     (Messier, common name, bright DSO) and observing-list members are exempt.
     ``dso_labels`` carries the deep-sky label size/weight hierarchy.
+    ``selection`` controls which candidate labels survive to placement.
     """
 
     font_family: str
@@ -391,6 +412,7 @@ class LabelStyle(_StrictModel):
     ring_gap_mm: PositiveFloat = 2.5
     dso_label_magnitude_limit: float | None = None
     dso_labels: DsoLabelStyle = Field(default_factory=DsoLabelStyle)
+    selection: LabelSelectionStyle = Field(default_factory=LabelSelectionStyle)
 
 
 class DsoExtentStyle(_StrictModel):
@@ -671,18 +693,19 @@ class ScaleBarStyle(_StrictModel):
 class NavigationStyle(_StrictModel):
     """Adjacent-chart navigation references.
 
-    Navigation sits outside the chart frame, further out than the coordinate
-    labels, is smaller and mid-grey, and always prints short chart codes.  It is
-    purely navigational furniture and is drawn beneath nothing sky-related.
-    ``frame_gap_mm`` is the gap to the chart frame for the N/S references;
-    ``side_inset_mm`` is the distance of the E/W references from the paper edge
-    and must stay clear of the printer's unprintable margin (a few millimetres),
-    not just the chart frame, which on a full-width field nearly touches the
-    page edge.
+    Navigation sits outside the chart frame and always prints short chart
+    codes.  It is deliberately larger than the coordinate labels so it can be
+    found at a glance while flipping pages, but mid-grey so it still reads as
+    subordinate to sky content.  ``frame_gap_mm`` is the gap to the chart frame
+    for the N/S references; ``side_inset_mm`` is the distance of the E/W
+    references from the paper edge and must stay clear of the printer's
+    unprintable margin (a few millimetres), not just the chart frame, which on a
+    full-width field nearly touches the page edge.  The side references are
+    rotated to read along the narrow margin.
     """
 
     enabled: bool = True
-    font_size_pt: PositiveFloat = 5.0
+    font_size_pt: PositiveFloat = 7.5
     gray: float = 0.5
     frame_gap_mm: PositiveFloat = 4.2
     side_inset_mm: PositiveFloat = 5.0
@@ -713,7 +736,7 @@ class MagnitudeLegendStyle(_StrictModel):
 class FurnitureStyle(_StrictModel):
     """Chart title/footer, scale bar, magnitude legend and navigation styling."""
 
-    title_font_size_pt: PositiveFloat = 8.0
+    title_font_size_pt: PositiveFloat = 8.5
     title_gray: float = 0.15
     chart_border_width_mm: PositiveFloat = 0.25
     scale_bar: ScaleBarStyle = Field(default_factory=ScaleBarStyle)

@@ -23,6 +23,11 @@ from dataclasses import dataclass, field
 
 from nightsky_atlas.catalog.models import DeepSkyObject
 from nightsky_atlas.catalog.observing_lists import dso_memberships
+from nightsky_atlas.catalog.priority import (
+    base_label_priority,
+    dso_label_priority,
+    messier_id,
+)
 from nightsky_atlas.catalog.visibility import (
     VisibilityLimits,
     evaluate_visibility,
@@ -36,33 +41,14 @@ __all__ = [
     "select_dso",
 ]
 
-_MESSIER_PRIORITY = 100
-_COMMON_NAME_PRIORITY = 90
-_BRIGHT_DSO_PRIORITY = 60
-_ORDINARY_DSO_PRIORITY = 30
-_BRIGHT_MAGNITUDE = 9.0
-
 _DEFAULT_RENDER_BASE_PRIORITY = 20
 _DEFAULT_FORCED_RENDER_PRIORITY = 100
-_DEFAULT_FORCED_LABEL_PRIORITY = 80
 
 
-def messier_id(dso: DeepSkyObject) -> str | None:
-    for cross_id in dso.cross_ids:
-        if cross_id.startswith("M") and cross_id[1:].isdigit():
-            return cross_id
-    return None
-
-
-def base_label_priority(dso: DeepSkyObject) -> tuple[int, bool]:
-    """Return the catalogue-only ``(priority, mandatory)`` for a DSO label."""
-    if messier_id(dso) is not None:
-        return _MESSIER_PRIORITY, True
-    if dso.common_name:
-        return _COMMON_NAME_PRIORITY, True
-    if dso.magnitude is not None and dso.magnitude <= _BRIGHT_MAGNITUDE:
-        return _BRIGHT_DSO_PRIORITY, True
-    return _ORDINARY_DSO_PRIORITY, False
+def _membership_bonus(
+    memberships: frozenset[str], policy: SelectionPolicy
+) -> int:
+    return sum(weight for list_id, weight in policy.list_weights if list_id in memberships)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +65,6 @@ class SelectionPolicy:
     forced_lists: frozenset[str] = frozenset()
     list_weights: tuple[tuple[str, int], ...] = ()
     forced_render_priority: int = _DEFAULT_FORCED_RENDER_PRIORITY
-    forced_label_priority: int = _DEFAULT_FORCED_LABEL_PRIORITY
     render_base_priority: int = _DEFAULT_RENDER_BASE_PRIORITY
     visibility: VisibilityLimits = field(default_factory=VisibilityLimits)
 
@@ -121,12 +106,6 @@ class DsoMetadata:
         }
 
 
-def _membership_bonus(
-    memberships: frozenset[str], policy: SelectionPolicy
-) -> int:
-    return sum(weight for list_id, weight in policy.list_weights if list_id in memberships)
-
-
 def _importance_score(
     dso: DeepSkyObject,
     memberships: frozenset[str],
@@ -165,7 +144,12 @@ def select_dso(
 
     if forced:
         render_priority = effective_policy.forced_render_priority
-        label_priority = max(base_priority, effective_policy.forced_label_priority)
+        label_priority = dso_label_priority(
+            dso,
+            memberships=memberships,
+            forced=True,
+            visual_score=assessment.score,
+        )
     else:
         render_priority = effective_policy.render_base_priority + bonus
         label_priority = base_priority + bonus

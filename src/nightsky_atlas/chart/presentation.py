@@ -19,9 +19,15 @@ __all__ = [
     "chart_index",
     "chart_title",
     "neighbour_code",
+    "neighbour_markup",
     "presentation_for",
     "product_edition_title",
 ]
+
+
+def _escape_markup(text: str) -> str:
+    """Escape text for Pango markup without depending on the render layer."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 PRODUCT_NAME = "NightSky Atlas"
 
@@ -70,6 +76,30 @@ class ChartPresentation:
             f"\N{MIDDLE DOT} {self.chart_code}"
         )
 
+    @property
+    def title_prefix(self) -> str:
+        """Visible title without the chart code, including the separator."""
+        if not self.chart_code:
+            return ""
+        return (
+            f"{self.product_name} \N{EM DASH} {self.edition_name} \N{MIDDLE DOT} "
+        )
+
+    @property
+    def title_markup(self) -> str:
+        """Title as Pango markup: regular prefix, emphasized chart code.
+
+        The chart code is the one string an observer hunts for while flipping
+        pages, so it is the only part rendered bold (``AGENTS.md`` section 16:
+        the renderer draws exactly what the presentation specifies).
+        """
+        if not self.chart_code:
+            return _escape_markup(self.title)
+        return (
+            f"{_escape_markup(self.title_prefix)}"
+            f"<b>{_escape_markup(self.chart_code)}</b>"
+        )
+
 
 def product_edition_title(edition_name: str, *, product_name: str = PRODUCT_NAME) -> str:
     """Product and edition name without a chart code, e.g. front matter."""
@@ -114,6 +144,16 @@ def neighbour_code(neighbour_id: str, edition_code: str) -> str:
     if index is None:
         return neighbour_id
     return f"{edition_code}{index:03d}"
+
+
+def neighbour_markup(direction: str, neighbour_id: str, edition_code: str) -> str:
+    """Return a neighbour reference as Pango markup.
+
+    The direction stays regular and the chart code is bold, so the code -- not
+    the compass letter -- is what catches the eye while flipping pages.
+    """
+    code = neighbour_code(neighbour_id, edition_code)
+    return f"{_escape_markup(direction)}: <b>{_escape_markup(code)}</b>"
 
 
 def chart_title(definition: ChartDefinition) -> str:

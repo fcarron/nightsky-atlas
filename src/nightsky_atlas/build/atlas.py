@@ -50,6 +50,7 @@ from nightsky_atlas.layout.overrides import (
     apply_overrides,
     load_override_library,
 )
+from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
 from nightsky_atlas.render.furniture import furniture_obstacles
@@ -321,6 +322,22 @@ def build_atlas(
             observing_lists = chart_context.observing_lists
         if chart_context.selection_policy is not None:
             forced_lists = sorted(chart_context.selection_policy.forced_lists)
+        protected_ids = (
+            frozenset(
+                label_id
+                for label_id, spec in chart_overrides.labels.items()
+                if spec.hidden is not True
+            )
+            if chart_overrides is not None
+            else frozenset()
+        )
+        labels = select_labels(
+            labels,
+            chart_context.scene,
+            chart_context.transform,
+            chart_context.style,
+            protected_ids=protected_ids,
+        )
         if chart_overrides is not None:
             labels = apply_overrides(labels, chart_overrides)
             applied_chart_ids.add(definition.id)

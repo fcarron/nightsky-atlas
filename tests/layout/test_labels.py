@@ -56,8 +56,8 @@ def test_priority_messier_is_mandatory() -> None:
     assert label_priority(make_dso("NGC4486", cross_ids=("M87",))) == (100, True)
 
 
-def test_priority_bright_dso_mandatory_ordinary_optional() -> None:
-    assert label_priority(make_dso("X", magnitude=8.0))[1] is True
+def test_priority_bright_dso_high_but_optional() -> None:
+    assert label_priority(make_dso("X", magnitude=8.0))[1] is False
     assert label_priority(make_dso("Y", magnitude=13.0))[1] is False
 
 
@@ -162,7 +162,7 @@ def test_build_dso_labels_uses_metadata_priority() -> None:
     )
     labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE)
     assert len(labels) == 1
-    assert labels[0].priority == policy.forced_label_priority
+    assert labels[0].priority == scene.deep_sky_objects[0].metadata.label_priority
     assert labels[0].mandatory is False
 
 

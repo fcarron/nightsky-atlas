@@ -332,7 +332,10 @@ atlas metadata and never modify the astronomical model (`AGENTS.md` section 5).
   the edition `VisibilityLimits` (default: 8-10 inch dark sky) sourced from the
   atlas `visibility:` block, and the scene builder keeps an object when it is
   visible or forced.  Star/double-star entries are excluded from the DSO layer.
-  A per-chart density budget remains a possible later refinement.
+  The per-chart density budget is implemented as local density label selection
+  (`layout/selection.py`, `catalog/priority.py`): high-tier labels are always
+  kept, medium/low labels are thinned by printed label area within a local
+  neighbourhood, and semantic duplicates are collapsed before placement.
 - [ ] **M21.5 Additional lists** — Messier, Caldwell, RASC, SAC, ASSA, Bennett and
   (licensing permitting) NSOG; Deep adds Herschel II and the Astronomical League
   programs.  Each needs a license/provenance decision before ingestion.
