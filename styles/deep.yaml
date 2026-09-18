@@ -1,7 +1,20 @@
 # Shared physical print style inherited from Standard; Deep alters only content density.
 extends: standard.yaml
 id: deep
-star: {faint_magnitude: 10.5, label_magnitude_limit: 6.5}
+star:
+  faint_magnitude: 10.0
+  label_magnitude_limit: 6.5
+  min_diameter_mm: 0.23
+  max_diameter_mm: 5.2
+  diameter_curve: [[0.0, 5.2], [1.0, 4.35], [2.0, 3.6], [3.0, 2.75], [4.0, 2.1], [5.0, 1.35], [6.0, 0.85], [7.0, 0.62], [8.0, 0.45], [9.0, 0.3], [10.0, 0.23]]
+dso:
+  galaxy: {min_diameter_mm: 0.7, min_minor_axis_mm: 1.0}
+  globular_cluster: {min_diameter_mm: 1.1}
+  planetary_nebula: {min_diameter_mm: 1.1}
+  open_cluster: {min_diameter_mm: 1.4}
+  bright_nebula: {min_diameter_mm: 1.6}
+  dark_nebula: {min_diameter_mm: 1.6}
+  galaxy_cluster: {min_diameter_mm: 1.6}
 label:
   dso_label_magnitude_limit: 14.0
   selection: {medium_density_budget: 0.18, low_density_budget: 0.09}

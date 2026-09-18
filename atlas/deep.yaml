@@ -2,7 +2,7 @@
 extends: standard.yaml
 id: deep
 edition: {name: Deep, code: D}
-stellar_limit_magnitude: 10.5
+stellar_limit_magnitude: 10.0
 tiling:
   width_deg: 13.5
   height_deg: 9.0

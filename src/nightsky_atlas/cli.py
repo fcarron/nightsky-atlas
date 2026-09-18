@@ -100,7 +100,12 @@ from nightsky_atlas.layout.overrides import (
 )
 from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import validate_layout
-from nightsky_atlas.render.cairo import DebugOptions, render_chart, render_magnitude_scale
+from nightsky_atlas.render.cairo import (
+    DebugOptions,
+    render_chart,
+    render_edition_magnitude_scale,
+    render_magnitude_scale,
+)
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.overview import LocatorInset
 from nightsky_atlas.render.review import render_review_png
@@ -349,6 +354,11 @@ def _add_chart_commands(subparsers: argparse._SubParsersAction) -> None:
     scale.add_argument("--style", type=Path, default=_DEFAULT_STYLE)
     scale.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
     scale.add_argument("--png-dpi", type=float, default=300.0)
+    scale.add_argument(
+        "--edition-comparison",
+        action="store_true",
+        help="render Pocket, Standard and Deep star curves on one A4 test sheet",
+    )
     scale.set_defaults(handler=_command_magnitude_scale)
 
 
@@ -822,14 +832,29 @@ def _command_magnitude_scale(args: argparse.Namespace) -> int:
     page = atlas.page.to_geometry()
 
     outdir = args.outdir / atlas.id / "diagnostics"
-    render_magnitude_scale(
-        page,
-        style,
-        pdf_path=outdir / "magnitude-scale.pdf",
-        png_path=outdir / "magnitude-scale.png",
-        png_dpi=args.png_dpi,
-    )
-    print(f"magnitude scale -> {outdir / 'magnitude-scale.pdf'}")
+    if args.edition_comparison:
+        styles = {
+            edition: load_style_config(Path("styles") / f"{edition}.yaml")
+            for edition in ("pocket", "standard", "deep")
+        }
+        pdf_path = outdir / "edition-star-curves.pdf"
+        render_edition_magnitude_scale(
+            page,
+            styles,
+            pdf_path=pdf_path,
+            png_path=outdir / "edition-star-curves.png",
+            png_dpi=args.png_dpi,
+        )
+    else:
+        pdf_path = outdir / "magnitude-scale.pdf"
+        render_magnitude_scale(
+            page,
+            style,
+            pdf_path=pdf_path,
+            png_path=outdir / "magnitude-scale.png",
+            png_dpi=args.png_dpi,
+        )
+    print(f"magnitude scale -> {pdf_path}")
     return 0
 
 

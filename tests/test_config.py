@@ -105,13 +105,32 @@ def test_edition_rejects_unknown_key(tmp_path: Path) -> None:
 def test_shipped_style_fixture_loads() -> None:
     config = load_style_config(STYLE_FIXTURE)
     assert config.id == "standard"
-    assert config.star.min_diameter_mm == pytest.approx(0.2)
+    assert config.star.min_diameter_mm == pytest.approx(0.36)
     assert config.star.label_magnitude_limit == pytest.approx(5.5)
     assert config.label.font_size_pt == pytest.approx(6.0)
     assert config.constellation.lines.enabled is True
     assert config.constellation.boundaries.enabled is True
     assert config.dso.outline_line_width_mm > 0.0
     assert config.dso.outline_dash_mm > 0.0
+
+
+@pytest.mark.parametrize(
+    "diameter_curve",
+    (
+        [[0.0, 1.0], [0.0, 0.8]],
+        [[0.0, 0.8], [9.0, 1.0]],
+        [[0.0, 1.0], [8.0, 0.4]],
+    ),
+)
+def test_star_diameter_curve_is_strictly_validated(
+    tmp_path: Path, diameter_curve: list[list[float]]
+) -> None:
+    data = valid_style_dict()
+    data["star"]["diameter_curve"] = diameter_curve
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError) as excinfo:
+        load_style_config(path)
+    assert "diameter_curve" in str(excinfo.value)
 
 
 def test_shipped_style_declares_subdued_furniture() -> None:

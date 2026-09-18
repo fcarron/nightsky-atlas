@@ -95,6 +95,7 @@ def galaxy_ellipse(
     *,
     mm_per_deg: float,
     min_axis_mm: float,
+    min_minor_axis_mm: float | None = None,
     max_axis_mm: float | None = None,
 ) -> EllipseGeometry | None:
     """Compute a true-scale, oriented ellipse for a galaxy.
@@ -110,9 +111,11 @@ def galaxy_ellipse(
 
     major_mm = dso.major_axis_arcmin / 60.0 * mm_per_deg
     minor_mm = (dso.minor_axis_arcmin or dso.major_axis_arcmin) / 60.0 * mm_per_deg
-    ratio = minor_mm / major_mm if major_mm > 0.0 else 1.0
-    major_mm = max(major_mm, min_axis_mm)
-    minor_mm = major_mm * ratio
+    scale = max(min_axis_mm / major_mm, 1.0)
+    if min_minor_axis_mm is not None and minor_mm > 0.0:
+        scale = max(scale, min_minor_axis_mm / minor_mm)
+    major_mm *= scale
+    minor_mm *= scale
     if max_axis_mm is not None and major_mm > max_axis_mm:
         scale = max_axis_mm / major_mm
         major_mm *= scale
@@ -227,6 +230,7 @@ def dso_symbol_extent(
                 dso,
                 mm_per_deg=mm_per_deg,
                 min_axis_mm=extent.min_diameter_mm,
+                min_minor_axis_mm=extent.min_minor_axis_mm,
                 max_axis_mm=extent.max_diameter_mm,
             )
             if ellipse is not None:
@@ -288,6 +292,7 @@ class StarSizeModel:
     max_diameter_mm: float
     bright_magnitude: float
     faint_magnitude: float
+    diameter_curve: tuple[tuple[float, float], ...] = ()
 
     def __post_init__(self) -> None:
         if self.min_diameter_mm <= 0.0:
@@ -305,10 +310,22 @@ class StarSizeModel:
             max_diameter_mm=style.max_diameter_mm,
             bright_magnitude=style.bright_magnitude,
             faint_magnitude=style.faint_magnitude,
+            diameter_curve=tuple(style.diameter_curve),
         )
 
     def diameter_mm(self, magnitude: float) -> float:
         """Return the printed diameter in millimetres for a magnitude."""
+        if self.diameter_curve:
+            first_magnitude, first_diameter = self.diameter_curve[0]
+            if magnitude <= first_magnitude:
+                return first_diameter
+            for (left_magnitude, left_diameter), (right_magnitude, right_diameter) in zip(
+                self.diameter_curve, self.diameter_curve[1:], strict=False
+            ):
+                if magnitude <= right_magnitude:
+                    fraction = (magnitude - left_magnitude) / (right_magnitude - left_magnitude)
+                    return left_diameter + fraction * (right_diameter - left_diameter)
+            return self.diameter_curve[-1][1]
         if magnitude <= self.bright_magnitude:
             return self.max_diameter_mm
         if magnitude >= self.faint_magnitude:

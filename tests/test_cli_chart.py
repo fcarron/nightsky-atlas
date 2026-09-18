@@ -54,6 +54,26 @@ def test_magnitude_scale_command_writes_artifacts(tmp_path: Path) -> None:
     assert (diagnostics / "magnitude-scale.png").exists()
 
 
+def test_edition_magnitude_scale_command_writes_artifacts(tmp_path: Path) -> None:
+    code = main(
+        [
+            "chart",
+            "magnitude-scale",
+            "--atlas",
+            str(ATLAS),
+            "--style",
+            str(STYLE),
+            "--edition-comparison",
+            "--outdir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 0
+    diagnostics = tmp_path / "standard" / "diagnostics"
+    assert (diagnostics / "edition-star-curves.pdf").exists()
+    assert (diagnostics / "edition-star-curves.png").exists()
+
+
 def test_unknown_chart_reports_error(tmp_path: Path, capsys) -> None:
     code = main(
         [

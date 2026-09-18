@@ -336,6 +336,7 @@ class StarStyle(_StrictModel):
     faint_magnitude: float
     label_magnitude_limit: float = 4.0
     close_overlap_halo_mm: NonNegativeFloat = 0.12
+    diameter_curve: tuple[tuple[float, PositiveFloat], ...] = ()
 
     @field_validator("max_diameter_mm")
     @classmethod
@@ -352,6 +353,20 @@ class StarStyle(_StrictModel):
         if bright is not None and value <= bright:
             raise ValueError("faint_magnitude must be larger than bright_magnitude")
         return value
+
+    @model_validator(mode="after")
+    def _validate_diameter_curve(self) -> StarStyle:
+        if not self.diameter_curve:
+            return self
+        magnitudes = [point[0] for point in self.diameter_curve]
+        diameters = [point[1] for point in self.diameter_curve]
+        if any(right <= left for left, right in zip(magnitudes, magnitudes[1:], strict=False)):
+            raise ValueError("star diameter_curve magnitudes must be strictly ascending")
+        if any(right > left for left, right in zip(diameters, diameters[1:], strict=False)):
+            raise ValueError("star diameter_curve diameters must be monotonically non-increasing")
+        if magnitudes[-1] < self.faint_magnitude:
+            raise ValueError("star diameter_curve must reach faint_magnitude")
+        return self
 
 
 class DsoLabelTierStyle(_StrictModel):
@@ -444,6 +459,7 @@ class DsoExtentStyle(_StrictModel):
     fallback_diameter_mm: PositiveFloat
     min_diameter_mm: PositiveFloat
     max_diameter_mm: PositiveFloat | None = None
+    min_minor_axis_mm: PositiveFloat | None = None
 
     @model_validator(mode="after")
     def _limits_are_consistent(self) -> DsoExtentStyle:
@@ -460,12 +476,14 @@ def _extent(
     min_diameter_mm: float,
     max_diameter_mm: float | None = None,
     use_angular_size: bool = False,
+    min_minor_axis_mm: float | None = None,
 ) -> DsoExtentStyle:
     return DsoExtentStyle(
         use_angular_size=use_angular_size,
         fallback_diameter_mm=fallback_diameter_mm,
         min_diameter_mm=min_diameter_mm,
         max_diameter_mm=max_diameter_mm,
+        min_minor_axis_mm=min_minor_axis_mm,
     )
 
 

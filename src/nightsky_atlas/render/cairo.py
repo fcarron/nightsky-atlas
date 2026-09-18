@@ -11,7 +11,7 @@ geometry is converted with :func:`nightsky_atlas.units.mm_to_pt`.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,7 +46,13 @@ from nightsky_atlas.render.text import draw_centered_text, draw_text
 from nightsky_atlas.scene.models import ChartScene, SceneOutline, SceneSegment
 from nightsky_atlas.units import mm_to_pt
 
-__all__ = ["DebugOptions", "draw_chart_page", "render_chart", "render_magnitude_scale"]
+__all__ = [
+    "DebugOptions",
+    "draw_chart_page",
+    "render_chart",
+    "render_magnitude_scale",
+    "render_edition_magnitude_scale",
+]
 
 _DEFAULT_PNG_DPI = 300.0
 _POINTS_PER_INCH = 72.0
@@ -154,9 +160,7 @@ def render_magnitude_scale(
     """Render a diagnostic page showing star size against magnitude."""
     size_model = StarSizeModel.from_style(style.star)
     if magnitudes is None:
-        low = math.floor(style.star.bright_magnitude)
-        high = math.ceil(style.star.faint_magnitude)
-        magnitude_values = tuple(float(value) for value in range(low, high + 1))
+        magnitude_values = _curve_magnitudes(style)
     else:
         magnitude_values = tuple(float(value) for value in magnitudes)
     if not magnitude_values:
@@ -211,6 +215,99 @@ def render_magnitude_scale(
             )
 
     _render_outputs(page, draw, pdf_path=pdf_path, png_path=png_path, png_dpi=png_dpi)
+
+
+def render_edition_magnitude_scale(
+    page: PageGeometry,
+    edition_styles: Mapping[str, StyleConfig],
+    *,
+    pdf_path: str | Path | None = None,
+    png_path: str | Path | None = None,
+    png_dpi: float = _DEFAULT_PNG_DPI,
+) -> None:
+    """Render one A4 sheet comparing the physical star curves of editions.
+
+    The circles use the same :class:`StarSizeModel` used on charts; this is a
+    print calibration artifact, not a separately approximated legend.
+    """
+    if not edition_styles:
+        raise ValueError("at least one edition style is required")
+
+    editions = tuple(edition_styles.items())
+
+    def draw(cr: cairo.Context[cairo.Surface]) -> None:
+        cr.set_source_rgb(1.0, 1.0, 1.0)
+        cr.paint()
+        left = mm_to_pt(page.margin_mm)
+        right = mm_to_pt(page.width_mm - page.margin_mm)
+        top = mm_to_pt(page.margin_mm)
+        bottom = mm_to_pt(page.height_mm - page.margin_mm)
+        width = right - left
+
+        cr.set_source_rgb(0.0, 0.0, 0.0)
+        _draw_centered_text(
+            cr,
+            f"{PRODUCT_NAME} — edition star-symbol calibration",
+            (left + right) / 2.0,
+            top,
+            editions[0][1].label.font_family,
+            editions[0][1].label.font_size_pt,
+        )
+
+        block_height = (bottom - top - mm_to_pt(10.0)) / len(editions)
+        for index, (edition, style) in enumerate(editions):
+            block_top = top + mm_to_pt(8.0) + index * block_height
+            model = StarSizeModel.from_style(style.star)
+            magnitudes = _curve_magnitudes(style)
+            _draw_centered_text(
+                cr,
+                edition.upper(),
+                (left + right) / 2.0,
+                block_top,
+                style.label.font_family,
+                style.label.font_size_pt,
+            )
+            cell_width = width / len(magnitudes)
+            baseline_y = block_top + block_height * 0.46
+            for magnitude_index, magnitude in enumerate(magnitudes):
+                center_x = left + cell_width * (magnitude_index + 0.5)
+                cr.set_source_rgb(0.0, 0.0, 0.0)
+                cr.arc(
+                    center_x,
+                    baseline_y,
+                    mm_to_pt(model.radius_mm(magnitude)),
+                    0.0,
+                    2.0 * math.pi,
+                )
+                cr.fill()
+                _draw_centered_text(
+                    cr,
+                    f"m={magnitude:g}",
+                    center_x,
+                    baseline_y + mm_to_pt(7.0),
+                    style.label.font_family,
+                    style.label.font_size_pt,
+                )
+                _draw_centered_text(
+                    cr,
+                    f"{model.diameter_mm(magnitude):.2f} mm",
+                    center_x,
+                    baseline_y + mm_to_pt(10.0),
+                    style.label.font_family,
+                    style.label.font_size_pt,
+                )
+
+    _render_outputs(page, draw, pdf_path=pdf_path, png_path=png_path, png_dpi=png_dpi)
+
+
+def _curve_magnitudes(style: StyleConfig) -> tuple[float, ...]:
+    """Return integer magnitude references plus the exact faint endpoint."""
+    low = math.floor(style.star.bright_magnitude)
+    high = math.floor(style.star.faint_magnitude)
+    values = tuple(float(value) for value in range(low, high + 1))
+    if not math.isclose(values[-1], style.star.faint_magnitude):
+        return (*values, style.star.faint_magnitude)
+    return values
 
 
 def _render_outputs(

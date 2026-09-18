@@ -27,6 +27,7 @@ from nightsky_atlas.render.cairo import (
     _foreground_close_stars,
     draw_chart_page,
     render_chart,
+    render_edition_magnitude_scale,
     render_magnitude_scale,
 )
 from nightsky_atlas.render.symbols import StarSizeModel
@@ -134,6 +135,24 @@ def test_render_magnitude_scale(tmp_path: Path) -> None:
 def test_render_magnitude_scale_requires_magnitudes(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         render_magnitude_scale(PAGE, STYLE, magnitudes=[], pdf_path=tmp_path / "x.pdf")
+
+
+def test_render_edition_magnitude_scale(tmp_path: Path) -> None:
+    styles = {
+        edition: load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+        for edition in ("pocket", "standard", "deep")
+    }
+    pdf_path = tmp_path / "edition-scale.pdf"
+    png_path = tmp_path / "edition-scale.png"
+    render_edition_magnitude_scale(
+        PAGE,
+        styles,
+        pdf_path=pdf_path,
+        png_path=png_path,
+        png_dpi=72.0,
+    )
+    assert pdf_path.read_bytes().startswith(b"%PDF")
+    assert png_path.exists()
 
 
 def make_label(label_id: str, target_id: str, weight: str) -> Label:

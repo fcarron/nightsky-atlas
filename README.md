@@ -42,6 +42,13 @@ Artifacts are written to `build/standard/charts/test-virgo/chart.pdf` and
 .venv/bin/nightsky chart magnitude-scale --outdir build
 ```
 
+For a 100%-print A4 comparison of the Pocket, Standard and Deep star-symbol
+curves, use:
+
+```bash
+.venv/bin/nightsky chart magnitude-scale --edition-comparison --outdir build
+```
+
 ### Real star catalogue (Tycho-2)
 
 ```bash

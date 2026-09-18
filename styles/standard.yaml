@@ -5,14 +5,15 @@
 id: standard
 
 star:
-  min_diameter_mm: 0.2
-  max_diameter_mm: 2.4
+  min_diameter_mm: 0.36
+  max_diameter_mm: 6.0
   bright_magnitude: 0.0
   faint_magnitude: 9.0
   label_magnitude_limit: 5.5
   # A faint star overlapping a brighter star is redrawn above it with this
   # physical white knockout ring, retaining both real positions.
   close_overlap_halo_mm: 0.12
+  diameter_curve: [[0.0, 6.0], [1.0, 5.0], [2.0, 4.2], [3.0, 3.15], [4.0, 2.4], [5.0, 1.65], [6.0, 1.1], [7.0, 0.78], [8.0, 0.58], [9.0, 0.36]]
 
 label:
   font_family: "DejaVu Sans"
@@ -65,31 +66,35 @@ dso:
     use_angular_size: true
     fallback_diameter_mm: 1.4
     min_diameter_mm: 0.7
+    min_minor_axis_mm: 1.2
     max_diameter_mm: 12.0
   globular_cluster:
     use_angular_size: true
     fallback_diameter_mm: 1.5
-    min_diameter_mm: 1.2
+    min_diameter_mm: 1.4
     max_diameter_mm: 20.0
   open_cluster:
     use_angular_size: true
     fallback_diameter_mm: 2.0
-    min_diameter_mm: 1.4
+    min_diameter_mm: 1.8
     max_diameter_mm: 30.0
   planetary_nebula:
     use_angular_size: true
     fallback_diameter_mm: 1.4
-    min_diameter_mm: 1.0
+    min_diameter_mm: 1.4
     max_diameter_mm: 12.0
   bright_nebula:
-    fallback_diameter_mm: 1.6
-    min_diameter_mm: 1.2
+    use_angular_size: true
+    fallback_diameter_mm: 2.0
+    min_diameter_mm: 2.0
   dark_nebula:
-    fallback_diameter_mm: 1.6
-    min_diameter_mm: 1.2
+    use_angular_size: true
+    fallback_diameter_mm: 2.0
+    min_diameter_mm: 2.0
   galaxy_cluster:
-    fallback_diameter_mm: 1.6
-    min_diameter_mm: 1.2
+    use_angular_size: true
+    fallback_diameter_mm: 2.0
+    min_diameter_mm: 2.0
   other:
     fallback_diameter_mm: 1.4
     min_diameter_mm: 1.0

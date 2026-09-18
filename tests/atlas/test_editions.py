@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize(
     ("edition", "code", "stellar_limit", "scale_bar"),
-    (("pocket", "P", 7.5, 10.0), ("standard", "S", 9.0, 5.0), ("deep", "D", 10.5, 2.0)),
+    (("pocket", "P", 7.5, 10.0), ("standard", "S", 9.0, 5.0), ("deep", "D", 10.0, 2.0)),
 )
 def test_edition_presets_load_with_expected_scale_and_codes(
     edition: str, code: str, stellar_limit: float, scale_bar: float
@@ -36,7 +36,11 @@ def test_physical_print_style_is_shared_and_overlap_is_mm_derived() -> None:
         style = load_style_config(ROOT / "styles" / f"{edition}.yaml")
         spec = TilingSpec.from_config(atlas.tiling)
         assert style.label.font_size_pt == standard.label.font_size_pt
-        assert style.dso.galaxy.min_diameter_mm == standard.dso.galaxy.min_diameter_mm
+        assert style.label.dso_labels.normal_size_pt == standard.label.dso_labels.normal_size_pt
+        assert style.grid.line_width_mm == standard.grid.line_width_mm
+        assert style.grid.label_padding_mm == standard.grid.label_padding_mm
+        assert style.constellation.lines.line_width_mm == standard.constellation.lines.line_width_mm
+        assert style.furniture.navigation.font_size_pt == standard.furniture.navigation.font_size_pt
         assert spec.overlap_deg == pytest.approx(10.0 / atlas.tiling.mm_per_degree)
 
 
