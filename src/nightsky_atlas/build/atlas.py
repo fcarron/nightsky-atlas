@@ -21,6 +21,7 @@ from nightsky_atlas.atlas.config import (
     AtlasConfig,
     StyleConfig,
 )
+from nightsky_atlas.atlas.index import build_atlas_index
 from nightsky_atlas.atlas.overview import OverviewMap, build_overview, hemisphere_for
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 from nightsky_atlas.atlas.tiling import (
@@ -56,10 +57,12 @@ from nightsky_atlas.layout.overrides import (
 )
 from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import validate_layout
+from nightsky_atlas.render.atlas_index import draw_atlas_index_pages
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.overview import LocatorInset, draw_overview_page
 from nightsky_atlas.render.text import draw_centered_text, draw_text
+from nightsky_atlas.scene.models import SceneDso
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = [
@@ -115,6 +118,7 @@ class AtlasBuildResult:
     combined_pdf: Path
     manifest_path: Path
     draft_report_path: Path | None = None
+    index_page_count: int = 0
 
     @property
     def total_hard_issues(self) -> int:
@@ -184,9 +188,7 @@ def _load_overview_stars(
         return tuple(stars)
     if stars_csv is not None:
         return tuple(
-            star
-            for star in load_sample_stars(stars_csv)
-            if star.magnitude <= magnitude_limit
+            star for star in load_sample_stars(stars_csv) if star.magnitude <= magnitude_limit
         )
     return ()
 
@@ -315,9 +317,7 @@ def build_atlas(
     combined_pdf = outroot / "atlas.pdf"
     progress.info(f"atlas {atlas.id!r}: {len(charts)} charts -> {outroot}")
 
-    surface = cairo.PDFSurface(
-        str(combined_pdf), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm)
-    )
+    surface = cairo.PDFSurface(str(combined_pdf), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm))
     context = cairo.Context(surface)
     if write_front_matter:
         with progress.step("front matter", detail=True):
@@ -326,9 +326,7 @@ def build_atlas(
 
     overviews: dict[str, OverviewMap] = {}
     overview_page_info: list[dict[str, Any]] = []
-    write_overview_pages = (
-        write_overviews and style.overview.enabled and atlas.tiling is not None
-    )
+    write_overview_pages = write_overviews and style.overview.enabled and atlas.tiling is not None
     if write_overview_pages or style.locator.enabled:
         with progress.step("build overview maps"):
             overview_stars: tuple[Star, ...] = ()
@@ -362,6 +360,13 @@ def build_atlas(
                 )
 
     results: list[ChartPageResult] = []
+    index_dsos: dict[str, tuple[SceneDso, ...]] = {}
+    index_constellations: dict[str, frozenset[str]] = {}
+    boundary_constellations = {
+        segment.id: segment.constellation_id
+        for segment in inputs.constellations.boundaries
+        if segment.constellation_id
+    }
     observing_lists: dict[str, object] = {}
     forced_lists: list[str] = []
     chart_total = len(charts)
@@ -417,9 +422,7 @@ def build_atlas(
             locator = LocatorInset(
                 overview=overviews[hemisphere_for(definition.center_dec_deg)],
                 current_chart_id=definition.id,
-                neighbour_ids=frozenset(
-                    neighbour for _, neighbour in definition.neighbours
-                ),
+                neighbour_ids=frozenset(neighbour for _, neighbour in definition.neighbours),
             )
         furniture = furniture_obstacles(
             chart_context.transform, definition, chart_context.style, presentation
@@ -455,6 +458,15 @@ def build_atlas(
             furniture=furniture,
         )
         validate_s = time.perf_counter() - stage_start
+
+        # The index consumes the same clipped scene that is rendered.  Boundary
+        # source IDs make constellation coverage a real chart-footprint result.
+        index_dsos[definition.id] = tuple(chart_context.scene.deep_sky_objects)
+        index_constellations[definition.id] = frozenset(
+            boundary_constellations[segment.source_id]
+            for segment in chart_context.scene.constellation_boundaries
+            if segment.source_id in boundary_constellations
+        )
 
         page_dir = outroot / "charts" / definition.id
         stage_start = time.perf_counter()
@@ -517,6 +529,10 @@ def build_atlas(
             )
         )
 
+    atlas_index = build_atlas_index(index_dsos, index_constellations, charts, edition)
+    with progress.step("append atlas index", detail=True):
+        index_pages = draw_atlas_index_pages(context, surface, atlas_index, page, style, edition)
+
     with progress.step("finish combined PDF"):
         surface.finish()
 
@@ -548,6 +564,7 @@ def build_atlas(
         "chart_count": len(results),
         "total_hard_issues": sum(page_result.hard_issues for page_result in results),
         "overview_pages": overview_page_info,
+        "index": {"page_count": index_pages, **atlas_index.to_dict()},
         "data_sources": _data_sources(),
         "pages": [page_result.to_dict() for page_result in results],
     }
@@ -577,4 +594,5 @@ def build_atlas(
         combined_pdf=combined_pdf,
         manifest_path=manifest_path,
         draft_report_path=draft_report_path,
+        index_page_count=index_pages,
     )
