@@ -216,3 +216,51 @@ def test_wide_companion_is_left_plotted_beside_a_close_pair() -> None:
     marks = resolve_double_stars(scene, TRANSFORM, STYLE)
     assert len(marks) == 1
     assert marks[0].suppress_star_ids == {"A", "B"}
+
+
+def test_connected_close_records_with_different_primaries_make_one_marker() -> None:
+    stars = (
+        SceneStar(make_star("A", 6.0), ChartPoint(0.0, 0.0)),
+        SceneStar(make_star("B", 5.0), ChartPoint(0.01, 0.0)),
+        SceneStar(make_star("C", 7.0), ChartPoint(0.02, 0.0)),
+    )
+    first = StarSystem(
+        id="system:wds:A-B",
+        source="wds",
+        source_id="A-B",
+        ra_deg=10.0,
+        dec_deg=0.0,
+        primary_star_id="A",
+        component_star_ids=("B",),
+        component_magnitudes=(6.0, 5.0),
+        match_status=MatchStatus.POSITIONAL,
+    )
+    second = StarSystem(
+        id="system:wds:B-C",
+        source="wds",
+        source_id="B-C",
+        ra_deg=10.0,
+        dec_deg=0.0,
+        primary_star_id="B",
+        component_star_ids=("C",),
+        component_magnitudes=(5.0, 7.0),
+        match_status=MatchStatus.POSITIONAL,
+    )
+    scene = ChartScene(
+        definition=CHART,
+        stars=stars,
+        star_systems=(
+            SceneStarSystem(
+                first, ChartPoint(0.0, 0.0), component_points=(ChartPoint(0.01, 0.0),)
+            ),
+            SceneStarSystem(
+                second, ChartPoint(0.01, 0.0), component_points=(ChartPoint(0.02, 0.0),)
+            ),
+        ),
+    )
+
+    marks = resolve_double_stars(scene, TRANSFORM, STYLE)
+
+    assert len(marks) == 1
+    assert marks[0].suppress_star_ids == {"A", "B", "C"}
+    assert marks[0].page_point == TRANSFORM.to_page(ChartPoint(0.01, 0.0))

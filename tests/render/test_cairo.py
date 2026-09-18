@@ -18,18 +18,20 @@ from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
-from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.cairo import (
     _bold_symbol_ids,
     _dso_line_width_mm,
     _foreground_close_stars,
+    _foreground_double_star_marks,
     draw_chart_page,
     render_chart,
     render_edition_magnitude_scale,
     render_magnitude_scale,
 )
+from nightsky_atlas.render.double_stars import DoubleStarMark
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
 from nightsky_atlas.scene.models import ChartScene, SceneStar
@@ -233,3 +235,47 @@ def test_weaker_star_overlapping_bright_star_gets_foreground_halo() -> None:
         scene, transform, StarSizeModel.from_style(STYLE.star), set()
     )
     assert len(foreground) == 1
+
+
+def test_equal_brightness_overlapping_stars_get_one_deterministic_halo() -> None:
+    transform = PageTransform(chart=CHART, page=PAGE)
+    first = Star("A", 187.5, 12.0, 6.0, Provenance("TEST", "A"))
+    second = Star("B", 187.5, 12.0, 6.0, Provenance("TEST", "B"))
+    scene = ChartScene(
+        definition=CHART,
+        stars=(
+            SceneStar(first, ChartPoint(0.0, 0.0)),
+            SceneStar(second, ChartPoint(0.05, 0.0)),
+        ),
+    )
+
+    foreground = _foreground_close_stars(
+        scene, transform, StarSizeModel.from_style(STYLE.star), set()
+    )
+
+    assert len(foreground) == 1
+    assert foreground[0][0] == transform.to_page(ChartPoint(0.05, 0.0))
+
+
+def test_overlapping_double_star_markers_get_one_deterministic_halo() -> None:
+    size_model = StarSizeModel.from_style(STYLE.star)
+    marks = (
+        DoubleStarMark(
+            "system:wds:A",
+            PagePoint(140.0, 90.0),
+            6.0,
+            frozenset({"A"}),
+            2.0,
+            0.15,
+        ),
+        DoubleStarMark(
+            "system:wds:B",
+            PagePoint(140.2, 90.0),
+            6.0,
+            frozenset({"B"}),
+            2.0,
+            0.15,
+        ),
+    )
+
+    assert _foreground_double_star_marks(marks, size_model) == (marks[1],)

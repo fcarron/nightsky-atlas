@@ -401,6 +401,14 @@ def _draw_stars(
     for mark in marks:
         _draw_double_star_mark(cr, mark, size_model)
 
+    for mark in _foreground_double_star_marks(marks, size_model):
+        _draw_double_star_mark(
+            cr,
+            mark,
+            size_model,
+            knockout_mm=style.star.close_overlap_halo_mm,
+        )
+
     for point, radius_mm in _foreground_close_stars(scene, transform, size_model, suppressed):
         cr.set_source_rgb(1.0, 1.0, 1.0)
         cr.arc(
@@ -436,7 +444,13 @@ def _foreground_close_stars(
     foreground = []
     for scene_star, point, radius in placed:
         if any(
-            other.star.magnitude < scene_star.star.magnitude
+            (
+                other.star.magnitude < scene_star.star.magnitude
+                or (
+                    math.isclose(other.star.magnitude, scene_star.star.magnitude)
+                    and other.star.id < scene_star.star.id
+                )
+            )
             and math.hypot(point.x_mm - other_point.x_mm, point.y_mm - other_point.y_mm)
             < radius + other_radius
             for other, other_point, other_radius in placed
@@ -445,18 +459,56 @@ def _foreground_close_stars(
     return tuple(foreground)
 
 
+def _foreground_double_star_marks(
+    marks: tuple[DoubleStarMark, ...], size_model: StarSizeModel
+) -> tuple[DoubleStarMark, ...]:
+    """Return overlapping double-star markers that need a white knockout."""
+    foreground = []
+    for mark in marks:
+        radius = size_model.radius_mm(mark.magnitude)
+        if any(
+            (
+                other.magnitude < mark.magnitude
+                or (
+                    math.isclose(other.magnitude, mark.magnitude)
+                    and other.system_id < mark.system_id
+                )
+            )
+            and math.hypot(
+                mark.page_point.x_mm - other.page_point.x_mm,
+                mark.page_point.y_mm - other.page_point.y_mm,
+            )
+            < radius + size_model.radius_mm(other.magnitude)
+            for other in marks
+        ):
+            foreground.append(mark)
+    return tuple(foreground)
+
+
 def _draw_double_star_mark(
     cr: cairo.Context[cairo.Surface],
     mark: DoubleStarMark,
     size_model: StarSizeModel,
+    *,
+    knockout_mm: float = 0.0,
 ) -> None:
     """Draw one collapsed double star: symbol plus a short horizontal marker."""
     x = mm_to_pt(mark.page_point.x_mm)
     y = mm_to_pt(mark.page_point.y_mm)
     radius = mm_to_pt(size_model.radius_mm(mark.magnitude))
+    half_length = mm_to_pt(mark.marker_length_mm) / 2.0
+    if knockout_mm > 0.0:
+        knockout_pt = mm_to_pt(knockout_mm)
+        cr.set_source_rgb(1.0, 1.0, 1.0)
+        cr.arc(x, y, radius + knockout_pt, 0.0, 2.0 * math.pi)
+        cr.fill()
+        cr.set_line_width(mm_to_pt(mark.marker_line_width_mm + 2.0 * knockout_mm))
+        cr.move_to(x - half_length - knockout_pt, y)
+        cr.line_to(x + half_length + knockout_pt, y)
+        cr.stroke()
+    cr.set_source_rgb(0.0, 0.0, 0.0)
     cr.arc(x, y, radius, 0.0, 2.0 * math.pi)
     cr.fill()
-    half_length = mm_to_pt(mark.marker_length_mm) / 2.0
     cr.set_line_width(mm_to_pt(mark.marker_line_width_mm))
     cr.move_to(x - half_length, y)
     cr.line_to(x + half_length, y)

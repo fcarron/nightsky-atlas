@@ -42,8 +42,50 @@ class DoubleStarMark:
     marker_line_width_mm: float
 
 
+@dataclass(frozen=True, slots=True)
+class _CollapsedRecord:
+    """One WDS relation whose components are unresolvable on paper."""
+
+    system_id: str
+    member_star_ids: frozenset[str]
+    combined_magnitude: float | None
+
+
 def _page_distance_mm(a: PagePoint, b: PagePoint) -> float:
     return math.hypot(a.x_mm - b.x_mm, a.y_mm - b.y_mm)
+
+
+def _connected_records(records: list[_CollapsedRecord]) -> tuple[tuple[_CollapsedRecord, ...], ...]:
+    """Group records sharing any printed component into one visual system."""
+    groups: list[list[_CollapsedRecord]] = []
+    for record in sorted(records, key=lambda item: item.system_id):
+        matching = [
+            index
+            for index, group in enumerate(groups)
+            if record.member_star_ids & set().union(*(item.member_star_ids for item in group))
+        ]
+        if not matching:
+            groups.append([record])
+            continue
+        merged = [record]
+        for index in reversed(matching):
+            merged.extend(groups.pop(index))
+        groups.append(merged)
+    return tuple(tuple(sorted(group, key=lambda item: item.system_id)) for group in groups)
+
+
+def _group_magnitude(
+    records: tuple[_CollapsedRecord, ...],
+    member_star_ids: frozenset[str],
+    magnitude_by_star: dict[str, float],
+) -> float:
+    """Return a combined magnitude without losing known unlinked companions."""
+    flux = sum(10.0 ** (-0.4 * magnitude_by_star[star_id]) for star_id in member_star_ids)
+    physical_magnitude = -2.5 * math.log10(flux)
+    recorded = [
+        record.combined_magnitude for record in records if record.combined_magnitude is not None
+    ]
+    return min((physical_magnitude, *recorded))
 
 
 def resolve_double_stars(
@@ -74,9 +116,7 @@ def resolve_double_stars(
         entry.star.id: transform.to_page(entry.chart_point) for entry in scene.stars
     }
 
-    # primary star -> one entry per unseparable WDS record, carrying the
-    # unseparable companion ids so they can be merged into one marker.
-    groups: dict[str, list[tuple[int, float, str, float | None, frozenset[str]]]] = {}
+    records: list[_CollapsedRecord] = []
     for scene_system in scene.star_systems:
         system = scene_system.system
         if not system.is_safe_match:
@@ -125,42 +165,36 @@ def resolve_double_stars(
         if not unseparable and widest_unseparable_mm == 0.0:
             continue
 
-        groups.setdefault(primary_id, []).append(
-            (
-                len(system.component_star_ids),
-                widest_unseparable_mm,
-                system.id,
-                system.combined_magnitude,
-                frozenset(unseparable),
+        records.append(
+            _CollapsedRecord(
+                system_id=system.id,
+                member_star_ids=frozenset({primary_id, *unseparable}),
+                combined_magnitude=system.combined_magnitude,
             )
         )
 
     marks: list[DoubleStarMark] = []
-    for primary_id in sorted(groups):
-        entries = groups[primary_id]
-        # Prefer the record that links the most catalogued companions, then the
-        # widest still-unseparable one, then the lowest ID, so the printed
-        # magnitude is taken from a stable representative record.
-        entries.sort(key=lambda item: (-item[0], -item[1], item[2]))
-        _count, _separation_mm, representative_id, combined, _components = entries[0]
-        suppress: set[str] = {primary_id}
-        for entry in entries:
-            suppress |= entry[4]
-        magnitude = combined
-        if magnitude is None:
-            magnitude = magnitude_by_star[primary_id]
+    for entries in _connected_records(records):
+        suppress = frozenset().union(*(entry.member_star_ids for entry in entries))
+        anchor_id = min(
+            suppress,
+            key=lambda star_id: (magnitude_by_star[star_id], star_id),
+        )
+        magnitude = _group_magnitude(entries, suppress, magnitude_by_star)
         marker_length_mm = max(
             config.min_marker_length_mm,
             config.marker_length_factor * size_model.diameter_mm(magnitude),
         )
         marks.append(
             DoubleStarMark(
-                system_id=representative_id,
-                page_point=page_by_star[primary_id],
+                system_id=entries[0].system_id,
+                page_point=page_by_star[anchor_id],
                 magnitude=magnitude,
-                suppress_star_ids=frozenset(suppress),
+                suppress_star_ids=suppress,
                 marker_length_mm=marker_length_mm,
                 marker_line_width_mm=config.marker_line_width_mm,
             )
         )
-    return tuple(marks)
+    return tuple(
+        sorted(marks, key=lambda mark: (mark.page_point.x_mm, mark.page_point.y_mm, mark.system_id))
+    )
