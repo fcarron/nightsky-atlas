@@ -19,6 +19,7 @@ from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle, score_candidate
 from nightsky_atlas.layout.spatial import RectIndex
+from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
@@ -58,9 +59,7 @@ def _symbol_circles(
                 )
             )
     for scene_dso in scene.deep_sky_objects:
-        extent = dso_symbol_extent(
-            scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style
-        )
+        extent = dso_symbol_extent(scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style)
         symbols.append(
             SymbolCircle(
                 center=transform.to_page(scene_dso.chart_point),
@@ -161,6 +160,10 @@ def optimize_labels(
     furniture_rects = tuple(furniture)
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
+    constellation_lines = tuple(
+        (stroke.start, stroke.end)
+        for stroke in resolve_constellation_lines(scene, transform, style)
+    )
     symbols_index = _build_symbol_index(symbols)
     anchors = _target_anchors(labels, scene, transform)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
@@ -173,7 +176,7 @@ def optimize_labels(
         candidate = label.effective_candidate()
         before[label.id] = candidate.id if candidate is not None else None
     cost_before, totals_before = _evaluate(
-        ordered, before, anchors, printable, symbols, weights
+        ordered, before, anchors, printable, symbols, weights, constellation_lines
     )
 
     placements: dict[str, str | None] = {}
@@ -216,6 +219,7 @@ def optimize_labels(
                 crowding_radius_mm=_CROWDING_RADIUS_MM,
                 weights=weights,
                 edge_margin_mm=_EDGE_MARGIN_MM,
+                constellation_lines=constellation_lines,
             )
             key = (
                 0.0 if valid else 1.0,
@@ -243,15 +247,14 @@ def optimize_labels(
         symbols_index,
         weights,
         furniture_rects,
+        constellation_lines,
     )
     cost_after, totals_after = _evaluate(
-        ordered, placements, anchors, printable, symbols, weights
+        ordered, placements, anchors, printable, symbols, weights, constellation_lines
     )
 
     optimized = tuple(
-        label.with_placement(
-            placements.get(label.id), hidden=placements.get(label.id) is None
-        )
+        label.with_placement(placements.get(label.id), hidden=placements.get(label.id) is None)
         for label in labels
     )
     placed_count = sum(1 for value in placements.values() if value is not None)
@@ -275,6 +278,7 @@ def _local_repair(
     symbols_index: RectIndex[SymbolCircle],
     weights: CostWeights,
     furniture: tuple[PageRect, ...] = (),
+    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
 ) -> dict[str, str | None]:
     for _ in range(_MAX_REPAIR_PASSES):
         changed = False
@@ -290,9 +294,7 @@ def _local_repair(
             anchor = _anchor_for(label, anchors, current)
             best_id = current_id
             nearby_bounds = tuple(
-                placed_index.query(
-                    current.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id
-                )
+                placed_index.query(current.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
             )
             nearby_symbols = tuple(symbols_index.query(current.bounds))
             best_cost = score_candidate(
@@ -304,6 +306,7 @@ def _local_repair(
                 crowding_radius_mm=_CROWDING_RADIUS_MM,
                 weights=weights,
                 edge_margin_mm=_EDGE_MARGIN_MM,
+                constellation_lines=constellation_lines,
             ).total(weights)
             for candidate in label.candidates:
                 if candidate.id == current_id:
@@ -316,9 +319,7 @@ def _local_repair(
                     )
                 )
                 cand_symbols = tuple(symbols_index.query(candidate.bounds))
-                if not _is_valid(
-                    candidate.bounds, cand_bounds, printable, cand_symbols, furniture
-                ):
+                if not _is_valid(candidate.bounds, cand_bounds, printable, cand_symbols, furniture):
                     continue
                 cost = score_candidate(
                     candidate,
@@ -329,6 +330,7 @@ def _local_repair(
                     crowding_radius_mm=_CROWDING_RADIUS_MM,
                     weights=weights,
                     edge_margin_mm=_EDGE_MARGIN_MM,
+                    constellation_lines=constellation_lines,
                 ).total(weights)
                 if cost < best_cost - 1e-9:
                     best_cost = cost
@@ -337,9 +339,7 @@ def _local_repair(
                 placements[label.id] = best_id
                 new_candidate = label.candidate(best_id)
                 if new_candidate is not None:
-                    placed_index.set(
-                        label.id, new_candidate.bounds, new_candidate.bounds
-                    )
+                    placed_index.set(label.id, new_candidate.bounds, new_candidate.bounds)
                 changed = True
         if not changed:
             break
@@ -353,6 +353,7 @@ def _evaluate(
     printable: PageRect,
     symbols: tuple[SymbolCircle, ...],
     weights: CostWeights,
+    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
 ) -> tuple[float, dict[str, float]]:
     label_by_id = {label.id: label for label in ordered}
     placed_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
@@ -374,9 +375,7 @@ def _evaluate(
         if candidate is None:
             continue
         nearby_bounds = tuple(
-            placed_index.query(
-                candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id
-            )
+            placed_index.query(candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
         )
         nearby_symbols = tuple(symbols_index.query(candidate.bounds))
         breakdown = score_candidate(
@@ -388,11 +387,13 @@ def _evaluate(
             crowding_radius_mm=_CROWDING_RADIUS_MM,
             weights=weights,
             edge_margin_mm=_EDGE_MARGIN_MM,
+            constellation_lines=constellation_lines,
         )
         total += breakdown.total(weights)
         for name, value in breakdown.components().items():
             totals[name] = totals.get(name, 0.0) + value
     return total, totals
+
 
 def layout_hash(labels: tuple[Label, ...]) -> str:
     """Return a stable hash of placements for repeated-layout detection."""
@@ -416,6 +417,10 @@ def layout_cost(
     weights = weights or CostWeights()
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
+    constellation_lines = tuple(
+        (stroke.start, stroke.end)
+        for stroke in resolve_constellation_lines(scene, transform, style)
+    )
     anchors = _target_anchors(labels, scene, transform)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
@@ -423,4 +428,4 @@ def layout_cost(
     for label in labels:
         candidate = None if label.hidden else label.effective_candidate()
         placements[label.id] = candidate.id if candidate is not None else None
-    return _evaluate(ordered, placements, anchors, printable, symbols, weights)
+    return _evaluate(ordered, placements, anchors, printable, symbols, weights, constellation_lines)

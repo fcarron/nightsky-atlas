@@ -8,10 +8,13 @@ from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
     clamp_point_to_rect,
+    expand_rect,
     point_in_rect,
     rect_distance_mm,
     rect_overlap_area_mm2,
     rects_overlap,
+    segment_intersects_rect,
+    split_segment_at_rect,
 )
 
 A = PageRect(left_mm=10.0, top_mm=10.0, width_mm=10.0, height_mm=10.0)
@@ -52,3 +55,11 @@ def test_circle_intersects_rect() -> None:
     assert circle_intersects_rect(PagePoint(15.0, 15.0), 1.0, A)
     assert circle_intersects_rect(PagePoint(8.0, 15.0), 3.0, A)
     assert not circle_intersects_rect(PagePoint(0.0, 0.0), 3.0, A)
+
+
+def test_segment_knockout_uses_expanded_label_bounds() -> None:
+    bounds = expand_rect(PageRect(4.0, 4.0, 2.0, 2.0), 0.5)
+    start, end = PagePoint(0.0, 5.0), PagePoint(10.0, 5.0)
+    assert segment_intersects_rect(start, end, bounds)
+    parts = split_segment_at_rect(start, end, bounds)
+    assert [(part[0].x_mm, part[1].x_mm) for part in parts] == [(0.0, 3.5), (6.5, 10.0)]

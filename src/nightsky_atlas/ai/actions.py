@@ -26,6 +26,7 @@ from nightsky_atlas.scene.models import ChartScene
 __all__ = ["ApplyResult", "apply_review_actions"]
 
 _COST_EPSILON = 1e-9
+DEFAULT_SOFT_COST_EPSILON = 0.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +44,35 @@ def _apply_one(label: Label, action: ReviewAction) -> Label | None:
         if label.candidate(candidate_id) is None:
             return None
         return label.with_placement(candidate_id)
+    if action.type == ReviewActionType.MOVE_LABEL:
+        candidates = [
+            item for item in label.candidates if item.position == action.preferred_direction
+        ]
+        if not candidates:
+            return None
+        ring_by_distance = {"near": 0, "medium": 1, "far": 2}
+        wanted_ring = ring_by_distance.get(action.distance or "near", 0)
+        candidate = min(
+            candidates, key=lambda item: (abs(item.ring - wanted_ring), item.ring, item.id)
+        )
+        return label.with_placement(candidate.id)
+    if action.type == ReviewActionType.FINE_ADJUST_LABEL:
+        # Intent is deliberately mapped to the nearest existing legal candidate;
+        # no reviewer-supplied page coordinate ever enters the layout document.
+        current = label.effective_candidate()
+        if current is None:
+            return None
+        wanted_x = current.bounds.center.x_mm + (action.offset_x_mm or 0.0)
+        wanted_y = current.bounds.center.y_mm + (action.offset_y_mm or 0.0)
+        candidate = min(
+            label.candidates,
+            key=lambda item: (
+                (item.bounds.center.x_mm - wanted_x) ** 2
+                + (item.bounds.center.y_mm - wanted_y) ** 2,
+                item.id,
+            ),
+        )
+        return label.with_placement(candidate.id)
     if action.type == ReviewActionType.SHOW_OPTIONAL_LABEL:
         candidate = label.effective_candidate()
         if candidate is None:
@@ -52,12 +82,16 @@ def _apply_one(label: Label, action: ReviewAction) -> Label | None:
         if label.mandatory:
             return None
         return label.with_placement(None, hidden=True)
+    if action.type == ReviewActionType.REQUEST_LINE_KNOCKOUT:
+        # Knockouts are derived from every final visible label by the renderer.
+        # Returning the same placement records the review intent without letting
+        # AI edit line geometry.
+        candidate = label.effective_candidate()
+        return label.with_placement(candidate.id, hidden=label.hidden) if candidate else None
     return None
 
 
-def _replace(
-    labels: tuple[Label, ...], label_id: str, updated: Label
-) -> tuple[Label, ...]:
+def _replace(labels: tuple[Label, ...], label_id: str, updated: Label) -> tuple[Label, ...]:
     return tuple(updated if item.id == label_id else item for item in labels)
 
 
@@ -70,9 +104,7 @@ def _hard_issues(
 ) -> set[str]:
     return {
         issue.id
-        for issue in validate_layout(
-            labels, scene, transform, style, furniture=furniture
-        ).issues
+        for issue in validate_layout(labels, scene, transform, style, furniture=furniture).issues
     }
 
 
@@ -119,6 +151,7 @@ def apply_review_actions(
     *,
     min_severity: int = 1,
     require_cost_non_increase: bool = False,
+    soft_cost_epsilon: float = DEFAULT_SOFT_COST_EPSILON,
 ) -> ApplyResult:
     """Apply a review's actions, rejecting those that break hard constraints.
 
@@ -157,12 +190,16 @@ def apply_review_actions(
             issues = _hard_issues(candidate_labels, scene, transform, style, furniture)
             if issues <= baseline:
                 cost = layout_cost(candidate_labels, scene, transform, style)[0]
-                if not require_cost_non_increase or cost <= current_cost + _COST_EPSILON:
+                if not require_cost_non_increase or cost <= current_cost + soft_cost_epsilon:
                     current, baseline, current_cost = candidate_labels, issues, cost
                     applied.append(issue.element_id)
                     continue
 
-        if action.type == ReviewActionType.SELECT_CANDIDATE:
+        if action.type in (
+            ReviewActionType.SELECT_CANDIDATE,
+            ReviewActionType.MOVE_LABEL,
+            ReviewActionType.FINE_ADJUST_LABEL,
+        ):
             repaired = _repair_candidate(
                 label, current, scene, transform, style, furniture, baseline, current_cost
             )
@@ -172,9 +209,7 @@ def apply_review_actions(
                 continue
 
         if updated is None:
-            rejected.append(
-                (issue.element_id, f"action not applicable: {action.type.value}")
-            )
+            rejected.append((issue.element_id, f"action not applicable: {action.type.value}"))
         elif require_cost_non_increase:
             rejected.append((issue.element_id, "action increases soft cost"))
         else:

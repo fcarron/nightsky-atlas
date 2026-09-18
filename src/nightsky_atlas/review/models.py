@@ -35,6 +35,10 @@ class ReviewElement:
     bounds: PageRect | None = None
     candidates: tuple[str, ...] = ()
     display_name_variants: tuple[str, ...] = ()
+    current_candidate: str | None = None
+    allowed_distances: tuple[str, ...] = ()
+    fine_adjust_radius_mm: float | None = None
+    constellation_line_conflict: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"id": self.id, "kind": self.kind}
@@ -55,6 +59,14 @@ class ReviewElement:
             payload["candidates"] = list(self.candidates)
         if self.display_name_variants:
             payload["display_name_variants"] = list(self.display_name_variants)
+        if self.current_candidate is not None:
+            payload["current_candidate"] = self.current_candidate
+        if self.allowed_distances:
+            payload["allowed_distances"] = list(self.allowed_distances)
+        if self.fine_adjust_radius_mm is not None:
+            payload["fine_adjust_radius_mm"] = self.fine_adjust_radius_mm
+        if self.constellation_line_conflict:
+            payload["constellation_line_conflict"] = True
         return payload
 
 

@@ -12,8 +12,10 @@ from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
+    expand_rect,
     rect_overlap_area_mm2,
     rects_overlap,
+    segment_intersects_rect,
 )
 from nightsky_atlas.layout.models import LabelCandidate
 
@@ -30,6 +32,7 @@ class CostWeights:
     edge_proximity: float = 2.0
     preference_rank: float = 0.5
     crowding: float = 1.0
+    constellation_line_overlap: float = 35.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +53,7 @@ class CostBreakdown:
     edge_proximity_mm: float = 0.0
     preference_rank: float = 0.0
     crowding: float = 0.0
+    constellation_line_overlap: float = 0.0
 
     def total(self, weights: CostWeights) -> float:
         """Return the weighted total cost."""
@@ -60,6 +64,7 @@ class CostBreakdown:
             + self.edge_proximity_mm * weights.edge_proximity
             + self.preference_rank * weights.preference_rank
             + self.crowding * weights.crowding
+            + self.constellation_line_overlap * weights.constellation_line_overlap
         )
 
     def components(self) -> dict[str, float]:
@@ -71,6 +76,7 @@ class CostBreakdown:
             "edge_proximity_mm": self.edge_proximity_mm,
             "preference_rank": self.preference_rank,
             "crowding": self.crowding,
+            "constellation_line_overlap": self.constellation_line_overlap,
         }
 
 
@@ -97,6 +103,8 @@ def score_candidate(
     crowding_radius_mm: float,
     weights: CostWeights,
     edge_margin_mm: float = 8.0,
+    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
+    line_safety_margin_mm: float = 0.4,
 ) -> CostBreakdown:
     """Measure all cost components for one candidate."""
     bounds = candidate.bounds
@@ -116,10 +124,12 @@ def score_candidate(
         (center.x_mm - target_anchor.x_mm) ** 2 + (center.y_mm - target_anchor.y_mm) ** 2
     ) ** 0.5
     crowding = float(
+        sum(1 for other in placed_bounds if _rect_distance(center, other) <= crowding_radius_mm)
+    )
+    line_overlap = float(
         sum(
-            1
-            for other in placed_bounds
-            if _rect_distance(center, other) <= crowding_radius_mm
+            segment_intersects_rect(start, end, expand_rect(bounds, line_safety_margin_mm))
+            for start, end in constellation_lines
         )
     )
 
@@ -130,6 +140,7 @@ def score_candidate(
         edge_proximity_mm=_edge_proximity_mm(bounds, printable, edge_margin_mm),
         preference_rank=float(CANDIDATE_PREFERENCE.index(candidate.position)),
         crowding=crowding,
+        constellation_line_overlap=line_overlap,
     )
 
 

@@ -48,9 +48,7 @@ def test_edge_proximity_penalty() -> None:
 
 def test_label_label_overlap_component() -> None:
     other = PageRect(140.0, 98.0, 8.0, 2.5)
-    breakdown = score(
-        make_candidate(CompassPosition.N, 142.0, 99.0), placed_bounds=(other,)
-    )
+    breakdown = score(make_candidate(CompassPosition.N, 142.0, 99.0), placed_bounds=(other,))
     assert breakdown.label_label_overlap_mm2 > 0.0
 
 
@@ -65,9 +63,7 @@ def test_crowding_component() -> None:
         PageRect(140.0, 90.0, 8.0, 2.5),
         PageRect(141.0, 92.0, 8.0, 2.5),
     )
-    breakdown = score(
-        make_candidate(CompassPosition.N, 142.0, 90.0), placed_bounds=others
-    )
+    breakdown = score(make_candidate(CompassPosition.N, 142.0, 90.0), placed_bounds=others)
     assert breakdown.crowding >= 1.0
 
 
@@ -81,9 +77,9 @@ def test_total_is_weighted_sum() -> None:
         "edge_proximity_mm": "edge_proximity",
         "preference_rank": "preference_rank",
         "crowding": "crowding",
+        "constellation_line_overlap": "constellation_line_overlap",
     }
     expected = sum(
-        value * getattr(weights, weight_for[name])
-        for name, value in breakdown.components().items()
+        value * getattr(weights, weight_for[name]) for name, value in breakdown.components().items()
     )
     assert breakdown.total(weights) == pytest.approx(expected)

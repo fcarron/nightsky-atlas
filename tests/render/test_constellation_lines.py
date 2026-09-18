@@ -11,7 +11,7 @@ from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
-from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
@@ -53,9 +53,7 @@ def make_segment(
 
 
 def resolve(*, stars, lines):
-    scene = build_scene(
-        DEFINITION, stars, [], constellation_lines=lines
-    )
+    scene = build_scene(DEFINITION, stars, [], constellation_lines=lines)
     return resolve_constellation_lines(scene, TRANSFORM, STYLE)
 
 
@@ -119,13 +117,23 @@ def test_disabled_lines_produce_no_strokes() -> None:
     style = STYLE.model_copy(
         update={
             "constellation": STYLE.constellation.model_copy(
-                update={
-                    "lines": STYLE.constellation.lines.model_copy(
-                        update={"enabled": False}
-                    )
-                }
+                update={"lines": STYLE.constellation.lines.model_copy(update={"enabled": False})}
             )
         }
     )
     scene = build_scene(DEFINITION, stars, [], constellation_lines=[line])
     assert resolve_constellation_lines(scene, TRANSFORM, style) == ()
+
+
+def test_line_is_split_around_label_knockout() -> None:
+    line = make_segment(-2.0, 0.0, 2.0, 0.0)
+    scene = build_scene(DEFINITION, [], [], constellation_lines=[line])
+    original = resolve_constellation_lines(scene, TRANSFORM, STYLE)
+    assert len(original) == 1
+    stroke = original[0]
+    middle_x = (stroke.start.x_mm + stroke.end.x_mm) / 2.0
+    bounds = PageRect(middle_x - 1.0, stroke.start.y_mm - 1.0, 2.0, 2.0)
+    knocked_out = resolve_constellation_lines(scene, TRANSFORM, STYLE, knockout_bounds=(bounds,))
+    assert len(knocked_out) == 2
+    gap_edges = sorted((knocked_out[0].end.x_mm, knocked_out[1].start.x_mm))
+    assert gap_edges[0] < middle_x < gap_edges[1]

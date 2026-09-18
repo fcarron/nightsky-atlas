@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.collision import placed_candidates
+from nightsky_atlas.layout.geometry import expand_rect, segment_intersects_rect
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.review.models import ReviewElement, ReviewRequest
 from nightsky_atlas.review.schema import ReviewActionType
@@ -23,6 +24,9 @@ _ADVERTISED_ACTIONS: tuple[ReviewActionType, ...] = (
     ReviewActionType.SELECT_CANDIDATE,
     ReviewActionType.SHOW_OPTIONAL_LABEL,
     ReviewActionType.HIDE_OPTIONAL_LABEL,
+    ReviewActionType.MOVE_LABEL,
+    ReviewActionType.FINE_ADJUST_LABEL,
+    ReviewActionType.REQUEST_LINE_KNOCKOUT,
 )
 
 
@@ -75,6 +79,14 @@ def build_review_request(
         )
 
     for label, candidate in placed_candidates(labels):
+        line_conflict = any(
+            segment_intersects_rect(
+                transform.to_page(line.points[0]),
+                transform.to_page(line.points[-1]),
+                expand_rect(candidate.bounds, 0.4),
+            )
+            for line in scene.constellation_lines
+        )
         elements.append(
             ReviewElement(
                 id=label.id,
@@ -84,6 +96,10 @@ def build_review_request(
                 candidates=tuple(
                     item.position.value for item in label.candidates if item.ring == 0
                 ),
+                current_candidate=candidate.position.value,
+                allowed_distances=("near", "medium", "far"),
+                fine_adjust_radius_mm=3.0,
+                constellation_line_conflict=line_conflict,
             )
         )
 

@@ -19,7 +19,8 @@ import math
 from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import StyleConfig
-from nightsky_atlas.chart.page import PagePoint, PageTransform
+from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
+from nightsky_atlas.layout.geometry import expand_rect, split_segment_at_rect
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.models import ChartScene
 
@@ -46,9 +47,7 @@ def _star_grid(
     for scene_star in scene.stars:
         point = transform.to_page(scene_star.chart_point)
         key = (int(math.floor(point.x_mm / cell_mm)), int(math.floor(point.y_mm / cell_mm)))
-        grid.setdefault(key, []).append(
-            (point, size_model.radius_mm(scene_star.star.magnitude))
-        )
+        grid.setdefault(key, []).append((point, size_model.radius_mm(scene_star.star.magnitude)))
     return grid
 
 
@@ -78,6 +77,9 @@ def resolve_constellation_lines(
     scene: ChartScene,
     transform: PageTransform,
     style: StyleConfig,
+    *,
+    knockout_bounds: tuple[PageRect, ...] = (),
+    knockout_margin_mm: float = 0.4,
 ) -> tuple[ConstellationStroke, ...]:
     """Return straight, star-trimmed page strokes for the scene's stick figures."""
     config = style.constellation.lines
@@ -97,27 +99,28 @@ def resolve_constellation_lines(
             continue
         unit_x = (end.x_mm - start.x_mm) / length
         unit_y = (end.y_mm - start.y_mm) / length
-        start_gap = _endpoint_gap_mm(
-            start, grid, tolerance, config.star_gap_extra_mm, tolerance
-        )
-        end_gap = _endpoint_gap_mm(
-            end, grid, tolerance, config.star_gap_extra_mm, tolerance
-        )
+        start_gap = _endpoint_gap_mm(start, grid, tolerance, config.star_gap_extra_mm, tolerance)
+        end_gap = _endpoint_gap_mm(end, grid, tolerance, config.star_gap_extra_mm, tolerance)
         start_trim = start_gap if start_gap is not None else 0.0
         end_trim = end_gap if end_gap is not None else 0.0
         if length - start_trim - end_trim <= 0.0:
             continue
-        strokes.append(
-            ConstellationStroke(
-                source_id=segment.source_id,
-                start=PagePoint(
-                    x_mm=start.x_mm + unit_x * start_trim,
-                    y_mm=start.y_mm + unit_y * start_trim,
-                ),
-                end=PagePoint(
-                    x_mm=end.x_mm - unit_x * end_trim,
-                    y_mm=end.y_mm - unit_y * end_trim,
-                ),
+        trimmed_start = PagePoint(
+            x_mm=start.x_mm + unit_x * start_trim,
+            y_mm=start.y_mm + unit_y * start_trim,
+        )
+        trimmed_end = PagePoint(
+            x_mm=end.x_mm - unit_x * end_trim,
+            y_mm=end.y_mm - unit_y * end_trim,
+        )
+        parts = ((trimmed_start, trimmed_end),)
+        for bounds in knockout_bounds:
+            parts = tuple(
+                piece
+                for part in parts
+                for piece in split_segment_at_rect(*part, expand_rect(bounds, knockout_margin_mm))
             )
+        strokes.extend(
+            ConstellationStroke(source_id=segment.source_id, start=a, end=b) for a, b in parts
         )
     return tuple(strokes)

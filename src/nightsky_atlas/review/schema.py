@@ -35,11 +35,15 @@ class ReviewActionType(StrEnum):
     """Whitelisted actions a reviewer may request."""
 
     SELECT_CANDIDATE = "select_candidate"
+    MOVE_LABEL = "move_label"
+    FINE_ADJUST_LABEL = "fine_adjust_label"
     SHOW_OPTIONAL_LABEL = "show_optional_label"
     HIDE_OPTIONAL_LABEL = "hide_optional_label"
     USE_LEADER_LINE = "use_leader_line"
     REMOVE_LEADER_LINE = "remove_leader_line"
     SELECT_DISPLAY_NAME_VARIANT = "select_display_name_variant"
+    ENABLE_LEADER_LINE = "enable_leader_line"
+    REQUEST_LINE_KNOCKOUT = "request_line_knockout"
 
 
 PERMITTED_ACTIONS: tuple[str, ...] = tuple(action.value for action in ReviewActionType)
@@ -54,6 +58,12 @@ class ReviewIssueType(StrEnum):
     WRONG_POSITION = "wrong_position"
     MISSING_LABEL = "missing_label"
     OTHER = "other"
+    CONSTELLATION_LINE_OVERLAP = "constellation_line_overlap"
+    LABEL_TOO_CLOSE_TO_SYMBOL = "label_too_close_to_symbol"
+    LABEL_CLUSTER_TOO_DENSE = "label_cluster_too_dense"
+    POOR_VISUAL_BALANCE = "poor_visual_balance"
+    LEADER_LINE_NEEDED = "leader_line_needed"
+    DISPLAY_NAME_TOO_LONG = "display_name_too_long"
 
 
 class _StrictModel(BaseModel):
@@ -66,6 +76,11 @@ class ReviewAction(_StrictModel):
     type: ReviewActionType
     candidate: str | None = None
     display_name_variant: str | None = None
+    preferred_direction: CompassPosition | None = None
+    distance: str | None = None
+    max_offset_mm: float | None = Field(default=None, ge=0.0, le=3.0)
+    offset_x_mm: float | None = Field(default=None, ge=-3.0, le=3.0)
+    offset_y_mm: float | None = Field(default=None, ge=-3.0, le=3.0)
 
 
 class ReviewIssue(_StrictModel):
@@ -87,30 +102,36 @@ class ReviewResult(_StrictModel):
 def _validate_action(action: ReviewAction, label_ids: set[str], element_id: str) -> None:
     if action.type == ReviewActionType.SELECT_CANDIDATE:
         if action.candidate is None:
-            raise ReviewValidationError(
-                f"{element_id}: select_candidate requires a candidate"
-            )
+            raise ReviewValidationError(f"{element_id}: select_candidate requires a candidate")
         if action.candidate not in {position.value for position in CompassPosition}:
-            raise ReviewValidationError(
-                f"{element_id}: invalid candidate {action.candidate!r}"
-            )
+            raise ReviewValidationError(f"{element_id}: invalid candidate {action.candidate!r}")
+    if action.type == ReviewActionType.MOVE_LABEL:
+        if action.preferred_direction is None:
+            raise ReviewValidationError(f"{element_id}: move_label requires preferred_direction")
+        if action.distance is not None and action.distance not in {"near", "medium", "far"}:
+            raise ReviewValidationError(f"{element_id}: invalid distance")
+    if action.type == ReviewActionType.FINE_ADJUST_LABEL:
+        if action.offset_x_mm is None or action.offset_y_mm is None:
+            raise ReviewValidationError(f"{element_id}: fine_adjust_label requires both offsets")
     if action.type == ReviewActionType.SELECT_DISPLAY_NAME_VARIANT:
         if action.display_name_variant is None:
             raise ReviewValidationError(
                 f"{element_id}: select_display_name_variant requires a variant"
             )
-    if action.type in (
-        ReviewActionType.SHOW_OPTIONAL_LABEL,
-        ReviewActionType.HIDE_OPTIONAL_LABEL,
-    ) and element_id not in label_ids:
+    if (
+        action.type
+        in (
+            ReviewActionType.SHOW_OPTIONAL_LABEL,
+            ReviewActionType.HIDE_OPTIONAL_LABEL,
+        )
+        and element_id not in label_ids
+    ):
         raise ReviewValidationError(
             f"{element_id}: label visibility actions require a label element"
         )
 
 
-def validate_review(
-    payload: dict[str, Any], *, known_element_ids: set[str]
-) -> ReviewResult:
+def validate_review(payload: dict[str, Any], *, known_element_ids: set[str]) -> ReviewResult:
     """Validate a raw review response against known elements.
 
     Raises :class:`ReviewValidationError` if the response is malformed or

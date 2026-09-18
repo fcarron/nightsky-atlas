@@ -54,6 +54,7 @@ class IterationRecord:
     usage_cost_usd: float | None
     cumulative_cost_usd: float
     error: str | None = None
+    proposed_actions: tuple[dict[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable mapping of this iteration."""
@@ -71,6 +72,7 @@ class IterationRecord:
             "usage_cost_usd": self.usage_cost_usd,
             "cumulative_cost_usd": self.cumulative_cost_usd,
             "error": self.error,
+            "proposed_actions": list(self.proposed_actions),
         }
 
 
@@ -116,9 +118,7 @@ def optimize_with_ai(
 ) -> AILoopResult:
     """Run a bounded AI review loop over an already-usable layout."""
     if request_factory is None:
-        request_factory = _default_request_factory(
-            scene, transform, style, page_id, images
-        )
+        request_factory = _default_request_factory(scene, transform, style, page_id, images)
 
     current = labels
     current_cost, _ = layout_cost(current, scene, transform, style)
@@ -185,6 +185,14 @@ def optimize_with_ai(
                 usage_model=getattr(usage, "model", None),
                 usage_cost_usd=usage_cost,
                 cumulative_cost_usd=total_cost_usd,
+                proposed_actions=tuple(
+                    {
+                        "element_id": issue.element_id,
+                        "reason_code": issue.issue_type.value,
+                        "action": issue.action.type.value if issue.action else "none",
+                    }
+                    for issue in review.issues
+                ),
             )
         )
 

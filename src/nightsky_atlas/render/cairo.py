@@ -25,6 +25,7 @@ from nightsky_atlas.chart.presentation import (
     ChartPresentation,
     presentation_for,
 )
+from nightsky_atlas.layout.geometry import expand_rect
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
@@ -58,6 +59,7 @@ class DebugOptions:
     exclusion_zones: bool = False
     element_ids: bool = False
     candidate_points: bool = False
+    line_knockouts: bool = False
 
 
 def render_chart(
@@ -124,14 +126,12 @@ def draw_chart_page(
     plan = build_furniture_plan(transform, scene.definition, style, presentation)
     _draw_background(cr, transform.page)
     grid_lines = _draw_grid(cr, transform, scene.definition, style)
-    _draw_constellations(cr, transform, scene, style)
+    _draw_constellations(cr, transform, scene, style, label_list)
     _draw_chart_border(cr, transform, style)
     _draw_outlines(cr, transform, scene, style)
     _draw_stars(cr, transform, scene, size_model, style)
     _draw_dsos(cr, transform, scene, style, bold_symbol_ids)
-    _draw_grid_labels(
-        cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles
-    )
+    _draw_grid_labels(cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles)
     _draw_labels(cr, label_list, style)
     if locator is not None:
         draw_locator_inset(cr, locator, transform, style)
@@ -225,9 +225,7 @@ def _render_outputs(
     if pdf_path is not None:
         path = Path(pdf_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        surface = cairo.PDFSurface(
-            str(path), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm)
-        )
+        surface = cairo.PDFSurface(str(path), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm))
         context = cairo.Context(surface)
         draw(context)
         surface.finish()
@@ -357,9 +355,7 @@ def _draw_dsos(
         cr.set_line_width(mm_to_pt(_dso_line_width_mm(style, bold=bold)))
         point = transform.to_page(scene_dso.chart_point)
         extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
-        _draw_dso_symbol(
-            cr, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), extent, style.dso.dash_mm
-        )
+        _draw_dso_symbol(cr, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), extent, style.dso.dash_mm)
     cr.restore()
 
 
@@ -471,9 +467,7 @@ def _draw_debug(
         cr.set_source_rgb(0.15, 0.35, 0.9)
         for scene_dso in scene.deep_sky_objects:
             point = transform.to_page(scene_dso.chart_point)
-            extent = dso_symbol_extent(
-                scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style
-            )
+            extent = dso_symbol_extent(scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style)
             cr.arc(
                 mm_to_pt(point.x_mm),
                 mm_to_pt(point.y_mm),
@@ -516,6 +510,20 @@ def _draw_debug(
             )
             cr.stroke()
 
+    if debug.line_knockouts:
+        cr.set_source_rgb(0.9, 0.45, 0.0)
+        for label in label_list:
+            if label.hidden or (candidate := label.effective_candidate()) is None:
+                continue
+            bounds = expand_rect(candidate.bounds, 0.4)
+            cr.rectangle(
+                mm_to_pt(bounds.left_mm),
+                mm_to_pt(bounds.top_mm),
+                mm_to_pt(bounds.width_mm),
+                mm_to_pt(bounds.height_mm),
+            )
+            cr.stroke()
+
     if debug.element_ids:
         cr.set_source_rgb(0.8, 0.0, 0.0)
         for label in label_list:
@@ -539,6 +547,7 @@ def _draw_constellations(
     transform: PageTransform,
     scene: ChartScene,
     style: StyleConfig,
+    labels: tuple[Label, ...] = (),
 ) -> None:
     config = style.constellation
     if config.boundaries.enabled and scene.constellation_boundaries:
@@ -558,6 +567,12 @@ def _draw_constellations(
             style,
             gray=config.lines.gray,
             line_width_mm=config.lines.line_width_mm,
+            knockout_bounds=tuple(
+                candidate.bounds
+                for label in labels
+                if not label.hidden
+                if (candidate := label.effective_candidate()) is not None
+            ),
         )
 
 
@@ -569,9 +584,10 @@ def _draw_constellation_lines(
     *,
     gray: float,
     line_width_mm: float,
+    knockout_bounds: tuple[PageRect, ...] = (),
 ) -> None:
     """Draw straight stick-figure lines, trimmed clear of their star symbols."""
-    strokes = resolve_constellation_lines(scene, transform, style)
+    strokes = resolve_constellation_lines(scene, transform, style, knockout_bounds=knockout_bounds)
     if not strokes:
         return
     rect = transform.chart_rect
@@ -690,9 +706,7 @@ def _draw_grid_labels(
 ) -> None:
     if not lines:
         return
-    labels = build_grid_labels(
-        transform.chart, transform, style, lines=lines, avoid=obstacles
-    )
+    labels = build_grid_labels(transform.chart, transform, style, lines=lines, avoid=obstacles)
     if not labels:
         return
     gray = min(max(style.grid.label_gray, 0.0), 1.0)
