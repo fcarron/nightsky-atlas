@@ -1,0 +1,9 @@
+# Shared physical print style inherited from Standard; Deep alters only content density.
+extends: standard.yaml
+id: deep
+star: {faint_magnitude: 10.5, label_magnitude_limit: 6.5}
+label:
+  dso_label_magnitude_limit: 14.0
+  selection: {medium_density_budget: 0.18, low_density_budget: 0.09}
+furniture:
+  scale_bar: {length_deg: 2.0}

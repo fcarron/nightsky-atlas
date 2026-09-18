@@ -47,6 +47,7 @@ __all__ = [
     "EditionConfig",
     "FurnitureStyle",
     "GridStyle",
+    "EclipticStyle",
     "LabelSelectionStyle",
     "LabelStyle",
     "LocatorStyle",
@@ -164,6 +165,8 @@ class TilingConfig(_StrictModel):
     width_deg: PositiveFloat
     height_deg: PositiveFloat
     overlap_deg: PositiveFloat | None = None
+    target_overlap_mm: PositiveFloat | None = None
+    mm_per_degree: PositiveFloat | None = None
     coverage_step_deg: PositiveFloat = 1.0
 
     declination_centers: tuple[float, ...] = ()
@@ -175,10 +178,22 @@ class TilingConfig(_StrictModel):
 
     @model_validator(mode="after")
     def _validate_tiling(self) -> TilingConfig:
-        if self.overlap_deg is None and not self.declination_centers:
+        if (self.target_overlap_mm is None) != (self.mm_per_degree is None):
+            raise ValueError("target_overlap_mm and mm_per_degree must be specified together")
+        if self.target_overlap_mm is not None and self.overlap_deg is not None:
+            raise ValueError("use either overlap_deg or target_overlap_mm, not both")
+        if (
+            self.target_overlap_mm is not None
+            and self.target_overlap_mm / self.mm_per_degree >= min(self.width_deg, self.height_deg)
+        ):
+            raise ValueError("physical overlap must be smaller than the chart field")
+        if (
+            self.overlap_deg is None
+            and self.target_overlap_mm is None
+            and not self.declination_centers
+        ):
             raise ValueError(
-                "tiling requires either overlap_deg (band mode) or "
-                "declination_centers (ring mode)"
+                "tiling requires either overlap_deg (band mode) or declination_centers (ring mode)"
             )
         if self.overlap_deg is not None and self.declination_centers:
             raise ValueError(
@@ -198,9 +213,7 @@ class TilingConfig(_StrictModel):
         if len(set(self.declination_centers)) != len(self.declination_centers):
             raise ValueError("declination_centers must be unique")
         if self.chart_counts and len(self.chart_counts) != len(self.declination_centers):
-            raise ValueError(
-                "chart_counts must have one entry per declination_center"
-            )
+            raise ValueError("chart_counts must have one entry per declination_center")
         if any(count < 1 for count in self.chart_counts):
             raise ValueError("chart_counts entries must be positive")
         if self.polar_caps and not self.declination_centers:
@@ -227,13 +240,10 @@ class VisibilityConfig(_StrictModel):
     @model_validator(mode="after")
     def _references_sit_inside_limits(self) -> VisibilityConfig:
         if self.reference_magnitude >= self.integrated_magnitude_limit:
-            raise ValueError(
-                "reference_magnitude must be brighter than integrated_magnitude_limit"
-            )
+            raise ValueError("reference_magnitude must be brighter than integrated_magnitude_limit")
         if self.reference_surface_brightness >= self.surface_brightness_limit:
             raise ValueError(
-                "reference_surface_brightness must be darker than "
-                "surface_brightness_limit"
+                "reference_surface_brightness must be darker than surface_brightness_limit"
             )
         if self.reference_axis_arcmin <= self.min_axis_arcmin:
             raise ValueError("reference_axis_arcmin must exceed min_axis_arcmin")
@@ -642,6 +652,16 @@ class GridStyle(_StrictModel):
         return self
 
 
+class EclipticStyle(_StrictModel):
+    """Fine J2000 ecliptic reference curve."""
+
+    enabled: bool = True
+    line_width_mm: PositiveFloat = 0.12
+    gray: float = 0.62
+    dash_mm: PositiveFloat = 0.8
+    gap_mm: PositiveFloat = 0.8
+
+
 class ConstellationLineStyle(_StrictModel):
     """Stick-figure constellation line appearance.
 
@@ -821,6 +841,7 @@ class StyleConfig(_StrictModel):
     dso: DsoStyle = Field(default_factory=DsoStyle)
     double_stars: DoubleStarStyle = Field(default_factory=DoubleStarStyle)
     grid: GridStyle = Field(default_factory=GridStyle)
+    ecliptic: EclipticStyle = Field(default_factory=EclipticStyle)
     constellation: ConstellationStyle = Field(default_factory=ConstellationStyle)
     furniture: FurnitureStyle = Field(default_factory=FurnitureStyle)
     overview: OverviewStyle = Field(default_factory=OverviewStyle)
@@ -841,9 +862,33 @@ def _load_yaml_mapping(path: Path) -> dict[str, object]:
     return raw
 
 
+def _merge_mapping(base: dict[str, object], override: dict[str, object]) -> dict[str, object]:
+    """Recursively merge a small edition override onto a shared YAML base."""
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_mapping(merged[key], value)  # type: ignore[arg-type]
+        else:
+            merged[key] = value
+    return merged
+
+
+def _load_inherited_mapping(path: Path) -> dict[str, object]:
+    mapping = _load_yaml_mapping(path)
+    parent = mapping.pop("extends", None)
+    if parent is None:
+        return mapping
+    if not isinstance(parent, str) or not parent:
+        raise ConfigError(f"extends must be a non-empty relative path: {path}")
+    parent_path = (path.parent / parent).resolve()
+    if parent_path == path.resolve():
+        raise ConfigError(f"configuration cannot extend itself: {path}")
+    return _merge_mapping(_load_inherited_mapping(parent_path), mapping)
+
+
 def load_atlas_config(path: str | Path) -> AtlasConfig:
     """Load and validate an atlas edition definition from a YAML file."""
-    mapping = _load_yaml_mapping(Path(path))
+    mapping = _load_inherited_mapping(Path(path))
     try:
         return AtlasConfig.model_validate(mapping)
     except ValidationError as exc:
@@ -852,7 +897,7 @@ def load_atlas_config(path: str | Path) -> AtlasConfig:
 
 def load_style_config(path: str | Path) -> StyleConfig:
     """Load and validate a rendering style definition from a YAML file."""
-    mapping = _load_yaml_mapping(Path(path))
+    mapping = _load_inherited_mapping(Path(path))
     try:
         return StyleConfig.model_validate(mapping)
     except ValidationError as exc:

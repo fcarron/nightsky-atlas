@@ -1,0 +1,24 @@
+# Pocket inherits the Standard print base; only edition geometry/content differs.
+extends: standard.yaml
+id: pocket
+edition: {name: Pocket, code: P}
+stellar_limit_magnitude: 7.5
+tiling:
+  width_deg: 54.0
+  height_deg: 36.0
+  target_overlap_mm: 10.0
+  mm_per_degree: 5.0
+  coverage_step_deg: 1.0
+  declination_centers: [-72.0, -38.0, -4.0, 30.0, 64.0]
+  chart_counts: []
+  polar_caps: true
+  stagger_ra_centers: true
+  auto_adjust_counts: true
+visibility:
+  integrated_magnitude_limit: 11.5
+  surface_brightness_limit: 22.5
+  min_axis_arcmin: 3.0
+  bright_magnitude_limit: 9.0
+  reference_magnitude: 7.5
+  reference_surface_brightness: 20.5
+  reference_axis_arcmin: 15.0

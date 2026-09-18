@@ -1,0 +1,9 @@
+# Shared physical print style inherited from Standard; Pocket alters only content density.
+extends: standard.yaml
+id: pocket
+star: {faint_magnitude: 7.5, label_magnitude_limit: 4.5}
+label:
+  dso_label_magnitude_limit: 10.5
+  selection: {medium_density_budget: 0.08, low_density_budget: 0.025}
+furniture:
+  scale_bar: {length_deg: 10.0}

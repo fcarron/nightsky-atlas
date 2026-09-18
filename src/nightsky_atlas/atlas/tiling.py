@@ -69,8 +69,7 @@ class TilingSpec:
             raise ValueError("tiling width_deg and height_deg must be positive")
         if self.overlap_deg is None and not self.declination_centers:
             raise ValueError(
-                "tiling requires overlap_deg (band mode) or declination_centers "
-                "(ring mode)"
+                "tiling requires overlap_deg (band mode) or declination_centers (ring mode)"
             )
         if self.overlap_deg is not None:
             if self.overlap_deg <= 0.0:
@@ -79,9 +78,7 @@ class TilingSpec:
                 raise ValueError("overlap_deg must be smaller than the chart field")
         for center in self.declination_centers:
             if not -90.0 < center < 90.0:
-                raise ValueError(
-                    "declination_centers must lie strictly inside (-90, 90)"
-                )
+                raise ValueError("declination_centers must lie strictly inside (-90, 90)")
         if len(set(self.declination_centers)) != len(self.declination_centers):
             raise ValueError("declination_centers must be unique")
         if self.chart_counts and len(self.chart_counts) != len(self.declination_centers):
@@ -98,10 +95,14 @@ class TilingSpec:
 
     @classmethod
     def from_config(cls, config: TilingConfig) -> TilingSpec:
+        overlap_deg = config.overlap_deg
+        if config.target_overlap_mm is not None:
+            assert config.mm_per_degree is not None
+            overlap_deg = config.target_overlap_mm / config.mm_per_degree
         return cls(
             width_deg=config.width_deg,
             height_deg=config.height_deg,
-            overlap_deg=config.overlap_deg,
+            overlap_deg=overlap_deg,
             coverage_step_deg=config.coverage_step_deg,
             declination_centers=config.declination_centers,
             chart_counts=config.chart_counts,
@@ -125,9 +126,9 @@ def _contains(
     center_dec_rad = math.radians(center_dec_deg)
     dec_rad = math.radians(dec_deg)
     delta_ra = math.radians((ra_deg - center_ra_deg + 180.0) % 360.0 - 180.0)
-    cos_c = math.sin(center_dec_rad) * math.sin(dec_rad) + math.cos(
-        center_dec_rad
-    ) * math.cos(dec_rad) * math.cos(delta_ra)
+    cos_c = math.sin(center_dec_rad) * math.sin(dec_rad) + math.cos(center_dec_rad) * math.cos(
+        dec_rad
+    ) * math.cos(delta_ra)
     denominator = 1.0 + cos_c
     if denominator <= 1e-12:
         return False
@@ -303,9 +304,7 @@ def _tile_rings(atlas_id: str, spec: TilingSpec) -> list[ChartDefinition]:
         )
     for index in reversed(range(len(centers))):
         charts.extend(
-            _charts_in_ring(
-                spec, centers[index], counts[index], _ring_phase(spec, index)
-            )
+            _charts_in_ring(spec, centers[index], counts[index], _ring_phase(spec, index))
         )
     if spec.polar_caps:
         charts.append(
@@ -364,8 +363,7 @@ def tile_sky(atlas_id: str, spec: TilingSpec) -> tuple[ChartDefinition, ...]:
         for center_dec in _band_centers(spec):
             charts.extend(_charts_in_band(atlas_id, spec, center_dec))
     numbered = [
-        replace(chart, id=f"{atlas_id}-{index + 1:03d}")
-        for index, chart in enumerate(charts)
+        replace(chart, id=f"{atlas_id}-{index + 1:03d}") for index, chart in enumerate(charts)
     ]
     return tuple(numbered)
 

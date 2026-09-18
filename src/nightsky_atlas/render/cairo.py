@@ -29,6 +29,7 @@ from nightsky_atlas.layout.geometry import expand_rect
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
+from nightsky_atlas.render.ecliptic import build_ecliptic
 from nightsky_atlas.render.furniture import build_furniture_plan, draw_furniture
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
 from nightsky_atlas.render.overview import LocatorInset, draw_locator_inset
@@ -126,6 +127,7 @@ def draw_chart_page(
     plan = build_furniture_plan(transform, scene.definition, style, presentation)
     _draw_background(cr, transform.page)
     grid_lines = _draw_grid(cr, transform, scene.definition, style)
+    _draw_ecliptic(cr, transform, scene.definition, style)
     _draw_constellations(cr, transform, scene, style, label_list)
     _draw_chart_border(cr, transform, style)
     _draw_outlines(cr, transform, scene, style)
@@ -698,6 +700,40 @@ def _draw_grid(
         cr.stroke()
     cr.restore()
     return lines
+
+
+def _draw_ecliptic(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    definition: ChartDefinition,
+    style: StyleConfig,
+) -> None:
+    if not style.ecliptic.enabled:
+        return
+    paths = build_ecliptic(definition, transform)
+    if not paths:
+        return
+    rect = transform.chart_rect
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
+    gray = min(max(style.ecliptic.gray, 0.0), 1.0)
+    cr.set_source_rgb(gray, gray, gray)
+    cr.set_line_width(mm_to_pt(style.ecliptic.line_width_mm))
+    cr.set_dash([mm_to_pt(style.ecliptic.dash_mm), mm_to_pt(style.ecliptic.gap_mm)])
+    for path in paths:
+        for index, point in enumerate(path):
+            if index == 0:
+                cr.move_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+            else:
+                cr.line_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+        cr.stroke()
+    cr.restore()
 
 
 def _draw_grid_labels(

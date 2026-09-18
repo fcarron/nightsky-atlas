@@ -142,6 +142,13 @@ grid:
   label_ra_step_deg: 4.0
   label_dec_step_deg: 4.0
 
+ecliptic:
+  enabled: true
+  line_width_mm: 0.12
+  gray: 0.62
+  dash_mm: 0.8
+  gap_mm: 0.8
+
 furniture:
   title_font_size_pt: 8.5
   title_gray: 0.15
