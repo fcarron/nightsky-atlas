@@ -35,8 +35,9 @@ LINES_FILENAME = "constellations.lines.json"
 BOUNDARIES_FILENAME = "constellations.bounds.json"
 
 # IAU three-letter abbreviations to full constellation names.  This is factual
-# reference data (no creative content) used only to label overview maps; the
-# geometry itself comes from the vendored d3-celestial fixture.
+# reference data (no creative content) used only to label overview maps. The
+# vendored geometry has separate provenance for the IAU/MacRobert stick figures
+# and d3-celestial boundary polygons; see the fixture SOURCE.md.
 CONSTELLATION_NAMES: dict[str, str] = {
     "And": "Andromeda",
     "Ant": "Antlia",

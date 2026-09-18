@@ -97,3 +97,14 @@ See `docs/CARTOGRAPHY.md`.
 
 Early development. See the development plan in `docs/DEVELOPMENT_PLAN.md` and the
 current snapshot in `docs/STATE.md`.
+
+## License and data attribution
+
+The NightSky Atlas source code is licensed under the [MIT License](LICENSE).
+This does not relicense the included fixtures or downloaded catalogues: they
+remain under their own terms, recorded in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+In particular, the IAU/MacRobert constellation stick figures are CC BY 4.0 and
+the IAU boundary polygons are BSD-3-Clause. Generated atlases must retain all
+applicable source attribution and licence obligations.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and contribution rules.

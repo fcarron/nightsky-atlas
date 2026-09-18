@@ -200,12 +200,14 @@ its licensing is resolved.
 
 | Field | Value |
 | --- | --- |
-| Source | d3-celestial (Olaf Frohn), `master`, fetched 2026-09-16 |
+| Stick figures | IAU/MacRobert design, via Dominic Ford's `dcf21/constellation-stick-figures`, `constellation_lines_iau.dat`, commit `75d29c207bbd752023c447ddd1f9f4ff0eb47538` |
+| Stick-figure license | **CC BY 4.0**; attribution: Alan MacRobert et al., imported via Dominic Ford |
+| Boundaries | d3-celestial (Olaf Frohn), `master`, fetched 2026-09-16 |
+| Boundary license | **BSD-3-Clause** |
 | Files | `data/fixtures/constellations/{constellations.lines,constellations.bounds}.json` |
 | Companion | `LICENSE`, `SOURCE.md` in the same directory |
-| License | **BSD-3-Clause** |
-| Content | 89 stick figures; 785 deduplicated IAU boundary segments |
-| Transformations | none on import; boundary polygons converted to a deduplicated segment set at load time |
+| Content | 89 IAU/MacRobert stick figures; 785 deduplicated IAU boundary segments |
+| Transformations | stick-figure Hipparcos IDs resolved to J2000 RA/Dec without changing connectivity; boundary polygons converted to a deduplicated segment set at load time |
 | Committed | yes (~68 kB); build must be reproducible offline |
 
 ### Schematic nebula outlines
