@@ -19,7 +19,7 @@ import cairo
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
-from nightsky_atlas.chart.page import PageRect, PageTransform
+from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.chart.presentation import (
     PRODUCT_NAME,
     ChartPresentation,
@@ -303,7 +303,49 @@ def _draw_stars(
 
     for mark in marks:
         _draw_double_star_mark(cr, mark, size_model)
+
+    for point, radius_mm in _foreground_close_stars(scene, transform, size_model, suppressed):
+        cr.set_source_rgb(1.0, 1.0, 1.0)
+        cr.arc(
+            mm_to_pt(point.x_mm),
+            mm_to_pt(point.y_mm),
+            mm_to_pt(radius_mm + style.star.close_overlap_halo_mm),
+            0.0,
+            2.0 * math.pi,
+        )
+        cr.fill()
+        cr.set_source_rgb(0.0, 0.0, 0.0)
+        cr.arc(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), mm_to_pt(radius_mm), 0.0, 2.0 * math.pi)
+        cr.fill()
     cr.restore()
+
+
+def _foreground_close_stars(
+    scene: ChartScene,
+    transform: PageTransform,
+    size_model: StarSizeModel,
+    suppressed: set[str],
+) -> tuple[tuple[PagePoint, float], ...]:
+    """Return weaker stars whose mark would otherwise merge into a brighter one."""
+    placed = tuple(
+        (
+            scene_star,
+            transform.to_page(scene_star.chart_point),
+            size_model.radius_mm(scene_star.star.magnitude),
+        )
+        for scene_star in scene.stars
+        if scene_star.star.id not in suppressed
+    )
+    foreground = []
+    for scene_star, point, radius in placed:
+        if any(
+            other.star.magnitude < scene_star.star.magnitude
+            and math.hypot(point.x_mm - other_point.x_mm, point.y_mm - other_point.y_mm)
+            < radius + other_radius
+            for other, other_point, other_radius in placed
+        ):
+            foreground.append((point, radius))
+    return tuple(foreground)
 
 
 def _draw_double_star_mark(

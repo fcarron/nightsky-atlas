@@ -335,6 +335,7 @@ class StarStyle(_StrictModel):
     bright_magnitude: float
     faint_magnitude: float
     label_magnitude_limit: float = 4.0
+    close_overlap_halo_mm: NonNegativeFloat = 0.12
 
     @field_validator("max_diameter_mm")
     @classmethod

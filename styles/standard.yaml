@@ -10,6 +10,9 @@ star:
   bright_magnitude: 0.0
   faint_magnitude: 9.0
   label_magnitude_limit: 5.5
+  # A faint star overlapping a brighter star is redrawn above it with this
+  # physical white knockout ring, retaining both real positions.
+  close_overlap_halo_mm: 0.12
 
 label:
   font_family: "DejaVu Sans"

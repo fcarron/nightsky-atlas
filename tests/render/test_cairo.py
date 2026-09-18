@@ -24,10 +24,12 @@ from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.cairo import (
     _bold_symbol_ids,
     _dso_line_width_mm,
+    _foreground_close_stars,
     draw_chart_page,
     render_chart,
     render_magnitude_scale,
 )
+from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
 from nightsky_atlas.scene.models import ChartScene, SceneStar
 from nightsky_atlas.units import mm_to_pt
@@ -156,12 +158,8 @@ def test_bold_symbol_ids_follow_bold_labels() -> None:
 
 
 def test_dso_line_width_uses_bold_width_for_emphasized_objects() -> None:
-    assert _dso_line_width_mm(STYLE, bold=True) == pytest.approx(
-        STYLE.dso.bold_line_width_mm
-    )
-    assert _dso_line_width_mm(STYLE, bold=False) == pytest.approx(
-        STYLE.dso.line_width_mm
-    )
+    assert _dso_line_width_mm(STYLE, bold=True) == pytest.approx(STYLE.dso.bold_line_width_mm)
+    assert _dso_line_width_mm(STYLE, bold=False) == pytest.approx(STYLE.dso.line_width_mm)
     assert STYLE.dso.bold_line_width_mm > STYLE.dso.line_width_mm
 
 
@@ -199,3 +197,20 @@ def test_stars_are_clipped_to_the_chart_frame() -> None:
     outside = _pixel_rgb(surface, mm_to_pt(rect.right_mm) + mm_to_pt(0.6), y_pt)
     assert sum(inside) < 200
     assert sum(outside) > 700
+
+
+def test_weaker_star_overlapping_bright_star_gets_foreground_halo() -> None:
+    transform = PageTransform(chart=CHART, page=PAGE)
+    bright = Star("bright", 187.5, 12.0, 0.0, Provenance("TEST", "bright"))
+    faint = Star("faint", 187.5, 12.0, 8.0, Provenance("TEST", "faint"))
+    scene = ChartScene(
+        definition=CHART,
+        stars=(
+            SceneStar(bright, ChartPoint(0.0, 0.0)),
+            SceneStar(faint, ChartPoint(0.05, 0.0)),
+        ),
+    )
+    foreground = _foreground_close_stars(
+        scene, transform, StarSizeModel.from_style(STYLE.star), set()
+    )
+    assert len(foreground) == 1
