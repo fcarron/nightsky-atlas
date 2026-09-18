@@ -73,6 +73,12 @@ def _element_lines(request: ReviewRequest) -> str:
                 f"box=({element.bounds.left_mm:.1f},{element.bounds.top_mm:.1f},"
                 f"{element.bounds.width_mm:.1f},{element.bounds.height_mm:.1f})"
             )
+        if element.candidates:
+            parts.append(f"candidates=[{','.join(element.candidates)}]")
+        if element.display_name_variants:
+            parts.append(
+                f"variants=[{','.join(element.display_name_variants)}]"
+            )
         lines.append(" ".join(parts))
     return "\n".join(lines)
 
@@ -84,8 +90,13 @@ def _user_prompt(request: ReviewRequest) -> str:
         f"Issue types: ambiguous_association, overlapping_labels, unreadable_label, "
         f"wrong_position, missing_label, other\n"
         f"Current diagnostics: {json.dumps(request.diagnostics, sort_keys=True)}\n\n"
-        "Elements (id kind [text] [box left,top,width,height in mm]):\n"
+        "Elements (id kind [text] [box left,top,width,height in mm] "
+        "[candidates=...] [variants=...]):\n"
         f"{_element_lines(request)}\n\n"
+        "Rules: select_candidate must use one of the candidates listed for that "
+        "element (compass position of the label relative to its anchor). "
+        "select_display_name_variant only when the element lists variants. "
+        "If no listed option is clearly better, omit the action.\n\n"
         "Return JSON: {\"page_score\": 0-10, \"issues\": [{\"element_id\": str, "
         "\"issue_type\": str, \"severity\": 1-10, \"action\": {\"type\": str, "
         "\"candidate\": \"N|NE|E|SE|S|SW|W|NW\" (only for select_candidate)} }]}"

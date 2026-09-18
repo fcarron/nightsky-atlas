@@ -113,3 +113,33 @@ def test_missing_api_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     with pytest.raises(OpenRouterError):
         OpenRouterReviewer(model="m")
+
+
+def test_prompt_lists_element_candidates() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=completion(json.dumps({"page_score": 9.0, "issues": []})))
+
+    request = ReviewRequest(
+        page_id="standard:test",
+        prompt_version="1",
+        schema_version="1",
+        images=(),
+        permitted_actions=("select_candidate",),
+        elements=(
+            ReviewElement(
+                id="label:dso:NGC4486",
+                kind="label",
+                text="M87",
+                candidates=("N", "S"),
+            ),
+        ),
+    )
+    reviewer = OpenRouterReviewer(
+        model="m", api_key="k", client=client_with(handler)
+    )
+    reviewer.review(request)
+    prompt = captured["body"]["messages"][1]["content"][0]["text"]
+    assert "candidates=[N,S]" in prompt

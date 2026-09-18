@@ -18,7 +18,14 @@ __all__ = ["ReviewElement", "ReviewRequest"]
 
 @dataclass(frozen=True, slots=True)
 class ReviewElement:
-    """A visible element a reviewer may refer to, with its page geometry."""
+    """A visible element a reviewer may refer to, with its page geometry.
+
+    ``candidates`` lists the compass positions a label may actually be moved to
+    (ring-0 placements); ``display_name_variants`` lists the alternative printed
+    names the label supports.  Both are empty for non-label elements.  Exposing
+    them stops the reviewer from inventing candidates or name variants that the
+    layout model cannot honour.
+    """
 
     id: str
     kind: str
@@ -26,6 +33,8 @@ class ReviewElement:
     page_x_mm: float | None = None
     page_y_mm: float | None = None
     bounds: PageRect | None = None
+    candidates: tuple[str, ...] = ()
+    display_name_variants: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {"id": self.id, "kind": self.kind}
@@ -42,6 +51,10 @@ class ReviewElement:
                 "width_mm": self.bounds.width_mm,
                 "height_mm": self.bounds.height_mm,
             }
+        if self.candidates:
+            payload["candidates"] = list(self.candidates)
+        if self.display_name_variants:
+            payload["display_name_variants"] = list(self.display_name_variants)
         return payload
 
 

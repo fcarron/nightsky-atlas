@@ -165,6 +165,7 @@ def optimize_with_ai(
             transform,
             style,
             min_severity=min_action_severity,
+            require_cost_non_increase=True,
         )
         new_labels = outcome.labels
         new_cost, _ = layout_cost(new_labels, scene, transform, style)

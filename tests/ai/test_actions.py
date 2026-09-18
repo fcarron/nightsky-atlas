@@ -228,3 +228,77 @@ def test_action_rejected_when_it_swaps_one_hard_violation_for_another() -> None:
     )
     assert outcome.applied == ()
     assert outcome.rejected[0][1] == "action introduces hard violations"
+
+
+def test_unavailable_candidate_is_repaired_to_a_free_candidate() -> None:
+    a = Label(
+        id="label:a",
+        target_id="X",
+        text="A",
+        priority=50,
+        mandatory=False,
+        candidates=(
+            make_candidate("label:a", CompassPosition.N, 100.0, 100.0),
+            make_candidate("label:a", CompassPosition.S, 100.0, 140.0),
+        ),
+    )
+    b = _fixed_label("label:b", 100.0, 100.0)  # overlaps the current A:N
+    outcome = apply_review_actions(
+        (a, b),
+        make_result("label:a", {"type": "select_candidate", "candidate": "SW"}),
+        SCENE,
+        TRANSFORM,
+        STYLE,
+    )
+    assert outcome.applied == ("label:a",)
+    assert outcome.labels[0].selected_candidate_id == "label:a:S"
+
+
+def test_colliding_candidate_is_repaired_to_a_free_candidate() -> None:
+    a = Label(
+        id="label:a",
+        target_id="X",
+        text="A",
+        priority=50,
+        mandatory=False,
+        candidates=(
+            make_candidate("label:a", CompassPosition.N, 100.0, 100.0),
+            make_candidate("label:a", CompassPosition.E, 140.0, 100.0),
+            make_candidate("label:a", CompassPosition.S, 100.0, 140.0),
+        ),
+    )
+    b = _fixed_label("label:b", 100.0, 100.0)  # overlaps the current A:N
+    c = _fixed_label("label:c", 140.0, 100.0)  # overlaps the requested A:E
+    outcome = apply_review_actions(
+        (a, b, c),
+        make_result("label:a", {"type": "select_candidate", "candidate": "E"}),
+        SCENE,
+        TRANSFORM,
+        STYLE,
+    )
+    assert outcome.applied == ("label:a",)
+    assert outcome.labels[0].selected_candidate_id == "label:a:S"
+
+
+def test_cost_increasing_move_rejected_when_cost_gate_is_required() -> None:
+    a = Label(
+        id="label:a",
+        target_id="X",
+        text="A",
+        priority=50,
+        mandatory=False,
+        candidates=(
+            make_candidate("label:a", CompassPosition.N, 100.0, 100.0),
+            make_candidate("label:a", CompassPosition.S, 100.0, 140.0),
+        ),
+    )
+    outcome = apply_review_actions(
+        (a,),
+        make_result("label:a", {"type": "select_candidate", "candidate": "S"}),
+        SCENE,
+        TRANSFORM,
+        STYLE,
+        require_cost_non_increase=True,
+    )
+    assert outcome.applied == ()
+    assert outcome.rejected[0][1] == "action increases soft cost"

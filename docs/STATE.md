@@ -112,7 +112,7 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   dark, neighbours mid-grey).  Constellation full names come from the IAU
   abbreviation registry in `catalog/constellations.py`. Manifest records
   `overview_pages` with `star_count`.
-- `make check`: Ruff clean, 634 tests passing.
+- `make check`: Ruff clean, 639 tests passing.
 - Standard v0.2 full-sky tiling (draft): explicit declination rings every
   16 deg (-72 ... +72), stereographic polar caps, RA staggering, frozen
   config-driven counts.  Ordering is north-to-south (reading order):
@@ -177,6 +177,12 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Default model `qwen/qwen3.7-flash`; `min_action_severity: 6`; key in git-ignored `.env` (`OPENROUTER_API_KEY`).
 - Benchmark: 12 cases, schema compliance 1.00, detected 118/556, 40 false positives, $0.0073.
 - Replay via `RecordedReviewer`; the loop records per-iteration layout hashes, review results and cost.
+- Review requests list each label's available ring-0 candidates and only
+  advertise actions the layout model can honour.  `apply_review_actions` repairs
+  an unavailable/colliding `select_candidate` to the label's cheapest hard-clean
+  candidate, and the optimization loop requires the soft cost not to increase,
+  so an AI pass cannot degrade a page (live S044: optimized page unchanged at
+  cost 250.6; raw page improved monotonically 11854 -> 3703).
 
 ## Full-sky Standard v0.2 draft
 

@@ -28,7 +28,10 @@ full-page structured review works.
 - `ReviewRequest` includes only what a reviewer needs: page ID, image(s),
   visible relevant element metadata, permitted actions, current quality
   diagnostics and schema/prompt version. It avoids dumping an enormous full
-  layout.
+  layout. Each label element also lists the candidate positions it may
+  actually be moved to (and display-name variants when the label has any), and
+  only actions the layout model can honour are advertised, so the reviewer is
+  never invited to invent a candidate or name variant.
 - `ReviewResult` is strictly validated: referenced element IDs, issue types,
   severities, action type and candidate values. Malformed reviews must never
   alter a layout.
@@ -81,7 +84,10 @@ select_display_name_variant
 ```
 
 Later, tightly bounded offset adjustments may be added. Any unknown action is
-rejected.
+rejected. An action is only *advertised* to the reviewer once the layout model
+can honour it: `use_leader_line`/`remove_leader_line` stay hidden until labels
+carry leader-line state, and `select_display_name_variant` is only offered when
+an element lists variants.
 
 After every AI change:
 
@@ -89,7 +95,10 @@ After every AI change:
 2. run deterministic validation;
 3. compute cost metrics;
 4. reject changes that introduce hard violations;
-5. render again only if accepted.
+5. reject a direct move that raises the soft cost (in the optimization loop) —
+   a colliding or unavailable `select_candidate` is first repaired to the
+   label's cheapest hard-clean candidate;
+6. render again only if accepted.
 
 AI is advisory, never authoritative over geometry.
 

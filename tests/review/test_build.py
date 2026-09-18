@@ -86,3 +86,24 @@ def test_review_request_is_serializable() -> None:
     assert payload["images"] == ["review.png"]
     assert isinstance(payload["elements"], list)
     assert payload["elements"][0]["kind"] in {"star", "dso", "label"}
+
+
+def test_label_elements_list_available_candidates() -> None:
+    scene = make_scene()
+    labels = build_dso_labels(scene, TRANSFORM, STYLE)
+    request = build_review_request(
+        page_id="standard:test",
+        scene=scene,
+        labels=labels,
+        transform=TRANSFORM,
+        diagnostics={},
+        images=("review.png",),
+    )
+    label_elements = [element for element in request.elements if element.kind == "label"]
+    assert label_elements
+    assert all(element.candidates for element in label_elements)
+    # No element carries display-name variants yet, so the reviewer is not
+    # invited to request them, and unsupported leader-line actions stay hidden.
+    assert "select_display_name_variant" not in request.permitted_actions
+    assert "use_leader_line" not in request.permitted_actions
+    assert "remove_leader_line" not in request.permitted_actions
