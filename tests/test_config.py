@@ -270,7 +270,7 @@ def test_shipped_style_declares_dso_extent_classes() -> None:
     assert config.dso.galaxy.use_angular_size is True
     assert config.dso.globular_cluster.use_angular_size is True
     assert config.dso.open_cluster.use_angular_size is True
-    assert config.dso.planetary_nebula.use_angular_size is False
+    assert config.dso.planetary_nebula.use_angular_size is True
     assert (
         config.dso.globular_cluster.min_diameter_mm
         <= config.dso.globular_cluster.fallback_diameter_mm

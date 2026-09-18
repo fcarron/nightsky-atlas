@@ -37,7 +37,7 @@ from nightsky_atlas.catalog.constellations import (
     load_constellations,
 )
 from nightsky_atlas.catalog.dso_store import load_dso_catalog
-from nightsky_atlas.catalog.models import DeepSkyObject, Star
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.observing_lists import (
     DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
 )
@@ -77,6 +77,8 @@ __all__ = [
     "load_chart_inputs",
     "load_chart_stars",
 ]
+
+OPENNGC_OUTLINE_DIR = Path("data/processed/outlines")
 
 DEFAULT_DSO_PATH = Path("data/processed/dso/openngc.json")
 DEFAULT_DOUBLE_STAR_PATH = Path("data/processed/double_stars/wds.json")
@@ -182,24 +184,25 @@ def load_chart_inputs(
         dsos = tuple(load_dsos(dsos_path))
     with progress.step("constellation/outline load", detail=True):
         constellations = load_constellations(
-            constellations_dir
-            if constellations_dir is not None
-            else CONSTELLATION_FIXTURE_DIR
+            constellations_dir if constellations_dir is not None else CONSTELLATION_FIXTURE_DIR
         )
-        outlines = load_outlines(
-            outlines_dir if outlines_dir is not None else OUTLINE_FIXTURE_DIR
+        selected_outline_dir = (
+            Path(outlines_dir) if outlines_dir is not None else OUTLINE_FIXTURE_DIR
         )
+        fallback_outlines = load_outlines(selected_outline_dir)
+        openngc_outlines = (
+            load_outlines(OPENNGC_OUTLINE_DIR)
+            if selected_outline_dir == OUTLINE_FIXTURE_DIR
+            else ()
+        )
+        outlines = _prefer_openngc_outlines(dsos, fallback_outlines, openngc_outlines)
     with progress.step("observing-list load", detail=True):
         observing_lists = load_observing_lists(
-            observing_lists_dir
-            if observing_lists_dir is not None
-            else OBSERVING_LISTS_FIXTURE_DIR
+            observing_lists_dir if observing_lists_dir is not None else OBSERVING_LISTS_FIXTURE_DIR
         )
         selection_policy = _selection_policy(
             atlas,
-            observing_config_path
-            if observing_config_path is not None
-            else OBSERVING_CONFIG_PATH,
+            observing_config_path if observing_config_path is not None else OBSERVING_CONFIG_PATH,
         )
     return ChartInputs(
         atlas=atlas,
@@ -210,6 +213,20 @@ def load_chart_inputs(
         observing_lists=observing_lists,
         selection_policy=selection_policy,
     )
+
+
+def _prefer_openngc_outlines(
+    dsos: tuple[DeepSkyObject, ...],
+    fallback: tuple[NebulaOutline, ...],
+    openngc: tuple[NebulaOutline, ...],
+) -> tuple[NebulaOutline, ...]:
+    """Prefer OpenNGC contours only for large diffuse nebulae."""
+    eligible_ids = {
+        dso.id for dso in dsos if dso.object_type in (DsoType.BRIGHT_NEBULA, DsoType.DARK_NEBULA)
+    }
+    preferred = tuple(outline for outline in openngc if outline.dso_id in eligible_ids)
+    preferred_ids = {outline.dso_id for outline in preferred}
+    return tuple(outline for outline in fallback if outline.dso_id not in preferred_ids) + preferred
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,9 +294,7 @@ def build_chart_context(
         definition = find_chart(atlas, chart_id)
     page = atlas.page.to_geometry()
 
-    star_limit = (
-        magnitude_limit if magnitude_limit is not None else atlas.stellar_limit_magnitude
-    )
+    star_limit = magnitude_limit if magnitude_limit is not None else atlas.stellar_limit_magnitude
     with progress.step("star query", detail=True):
         stars = load_chart_stars(
             definition,
@@ -293,9 +308,7 @@ def build_chart_context(
     # full-catalogue scan per chart.
     dso_box = field_query_box(definition, padding_deg=2.0)
     dsos = tuple(
-        dso
-        for dso in inputs.dsos
-        if _coordinates_in_box(dso.ra_deg, dso.dec_deg, dso_box)
+        dso for dso in inputs.dsos if _coordinates_in_box(dso.ra_deg, dso.dec_deg, dso_box)
     )
     # Deep-sky selection is governed entirely by the edition's per-type
     # visibility rules; there is no global magnitude cut in the atlas config.
@@ -309,9 +322,7 @@ def build_chart_context(
             list(star_systems) if star_systems is not None else load_star_systems(double_stars_path)
         )
         box = chart_query_box(definition, padding_deg=1.0)
-        nearby_systems = [
-            system for system in all_systems if _system_in_box(system, box)
-        ]
+        nearby_systems = [system for system in all_systems if _system_in_box(system, box)]
         matched_systems = match_star_systems(
             nearby_systems,
             stars,
@@ -355,9 +366,7 @@ def field_query_box(definition: ChartDefinition, *, padding_deg: float = 2.0) ->
     superset of the field, so pre-filtering a catalogue never drops an object
     the scene builder would keep.
     """
-    radius = (
-        math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0) + padding_deg
-    )
+    radius = math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0) + padding_deg
     dec_min = max(-90.0, definition.center_dec_deg - radius)
     dec_max = min(90.0, definition.center_dec_deg + radius)
     worst_dec = min(89.9, max(abs(dec_min), abs(dec_max)))

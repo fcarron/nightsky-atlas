@@ -45,13 +45,12 @@ class DsoShape(StrEnum):
     DOT = "dot"
 
 
-# Decorative-mark reach as a multiple of the symbol's collision radius.  The
-# drawn symbol must never extend beyond the :class:`SymbolExtent` that label
-# exclusion and collision detection consume, so every outer factor stays <= 1.0
-# (``AGENTS.md`` section 12).
+# Decorative-mark reach as a multiple of the circle radius.  The planetary
+# symbol's radial strokes deliberately extend beyond the circle; callers size
+# the circle to keep the full mark within :class:`SymbolExtent`.
 CIRCLE_CROSS_REACH_FACTOR = 1.0
-SPOKED_CIRCLE_INNER_FACTOR = 0.5
-SPOKED_CIRCLE_OUTER_FACTOR = 1.0
+SPOKED_CIRCLE_INNER_FACTOR = 1.0
+SPOKED_CIRCLE_OUTER_FACTOR = 1.85
 
 
 _SHAPE_BY_TYPE: dict[DsoType, DsoShape] = {
@@ -241,18 +240,35 @@ def dso_symbol_extent(
         else:
             axis_arcmin = _usable_axis_arcmin(dso)
             if axis_arcmin is not None:
-                diameter_mm = _clamped_diameter_mm(
-                    axis_arcmin / 60.0 * mm_per_deg, extent
-                )
-                return SymbolExtent(
-                    shape=shape,
-                    width_mm=diameter_mm,
-                    height_mm=diameter_mm,
-                    uses_angular_size=True,
-                )
+                diameter_mm = _clamped_diameter_mm(axis_arcmin / 60.0 * mm_per_deg, extent)
+                return _symbol_extent(shape, diameter_mm, diameter_mm, uses_angular_size=True)
 
     diameter_mm = _clamped_diameter_mm(extent.fallback_diameter_mm, extent)
-    return SymbolExtent(shape=shape, width_mm=diameter_mm, height_mm=diameter_mm)
+    return _symbol_extent(shape, diameter_mm, diameter_mm)
+
+
+def _symbol_extent(
+    shape: DsoShape,
+    circle_width_mm: float,
+    circle_height_mm: float,
+    *,
+    uses_angular_size: bool = False,
+) -> SymbolExtent:
+    """Return the full drawn extent, including any exterior PN spokes."""
+    if shape == DsoShape.SPOKED_CIRCLE:
+        scale = SPOKED_CIRCLE_OUTER_FACTOR
+        return SymbolExtent(
+            shape=shape,
+            width_mm=circle_width_mm * scale,
+            height_mm=circle_height_mm * scale,
+            uses_angular_size=uses_angular_size,
+        )
+    return SymbolExtent(
+        shape=shape,
+        width_mm=circle_width_mm,
+        height_mm=circle_height_mm,
+        uses_angular_size=uses_angular_size,
+    )
 
 
 @dataclass(frozen=True, slots=True)

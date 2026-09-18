@@ -395,7 +395,12 @@ def _draw_dso_shape(
     shape: DsoShape,
     dash_mm: float,
 ) -> None:
-    radius = size_pt / 2.0
+    outer_radius = size_pt / 2.0
+    radius = (
+        outer_radius / SPOKED_CIRCLE_OUTER_FACTOR
+        if shape == DsoShape.SPOKED_CIRCLE
+        else outer_radius
+    )
     cr.save()
     if shape in (DsoShape.DASHED_CIRCLE, DsoShape.DASHED_SQUARE):
         cr.set_dash([mm_to_pt(dash_mm), mm_to_pt(dash_mm)], 0.0)

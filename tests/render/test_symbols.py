@@ -156,9 +156,7 @@ def test_galaxy_maximum_size_caps_both_axes() -> None:
 
 
 def test_galaxy_without_axes_has_no_ellipse() -> None:
-    geometry = galaxy_ellipse(
-        make_galaxy(major_axis_arcmin=None), mm_per_deg=60.0, min_axis_mm=0.7
-    )
+    geometry = galaxy_ellipse(make_galaxy(major_axis_arcmin=None), mm_per_deg=60.0, min_axis_mm=0.7)
     assert geometry is None
 
 
@@ -166,8 +164,8 @@ def test_decorative_symbol_reach_stays_within_extent() -> None:
     # The drawn symbol must never exceed the SymbolExtent that label exclusion
     # and collision detection consume (AGENTS.md section 12).
     assert CIRCLE_CROSS_REACH_FACTOR <= 1.0
-    assert SPOKED_CIRCLE_OUTER_FACTOR <= 1.0
-    assert SPOKED_CIRCLE_INNER_FACTOR < SPOKED_CIRCLE_OUTER_FACTOR
+    assert SPOKED_CIRCLE_INNER_FACTOR == 1.0
+    assert SPOKED_CIRCLE_OUTER_FACTOR > 1.0
 
 
 @pytest.mark.parametrize(
@@ -223,9 +221,7 @@ def extent_for(dso: DeepSkyObject, *, mm_per_deg: float = 10.0):
         (36.0, 6.0),
     ],
 )
-def test_globular_cluster_uses_angular_diameter(
-    arcmin: float, expected_mm: float
-) -> None:
+def test_globular_cluster_uses_angular_diameter(arcmin: float, expected_mm: float) -> None:
     extent = extent_for(make_dso(DsoType.GLOBULAR_CLUSTER, major_axis_arcmin=arcmin))
     assert extent.uses_angular_size is True
     assert extent.shape == DsoShape.CIRCLE_CROSS
@@ -236,9 +232,7 @@ def test_globular_cluster_uses_angular_diameter(
 def test_globular_cluster_falls_back_without_size() -> None:
     extent = extent_for(make_dso(DsoType.GLOBULAR_CLUSTER))
     assert extent.uses_angular_size is False
-    assert extent.width_mm == pytest.approx(
-        STYLE.dso.globular_cluster.fallback_diameter_mm
-    )
+    assert extent.width_mm == pytest.approx(STYLE.dso.globular_cluster.fallback_diameter_mm)
 
 
 def test_globular_cluster_uses_minor_axis_when_major_missing() -> None:
@@ -250,9 +244,7 @@ def test_globular_cluster_uses_minor_axis_when_major_missing() -> None:
 def test_globular_cluster_rejects_implausible_size() -> None:
     extent = extent_for(make_dso(DsoType.GLOBULAR_CLUSTER, major_axis_arcmin=5000.0))
     assert extent.uses_angular_size is False
-    assert extent.width_mm == pytest.approx(
-        STYLE.dso.globular_cluster.fallback_diameter_mm
-    )
+    assert extent.width_mm == pytest.approx(STYLE.dso.globular_cluster.fallback_diameter_mm)
 
 
 @pytest.mark.parametrize(
@@ -276,18 +268,14 @@ def test_open_cluster_maximum_size_caps_extent() -> None:
     assert extent.width_mm == pytest.approx(STYLE.dso.open_cluster.max_diameter_mm)
 
 
-def test_fixed_size_type_ignores_angular_size() -> None:
+def test_planetary_nebula_uses_angular_diameter_and_includes_outer_spokes() -> None:
     extent = extent_for(make_dso(DsoType.PLANETARY_NEBULA, major_axis_arcmin=30.0))
-    assert extent.uses_angular_size is False
-    assert extent.width_mm == pytest.approx(
-        STYLE.dso.planetary_nebula.fallback_diameter_mm
-    )
+    assert extent.uses_angular_size is True
+    assert extent.width_mm == pytest.approx(30.0 / 60.0 * 10.0 * SPOKED_CIRCLE_OUTER_FACTOR)
 
 
 def test_galaxy_extent_matches_true_scale() -> None:
-    extent = extent_for(
-        make_galaxy(major_axis_arcmin=2.0, minor_axis_arcmin=1.0), mm_per_deg=60.0
-    )
+    extent = extent_for(make_galaxy(major_axis_arcmin=2.0, minor_axis_arcmin=1.0), mm_per_deg=60.0)
     assert extent.uses_angular_size is True
     assert extent.shape == DsoShape.CIRCLE
     assert extent.is_elliptical is True
@@ -316,9 +304,7 @@ def test_extent_shared_by_label_exclusion_and_optimizer() -> None:
     scene = build_scene(CHART, (), [dso])
     extent = dso_symbol_extent(dso, mm_per_deg=TRANSFORM.mm_per_deg, style=STYLE)
 
-    assert _exclusion_radius_mm(dso, TRANSFORM, STYLE) == pytest.approx(
-        extent.collision_radius_mm
-    )
+    assert _exclusion_radius_mm(dso, TRANSFORM, STYLE) == pytest.approx(extent.collision_radius_mm)
     circles = _symbol_circles(scene, TRANSFORM, STYLE)
     assert len(circles) == 1
     assert circles[0].radius_mm == pytest.approx(extent.collision_radius_mm)
@@ -353,12 +339,8 @@ def test_collision_detection_uses_real_symbol_extent() -> None:
             candidates=(candidate,),
         )
 
-    outside = find_hard_violations(
-        (label_at(center.x_mm + radius + 0.5),), scene, TRANSFORM, STYLE
-    )
+    outside = find_hard_violations((label_at(center.x_mm + radius + 0.5),), scene, TRANSFORM, STYLE)
     assert IssueType.LABEL_DSO not in {issue.issue_type for issue in outside}
 
-    inside = find_hard_violations(
-        (label_at(center.x_mm + radius - 0.5),), scene, TRANSFORM, STYLE
-    )
+    inside = find_hard_violations((label_at(center.x_mm + radius - 0.5),), scene, TRANSFORM, STYLE)
     assert IssueType.LABEL_DSO in {issue.issue_type for issue in inside}

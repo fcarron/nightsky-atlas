@@ -102,7 +102,14 @@ def load_outlines(
     if not path.exists():
         return ()
     data = _load_json(path)
-    provenance = Provenance(catalogue=CATALOGUE, version=VERSION, source_id=FILENAME)
+    source = data.get("source", {})
+    if not isinstance(source, dict):
+        raise ValueError(f"outline source must be an object in {path}")
+    provenance = Provenance(
+        catalogue=str(source.get("catalogue", CATALOGUE)),
+        version=str(source.get("version", VERSION)),
+        source_id=FILENAME,
+    )
     outlines: list[NebulaOutline] = []
     for entry in data.get("outlines", ()):
         if not isinstance(entry, dict):
@@ -113,10 +120,14 @@ def load_outlines(
         name = entry.get("name")
         outlines.append(
             NebulaOutline(
-                id=f"outline:dso:{dso_id}",
+                id=str(entry.get("id", f"outline:dso:{dso_id}")),
                 dso_id=dso_id,
                 points=_vertices(entry.get("points"), path.name),
-                provenance=provenance,
+                provenance=Provenance(
+                    catalogue=provenance.catalogue,
+                    version=provenance.version,
+                    source_id=str(entry.get("source_id", provenance.source_id)),
+                ),
                 name=str(name) if name is not None else None,
             )
         )
