@@ -21,9 +21,11 @@ from nightsky_atlas.catalog.models import Provenance
 
 __all__ = [
     "CATALOGUE",
+    "CONSTELLATION_NAMES",
     "VERSION",
     "ConstellationCatalogue",
     "ConstellationSegment",
+    "constellation_name",
     "load_constellations",
 ]
 
@@ -33,10 +35,118 @@ DEFAULT_FIXTURE_DIR = Path("data/fixtures/constellations")
 LINES_FILENAME = "constellations.lines.json"
 BOUNDARIES_FILENAME = "constellations.bounds.json"
 
+# IAU three-letter abbreviations to full constellation names.  This is factual
+# reference data (no creative content) used only to label overview maps; the
+# geometry itself comes from the vendored d3-celestial fixture.
+CONSTELLATION_NAMES: dict[str, str] = {
+    "And": "Andromeda",
+    "Ant": "Antlia",
+    "Aps": "Apus",
+    "Aqr": "Aquarius",
+    "Aql": "Aquila",
+    "Ara": "Ara",
+    "Ari": "Aries",
+    "Aur": "Auriga",
+    "Boo": "Boötes",
+    "Cae": "Caelum",
+    "Cam": "Camelopardalis",
+    "Cnc": "Cancer",
+    "CVn": "Canes Venatici",
+    "CMa": "Canis Major",
+    "CMi": "Canis Minor",
+    "Cap": "Capricornus",
+    "Car": "Carina",
+    "Cas": "Cassiopeia",
+    "Cen": "Centaurus",
+    "Cep": "Cepheus",
+    "Cet": "Cetus",
+    "Cha": "Chamaeleon",
+    "Cir": "Circinus",
+    "Col": "Columba",
+    "Com": "Coma Berenices",
+    "CrA": "Corona Australis",
+    "CrB": "Corona Borealis",
+    "Crv": "Corvus",
+    "Crt": "Crater",
+    "Cru": "Crux",
+    "Cyg": "Cygnus",
+    "Del": "Delphinus",
+    "Dor": "Dorado",
+    "Dra": "Draco",
+    "Equ": "Equuleus",
+    "Eri": "Eridanus",
+    "For": "Fornax",
+    "Gem": "Gemini",
+    "Gru": "Grus",
+    "Her": "Hercules",
+    "Hor": "Horologium",
+    "Hya": "Hydra",
+    "Hyi": "Hydrus",
+    "Ind": "Indus",
+    "Lac": "Lacerta",
+    "Leo": "Leo",
+    "LMi": "Leo Minor",
+    "Lep": "Lepus",
+    "Lib": "Libra",
+    "Lup": "Lupus",
+    "Lyn": "Lynx",
+    "Lyr": "Lyra",
+    "Men": "Mensa",
+    "Mic": "Microscopium",
+    "Mon": "Monoceros",
+    "Mus": "Musca",
+    "Nor": "Norma",
+    "Oct": "Octans",
+    "Oph": "Ophiuchus",
+    "Ori": "Orion",
+    "Pav": "Pavo",
+    "Peg": "Pegasus",
+    "Per": "Perseus",
+    "Phe": "Phoenix",
+    "Pic": "Pictor",
+    "Psc": "Pisces",
+    "PsA": "Piscis Austrinus",
+    "Pup": "Puppis",
+    "Pyx": "Pyxis",
+    "Ret": "Reticulum",
+    "Sge": "Sagitta",
+    "Sgr": "Sagittarius",
+    "Sco": "Scorpius",
+    "Scl": "Sculptor",
+    "Sct": "Scutum",
+    "Ser": "Serpens",
+    "Sex": "Sextans",
+    "Tau": "Taurus",
+    "Tel": "Telescopium",
+    "Tri": "Triangulum",
+    "TrA": "Triangulum Australe",
+    "Tuc": "Tucana",
+    "UMa": "Ursa Major",
+    "UMi": "Ursa Minor",
+    "Vel": "Vela",
+    "Vir": "Virgo",
+    "Vol": "Volans",
+    "Vul": "Vulpecula",
+}
+
+
+def constellation_name(abbreviation: str) -> str:
+    """Return the full IAU name for a constellation abbreviation.
+
+    Unknown abbreviations are returned unchanged so a future fixture addition
+    still labels sensibly instead of failing the build.
+    """
+    return CONSTELLATION_NAMES.get(abbreviation, abbreviation)
+
 
 @dataclass(frozen=True, slots=True)
 class ConstellationSegment:
-    """One straight RA/Dec segment of a line or boundary."""
+    """One straight RA/Dec segment of a line or boundary.
+
+    ``constellation_id`` is the source constellation abbreviation (``And``);
+    it is kept so overview maps can group segments and place constellation
+    names without re-parsing the fixture.
+    """
 
     id: str
     ra1_deg: float
@@ -44,6 +154,7 @@ class ConstellationSegment:
     ra2_deg: float
     dec2_deg: float
     provenance: Provenance
+    constellation_id: str = ""
 
     def __post_init__(self) -> None:
         for name in ("ra1_deg", "dec1_deg", "ra2_deg", "dec2_deg"):
@@ -103,6 +214,7 @@ def _line_segments(data: dict[str, Any]) -> tuple[ConstellationSegment, ...]:
         geometry = feature.get("geometry", {})
         if geometry.get("type") != "MultiLineString":
             continue
+        constellation_id = str(feature.get("id", ""))
         for path_index, polyline in enumerate(geometry.get("coordinates", ())):
             vertices = _vertices(polyline, LINES_FILENAME)
             for index in range(len(vertices) - 1):
@@ -117,6 +229,7 @@ def _line_segments(data: dict[str, Any]) -> tuple[ConstellationSegment, ...]:
                         ra2_deg=ra2,
                         dec2_deg=dec2,
                         provenance=provenance,
+                        constellation_id=constellation_id,
                     )
                 )
     return tuple(segments)
@@ -130,6 +243,7 @@ def _boundary_segments(data: dict[str, Any]) -> tuple[ConstellationSegment, ...]
         geometry = feature.get("geometry", {})
         if geometry.get("type") != "Polygon":
             continue
+        constellation_id = str(feature.get("id", ""))
         for ring_index, ring in enumerate(geometry.get("coordinates", ())):
             vertices = _vertices(ring, BOUNDARIES_FILENAME)
             for index in range(len(vertices) - 1):
@@ -150,6 +264,7 @@ def _boundary_segments(data: dict[str, Any]) -> tuple[ConstellationSegment, ...]
                         ra2_deg=end[0],
                         dec2_deg=end[1],
                         provenance=provenance,
+                        constellation_id=constellation_id,
                     )
                 )
     return tuple(segments)

@@ -27,6 +27,7 @@ from nightsky_atlas.chart.presentation import (
     neighbour_markup,
     presentation_for,
 )
+from nightsky_atlas.render.overview import locator_rect
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.render.text import (
     TextMeasurer,
@@ -348,6 +349,10 @@ def build_furniture_plan(
                 - (legend.dots[0].y_mm - max_diameter / 2.0),
             )
         )
+
+    locator = locator_rect(transform, style)
+    if locator is not None:
+        obstacles.append(locator)
 
     return FurniturePlan(
         title=title,

@@ -138,6 +138,36 @@ Furniture sits outside the chart frame and is deliberately quiet
   (left), scale bar (centre), title (right); nothing is stacked in the middle of
   the chart.
 
+## Overview maps and locator
+
+The atlas opens with two whole-sky **overview pages** (after the front matter):
+a northern and a southern hemisphere disk, each a pole-centred azimuthal
+equidistant projection of radius 90 degrees.  They show a simplified
+constellation background (stick figures and dotted boundaries drawn as straight
+chords), a light RA/Dec grid, the full name of each constellation, the bright
+stars down to the ``overview.star_limit_magnitude`` and one clean **cell** per
+Standard chart with its printed chart code (``S001`` …).
+
+Charts overlap by design (star-hop overlap), so drawing every chart field
+rectangle produced a tangle of near-parallel lines.  Each chart is therefore
+represented by the declination-ring / right-ascension sector around its centre:
+declination boundaries lie midway between adjacent ring centres (and at the pole
+and equator) and RA boundaries midway between adjacent chart centres within a
+ring.  Every chart contributes exactly one **trapezoidal** cell, adjacent cells
+share a single boundary, and there is no overlap; cell sides are straight
+meridians and tops/bottoms follow declination circles.  This is an index
+schematic, not a reproduction of the chart fields.  The bright stars use the
+same monotonic magnitude-to-size model as the charts, limited to a small,
+deliberately quiet foreground.  RA hour labels ring the equator.  Appearance
+lives under ``overview:`` in the style; the pages are controlled by
+``atlas build --no-overviews``.
+
+An optional **locator inset** (``locator.enabled`` in the style, default off)
+draws a compact version of the hemisphere overview inside a chart corner,
+with the current cell in black and its immediate neighbours mid-grey (stars are
+omitted at that size).  The inset rectangle is registered as a label obstacle
+so no chart label is placed under it.
+
 ## Open items
 
 - Residual hard violations on dense pages (Milky Way / Virgo-Coma fields,

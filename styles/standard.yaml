@@ -173,3 +173,28 @@ furniture:
     gray: 0.55
     spacing_mm: 6.0
     label: "mag"
+
+# Front-of-atlas whole-sky overview pages: a pole-centred azimuthal equidistant
+# disk per hemisphere showing a simplified constellation background, the bright
+# stars, and one clean trapezoidal ring/RA-sector cell per Standard chart (no
+# overlapping chart fields) with the printed chart code (S001, ...) at each cell
+# centre.  Appearance only; geometry comes from the atlas tiling.
+overview:
+  enabled: true
+  radius_mm: 76.0
+  show_stars: true
+  star_limit_magnitude: 5.0
+  star_min_diameter_mm: 0.3
+  star_max_diameter_mm: 1.4
+  star_bright_magnitude: 0.0
+  star_faint_magnitude: 5.0
+  star_gray: 0.0
+
+# Optional per-chart locator inset: a compact version of the hemisphere
+# overview drawn in a chart corner, with the current footprint emphasized and
+# its immediate neighbours highlighted.  Disabled by default.
+locator:
+  enabled: false
+  diameter_mm: 42.0
+  corner: bottom_left
+  show_neighbours: true

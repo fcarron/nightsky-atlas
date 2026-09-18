@@ -108,6 +108,44 @@ def test_build_atlas_subset(tmp_path: Path) -> None:
     assert manifest["chart_count"] == 2
     assert manifest["page"]["width_mm"] == 297.0
     assert len(manifest["pages"]) == 2
+    assert manifest["overview_pages"] == []
+
+
+def test_build_writes_overview_pages_for_tiled_atlas(tmp_path: Path) -> None:
+    result = build_atlas(
+        atlas_path=SHIPPED_ATLAS,
+        style_path=STYLE,
+        outdir=tmp_path,
+        stars_csv=STARS,
+        dsos_path=make_dso_json(tmp_path),
+        limit=1,
+        render_png=False,
+        png_dpi=72.0,
+        write_front_matter=False,
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert [page["hemisphere"] for page in manifest["overview_pages"]] == [
+        "north",
+        "south",
+    ]
+    assert all(page["chart_count"] > 0 for page in manifest["overview_pages"])
+
+
+def test_build_can_skip_overview_pages(tmp_path: Path) -> None:
+    result = build_atlas(
+        atlas_path=SHIPPED_ATLAS,
+        style_path=STYLE,
+        outdir=tmp_path,
+        stars_csv=STARS,
+        dsos_path=make_dso_json(tmp_path),
+        limit=1,
+        render_png=False,
+        png_dpi=72.0,
+        write_front_matter=False,
+        write_overviews=False,
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["overview_pages"] == []
 
 
 def test_build_respects_limit(tmp_path: Path) -> None:

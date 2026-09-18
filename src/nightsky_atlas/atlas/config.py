@@ -49,9 +49,11 @@ __all__ = [
     "GridStyle",
     "LabelSelectionStyle",
     "LabelStyle",
+    "LocatorStyle",
     "MagnitudeLegendStyle",
     "NavigationStyle",
     "OverlapTargetConfig",
+    "OverviewStyle",
     "PageConfig",
     "ScaleBarStyle",
     "StyleConfig",
@@ -744,6 +746,72 @@ class FurnitureStyle(_StrictModel):
     magnitude_legend: MagnitudeLegendStyle = Field(default_factory=MagnitudeLegendStyle)
 
 
+class OverviewStyle(_StrictModel):
+    """Appearance of the whole-sky overview pages at the front of the atlas.
+
+    The overview is a pole-centred azimuthal equidistant disk: constellation
+    geometry and bright stars as a quiet background, one trapezoidal
+    ring/RA-sector cell per chart (so overlapping chart fields never tangle),
+    and a chart code at each cell centre.  Colours are deliberately quiet so
+    the cell grid and the codes are the readable layer.
+    """
+
+    enabled: bool = True
+    radius_mm: PositiveFloat = 76.0
+    title_font_size_pt: PositiveFloat = 15.0
+    subtitle_font_size_pt: PositiveFloat = 9.0
+    rim_line_width_mm: PositiveFloat = 0.3
+    rim_gray: float = 0.25
+    show_grid: bool = True
+    grid_gray: float = 0.9
+    grid_line_width_mm: PositiveFloat = 0.08
+    constellation_gray: float = 0.78
+    constellation_line_width_mm: PositiveFloat = 0.2
+    boundary_gray: float = 0.86
+    boundary_line_width_mm: PositiveFloat = 0.1
+    name_font_size_pt: PositiveFloat = 5.5
+    name_gray: float = 0.3
+    footprint_gray: float = 0.45
+    footprint_line_width_mm: PositiveFloat = 0.2
+    code_font_size_pt: PositiveFloat = 4.5
+    code_gray: float = 0.1
+    # Bright-star foreground.  The overview is an index, so only stars down to
+    # ``star_limit_magnitude`` are projected; sizes use the same monotonic
+    # magnitude model as the charts but stay deliberately small.
+    show_stars: bool = True
+    star_limit_magnitude: float = 5.0
+    star_min_diameter_mm: PositiveFloat = 0.3
+    star_max_diameter_mm: PositiveFloat = 1.4
+    star_bright_magnitude: float = 0.0
+    star_faint_magnitude: float = 5.0
+    star_gray: float = 0.0
+
+
+class LocatorStyle(_StrictModel):
+    """Optional compact per-chart locator inset.
+
+    A small pole-centred overview disk drawn inside the chart field, with the
+    current chart footprint emphasized and, optionally, its immediate
+    neighbours shown.  Disabled by default so existing pages are unchanged.
+    """
+
+    enabled: bool = False
+    diameter_mm: PositiveFloat = 42.0
+    corner: Literal["bottom_left", "bottom_right", "top_left", "top_right"] = "bottom_left"
+    inset_margin_mm: PositiveFloat = 3.0
+    show_neighbours: bool = True
+    border_gray: float = 0.4
+    border_line_width_mm: PositiveFloat = 0.15
+    constellation_gray: float = 0.9
+    constellation_line_width_mm: PositiveFloat = 0.08
+    footprint_gray: float = 0.78
+    footprint_line_width_mm: PositiveFloat = 0.1
+    neighbour_gray: float = 0.4
+    neighbour_line_width_mm: PositiveFloat = 0.22
+    current_gray: float = 0.0
+    current_line_width_mm: PositiveFloat = 0.35
+
+
 class StyleConfig(_StrictModel):
     """Visual appearance configuration for one style."""
 
@@ -755,6 +823,8 @@ class StyleConfig(_StrictModel):
     grid: GridStyle = Field(default_factory=GridStyle)
     constellation: ConstellationStyle = Field(default_factory=ConstellationStyle)
     furniture: FurnitureStyle = Field(default_factory=FurnitureStyle)
+    overview: OverviewStyle = Field(default_factory=OverviewStyle)
+    locator: LocatorStyle = Field(default_factory=LocatorStyle)
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, object]:

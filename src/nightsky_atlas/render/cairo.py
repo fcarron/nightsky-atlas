@@ -30,6 +30,7 @@ from nightsky_atlas.render.constellation_lines import resolve_constellation_line
 from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
 from nightsky_atlas.render.furniture import build_furniture_plan, draw_furniture
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
+from nightsky_atlas.render.overview import LocatorInset, draw_locator_inset
 from nightsky_atlas.render.symbols import (
     CIRCLE_CROSS_REACH_FACTOR,
     SPOKED_CIRCLE_INNER_FACTOR,
@@ -67,6 +68,7 @@ def render_chart(
     labels: Iterable[Label] = (),
     debug: DebugOptions | None = None,
     presentation: ChartPresentation | None = None,
+    locator: LocatorInset | None = None,
     pdf_path: str | Path | None = None,
     png_path: str | Path | None = None,
     png_dpi: float = _DEFAULT_PNG_DPI,
@@ -87,6 +89,7 @@ def render_chart(
             labels=labels,
             debug=debug,
             presentation=presentation,
+            locator=locator,
         )
 
     _render_outputs(
@@ -107,6 +110,7 @@ def draw_chart_page(
     labels: Iterable[Label] = (),
     debug: DebugOptions | None = None,
     presentation: ChartPresentation | None = None,
+    locator: LocatorInset | None = None,
 ) -> None:
     """Draw one chart page into an existing context, in point units.
 
@@ -129,6 +133,8 @@ def draw_chart_page(
         cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles
     )
     _draw_labels(cr, label_list, style)
+    if locator is not None:
+        draw_locator_inset(cr, locator, transform, style)
     if debug is not None:
         _draw_debug(cr, transform, scene, label_list, style, debug)
     draw_furniture(cr, plan, style)

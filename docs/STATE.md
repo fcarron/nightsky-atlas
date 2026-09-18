@@ -98,7 +98,21 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   neighbour navigation is 7.5 pt with a bold code. E/W references are rotated
   along the narrow side margin so they stay outside the chart field without
   colliding with the Dec labels; N/S remain outside the top/bottom frame.
-- `make check`: Ruff clean, 597 tests passing.
+- Whole-sky overview pages and optional locator inset: `atlas/overview.py`
+  builds a pole-centred azimuthal equidistant hemisphere map (simplified
+  constellation lines/boundaries drawn as straight chords, a light RA/Dec grid,
+  bright stars down to `overview.star_limit_magnitude`, and one trapezoidal
+  declination-ring / RA-sector **cell** per Standard chart with the printed
+  chart code at its centre); new `projection/azimuthal.py` supplies the
+  projection.  Each chart contributes exactly one cell boundary, so overlapping
+  chart fields never tangle the index.  `render/overview.py` draws the
+  front-of-atlas north/south pages (after the front matter, controlled by
+  `style.overview.enabled` / `atlas build --no-overviews`) and the compact
+  per-chart locator inset (`style.locator.enabled`, default off; current cell
+  dark, neighbours mid-grey).  Constellation full names come from the IAU
+  abbreviation registry in `catalog/constellations.py`. Manifest records
+  `overview_pages` with `star_count`.
+- `make check`: Ruff clean, 634 tests passing.
 - Standard v0.2 full-sky tiling (draft): explicit declination rings every
   16 deg (-72 ... +72), stereographic polar caps, RA staggering, frozen
   config-driven counts.  Ordering is north-to-south (reading order):

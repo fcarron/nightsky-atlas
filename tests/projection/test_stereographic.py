@@ -111,3 +111,27 @@ def test_rejects_invalid_centre() -> None:
 def test_chart_point_is_hashable() -> None:
     assert ChartPoint(1.0, 2.0) == ChartPoint(1.0, 2.0)
     assert len({ChartPoint(1.0, 2.0), ChartPoint(1.0, 2.0)}) == 1
+
+
+def test_inverse_round_trips_within_field() -> None:
+    projection = make_projection()
+    for delta_ra in (-15.0, -5.0, 0.0, 5.0, 15.0):
+        for delta_dec in (-8.0, 0.0, 8.0):
+            ra = (CENTER_RA_DEG + delta_ra) % 360.0
+            dec = CENTER_DEC_DEG + delta_dec
+            point = projection.project(ra, dec)
+            ra_back, dec_back = projection.inverse(point.xi_deg, point.eta_deg)
+            assert ra_back == pytest.approx(ra, abs=1e-9)
+            assert dec_back == pytest.approx(dec, abs=1e-9)
+
+
+def test_inverse_of_centre_is_centre() -> None:
+    projection = make_projection()
+    assert projection.inverse(0.0, 0.0) == pytest.approx(
+        (CENTER_RA_DEG, CENTER_DEC_DEG)
+    )
+
+
+def test_inverse_rejects_non_finite() -> None:
+    with pytest.raises(ProjectionError):
+        make_projection().inverse(float("inf"), 0.0)

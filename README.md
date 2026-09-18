@@ -73,6 +73,19 @@ real positions. See `docs/ARCHITECTURE.md` and `docs/DATA_SOURCES.md`.
 Raw and processed catalogue data are build inputs and are not committed. See
 `docs/PERFORMANCE.md` for benchmark numbers and licensing notes.
 
+### Full atlas with overview pages
+
+```bash
+.venv/bin/nightsky atlas build --star-store data/processed/stars/tycho2.sqlite
+```
+
+The combined `build/standard/atlas.pdf` opens with front matter and two
+whole-sky overview pages (northern and southern hemispheres) showing the
+constellation background, the bright stars and one trapezoidal cell per chart
+with its printed chart code. Use `--no-overviews` to omit them. An optional
+per-chart locator inset is enabled with `locator.enabled: true` in the style.
+See `docs/CARTOGRAPHY.md`.
+
 ## Status
 
 Early development. See the development plan in `docs/DEVELOPMENT_PLAN.md` and the

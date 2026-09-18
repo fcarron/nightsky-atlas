@@ -21,6 +21,7 @@ from nightsky_atlas.atlas.config import (
     AtlasConfig,
     StyleConfig,
 )
+from nightsky_atlas.atlas.overview import OverviewMap, build_overview, hemisphere_for
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 from nightsky_atlas.atlas.tiling import (
     TilingSpec,
@@ -33,12 +34,15 @@ from nightsky_atlas.build.chart import (
     load_star_systems,
 )
 from nightsky_atlas.build.progress import Progress, null_progress
+from nightsky_atlas.catalog.models import Star
+from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
 )
 from nightsky_atlas.catalog.star_names import (
     load_star_names,
 )
+from nightsky_atlas.catalog.store import QueryBox, StarStore
 from nightsky_atlas.chart.presentation import (
     presentation_from_edition,
     product_edition_title,
@@ -54,6 +58,7 @@ from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
 from nightsky_atlas.render.furniture import furniture_obstacles
+from nightsky_atlas.render.overview import LocatorInset, draw_overview_page
 from nightsky_atlas.render.text import draw_centered_text, draw_text
 from nightsky_atlas.units import mm_to_pt
 
@@ -161,6 +166,31 @@ def _tiling_manifest(atlas: AtlasConfig) -> dict[str, Any] | None:
     return payload
 
 
+def _load_overview_stars(
+    star_store: str | Path | None,
+    stars_csv: str | Path | None,
+    magnitude_limit: float,
+) -> tuple[Star, ...]:
+    """Load the bright-star foreground for the overview pages.
+
+    The overview needs the whole sky, not one chart, so it queries the store
+    with a full-sky box instead of the per-chart path.
+    """
+    if star_store is not None:
+        with StarStore.open(star_store) as store:
+            stars = store.query_box(
+                QueryBox(0.0, 360.0, -90.0, 90.0), magnitude_limit=magnitude_limit
+            )
+        return tuple(stars)
+    if stars_csv is not None:
+        return tuple(
+            star
+            for star in load_sample_stars(stars_csv)
+            if star.magnitude <= magnitude_limit
+        )
+    return ()
+
+
 def _data_sources() -> list[dict[str, Any]]:
     manifest_paths = [
         Path("data/processed/stars/tycho2.manifest.json"),
@@ -239,6 +269,7 @@ def build_atlas(
     render_png: bool = True,
     png_dpi: float = 150.0,
     write_front_matter: bool = True,
+    write_overviews: bool = True,
     write_draft_report: bool = True,
     progress: Progress | None = None,
 ) -> AtlasBuildResult:
@@ -259,7 +290,8 @@ def build_atlas(
     style = inputs.style
     edition = atlas.resolved_edition()
     with progress.step("resolve chart definitions"):
-        charts = chart_definitions(atlas)
+        all_charts = chart_definitions(atlas)
+    charts = all_charts
     if chart_ids is not None:
         wanted = set(chart_ids)
         charts = tuple(chart for chart in charts if chart.id in wanted)
@@ -291,6 +323,43 @@ def build_atlas(
         with progress.step("front matter", detail=True):
             _draw_front_matter(context, atlas, style, len(charts))
             surface.show_page()
+
+    overviews: dict[str, OverviewMap] = {}
+    overview_page_info: list[dict[str, Any]] = []
+    write_overview_pages = (
+        write_overviews and style.overview.enabled and atlas.tiling is not None
+    )
+    if write_overview_pages or style.locator.enabled:
+        with progress.step("build overview maps"):
+            overview_stars: tuple[Star, ...] = ()
+            if write_overview_pages and style.overview.show_stars:
+                overview_stars = _load_overview_stars(
+                    star_store,
+                    stars_csv,
+                    style.overview.star_limit_magnitude,
+                )
+            for hemisphere in ("north", "south"):
+                overviews[hemisphere] = build_overview(
+                    all_charts,
+                    hemisphere=hemisphere,
+                    constellations=inputs.constellations,
+                    edition=edition,
+                    bright_stars=overview_stars,
+                )
+    if write_overview_pages:
+        with progress.step("overview pages", detail=True):
+            for hemisphere in ("north", "south"):
+                overview = overviews[hemisphere]
+                draw_overview_page(context, overview, page, style)
+                surface.show_page()
+                overview_page_info.append(
+                    {
+                        "hemisphere": hemisphere,
+                        "title": overview.title,
+                        "chart_count": overview.chart_count,
+                        "star_count": len(overview.stars),
+                    }
+                )
 
     results: list[ChartPageResult] = []
     observing_lists: dict[str, object] = {}
@@ -343,6 +412,15 @@ def build_atlas(
             applied_chart_ids.add(definition.id)
         overrides_applied = len(chart_overrides) if chart_overrides is not None else 0
         presentation = presentation_from_edition(definition, edition)
+        locator: LocatorInset | None = None
+        if style.locator.enabled and overviews:
+            locator = LocatorInset(
+                overview=overviews[hemisphere_for(definition.center_dec_deg)],
+                current_chart_id=definition.id,
+                neighbour_ids=frozenset(
+                    neighbour for _, neighbour in definition.neighbours
+                ),
+            )
         furniture = furniture_obstacles(
             chart_context.transform, definition, chart_context.style, presentation
         )
@@ -386,6 +464,7 @@ def build_atlas(
             chart_context.style,
             labels=labels,
             presentation=presentation,
+            locator=locator,
             pdf_path=page_dir / "chart.pdf",
             png_path=page_dir / "preview.png" if render_png else None,
             png_dpi=png_dpi,
@@ -399,6 +478,7 @@ def build_atlas(
             chart_context.style,
             labels=labels,
             presentation=presentation,
+            locator=locator,
         )
         surface.show_page()
         compose_s = time.perf_counter() - stage_start
@@ -467,6 +547,7 @@ def build_atlas(
         },
         "chart_count": len(results),
         "total_hard_issues": sum(page_result.hard_issues for page_result in results),
+        "overview_pages": overview_page_info,
         "data_sources": _data_sources(),
         "pages": [page_result.to_dict() for page_result in results],
     }

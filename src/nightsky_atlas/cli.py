@@ -22,9 +22,11 @@ from nightsky_atlas.atlas.config import (
     load_atlas_config,
     load_style_config,
 )
+from nightsky_atlas.atlas.overview import build_overview, hemisphere_for
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 from nightsky_atlas.atlas.tiling import (
     TilingSpec,
+    chart_definitions,
     coverage_report,
     tile_sky,
     with_neighbours,
@@ -32,6 +34,7 @@ from nightsky_atlas.atlas.tiling import (
 from nightsky_atlas.build.atlas import build_atlas
 from nightsky_atlas.build.chart import build_chart_context
 from nightsky_atlas.build.progress import Progress
+from nightsky_atlas.catalog.constellations import load_constellations
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
 from nightsky_atlas.catalog.hipparcos import (
     CATALOGUE as HIPPARCOS_CATALOGUE,
@@ -99,6 +102,7 @@ from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import DebugOptions, render_chart, render_magnitude_scale
 from nightsky_atlas.render.furniture import furniture_obstacles
+from nightsky_atlas.render.overview import LocatorInset
 from nightsky_atlas.render.review import render_review_png
 from nightsky_atlas.review.build import build_review_request
 from nightsky_atlas.review.models import ReviewRequest
@@ -532,6 +536,11 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     build.add_argument("--no-png", action="store_true")
     build.add_argument("--no-optimize", action="store_true")
     build.add_argument("--no-front-matter", action="store_true")
+    build.add_argument(
+        "--no-overviews",
+        action="store_true",
+        help="omit the front-of-atlas north/south overview pages",
+    )
     build.add_argument("--no-draft-report", action="store_true")
     build.add_argument(
         "-v",
@@ -595,6 +604,32 @@ def _star_names(args: argparse.Namespace) -> dict:
     return load_star_names(directory if directory is not None else STAR_NAMES_FIXTURE_DIR)
 
 
+def _locator_inset(
+    args: argparse.Namespace,
+    atlas: AtlasConfig,
+    style: StyleConfig,
+    definition: ChartDefinition,
+) -> LocatorInset | None:
+    """Build the per-chart locator inset when the style enables it."""
+    if not style.locator.enabled:
+        return None
+    directory = getattr(args, "constellations", None)
+    constellations = load_constellations(
+        directory if directory is not None else _DEFAULT_CONSTELLATIONS
+    )
+    overview = build_overview(
+        chart_definitions(atlas),
+        hemisphere=hemisphere_for(definition.center_dec_deg),
+        constellations=constellations,
+        edition=atlas.resolved_edition(),
+    )
+    return LocatorInset(
+        overview=overview,
+        current_chart_id=definition.id,
+        neighbour_ids=frozenset(neighbour for _, neighbour in definition.neighbours),
+    )
+
+
 def _command_chart_render(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
 
@@ -626,6 +661,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
         labels=labels,
         debug=_parse_debug(args.debug),
         presentation=presentation,
+        locator=_locator_inset(args, atlas, style, definition),
         pdf_path=outdir / "chart.pdf",
         png_path=outdir / "preview.png",
         png_dpi=args.png_dpi,
@@ -1027,6 +1063,7 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         render_png=not args.no_png,
         png_dpi=args.png_dpi,
         write_front_matter=not args.no_front_matter,
+        write_overviews=not args.no_overviews,
         write_draft_report=not args.no_draft_report,
         progress=progress,
     )

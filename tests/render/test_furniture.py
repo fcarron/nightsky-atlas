@@ -6,11 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from nightsky_atlas.atlas.config import load_style_config
+from nightsky_atlas.atlas.config import LocatorStyle, load_style_config
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_for
 from nightsky_atlas.render.furniture import build_furniture_plan
+from nightsky_atlas.render.overview import locator_rect
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.render.text import TextMeasurer
 
@@ -141,3 +142,14 @@ def test_footer_sits_below_the_chart_frame() -> None:
     assert plan.scale_bar.line_y_mm > rect.bottom_mm
     assert plan.legend is not None
     assert plan.legend.dots[0].y_mm > rect.bottom_mm
+
+
+def test_locator_rect_is_a_label_obstacle_when_enabled() -> None:
+    style = STYLE.model_copy(update={"locator": LocatorStyle(enabled=True)})
+    transform = make_transform()
+    plan = build_furniture_plan(
+        transform, transform.chart, style, presentation_for(transform.chart)
+    )
+    rect = locator_rect(transform, style)
+    assert rect is not None
+    assert rect in plan.obstacles

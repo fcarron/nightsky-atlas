@@ -82,3 +82,37 @@ class StereographicProjection:
             - math.sin(center_dec_rad) * math.cos(dec_rad) * math.cos(delta_ra_rad)
         )
         return ChartPoint(xi_deg=math.degrees(xi_rad), eta_deg=math.degrees(eta_rad))
+
+    def inverse(self, xi_deg: float, eta_deg: float) -> tuple[float, float]:
+        """Invert a chart-plane point to ``(ra_deg, dec_deg)``.
+
+        The inverse is used to recover the sky directions bounding a chart
+        field for overview/locator maps.  It is the exact algebraic inverse of
+        :meth:`project`; the antipode is not reachable because it maps to
+        infinity.
+        """
+        if not math.isfinite(xi_deg) or not math.isfinite(eta_deg):
+            raise ProjectionError("chart-plane coordinates must be finite")
+        xi_rad = math.radians(xi_deg)
+        eta_rad = math.radians(eta_deg)
+        rho = math.hypot(xi_rad, eta_rad)
+        center_dec_rad = math.radians(self.center_dec_deg)
+        if rho <= _ANTIPODE_EPSILON:
+            return self.center_ra_deg, self.center_dec_deg
+        c = 2.0 * math.atan(rho / 2.0)
+        sin_c = math.sin(c)
+        cos_c = math.cos(c)
+        east = xi_rad / rho
+        north = eta_rad / rho
+        sin_dec = cos_c * math.sin(center_dec_rad) + north * sin_c * math.cos(
+            center_dec_rad
+        )
+        sin_dec = max(-1.0, min(1.0, sin_dec))
+        dec_rad = math.asin(sin_dec)
+        delta_ra_rad = math.atan2(
+            east * sin_c,
+            cos_c * math.cos(center_dec_rad)
+            - north * sin_c * math.sin(center_dec_rad),
+        )
+        ra_deg = (self.center_ra_deg + math.degrees(delta_ra_rad)) % 360.0
+        return ra_deg, math.degrees(dec_rad)
