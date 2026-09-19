@@ -60,10 +60,11 @@ dso:
   outline_line_width_mm: 0.18
   outline_dash_mm: 0.8
   outline_gray: 0.45
-  # A DSO overlapping a bright star receives a small physical white knockout,
-  # so an observing target such as NGC 404 remains visibly distinct from Mirach.
+  # Only compact DSO symbols receive a white knockout near a bright star.
+  # Clearing an extended nebula's full extent would erase the stars inside it.
   star_overlap_halo_mm: 0.12
   star_overlap_magnitude_limit: 4.5
+  star_overlap_knockout_max_diameter_mm: 3.0
   # Per-class symbol extent.  Extended classes use the catalogue angular size
   # (scaled by the chart's mm-per-degree) when available; fallback_diameter_mm
   # covers missing/unreliable sizes, min_diameter_mm keeps small marks

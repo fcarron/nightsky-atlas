@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from nightsky_atlas.atlas.config import EditionConfig
+from nightsky_atlas.atlas.directory import build_chart_directory
 from nightsky_atlas.atlas.index import build_atlas_index, natural_designation_key
-from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
+from nightsky_atlas.catalog.star_names import StarName
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.atlas_index import _chart_lines, index_page_count
@@ -107,3 +109,36 @@ def test_constellation_chart_references_wrap_between_complete_codes() -> None:
         "S010, S011, S012",
         "S013",
     )
+
+
+def test_named_star_index_uses_visible_stars_and_nearest_chart() -> None:
+    charts = (_chart("standard-040", 10.0), _chart("standard-041", 18.0))
+    star = Star("HIP 123", 11.0, 20.0, 1.0, Provenance("test", "123"), hip_id="HIP 123")
+    index = build_atlas_index(
+        {},
+        {},
+        charts,
+        EditionConfig(name="Standard", code="S"),
+        chart_stars={"standard-040": (star,), "standard-041": (star,)},
+        star_names={123: StarName(123, name="Test Star", bayer="α", constellation="Com")},
+    )
+    assert len(index.named_star_entries) == 1
+    entry = index.named_star_entries[0]
+    assert (entry.name, entry.designation, entry.primary_chart, entry.secondary_charts) == (
+        "Test Star",
+        "α Com",
+        "S040",
+        ("S041",),
+    )
+
+
+def test_chart_directory_uses_edition_codes_and_published_neighbours() -> None:
+    charts = (
+        ChartDefinition("deep-001", 10.0, 20.0, 13.5, 9.0, neighbours=(("E", "deep-002"),)),
+        ChartDefinition("deep-002", 20.0, 20.0, 13.5, 9.0),
+    )
+    entries = build_chart_directory(charts, EditionConfig(name="Deep", code="D"))
+    assert entries[0].chart_code == "D001"
+    assert entries[0].center_ra == "00h40m"
+    assert entries[0].field == "13.5° × 9°"
+    assert entries[0].neighbours == ("D002",)

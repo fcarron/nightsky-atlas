@@ -18,6 +18,8 @@ __all__ = [
     "ChartPresentation",
     "chart_index",
     "chart_title",
+    "format_dec_deg",
+    "format_ra_deg",
     "neighbour_code",
     "neighbour_markup",
     "presentation_for",
@@ -29,7 +31,27 @@ def _escape_markup(text: str) -> str:
     """Escape text for Pango markup without depending on the render layer."""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+
 PRODUCT_NAME = "NightSky Atlas"
+
+
+def format_ra_deg(ra_deg: float) -> str:
+    """Format right ascension as ``HHhMMm`` on the 0–24 hour clock."""
+    total_minutes = int(round((ra_deg % 360.0) * 4.0)) % (24 * 60)
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours:02d}h{minutes:02d}m"
+
+
+def format_dec_deg(dec_deg: float) -> str:
+    """Format declination as a signed degree value for chart furniture."""
+    value = round(dec_deg, 3)
+    sign = "+" if value >= 0.0 else "-"
+    magnitude = abs(value)
+    if abs(magnitude - round(magnitude)) < 1e-6:
+        body = f"{magnitude:.0f}"
+    else:
+        body = f"{magnitude:.1f}"
+    return f"{sign}{body}\N{DEGREE SIGN}"
 
 
 def chart_index(chart_id: str) -> int | None:
@@ -72,8 +94,7 @@ class ChartPresentation:
         if not self.chart_code:
             return product_edition_title(self.edition_name, product_name=self.product_name)
         return (
-            f"{self.product_name} \N{EM DASH} {self.edition_name} "
-            f"\N{MIDDLE DOT} {self.chart_code}"
+            f"{self.product_name} \N{EM DASH} {self.edition_name} \N{MIDDLE DOT} {self.chart_code}"
         )
 
     @property
@@ -81,9 +102,7 @@ class ChartPresentation:
         """Visible title without the chart code, including the separator."""
         if not self.chart_code:
             return ""
-        return (
-            f"{self.product_name} \N{EM DASH} {self.edition_name} \N{MIDDLE DOT} "
-        )
+        return f"{self.product_name} \N{EM DASH} {self.edition_name} \N{MIDDLE DOT} "
 
     @property
     def title_markup(self) -> str:
@@ -95,10 +114,7 @@ class ChartPresentation:
         """
         if not self.chart_code:
             return _escape_markup(self.title)
-        return (
-            f"{_escape_markup(self.title_prefix)}"
-            f"<b>{_escape_markup(self.chart_code)}</b>"
-        )
+        return f"{_escape_markup(self.title_prefix)}<b>{_escape_markup(self.chart_code)}</b>"
 
 
 def product_edition_title(edition_name: str, *, product_name: str = PRODUCT_NAME) -> str:
@@ -133,9 +149,7 @@ def presentation_from_edition(
     definition: ChartDefinition, edition: EditionConfig
 ) -> ChartPresentation:
     """Build the visible presentation from an edition configuration block."""
-    return presentation_for(
-        definition, edition_name=edition.name, edition_code=edition.code
-    )
+    return presentation_for(definition, edition_name=edition.name, edition_code=edition.code)
 
 
 def neighbour_code(neighbour_id: str, edition_code: str) -> str:

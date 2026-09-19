@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
+from nightsky_atlas.chart.presentation import format_dec_deg, format_ra_deg
 from nightsky_atlas.projection.base import ProjectionError
 from nightsky_atlas.projection.stereographic import StereographicProjection
 from nightsky_atlas.render.text import TextMeasurer
@@ -61,25 +62,6 @@ class GridLabel:
     bounds: PageRect
 
 
-def format_ra_deg(ra_deg: float) -> str:
-    """Format right ascension as ``HHhMMm`` on the 0-24 hour clock."""
-    total_minutes = int(round((ra_deg % 360.0) * 4.0)) % (24 * 60)
-    hours, minutes = divmod(total_minutes, 60)
-    return f"{hours:02d}h{minutes:02d}m"
-
-
-def format_dec_deg(dec_deg: float) -> str:
-    """Format declination as a signed degree value, e.g. ``+12°``."""
-    value = round(dec_deg, 3)
-    sign = "+" if value >= 0.0 else "-"
-    magnitude = abs(value)
-    if abs(magnitude - round(magnitude)) < _MULTIPLE_TOL:
-        body = f"{magnitude:.0f}"
-    else:
-        body = f"{magnitude:.1f}"
-    return f"{sign}{body}\N{DEGREE SIGN}"
-
-
 def _ra_half_width_deg(definition: ChartDefinition, dec_deg: float) -> float:
     """Half-width in right ascension of the field at ``dec_deg``.
 
@@ -113,9 +95,7 @@ def _is_polar_field(definition: ChartDefinition) -> bool:
     return near_edge >= 90.0 - _POLAR_DEC_TOLERANCE_DEG
 
 
-def _polyline_hits_rect(
-    points: tuple[PagePoint, ...], rect: PageRect, margin_mm: float
-) -> bool:
+def _polyline_hits_rect(points: tuple[PagePoint, ...], rect: PageRect, margin_mm: float) -> bool:
     """Whether any point of a densely sampled polyline lies on the page rect."""
     return any(
         rect.left_mm - margin_mm <= point.x_mm <= rect.right_mm + margin_mm
@@ -182,8 +162,7 @@ def build_grid(
                     projector,
                     transform,
                     ra,
-                    sample_dec_min
-                    + (sample_dec_max - sample_dec_min) * index / (_SAMPLES - 1),
+                    sample_dec_min + (sample_dec_max - sample_dec_min) * index / (_SAMPLES - 1),
                 )
             )
             is not None
@@ -242,9 +221,7 @@ def _overlaps(first: PageRect, second: PageRect, margin_mm: float = 0.0) -> bool
     )
 
 
-def _scan_crossings(
-    points: tuple[PagePoint, ...], edge_value: float, axis: str
-) -> list[float]:
+def _scan_crossings(points: tuple[PagePoint, ...], edge_value: float, axis: str) -> list[float]:
     """Return perpendicular coordinates where a polyline crosses an edge.
 
     ``axis == "x"`` scans a vertical edge and returns page ``y`` positions;
@@ -339,8 +316,7 @@ def build_grid_labels(
             height_mm=metrics.height_mm,
         )
         if any(
-            _overlaps(bounds, obstacle, margin_mm=_OBSTACLE_CLEARANCE_MM)
-            for obstacle in obstacles
+            _overlaps(bounds, obstacle, margin_mm=_OBSTACLE_CLEARANCE_MM) for obstacle in obstacles
         ):
             return
         seen_ids.add(label_id)
@@ -476,9 +452,7 @@ def _thin_labels(
         items.sort(key=lambda item: (_label_tier(item[1].kind, item[1].value_deg), item[0]))
         kept_along: list[float] = []
         for along, label in items:
-            if spacing_mm > 0.0 and any(
-                abs(along - other) < spacing_mm for other in kept_along
-            ):
+            if spacing_mm > 0.0 and any(abs(along - other) < spacing_mm for other in kept_along):
                 continue
             if any(
                 _overlaps(label.bounds, other.bounds, margin_mm=_OBSTACLE_CLEARANCE_MM)

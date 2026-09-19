@@ -144,6 +144,7 @@ def draw_chart_page(
     _draw_outlines(cr, transform, scene, style)
     _draw_stars(cr, transform, scene, size_model, style)
     _draw_dsos(cr, transform, scene, size_model, style, bold_symbol_ids)
+    _draw_stars_over_dso_symbols(cr, transform, scene, size_model, style)
     _draw_grid_labels(cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles)
     _draw_labels(cr, foreground_labels, style)
     if locator is not None:
@@ -415,19 +416,26 @@ def _draw_stars(
         )
 
     for point, radius_mm in _foreground_close_stars(scene, transform, size_model, suppressed):
-        cr.set_source_rgb(1.0, 1.0, 1.0)
-        cr.arc(
-            mm_to_pt(point.x_mm),
-            mm_to_pt(point.y_mm),
-            mm_to_pt(radius_mm + style.star.close_overlap_halo_mm),
-            0.0,
-            2.0 * math.pi,
-        )
-        cr.fill()
-        cr.set_source_rgb(0.0, 0.0, 0.0)
-        cr.arc(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), mm_to_pt(radius_mm), 0.0, 2.0 * math.pi)
-        cr.fill()
+        _draw_star_with_halo(cr, point, radius_mm, style.star.close_overlap_halo_mm)
     cr.restore()
+
+
+def _draw_star_with_halo(
+    cr: cairo.Context[cairo.Surface], point: PagePoint, radius_mm: float, halo_mm: float
+) -> None:
+    """Draw a foreground star with a paper gap protecting its circular form."""
+    cr.set_source_rgb(1.0, 1.0, 1.0)
+    cr.arc(
+        mm_to_pt(point.x_mm),
+        mm_to_pt(point.y_mm),
+        mm_to_pt(radius_mm + halo_mm),
+        0.0,
+        2.0 * math.pi,
+    )
+    cr.fill()
+    cr.set_source_rgb(0.0, 0.0, 0.0)
+    cr.arc(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), mm_to_pt(radius_mm), 0.0, 2.0 * math.pi)
+    cr.fill()
 
 
 def _foreground_close_stars(
@@ -462,6 +470,89 @@ def _foreground_close_stars(
         ):
             foreground.append((point, radius))
     return tuple(foreground)
+
+
+def _foreground_stars_over_dsos(
+    scene: ChartScene,
+    transform: PageTransform,
+    size_model: StarSizeModel,
+    style: StyleConfig,
+    suppressed: set[str],
+) -> tuple[tuple[PagePoint, float], ...]:
+    """Return stars whose printed mark intersects a DSO symbol's full extent.
+
+    DSO symbols are rendered after the regular star layer.  Repainting just
+    these stars above a symbol restores a usable star-hop point without
+    changing either catalogue position or the DSO's true angular scale.
+    """
+    dso_marks = _dso_marks_requiring_foreground(scene, transform, size_model, style)
+    foreground = []
+    for scene_star in scene.stars:
+        if scene_star.star.id in suppressed:
+            continue
+        point = transform.to_page(scene_star.chart_point)
+        radius_mm = size_model.radius_mm(scene_star.star.magnitude)
+        if any(
+            math.hypot(point.x_mm - dso_point.x_mm, point.y_mm - dso_point.y_mm)
+            <= radius_mm + extent.collision_radius_mm
+            for dso_point, extent in dso_marks
+        ):
+            foreground.append((point, radius_mm))
+    return tuple(foreground)
+
+
+def _dso_marks_requiring_foreground(
+    scene: ChartScene,
+    transform: PageTransform,
+    size_model: StarSizeModel,
+    style: StyleConfig,
+) -> tuple[tuple[PagePoint, SymbolExtent], ...]:
+    marks = []
+    for item in scene.deep_sky_objects:
+        extent = dso_symbol_extent(item.dso, mm_per_deg=transform.mm_per_deg, style=style)
+        if _dso_overlaps_bright_star(item, scene, transform, size_model, extent, style):
+            continue
+        marks.append((transform.to_page(item.chart_point), extent))
+    return tuple(marks)
+
+
+def _draw_stars_over_dso_symbols(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    scene: ChartScene,
+    size_model: StarSizeModel,
+    style: StyleConfig,
+) -> None:
+    """Restore real star positions above DSO ink that would otherwise obscure them."""
+    marks = resolve_double_stars(scene, transform, style)
+    suppressed = {star_id for mark in marks for star_id in mark.suppress_star_ids}
+    foreground = _foreground_stars_over_dsos(scene, transform, size_model, style, suppressed)
+    dso_marks = _dso_marks_requiring_foreground(scene, transform, size_model, style)
+    foreground_marks = tuple(
+        mark
+        for mark in marks
+        if any(
+            math.hypot(mark.page_point.x_mm - point.x_mm, mark.page_point.y_mm - point.y_mm)
+            <= size_model.radius_mm(mark.magnitude) + extent.collision_radius_mm
+            for point, extent in dso_marks
+        )
+    )
+    if not foreground and not foreground_marks:
+        return
+    rect = transform.chart_rect
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
+    for point, radius_mm in foreground:
+        _draw_star_with_halo(cr, point, radius_mm, style.star.close_overlap_halo_mm)
+    for mark in foreground_marks:
+        _draw_double_star_mark(cr, mark, size_model, knockout_mm=style.star.close_overlap_halo_mm)
+    cr.restore()
 
 
 def _foreground_double_star_marks(
@@ -576,6 +667,8 @@ def _dso_overlaps_bright_star(
     style: StyleConfig,
 ) -> bool:
     """Return whether a bright star would make a DSO mark visually disappear."""
+    if max(extent.width_mm, extent.height_mm) > style.dso.star_overlap_knockout_max_diameter_mm:
+        return False
     point = transform.to_page(scene_dso.chart_point)
     for scene_star in scene.stars:
         if scene_star.star.magnitude > style.dso.star_overlap_magnitude_limit:
@@ -701,9 +794,7 @@ def _draw_labels(
         if candidate is None:
             continue
         gray = (
-            style.constellation.names.gray
-            if label.id.startswith("label:constellation:")
-            else 0.0
+            style.constellation.names.gray if label.id.startswith("label:constellation:") else 0.0
         )
         cr.set_source_rgb(gray, gray, gray)
         draw_text(
@@ -838,6 +929,8 @@ def _draw_constellations(
                 if (candidate := label.effective_candidate()) is not None
             ),
         )
+
+
 def _draw_constellation_lines(
     cr: cairo.Context[cairo.Surface],
     transform: PageTransform,

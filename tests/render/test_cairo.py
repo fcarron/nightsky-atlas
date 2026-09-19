@@ -24,15 +24,17 @@ from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.cairo import (
     _bold_symbol_ids,
     _dso_line_width_mm,
+    _dso_overlaps_bright_star,
     _foreground_close_stars,
     _foreground_double_star_marks,
+    _foreground_stars_over_dsos,
     draw_chart_page,
     render_chart,
     render_edition_magnitude_scale,
     render_magnitude_scale,
 )
 from nightsky_atlas.render.double_stars import DoubleStarMark
-from nightsky_atlas.render.symbols import StarSizeModel
+from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
 from nightsky_atlas.scene.models import ChartScene, SceneStar
 from nightsky_atlas.units import mm_to_pt
@@ -237,7 +239,7 @@ def test_weaker_star_overlapping_bright_star_gets_foreground_halo() -> None:
     assert len(foreground) == 1
 
 
-def test_dso_overlapping_bright_star_gets_a_white_knockout() -> None:
+def test_compact_dso_overlapping_bright_star_keeps_its_knockout() -> None:
     transform = PageTransform(chart=CHART, page=PAGE)
     star = Star("bright", 187.5, 12.0, 2.0, Provenance("TEST", "bright"))
     dso = DeepSkyObject(
@@ -250,6 +252,15 @@ def test_dso_overlapping_bright_star_gets_a_white_knockout() -> None:
         minor_axis_arcmin=3.37,
     )
     scene = build_scene(CHART, (star,), (dso,))
+    extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=STYLE)
+    assert _dso_overlaps_bright_star(
+        scene.deep_sky_objects[0],
+        scene,
+        transform,
+        StarSizeModel.from_style(STYLE.star),
+        extent,
+        STYLE,
+    )
     surface = cairo.ImageSurface(
         cairo.FORMAT_ARGB32,
         round(mm_to_pt(PAGE.width_mm)),
@@ -259,6 +270,39 @@ def test_dso_overlapping_bright_star_gets_a_white_knockout() -> None:
 
     dso_point = transform.to_page(scene.deep_sky_objects[0].chart_point)
     assert sum(_pixel_rgb(surface, mm_to_pt(dso_point.x_mm), mm_to_pt(dso_point.y_mm))) > 700
+
+
+def test_star_overlapping_large_nebula_symbol_is_redrawn_in_foreground() -> None:
+    transform = PageTransform(chart=CHART, page=PAGE)
+    star = Star("star", 187.5, 12.0, 5.0, Provenance("TEST", "star"))
+    nebula = DeepSkyObject(
+        id="IC0434",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.BRIGHT_NEBULA,
+        provenance=Provenance("TEST", "IC0434"),
+        major_axis_arcmin=90.0,
+        minor_axis_arcmin=90.0,
+    )
+    scene = build_scene(CHART, (star,), (nebula,))
+    extent = dso_symbol_extent(nebula, mm_per_deg=transform.mm_per_deg, style=STYLE)
+    assert not _dso_overlaps_bright_star(
+        scene.deep_sky_objects[0],
+        scene,
+        transform,
+        StarSizeModel.from_style(STYLE.star),
+        extent,
+        STYLE,
+    )
+    foreground = _foreground_stars_over_dsos(
+        scene, transform, StarSizeModel.from_style(STYLE.star), STYLE, set()
+    )
+    assert foreground == (
+        (
+            transform.to_page(scene.stars[0].chart_point),
+            StarSizeModel.from_style(STYLE.star).radius_mm(5.0),
+        ),
+    )
 
 
 def test_equal_brightness_overlapping_stars_get_one_deterministic_halo() -> None:

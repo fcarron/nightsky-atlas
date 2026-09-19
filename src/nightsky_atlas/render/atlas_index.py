@@ -7,7 +7,12 @@ import math
 import cairo
 
 from nightsky_atlas.atlas.config import EditionConfig, PageGeometry, StyleConfig
-from nightsky_atlas.atlas.index import AtlasIndex, ConstellationIndexEntry, DsoIndexEntry
+from nightsky_atlas.atlas.index import (
+    AtlasIndex,
+    ConstellationIndexEntry,
+    DsoIndexEntry,
+    NamedStarIndexEntry,
+)
 from nightsky_atlas.render.text import draw_text
 from nightsky_atlas.units import mm_to_pt
 
@@ -27,7 +32,12 @@ def index_page_count(index: AtlasIndex, page: PageGeometry) -> int:
     constellation_capacity = _capacity(page, _CONSTELLATION_ROW_MM)
     count = max(1, math.ceil(len(index.dso_entries) / dso_capacity))
     count += max(1, math.ceil(len(index.constellation_entries) / constellation_capacity))
-    return count + (max(1, math.ceil(len(index.aliases) / dso_capacity)) if index.aliases else 0)
+    count += max(1, math.ceil(len(index.aliases) / dso_capacity)) if index.aliases else 0
+    return count + (
+        max(1, math.ceil(len(index.named_star_entries) / dso_capacity))
+        if index.named_star_entries
+        else 0
+    )
 
 
 def _footer(
@@ -107,6 +117,21 @@ def _draw_alias_row(
     draw_text(cr, canonical_id, mm_to_pt(x + 70), mm_to_pt(y), family, _FONT_SIZE_PT)
 
 
+def _draw_named_star_row(
+    cr: cairo.Context[cairo.Surface], entry: NamedStarIndexEntry, x: float, y: float, family: str
+) -> None:
+    charts = entry.primary_chart + (
+        f" ({', '.join(entry.secondary_charts)})" if entry.secondary_charts else ""
+    )
+    for text, offset in (
+        (entry.name, 0),
+        (entry.designation, 35),
+        (entry.constellation, 75),
+        (charts, 90),
+    ):
+        draw_text(cr, text, mm_to_pt(x + offset), mm_to_pt(y), family, _FONT_SIZE_PT)
+
+
 def _draw_headers(
     cr: cairo.Context[cairo.Surface],
     cells: tuple[tuple[str, float], ...],
@@ -124,6 +149,7 @@ def _draw_section(
     entries: (
         tuple[DsoIndexEntry, ...]
         | tuple[ConstellationIndexEntry, ...]
+        | tuple[NamedStarIndexEntry, ...]
         | tuple[tuple[str, str], ...]
     ),
     title: str,
@@ -158,6 +184,8 @@ def _draw_section(
                 _draw_dso_row(cr, entry, x, y, family)
             elif isinstance(entry, ConstellationIndexEntry):
                 _draw_constellation_row(cr, entry, x, y, family)
+            elif isinstance(entry, NamedStarIndexEntry):
+                _draw_named_star_row(cr, entry, x, y, family)
             else:
                 _draw_alias_row(cr, entry, x, y, family)
         _footer(cr, page, edition, page_number, family)
@@ -200,12 +228,24 @@ def draw_atlas_index_pages(
         _CONSTELLATION_ROW_MM,
     )
     if index.aliases:
-        _draw_section(
+        next_page = _draw_section(
             cr,
             surface,
             index.aliases,
             "CROSS-REFERENCE INDEX",
             (("Common name", 0), ("See", 70)),
+            page,
+            style,
+            edition,
+            next_page,
+        )
+    if index.named_star_entries:
+        _draw_section(
+            cr,
+            surface,
+            index.named_star_entries,
+            "NAMED STAR INDEX",
+            (("Name", 0), ("Designation", 35), ("Con", 75), ("Chart", 90)),
             page,
             style,
             edition,

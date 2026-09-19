@@ -513,6 +513,7 @@ class DsoStyle(_StrictModel):
     outline_gray: float = 0.45
     star_overlap_halo_mm: PositiveFloat = 0.12
     star_overlap_magnitude_limit: float = 4.5
+    star_overlap_knockout_max_diameter_mm: PositiveFloat = 3.0
 
     galaxy: DsoExtentStyle = Field(
         default_factory=lambda: _extent(

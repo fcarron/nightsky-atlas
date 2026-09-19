@@ -21,6 +21,7 @@ from nightsky_atlas.atlas.config import (
     AtlasConfig,
     StyleConfig,
 )
+from nightsky_atlas.atlas.directory import build_chart_directory
 from nightsky_atlas.atlas.index import build_atlas_index
 from nightsky_atlas.atlas.overview import OverviewMap, build_overview, hemisphere_for
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
@@ -59,6 +60,7 @@ from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.atlas_index import draw_atlas_index_pages
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
+from nightsky_atlas.render.chart_directory import draw_chart_directory_pages
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.overview import LocatorInset, draw_overview_page
 from nightsky_atlas.render.text import draw_centered_text, draw_text
@@ -119,6 +121,8 @@ class AtlasBuildResult:
     manifest_path: Path
     draft_report_path: Path | None = None
     index_page_count: int = 0
+    front_matter_page_count: int = 0
+    chart_directory_page_count: int = 0
 
     @property
     def total_hard_issues(self) -> int:
@@ -206,12 +210,14 @@ def _data_sources() -> list[dict[str, Any]]:
     return sources
 
 
-def _draw_front_matter(
+def _draw_front_matter_pages(
     cr: cairo.Context[cairo.Surface],
+    surface: cairo.Surface,
     atlas: AtlasConfig,
     style: StyleConfig,
     chart_count: int,
-) -> None:
+) -> int:
+    """Write the concise reader guide and provenance page before the maps."""
     page = atlas.page.to_geometry()
     family = style.label.font_family
     draw_centered_text(
@@ -222,15 +228,15 @@ def _draw_front_matter(
         family,
         16.0,
     )
-    lines = [
-        f"{chart_count} charts",
+    overview_lines = [
+        f"{chart_count} {'chart' if chart_count == 1 else 'charts'}",
         f"Stellar limit: magnitude {atlas.stellar_limit_magnitude}",
         "Reference frame: J2000 / ICRS",
         "Projection: stereographic",
     ]
     if atlas.tiling is not None and atlas.tiling.mm_per_degree is not None:
-        lines.append(f"Chart scale: {atlas.tiling.mm_per_degree:g} mm/degree")
-    for index, line in enumerate(lines):
+        overview_lines.append(f"Chart scale: {atlas.tiling.mm_per_degree:g} mm/degree")
+    for index, line in enumerate(overview_lines):
         draw_text(
             cr,
             line,
@@ -239,23 +245,155 @@ def _draw_front_matter(
             family,
             9.0,
         )
-    legend_lines = (
-        "Symbol key",
-        "Star: solid dot   Double star: dot with short horizontal marker",
-        "Galaxy: ellipse   Globular cluster: circle with cross   Open cluster: dashed circle",
-        "Planetary nebula: circle with outward spokes   Nebula: dashed square or outline",
-        "Constellation: grey stick figure   Boundary: fine dotted line",
-        "Ecliptic: fine dashed line",
+    guide_lines = (
+        ("USING THE CHARTS", 10.0, "bold"),
+        (
+            "North is up and east is left. Coordinate labels around each chart give "
+            "right ascension",
+            7.5,
+            "normal",
+        ),
+        (
+            "and declination; the fine grid is a positional aid, not an observing target list.",
+            7.5,
+            "normal",
+        ),
+        (
+            "Charts overlap deliberately. Use the neighbour codes at the page edge, "
+            "the overview maps,",
+            7.5,
+            "normal",
+        ),
+        (
+            "or the chart directory to continue a star hop. The indexes at the back "
+            "use printed chart",
+            7.5,
+            "normal",
+        ),
+        ("codes (for example S029), never internal build identifiers.", 7.5, "normal"),
+        ("NOTATION AND SYMBOL KEY", 10.0, "bold"),
+        (
+            "Star: solid dot scaled by visual magnitude. Double: real components or "
+            "a short marker when",
+            7.0,
+            "normal",
+        ),
+        (
+            "unresolved at print scale. Galaxy: oriented ellipse. Globular: circle with cross.",
+            7.0,
+            "normal",
+        ),
+        (
+            "Open cluster: dashed circle. Planetary nebula: circle with outward spokes. "
+            "Diffuse nebula:",
+            7.0,
+            "normal",
+        ),
+        (
+            "dashed frame or true outline. Grey lines are constellation stick figures; "
+            "dotted lines are",
+            7.0,
+            "normal",
+        ),
+        ("IAU boundaries; the fine dashed curve is the ecliptic.", 7.0, "normal"),
+        (
+            "DSO labels use compact chart notation: 4565 means NGC 4565; I5070 means IC 5070;",
+            7.0,
+            "normal",
+        ),
+        (
+            "Messier designations stay M13, M31, etc. Bayer, Flamsteed and variable-star "
+            "designations",
+            7.0,
+            "normal",
+        ),
+        (
+            "identify stars (for example α Ori, 41 Ari, R CrB); this atlas does not "
+            "encode light curves.",
+            7.0,
+            "normal",
+        ),
     )
-    for index, line in enumerate(legend_lines):
+    for index, (line, size, weight) in enumerate(guide_lines):
         draw_text(
             cr,
             line,
             mm_to_pt(page.margin_mm + 8.0),
-            mm_to_pt(page.height_mm - page.margin_mm - 27.0 + index * 4.0),
+            mm_to_pt(page.margin_mm + 62.0 + index * 4.3),
             family,
-            7.5 if index == 0 else 6.5,
+            size,
+            weight,
         )
+    draw_text(
+        cr,
+        f"NightSky Atlas — {atlas.resolved_edition().name} · Reader guide",
+        mm_to_pt(page.margin_mm),
+        mm_to_pt(page.height_mm - page.margin_mm + 2.5),
+        family,
+        7.0,
+    )
+    surface.show_page()
+
+    draw_text(
+        cr,
+        "DATA, CREDITS AND LICENCE",
+        mm_to_pt(page.margin_mm),
+        mm_to_pt(page.margin_mm),
+        family,
+        14.0,
+        "bold",
+    )
+    credits = (
+        (
+            "This publication is generated from versioned source catalogues and the exact "
+            "atlas definition",
+        ),
+        (
+            "recorded in its build manifest. Chart geometry, object selection and indexes "
+            "are reproducible.",
+        ),
+        ("STARS",),
+        ("Tycho-2 catalogue with Hipparcos bright-star supplement (ESA / CDS I/259 and I/239),",),
+        ("CC BY-NC 3.0 IGO. This restriction applies to data-derived atlas distribution.",),
+        ("DEEP-SKY OBJECTS",),
+        ("OpenNGC (mattiaverga/OpenNGC), CC BY-SA 4.0. Visual double-star overlay: Washington",),
+        ("Double Star Catalog, U.S. Naval Observatory, public domain; acknowledgement requested.",),
+        ("CONSTELLATIONS AND NAMES",),
+        ("IAU/MacRobert stick figures by Alan MacRobert et al., imported via Dominic Ford's",),
+        ("dcf21/constellation-stick-figures, CC BY 4.0. IAU boundaries and star-name data from",),
+        ("d3-celestial by Olaf Frohn, BSD-3-Clause.",),
+        ("PROJECT",),
+        (
+            "NightSky Atlas source code and project-authored artwork are released under "
+            "the MIT License.",
+        ),
+        (
+            "Third-party catalogue and geometry terms remain in force. Full provenance, "
+            "versions and",
+        ),
+        ("attribution text are included in docs/DATA_SOURCES.md and adjacent source manifests.",),
+    )
+    for index, (line,) in enumerate(credits):
+        is_heading = line in {"STARS", "DEEP-SKY OBJECTS", "CONSTELLATIONS AND NAMES", "PROJECT"}
+        draw_text(
+            cr,
+            line,
+            mm_to_pt(page.margin_mm + 8.0),
+            mm_to_pt(page.margin_mm + 18.0 + index * 5.0),
+            family,
+            8.0 if is_heading else 7.5,
+            "bold" if is_heading else "normal",
+        )
+    draw_text(
+        cr,
+        f"NightSky Atlas — {atlas.resolved_edition().name} · Data and credits",
+        mm_to_pt(page.margin_mm),
+        mm_to_pt(page.height_mm - page.margin_mm + 2.5),
+        family,
+        7.0,
+    )
+    surface.show_page()
+    return 2
 
 
 def build_atlas(
@@ -331,10 +469,21 @@ def build_atlas(
 
     surface = cairo.PDFSurface(str(combined_pdf), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm))
     context = cairo.Context(surface)
+    front_matter_pages = 0
     if write_front_matter:
         with progress.step("front matter", detail=True):
-            _draw_front_matter(context, atlas, style, len(charts))
-            surface.show_page()
+            front_matter_pages = _draw_front_matter_pages(
+                context, surface, atlas, style, len(charts)
+            )
+
+    chart_directory = ()
+    chart_directory_pages = 0
+    if write_front_matter:
+        chart_directory = build_chart_directory(charts, edition)
+        with progress.step("chart directory", detail=True):
+            chart_directory_pages = draw_chart_directory_pages(
+                context, surface, chart_directory, page, style, edition
+            )
 
     overviews: dict[str, OverviewMap] = {}
     overview_page_info: list[dict[str, Any]] = []
@@ -373,6 +522,7 @@ def build_atlas(
 
     results: list[ChartPageResult] = []
     index_dsos: dict[str, tuple[SceneDso, ...]] = {}
+    index_stars: dict[str, tuple[Star, ...]] = {}
     index_constellations: dict[str, frozenset[str]] = {}
     boundary_constellations = {
         segment.id: segment.constellation_id
@@ -474,6 +624,7 @@ def build_atlas(
         # The index consumes the same clipped scene that is rendered.  Boundary
         # source IDs make constellation coverage a real chart-footprint result.
         index_dsos[definition.id] = tuple(chart_context.scene.deep_sky_objects)
+        index_stars[definition.id] = tuple(item.star for item in chart_context.scene.stars)
         index_constellations[definition.id] = frozenset(
             boundary_constellations[segment.source_id]
             for segment in chart_context.scene.constellation_boundaries
@@ -541,7 +692,14 @@ def build_atlas(
             )
         )
 
-    atlas_index = build_atlas_index(index_dsos, index_constellations, charts, edition)
+    atlas_index = build_atlas_index(
+        index_dsos,
+        index_constellations,
+        charts,
+        edition,
+        chart_stars=index_stars,
+        star_names=star_names,
+    )
     with progress.step("append atlas index", detail=True):
         index_pages = draw_atlas_index_pages(context, surface, atlas_index, page, style, edition)
 
@@ -574,6 +732,11 @@ def build_atlas(
             "forced": forced_lists,
         },
         "chart_count": len(results),
+        "front_matter_page_count": front_matter_pages,
+        "chart_directory": {
+            "page_count": chart_directory_pages,
+            "entries": [entry.to_dict() for entry in chart_directory],
+        },
         "total_hard_issues": sum(page_result.hard_issues for page_result in results),
         "overview_pages": overview_page_info,
         "index": {"page_count": index_pages, **atlas_index.to_dict()},
@@ -607,4 +770,6 @@ def build_atlas(
         manifest_path=manifest_path,
         draft_report_path=draft_report_path,
         index_page_count=index_pages,
+        front_matter_page_count=front_matter_pages,
+        chart_directory_page_count=chart_directory_pages,
     )

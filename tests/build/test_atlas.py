@@ -109,6 +109,9 @@ def test_build_atlas_subset(tmp_path: Path) -> None:
     assert manifest["page"]["width_mm"] == 297.0
     assert len(manifest["pages"]) == 2
     assert manifest["overview_pages"] == []
+    assert result.front_matter_page_count == 2
+    assert result.chart_directory_page_count == 1
+    assert manifest["chart_directory"]["entries"][0]["chart_code"] == "c1"
 
 
 def test_build_writes_overview_pages_for_tiled_atlas(tmp_path: Path) -> None:

@@ -9,8 +9,9 @@ from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import EditionConfig
 from nightsky_atlas.catalog.constellations import constellation_name
-from nightsky_atlas.catalog.models import DeepSkyObject
+from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.priority import messier_id
+from nightsky_atlas.catalog.star_names import StarName, hip_number
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.presentation import presentation_from_edition
 from nightsky_atlas.scene.models import SceneDso
@@ -19,6 +20,7 @@ __all__ = [
     "AtlasIndex",
     "ConstellationIndexEntry",
     "DsoIndexEntry",
+    "NamedStarIndexEntry",
     "build_atlas_index",
     "is_indexable_dso",
     "natural_designation_key",
@@ -64,10 +66,33 @@ class ConstellationIndexEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class NamedStarIndexEntry:
+    """A proper star name occurring in the exact atlas chart set."""
+
+    canonical_id: str
+    name: str
+    designation: str
+    constellation: str
+    primary_chart: str
+    secondary_charts: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "canonical_id": self.canonical_id,
+            "name": self.name,
+            "designation": self.designation,
+            "constellation": self.constellation,
+            "primary_chart": self.primary_chart,
+            "secondary_charts": list(self.secondary_charts),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class AtlasIndex:
     dso_entries: tuple[DsoIndexEntry, ...]
     constellation_entries: tuple[ConstellationIndexEntry, ...]
     aliases: tuple[tuple[str, str], ...] = ()
+    named_star_entries: tuple[NamedStarIndexEntry, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -76,6 +101,7 @@ class AtlasIndex:
             "aliases": [
                 {"alias": alias, "canonical_id": canonical} for alias, canonical in self.aliases
             ],
+            "named_star_entries": [entry.to_dict() for entry in self.named_star_entries],
         }
 
 
@@ -114,12 +140,25 @@ def _type_name(dso: DeepSkyObject) -> str:
     return dso.object_type.value.replace("_", " ").title()
 
 
-def _angular_distance(chart: ChartDefinition, dso: DeepSkyObject) -> float:
+def _angular_distance(chart: ChartDefinition, ra_deg: float, dec_deg: float) -> float:
     ra1, dec1, ra2, dec2 = map(
-        math.radians, (chart.center_ra_deg, chart.center_dec_deg, dso.ra_deg, dso.dec_deg)
+        math.radians, (chart.center_ra_deg, chart.center_dec_deg, ra_deg, dec_deg)
     )
     cosine = math.sin(dec1) * math.sin(dec2) + math.cos(dec1) * math.cos(dec2) * math.cos(ra1 - ra2)
     return math.acos(max(-1.0, min(1.0, cosine)))
+
+
+def _star_designation(entry: StarName) -> str:
+    """Return a compact, stable companion designation for a proper name."""
+    if entry.constellation:
+        for value in (entry.bayer, entry.flamsteed, entry.variable):
+            if value:
+                return f"{value} {entry.constellation}"
+    return entry.bayer or entry.flamsteed or entry.variable or ""
+
+
+def _angular_distance_to_star(chart: ChartDefinition, star: Star) -> float:
+    return _angular_distance(chart, star.ra_deg, star.dec_deg)
 
 
 def build_atlas_index(
@@ -127,6 +166,8 @@ def build_atlas_index(
     chart_constellations: dict[str, frozenset[str]],
     charts: tuple[ChartDefinition, ...],
     edition: EditionConfig,
+    chart_stars: dict[str, Iterable[Star]] | None = None,
+    star_names: dict[int, StarName] | None = None,
 ) -> AtlasIndex:
     """Build all index content from the exact set of charts being published."""
     definitions = {chart.id: chart for chart in charts}
@@ -146,7 +187,10 @@ def build_atlas_index(
     for dso_id, dso in objects.items():
         chart_ids = sorted(
             locations[dso_id],
-            key=lambda chart_id: (_angular_distance(definitions[chart_id], dso), chart_id),
+            key=lambda chart_id: (
+                _angular_distance(definitions[chart_id], dso.ra_deg, dso.dec_deg),
+                chart_id,
+            ),
         )
         chart_codes = tuple(
             presentation_from_edition(definitions[item], edition).chart_code for item in chart_ids
@@ -174,7 +218,45 @@ def build_atlas_index(
         constellation_entries.append(
             ConstellationIndexEntry(constellation_name(abbreviation), abbreviation, codes)
         )
+    named_star_entries: list[NamedStarIndexEntry] = []
+    if chart_stars and star_names:
+        stars: dict[int, Star] = {}
+        star_locations: dict[int, set[str]] = {}
+        for chart_id, scene_stars in chart_stars.items():
+            for star in scene_stars:
+                number = hip_number(star.hip_id)
+                if number is None or number not in star_names or not star_names[number].name:
+                    continue
+                stars.setdefault(number, star)
+                star_locations.setdefault(number, set()).add(chart_id)
+        for number, star in stars.items():
+            name = star_names[number]
+            chart_ids = sorted(
+                star_locations[number],
+                key=lambda chart_id: (
+                    _angular_distance_to_star(definitions[chart_id], star),
+                    chart_id,
+                ),
+            )
+            codes = tuple(
+                presentation_from_edition(definitions[item], edition).chart_code
+                for item in chart_ids
+            )
+            named_star_entries.append(
+                NamedStarIndexEntry(
+                    f"HIP {number}",
+                    name.name or "",
+                    _star_designation(name),
+                    name.constellation or "",
+                    codes[0],
+                    codes[1:],
+                )
+            )
+
     return AtlasIndex(
         tuple(sorted(entries, key=lambda item: natural_designation_key(item.designation))),
         tuple(constellation_entries),
+        named_star_entries=tuple(
+            sorted(named_star_entries, key=lambda item: (item.name.casefold(), item.canonical_id))
+        ),
     )
