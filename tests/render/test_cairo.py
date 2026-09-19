@@ -15,7 +15,7 @@ import pytest
 
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.constellations import ConstellationSegment
-from nightsky_atlas.catalog.models import Provenance, Star
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageTransform
@@ -235,6 +235,30 @@ def test_weaker_star_overlapping_bright_star_gets_foreground_halo() -> None:
         scene, transform, StarSizeModel.from_style(STYLE.star), set()
     )
     assert len(foreground) == 1
+
+
+def test_dso_overlapping_bright_star_gets_a_white_knockout() -> None:
+    transform = PageTransform(chart=CHART, page=PAGE)
+    star = Star("bright", 187.5, 12.0, 2.0, Provenance("TEST", "bright"))
+    dso = DeepSkyObject(
+        id="NGC0404",
+        ra_deg=187.55,
+        dec_deg=12.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance("TEST", "NGC0404"),
+        major_axis_arcmin=3.4,
+        minor_axis_arcmin=3.37,
+    )
+    scene = build_scene(CHART, (star,), (dso,))
+    surface = cairo.ImageSurface(
+        cairo.FORMAT_ARGB32,
+        round(mm_to_pt(PAGE.width_mm)),
+        round(mm_to_pt(PAGE.height_mm)),
+    )
+    draw_chart_page(cairo.Context(surface), scene, transform, STYLE)
+
+    dso_point = transform.to_page(scene.deep_sky_objects[0].chart_point)
+    assert sum(_pixel_rgb(surface, mm_to_pt(dso_point.x_mm), mm_to_pt(dso_point.y_mm))) > 700
 
 
 def test_equal_brightness_overlapping_stars_get_one_deterministic_halo() -> None:

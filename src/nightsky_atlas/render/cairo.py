@@ -43,7 +43,7 @@ from nightsky_atlas.render.symbols import (
     dso_symbol_extent,
 )
 from nightsky_atlas.render.text import draw_centered_text, draw_text
-from nightsky_atlas.scene.models import ChartScene, SceneOutline, SceneSegment
+from nightsky_atlas.scene.models import ChartScene, SceneDso, SceneOutline, SceneSegment
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = [
@@ -143,7 +143,7 @@ def draw_chart_page(
     _draw_chart_border(cr, transform, style)
     _draw_outlines(cr, transform, scene, style)
     _draw_stars(cr, transform, scene, size_model, style)
-    _draw_dsos(cr, transform, scene, style, bold_symbol_ids)
+    _draw_dsos(cr, transform, scene, size_model, style, bold_symbol_ids)
     _draw_grid_labels(cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles)
     _draw_labels(cr, foreground_labels, style)
     if locator is not None:
@@ -534,6 +534,7 @@ def _draw_dsos(
     cr: cairo.Context[cairo.Surface],
     transform: PageTransform,
     scene: ChartScene,
+    size_model: StarSizeModel,
     style: StyleConfig,
     bold_symbol_ids: frozenset[str] = frozenset(),
 ) -> None:
@@ -553,7 +554,62 @@ def _draw_dsos(
         cr.set_line_width(mm_to_pt(_dso_line_width_mm(style, bold=bold)))
         point = transform.to_page(scene_dso.chart_point)
         extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
+        if _dso_overlaps_bright_star(scene_dso, scene, transform, size_model, extent, style):
+            _draw_dso_knockout(
+                cr,
+                mm_to_pt(point.x_mm),
+                mm_to_pt(point.y_mm),
+                extent,
+                style.dso.star_overlap_halo_mm,
+            )
+            cr.set_source_rgb(0.0, 0.0, 0.0)
         _draw_dso_symbol(cr, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), extent, style.dso.dash_mm)
+    cr.restore()
+
+
+def _dso_overlaps_bright_star(
+    scene_dso: SceneDso,
+    scene: ChartScene,
+    transform: PageTransform,
+    size_model: StarSizeModel,
+    extent: SymbolExtent,
+    style: StyleConfig,
+) -> bool:
+    """Return whether a bright star would make a DSO mark visually disappear."""
+    point = transform.to_page(scene_dso.chart_point)
+    for scene_star in scene.stars:
+        if scene_star.star.magnitude > style.dso.star_overlap_magnitude_limit:
+            continue
+        star_point = transform.to_page(scene_star.chart_point)
+        if math.hypot(point.x_mm - star_point.x_mm, point.y_mm - star_point.y_mm) <= (
+            extent.collision_radius_mm + size_model.radius_mm(scene_star.star.magnitude)
+        ):
+            return True
+    return False
+
+
+def _draw_dso_knockout(
+    cr: cairo.Context[cairo.Surface],
+    x: float,
+    y: float,
+    extent: SymbolExtent,
+    halo_mm: float,
+) -> None:
+    """Clear enough paper behind a DSO mark for it to remain identifiable."""
+    halo_pt = mm_to_pt(halo_mm)
+    cr.save()
+    cr.set_source_rgb(1.0, 1.0, 1.0)
+    if extent.is_elliptical:
+        cr.translate(x, y)
+        cr.rotate(extent.rotation_rad)
+        cr.scale(
+            mm_to_pt(extent.width_mm) / 2.0 + halo_pt,
+            mm_to_pt(extent.height_mm) / 2.0 + halo_pt,
+        )
+        cr.arc(0.0, 0.0, 1.0, 0.0, 2.0 * math.pi)
+    else:
+        cr.arc(x, y, mm_to_pt(extent.collision_radius_mm) + halo_pt, 0.0, 2.0 * math.pi)
+    cr.fill()
     cr.restore()
 
 
