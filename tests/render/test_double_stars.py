@@ -120,6 +120,34 @@ def test_unlinked_companion_falls_back_to_catalogue_separation() -> None:
     assert marks[0].magnitude == 5.71
 
 
+def test_unrendered_component_never_becomes_a_marker_anchor() -> None:
+    primary = SceneStar(make_star("A", 6.0), ChartPoint(0.0, 0.0))
+    system = StarSystem(
+        id="system:wds:UNRENDERED",
+        source="wds",
+        source_id="UNRENDERED",
+        ra_deg=10.0,
+        dec_deg=0.0,
+        primary_star_id="A",
+        component_star_ids=("B",),
+        component_magnitudes=(6.0, 7.0),
+        combined_magnitude=5.53,
+        separation_arcsec=2.0,
+        match_status=MatchStatus.POSITIONAL,
+    )
+    scene = ChartScene(
+        definition=CHART,
+        stars=(primary,),
+        star_systems=(SceneStarSystem(system, ChartPoint(0.0, 0.0)),),
+    )
+
+    marks = resolve_double_stars(scene, TRANSFORM, STYLE)
+
+    assert len(marks) == 1
+    assert marks[0].suppress_star_ids == {"A"}
+    assert marks[0].magnitude == 5.53
+
+
 def test_one_marker_per_star_prefers_a_linked_companion() -> None:
     without_companion = StarSystem(
         id="system:wds:INNER",

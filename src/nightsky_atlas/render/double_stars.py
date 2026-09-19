@@ -149,7 +149,12 @@ def resolve_double_stars(
             else:
                 continue
             if separation_mm < config.min_component_separation_mm:
-                unseparable.add(star_id)
+                # A WDS component may be just outside this chart or omitted by
+                # the edition's magnitude limit.  It contributes semantic
+                # double-star information, but cannot be suppressed or used as
+                # a marker anchor because no printed star exists for it.
+                if star_id in magnitude_by_star:
+                    unseparable.add(star_id)
                 widest_unseparable_mm = max(widest_unseparable_mm, separation_mm)
 
         if not unseparable and not system.component_star_ids:
@@ -175,7 +180,14 @@ def resolve_double_stars(
 
     marks: list[DoubleStarMark] = []
     for entries in _connected_records(records):
-        suppress = frozenset().union(*(entry.member_star_ids for entry in entries))
+        suppress = frozenset(
+            star_id
+            for entry in entries
+            for star_id in entry.member_star_ids
+            if star_id in magnitude_by_star
+        )
+        if not suppress:
+            continue
         anchor_id = min(
             suppress,
             key=lambda star_id: (magnitude_by_star[star_id], star_id),
