@@ -7,17 +7,21 @@ from pathlib import Path
 import pytest
 
 from nightsky_atlas.atlas.config import load_style_config
+from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.selection import SelectionPolicy
 from nightsky_atlas.catalog.star_names import StarName
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.labels import (
+    build_constellation_labels,
     build_dso_labels,
     build_labels,
     build_star_labels,
+    constellation_label_anchors,
     label_priority,
 )
+from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.scene.builder import build_scene
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -149,6 +153,38 @@ def test_build_labels_without_names_is_dso_only() -> None:
     scene = build_scene(CHART, [make_star("HIP 12345", 2.0, hip_id="HIP 12345")])
     labels = build_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE, None)
     assert labels == ()
+
+
+def test_constellation_names_are_optional_layout_labels() -> None:
+    segments = [
+        ConstellationSegment(
+            id=f"ori:{index}",
+            ra1_deg=185.0 + index,
+            dec1_deg=10.0,
+            ra2_deg=186.0 + index,
+            dec2_deg=11.0,
+            provenance=Provenance(catalogue="TEST", source_id=f"ori:{index}"),
+            constellation_id="Ori",
+        )
+        for index in range(STYLE.constellation.names.min_segments)
+    ]
+    scene = build_scene(CHART, (), constellation_lines=segments)
+    transform = PageTransform(chart=CHART, page=PAGE)
+
+    labels = build_constellation_labels(scene, transform, STYLE)
+
+    assert len(labels) == 1
+    label = labels[0]
+    assert label.id == "label:constellation:Ori"
+    assert label.target_id == "constellation:Ori"
+    assert label.text == "ORION"
+    assert label.mandatory is False
+    assert label.font_size_pt == STYLE.constellation.names.font_size_pt
+    assert label.candidates[0].id == "label:constellation:Ori:N"
+    anchor = constellation_label_anchors(scene, transform, STYLE)["constellation:Ori"]
+    assert transform.chart_rect.left_mm <= anchor.x_mm <= transform.chart_rect.right_mm
+    assert transform.chart_rect.top_mm <= anchor.y_mm <= transform.chart_rect.bottom_mm
+    assert select_labels(labels, scene, transform, STYLE) == labels
 
 
 def test_build_dso_labels_uses_metadata_priority() -> None:

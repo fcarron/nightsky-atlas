@@ -6,14 +6,17 @@ Priority and mandatory status follow the conceptual ordering in section 14.3.
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from nightsky_atlas.atlas.config import StyleConfig
+from nightsky_atlas.catalog.constellations import constellation_name
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.priority import (
     base_label_priority,
     star_label_priority,
 )
 from nightsky_atlas.catalog.star_names import StarName, hip_number
-from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.layout.candidates import compass_candidates
 from nightsky_atlas.layout.dso_labels import format_dso_label
 from nightsky_atlas.layout.models import Label
@@ -25,6 +28,8 @@ __all__ = [
     "build_dso_labels",
     "build_labels",
     "build_star_labels",
+    "build_constellation_labels",
+    "constellation_label_anchors",
     "label_priority",
 ]
 
@@ -185,18 +190,93 @@ def build_star_labels(
     return tuple(labels)
 
 
+def constellation_label_anchors(
+    scene: ChartScene, transform: PageTransform, style: StyleConfig
+) -> dict[str, PagePoint]:
+    """Return deterministic printable anchors for visible constellation names.
+
+    The anchor is derived solely from the projected stick-figure geometry.  It
+    is intentionally shared by construction, selection and optimization so a
+    constellation name is one normal layout element rather than a renderer
+    decoration with separate placement rules.
+    """
+    config = style.constellation.names
+    if not config.enabled:
+        return {}
+    points_by_constellation: dict[str, list[PagePoint]] = defaultdict(list)
+    for segment in scene.constellation_lines:
+        if segment.constellation_id:
+            points_by_constellation[segment.constellation_id].extend(
+                transform.to_page(point) for point in segment.points
+            )
+
+    rect = transform.chart_rect
+    anchors: dict[str, PagePoint] = {}
+    for constellation_id, points in sorted(points_by_constellation.items()):
+        if len(points) < config.min_segments * 2:
+            continue
+        x_mm = sum(point.x_mm for point in points) / len(points)
+        y_mm = sum(point.y_mm for point in points) / len(points)
+        if rect.left_mm <= x_mm <= rect.right_mm and rect.top_mm <= y_mm <= rect.bottom_mm:
+            anchors[f"constellation:{constellation_id}"] = PagePoint(x_mm=x_mm, y_mm=y_mm)
+    return anchors
+
+
+def build_constellation_labels(
+    scene: ChartScene,
+    transform: PageTransform,
+    style: StyleConfig,
+) -> tuple[Label, ...]:
+    """Build optional, collision-aware labels for visible stick figures."""
+    config = style.constellation.names
+    if not config.enabled:
+        return ()
+    measurer = TextMeasurer(style.label.font_family, config.font_size_pt)
+    labels: list[Label] = []
+    for target_id, anchor in constellation_label_anchors(scene, transform, style).items():
+        constellation_id = target_id.removeprefix("constellation:")
+        label_id = f"label:constellation:{constellation_id}"
+        metrics = measurer.measure_mm(constellation_name(constellation_id).upper())
+        candidates = compass_candidates(
+            label_id=label_id,
+            metrics=metrics,
+            anchor=anchor,
+            exclusion_radius_mm=0.0,
+            ring_count=style.label.candidate_rings,
+            ring_gap_mm=style.label.ring_gap_mm,
+        )
+        labels.append(
+            Label(
+                id=label_id,
+                target_id=target_id,
+                text=constellation_name(constellation_id).upper(),
+                priority=10,
+                mandatory=False,
+                candidates=candidates,
+                selected_candidate_id=candidates[0].id if candidates else None,
+                font_size_pt=config.font_size_pt,
+            )
+        )
+    return tuple(labels)
+
+
 def build_labels(
     scene: ChartScene,
     transform: PageTransform,
     style: StyleConfig,
     star_names: dict[int, StarName] | None = None,
 ) -> tuple[Label, ...]:
-    """Build deep-sky and star labels for a scene.
+    """Build deep-sky, constellation and star labels for a scene.
 
     Deep-sky labels come first, then star labels; the optimizer reorders by
     priority, so the input order only aids deterministic tie-breaking.
     """
     dso_labels = build_dso_labels(scene, transform, style)
+    constellation_labels = build_constellation_labels(scene, transform, style)
     if star_names is None:
-        return dso_labels
-    return dso_labels + build_star_labels(scene, transform, style, star_names)
+        return dso_labels + constellation_labels
+    return (
+        dso_labels
+        + constellation_labels
+        + build_star_labels(scene, transform, style, star_names)
+    )

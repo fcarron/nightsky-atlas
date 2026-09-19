@@ -101,6 +101,11 @@ def find_hard_violations(
     known_targets = {entry.star.id for entry in scene.stars}
     known_targets.update(entry.dso.id for entry in scene.deep_sky_objects)
     known_targets.update(entry.system.id for entry in scene.star_systems)
+    known_targets.update(
+        f"constellation:{segment.constellation_id}"
+        for segment in scene.constellation_lines
+        if segment.constellation_id
+    )
 
     id_counts = Counter(label.id for label in labels)
     first_by_id: dict[str, Label] = {}

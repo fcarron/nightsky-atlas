@@ -11,7 +11,6 @@ geometry is converted with :func:`nightsky_atlas.units.mm_to_pt`.
 from __future__ import annotations
 
 import math
-from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +18,6 @@ from pathlib import Path
 import cairo
 
 from nightsky_atlas.atlas.config import StyleConfig
-from nightsky_atlas.catalog.constellations import constellation_name
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.chart.presentation import (
@@ -44,7 +42,7 @@ from nightsky_atlas.render.symbols import (
     SymbolExtent,
     dso_symbol_extent,
 )
-from nightsky_atlas.render.text import TextMeasurer, draw_centered_text, draw_text
+from nightsky_atlas.render.text import draw_centered_text, draw_text
 from nightsky_atlas.scene.models import ChartScene, SceneOutline, SceneSegment
 from nightsky_atlas.units import mm_to_pt
 
@@ -129,6 +127,10 @@ def draw_chart_page(
     """
     size_model = StarSizeModel.from_style(style.star)
     label_list = tuple(labels)
+    constellation_labels = tuple(
+        label for label in label_list if label.id.startswith("label:constellation:")
+    )
+    foreground_labels = tuple(label for label in label_list if label not in constellation_labels)
     bold_symbol_ids = _bold_symbol_ids(label_list)
     if presentation is None:
         presentation = presentation_for(scene.definition)
@@ -137,12 +139,13 @@ def draw_chart_page(
     grid_lines = _draw_grid(cr, transform, scene.definition, style)
     _draw_ecliptic(cr, transform, scene.definition, style)
     _draw_constellations(cr, transform, scene, style, label_list)
+    _draw_labels(cr, constellation_labels, style)
     _draw_chart_border(cr, transform, style)
     _draw_outlines(cr, transform, scene, style)
     _draw_stars(cr, transform, scene, size_model, style)
     _draw_dsos(cr, transform, scene, style, bold_symbol_ids)
     _draw_grid_labels(cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles)
-    _draw_labels(cr, label_list, style)
+    _draw_labels(cr, foreground_labels, style)
     if locator is not None:
         draw_locator_inset(cr, locator, transform, style)
     if debug is not None:
@@ -641,7 +644,12 @@ def _draw_labels(
         candidate = label.effective_candidate()
         if candidate is None:
             continue
-        cr.set_source_rgb(0.0, 0.0, 0.0)
+        gray = (
+            style.constellation.names.gray
+            if label.id.startswith("label:constellation:")
+            else 0.0
+        )
+        cr.set_source_rgb(gray, gray, gray)
         draw_text(
             cr,
             label.text,
@@ -774,59 +782,6 @@ def _draw_constellations(
                 if (candidate := label.effective_candidate()) is not None
             ),
         )
-    if config.names.enabled and scene.constellation_lines:
-        _draw_constellation_names(cr, transform, scene, style)
-
-
-def _draw_constellation_names(
-    cr: cairo.Context[cairo.Surface],
-    transform: PageTransform,
-    scene: ChartScene,
-    style: StyleConfig,
-) -> None:
-    """Draw subdued names at the centres of visible stick figures.
-
-    Names are presentation-only and sit below stars, DSOs and labels.  The
-    scene keeps the source abbreviation, so this uses no renderer catalogue
-    lookup or special case per chart.
-    """
-    config = style.constellation.names
-    points_by_constellation: dict[str, list[PagePoint]] = defaultdict(list)
-    for segment in scene.constellation_lines:
-        if segment.constellation_id:
-            points_by_constellation[segment.constellation_id].extend(
-                transform.to_page(point) for point in segment.points
-            )
-    rect = transform.chart_rect
-    measurer = TextMeasurer(style.label.font_family, config.font_size_pt)
-    cr.set_source_rgb(config.gray, config.gray, config.gray)
-    for constellation_id, points in sorted(points_by_constellation.items()):
-        if len(points) < config.min_segments * 2:
-            continue
-        x_mm = sum(point.x_mm for point in points) / len(points)
-        y_mm = sum(point.y_mm for point in points) / len(points)
-        if not rect.left_mm <= x_mm <= rect.right_mm or not rect.top_mm <= y_mm <= rect.bottom_mm:
-            continue
-        text = constellation_name(constellation_id).upper()
-        metrics = measurer.measure_mm(text)
-        x_mm = min(
-            max(x_mm, rect.left_mm + metrics.width_mm / 2.0 + 2.0),
-            rect.right_mm - metrics.width_mm / 2.0 - 2.0,
-        )
-        y_mm = min(
-            max(y_mm, rect.top_mm + metrics.height_mm + 2.0),
-            rect.bottom_mm - 2.0,
-        )
-        draw_centered_text(
-            cr,
-            text,
-            mm_to_pt(x_mm),
-            mm_to_pt(y_mm),
-            style.label.font_family,
-            config.font_size_pt,
-        )
-
-
 def _draw_constellation_lines(
     cr: cairo.Context[cairo.Surface],
     transform: PageTransform,

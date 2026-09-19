@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from nightsky_atlas.atlas.config import load_style_config
+from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
@@ -160,6 +162,27 @@ def test_known_target_is_accepted() -> None:
     }
     assert IssueType.UNKNOWN_TARGET not in types
     assert IssueType.DUPLICATE_LABEL_ID not in types
+
+
+def test_constellation_layout_target_is_accepted() -> None:
+    segment = ConstellationSegment(
+        id="ori:line",
+        ra1_deg=186.0,
+        dec1_deg=11.0,
+        ra2_deg=187.0,
+        dec2_deg=12.0,
+        provenance=Provenance(catalogue="TEST", source_id="ori:line"),
+        constellation_id="Ori",
+    )
+    scene = build_scene(CHART, [], [], constellation_lines=(segment,))
+    label = replace(
+        make_label("label:constellation:Ori", 20.0, 20.0),
+        target_id="constellation:Ori",
+    )
+    types = {
+        issue.issue_type for issue in find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    }
+    assert IssueType.UNKNOWN_TARGET not in types
 
 
 def test_label_overlapping_furniture_is_reported() -> None:

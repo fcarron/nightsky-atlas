@@ -16,6 +16,7 @@ from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
 from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
+from nightsky_atlas.layout.labels import constellation_label_anchors
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle, score_candidate
 from nightsky_atlas.layout.spatial import RectIndex
@@ -70,13 +71,14 @@ def _symbol_circles(
 
 
 def _target_anchors(
-    labels: tuple[Label, ...], scene: ChartScene, transform: PageTransform
+    labels: tuple[Label, ...], scene: ChartScene, transform: PageTransform, style: StyleConfig
 ) -> dict[str, PagePoint]:
     anchors: dict[str, PagePoint] = {}
     for scene_star in scene.stars:
         anchors[scene_star.star.id] = transform.to_page(scene_star.chart_point)
     for scene_dso in scene.deep_sky_objects:
         anchors[scene_dso.dso.id] = transform.to_page(scene_dso.chart_point)
+    anchors.update(constellation_label_anchors(scene, transform, style))
     return anchors
 
 
@@ -165,7 +167,7 @@ def optimize_labels(
         for stroke in resolve_constellation_lines(scene, transform, style)
     )
     symbols_index = _build_symbol_index(symbols)
-    anchors = _target_anchors(labels, scene, transform)
+    anchors = _target_anchors(labels, scene, transform, style)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
     # Initial layout: the placement that would be printed without optimization
@@ -421,7 +423,7 @@ def layout_cost(
         (stroke.start, stroke.end)
         for stroke in resolve_constellation_lines(scene, transform, style)
     )
-    anchors = _target_anchors(labels, scene, transform)
+    anchors = _target_anchors(labels, scene, transform, style)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
     placements: dict[str, str | None] = {}

@@ -31,6 +31,7 @@ from collections.abc import Iterable, Sequence
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.catalog.priority import LabelPriorityTier, tier_for
 from nightsky_atlas.chart.page import PagePoint, PageTransform
+from nightsky_atlas.layout.labels import constellation_label_anchors
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.scene.models import ChartScene
 
@@ -55,17 +56,25 @@ def select_labels(
     if not selection.enabled:
         return tuple(labels)
 
-    anchors = _anchors(scene, transform)
+    anchors = _anchors(scene, transform, style)
     magnitudes = _magnitudes(scene)
     deduplicated = _remove_duplicates(labels, anchors, magnitudes)
-    kept = _thin_by_density(
-        deduplicated, anchors, style, protected_ids=set(protected_ids)
+    protected = set(protected_ids)
+    # A constellation name is a single low-priority presentation element for a
+    # whole stick figure, not one of the dense catalogue labels this stage is
+    # intended to thin.  It still remains optional for the collision-aware
+    # optimizer and AI action gate below.
+    protected.update(
+        label.id for label in labels if label.id.startswith("label:constellation:")
     )
+    kept = _thin_by_density(deduplicated, anchors, style, protected_ids=protected)
     kept_ids = {label.id for label in kept}
     return tuple(label for label in labels if label.id in kept_ids)
 
 
-def _anchors(scene: ChartScene, transform: PageTransform) -> dict[str, PagePoint]:
+def _anchors(
+    scene: ChartScene, transform: PageTransform, style: StyleConfig
+) -> dict[str, PagePoint]:
     anchors: dict[str, PagePoint] = {}
     for scene_star in scene.stars:
         anchors[scene_star.star.id] = transform.to_page(scene_star.chart_point)
@@ -73,6 +82,7 @@ def _anchors(scene: ChartScene, transform: PageTransform) -> dict[str, PagePoint
         anchors[scene_dso.dso.id] = transform.to_page(scene_dso.chart_point)
     for scene_system in scene.star_systems:
         anchors[scene_system.system.id] = transform.to_page(scene_system.chart_point)
+    anchors.update(constellation_label_anchors(scene, transform, style))
     return anchors
 
 
