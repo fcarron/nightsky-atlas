@@ -327,13 +327,14 @@ def build_chart_context(
             stars_csv=stars_csv,
             magnitude_limit=star_limit,
         )
-    # The scene builder only keeps objects whose centre projects into the
-    # field; pre-filtering the shared catalogue to a radial box around the
-    # field (which reaches the corners) keeps selection exact while avoiding a
-    # full-catalogue scan per chart.
+    # Keep outlined objects available even when their centres lie beyond the
+    # field query box: their projected polygons can still cross this chart.
     dso_box = field_query_box(definition, padding_deg=2.0)
+    outlined_dso_ids = {outline.dso_id for outline in inputs.outlines}
     dsos = tuple(
-        dso for dso in inputs.dsos if _coordinates_in_box(dso.ra_deg, dso.dec_deg, dso_box)
+        dso for dso in inputs.dsos
+        if dso.id in outlined_dso_ids
+        or _coordinates_in_box(dso.ra_deg, dso.dec_deg, dso_box)
     )
     # Deep-sky selection is governed entirely by the edition's per-type
     # visibility rules; there is no global magnitude cut in the atlas config.

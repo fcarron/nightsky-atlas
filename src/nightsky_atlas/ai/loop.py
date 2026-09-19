@@ -22,6 +22,7 @@ from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.optimizer import layout_cost, layout_hash
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.furniture import furniture_obstacles
+from nightsky_atlas.render.review import render_review_png
 from nightsky_atlas.review.build import build_review_request
 from nightsky_atlas.review.models import ReviewRequest
 from nightsky_atlas.review.schema import ReviewValidationError
@@ -234,7 +235,18 @@ def _default_request_factory(
     page_id: str,
     images: tuple[str, ...],
 ) -> RequestFactory:
+    if len(images) > 1:
+        raise ValueError(
+            "default AI review supports one full-page image; use a request factory for crops"
+        )
+
     def factory(labels: tuple[Label, ...], iteration: int) -> ReviewRequest:
+        current_images = images
+        if images:
+            original = Path(images[0])
+            rendered = original.with_name(f"{original.stem}-iteration-{iteration}.png")
+            render_review_png(scene, transform, style, labels, rendered)
+            current_images = (str(rendered),)
         validation = validate_layout(
             labels,
             scene,
@@ -254,7 +266,7 @@ def _default_request_factory(
             labels=labels,
             transform=transform,
             diagnostics=diagnostics,
-            images=images,
+            images=current_images,
         )
 
     return factory

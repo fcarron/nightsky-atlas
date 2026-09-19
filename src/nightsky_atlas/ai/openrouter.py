@@ -84,6 +84,8 @@ def _element_lines(request: ReviewRequest) -> str:
             parts.append(f"fine_adjust_radius_mm={element.fine_adjust_radius_mm:.1f}")
         if element.constellation_line_conflict:
             parts.append("constellation_line_conflict=true")
+        if element.hidden:
+            parts.append("hidden=true")
         lines.append(" ".join(parts))
     return "\n".join(lines)
 
@@ -106,7 +108,8 @@ def _user_prompt(request: ReviewRequest) -> str:
         "offset_x_mm and offset_y_mm within the listed radius; the engine snaps "
         "this intent to a legal 0.5-mm local placement. show_optional_label and "
         "hide_optional_label take no extra field. request_line_knockout may only "
-        "be used for constellation_line_overlap. If no listed option is clearly "
+        "be used for constellation_line_overlap. A hidden label is not printed; "
+        "show_optional_label may reveal it. If no listed option is clearly "
         "better, omit the action.\n\n"
         "Return JSON: {\"page_score\": 0-10, \"issues\": [{\"element_id\": str, "
         "\"issue_type\": str, \"severity\": 1-10, \"action\": {\"type\": str, "

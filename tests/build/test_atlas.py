@@ -112,6 +112,61 @@ def test_build_atlas_subset(tmp_path: Path) -> None:
     assert result.front_matter_page_count == 2
     assert result.chart_directory_page_count == 1
     assert manifest["chart_directory"]["entries"][0]["chart_code"] == "c1"
+    assert [source["kind"] for source in manifest["data_sources"]][:2] == [
+        "stars",
+        "deep_sky",
+    ]
+    assert manifest["data_sources"][0]["path"] == str(STARS)
+    assert manifest["data_sources"][1]["path"].endswith("openngc.json")
+    assert manifest["publication_preflight"] == {
+        "requested": False,
+        "inputs_passed": None,
+        "output_passed": None,
+    }
+
+
+def test_build_rejects_unknown_or_empty_chart_selection(tmp_path: Path) -> None:
+    atlas_path = make_atlas_file(tmp_path)
+    for chart_ids, limit, message in (
+        (("missing",), None, "unknown chart IDs"),
+        ((), None, "no charts selected"),
+        (None, 0, "limit must be positive"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            build_atlas(
+                atlas_path=atlas_path,
+                style_path=STYLE,
+                outdir=tmp_path,
+                stars_csv=STARS,
+                chart_ids=chart_ids,
+                limit=limit,
+            )
+
+
+def test_publication_rejects_partial_fixture_build(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="publication preflight failed"):
+        build_atlas(
+            atlas_path=SHIPPED_ATLAS,
+            style_path=STYLE,
+            outdir=tmp_path,
+            stars_csv=STARS,
+            dsos_path=make_dso_json(tmp_path),
+            limit=1,
+            publication=True,
+        )
+    assert not (tmp_path / "standard" / "atlas.pdf").exists()
+
+
+def test_publication_requires_front_matter_and_overviews(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="front matter and overview maps"):
+        build_atlas(
+            atlas_path=SHIPPED_ATLAS,
+            style_path=STYLE,
+            outdir=tmp_path,
+            stars_csv=STARS,
+            publication=True,
+            write_overviews=False,
+        )
 
 
 def test_build_writes_overview_pages_for_tiled_atlas(tmp_path: Path) -> None:

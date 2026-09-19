@@ -104,9 +104,7 @@ def test_replay_reproduces_layout() -> None:
     original = optimize_with_ai(
         labels, SCENE, TRANSFORM, STYLE, MockReviewer(results=list(recorded))
     )
-    replay = optimize_with_ai(
-        labels, SCENE, TRANSFORM, STYLE, RecordedReviewer(list(recorded))
-    )
+    replay = optimize_with_ai(labels, SCENE, TRANSFORM, STYLE, RecordedReviewer(list(recorded)))
     assert layout_hash(original.labels) == layout_hash(replay.labels)
     assert original.stopped_reason == replay.stopped_reason
 
@@ -148,9 +146,7 @@ def test_cost_budget_stops() -> None:
 
 def test_max_iterations_is_bounded() -> None:
     reviewer = MockReviewer()
-    result = optimize_with_ai(
-        make_labels(), SCENE, TRANSFORM, STYLE, reviewer, max_iterations=1
-    )
+    result = optimize_with_ai(make_labels(), SCENE, TRANSFORM, STYLE, reviewer, max_iterations=1)
     assert len(result.iterations) <= 1
 
 
@@ -163,3 +159,22 @@ def test_history_is_written(tmp_path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert "stopped_reason" in text
     assert "layout_hash_before" in text
+
+
+def test_review_image_is_rerendered_for_each_iteration(tmp_path: Path) -> None:
+    reviewer = MockReviewer(results=[fix_a_result(), ReviewResult(page_score=10.0, issues=[])])
+    result = optimize_with_ai(
+        make_labels(),
+        SCENE,
+        TRANSFORM,
+        STYLE,
+        reviewer,
+        images=(str(tmp_path / "review.png"),),
+    )
+
+    assert len(result.iterations) == 2
+    first, second = reviewer.requests
+    assert first.images != second.images
+    assert Path(first.images[0]).is_file()
+    assert Path(second.images[0]).is_file()
+    assert Path(first.images[0]).read_bytes() != Path(second.images[0]).read_bytes()

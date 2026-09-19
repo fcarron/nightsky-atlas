@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from nightsky_atlas.chart.page import PageTransform
-from nightsky_atlas.layout.collision import placed_candidates
 from nightsky_atlas.layout.geometry import expand_rect, segment_intersects_rect
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.review.models import ReviewElement, ReviewRequest
@@ -48,8 +47,8 @@ def build_review_request(
 ) -> ReviewRequest:
     """Assemble a review request with only the elements a reviewer needs.
 
-    Includes bright stars, deep-sky objects and visible labels; omits faint
-    stars and hidden labels to keep the payload focused.
+    Includes bright stars, deep-sky objects, visible labels and hidden optional
+    labels that the reviewer may ask to show. Faint stars are omitted.
     """
     elements: list[ReviewElement] = []
 
@@ -78,8 +77,11 @@ def build_review_request(
             )
         )
 
-    for label, candidate in placed_candidates(labels):
-        line_conflict = any(
+    for label in labels:
+        candidate = label.effective_candidate()
+        if candidate is None or (label.hidden and label.mandatory):
+            continue
+        line_conflict = not label.hidden and any(
             segment_intersects_rect(
                 transform.to_page(line.points[0]),
                 transform.to_page(line.points[-1]),
@@ -100,6 +102,7 @@ def build_review_request(
                 allowed_distances=("near", "medium", "far"),
                 fine_adjust_radius_mm=3.0,
                 constellation_line_conflict=line_conflict,
+                hidden=label.hidden,
             )
         )
 

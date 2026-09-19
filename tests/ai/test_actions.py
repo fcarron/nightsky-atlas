@@ -88,6 +88,15 @@ def test_select_candidate_applied() -> None:
     assert outcome.labels[0].selected_candidate_id == "label:x:S"
 
 
+def test_move_label_respects_requested_max_offset() -> None:
+    action = {"type": "move_label", "preferred_direction": "S", "max_offset_mm": 3.0}
+    outcome = apply_review_actions(
+        (make_label(),), make_result("label:x", action), SCENE, TRANSFORM, STYLE
+    )
+    assert outcome.applied == ()
+    assert outcome.labels[0].effective_candidate().id == "label:x:N"
+
+
 def test_fine_adjust_snaps_to_a_local_deterministic_grid() -> None:
     outcome = apply_review_actions(
         (make_label(),),
@@ -120,9 +129,7 @@ def test_low_severity_actions_ignored() -> None:
             }
         ],
     )
-    outcome = apply_review_actions(
-        (make_label(),), result, SCENE, TRANSFORM, STYLE, min_severity=6
-    )
+    outcome = apply_review_actions((make_label(),), result, SCENE, TRANSFORM, STYLE, min_severity=6)
     assert outcome.applied == ()
     assert outcome.labels[0].selected_candidate_id is None
 

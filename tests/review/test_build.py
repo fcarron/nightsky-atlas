@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from nightsky_atlas.atlas.config import load_style_config
@@ -107,3 +108,23 @@ def test_label_elements_list_available_candidates() -> None:
     assert "select_display_name_variant" not in request.permitted_actions
     assert "use_leader_line" not in request.permitted_actions
     assert "remove_leader_line" not in request.permitted_actions
+
+
+def test_hidden_optional_label_is_available_for_show_action() -> None:
+    scene = make_scene()
+    labels = tuple(
+        replace(label.with_placement(None, hidden=True), mandatory=False)
+        for label in build_dso_labels(scene, TRANSFORM, STYLE)
+    )
+    request = build_review_request(
+        page_id="standard:test",
+        scene=scene,
+        labels=labels,
+        transform=TRANSFORM,
+        diagnostics={},
+        images=(),
+    )
+    element = next(item for item in request.elements if item.id == "label:dso:NGC4486")
+    assert element.hidden
+    assert element.to_dict()["hidden"] is True
+    assert "show_optional_label" in request.permitted_actions

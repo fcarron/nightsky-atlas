@@ -169,11 +169,9 @@ class SymbolExtent:
 
     @property
     def collision_radius_mm(self) -> float:
-        """Conservative bounding-circle radius for collision and exclusion.
-
-        The farthest point of an ellipse from its centre lies on the major axis,
-        so the largest semi-axis is a safe, rotation-independent bound.
-        """
+        """Conservative bounding-circle radius for collision and exclusion."""
+        if self.shape in (DsoShape.SQUARE, DsoShape.DASHED_SQUARE):
+            return math.hypot(self.radius_x_mm, self.radius_y_mm)
         return max(self.radius_x_mm, self.radius_y_mm)
 
     @property

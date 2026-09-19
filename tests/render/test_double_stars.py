@@ -8,9 +8,13 @@ from nightsky_atlas.atlas.config import StyleConfig, load_style_config
 from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.catalog.systems import MatchStatus, StarSystem
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
-from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.page import PageRect, PageTransform
+from nightsky_atlas.layout.collision import IssueType, find_hard_violations
+from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
+from nightsky_atlas.layout.optimizer import _symbol_circles, _target_anchors
 from nightsky_atlas.projection.base import ChartPoint
-from nightsky_atlas.render.double_stars import resolve_double_stars
+from nightsky_atlas.render.double_stars import printed_star_obstacles, resolve_double_stars
+from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.models import ChartScene, SceneStar, SceneStarSystem
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -90,6 +94,32 @@ def test_close_pair_collapses_to_one_marker() -> None:
     assert len(marks) == 1
     assert marks[0].suppress_star_ids == {"A", "B"}
     assert marks[0].magnitude == 5.71
+
+
+def test_collapsed_pair_uses_printed_extent_in_optimizer_and_hard_gate() -> None:
+    scene = make_scene(component_eta_deg=0.01, primary_magnitude=6.2)
+    obstacle, = printed_star_obstacles(scene, TRANSFORM, STYLE)
+    assert obstacle.star_ids == {"A", "B"}
+    assert obstacle.magnitude < 6.0
+    original_radius = StarSizeModel.from_style(STYLE.star).radius_mm(6.2)
+    assert obstacle.collision_radius_mm > original_radius
+    circles = _symbol_circles(scene, TRANSFORM, STYLE)
+    assert len(circles) == 1
+    assert circles[0].radius_mm == obstacle.collision_radius_mm
+    assert _target_anchors((), scene, TRANSFORM, STYLE)["B"] == obstacle.page_point
+
+    x = obstacle.page_point.x_mm + (original_radius + obstacle.collision_radius_mm) / 2.0
+    bounds = PageRect(x, obstacle.page_point.y_mm - 0.05, 0.1, 0.1)
+    candidate = LabelCandidate(
+        id="label:near:N", position=CompassPosition.N,
+        anchor=obstacle.page_point, bounds=bounds,
+    )
+    label = Label(
+        id="label:near", target_id="A", text="X", priority=50,
+        mandatory=True, candidates=(candidate,),
+    )
+    issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    assert IssueType.LABEL_STAR in {issue.issue_type for issue in issues}
 
 
 def test_wide_pair_is_left_separate() -> None:

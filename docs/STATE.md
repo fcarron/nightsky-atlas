@@ -246,9 +246,11 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - M15.5 remains a human checkpoint: print Orion, Cygnus, Virgo/Coma,
   Sagittarius and polar pages at 100% and use them under red light / at the
   telescope before treating Standard as publication-ready.
-- M16.3 publication preflight is still missing. It should reject hard layout
-  issues, incomplete coverage, missing provenance and a stale/failed atlas
-  build in one command.
+- M16.3 is partial: `atlas build --publication` rejects subsets, coverage gaps,
+  missing/empty core catalogues and missing or mismatched source manifests
+  before rendering. The CLI still rejects builds with hard layout issues. A
+  separate post-build `atlas validate --publication` command and freshness
+  check remain open.
 
 - The alpha artifacts predate the Hipparcos bright-star supplement and must be
   rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page

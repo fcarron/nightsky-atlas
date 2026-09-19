@@ -22,7 +22,12 @@ from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.models import ChartScene
 
-__all__ = ["DoubleStarMark", "resolve_double_stars"]
+__all__ = [
+    "DoubleStarMark",
+    "PrintedStarObstacle",
+    "printed_star_obstacles",
+    "resolve_double_stars",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +45,15 @@ class DoubleStarMark:
     suppress_star_ids: frozenset[str]
     marker_length_mm: float
     marker_line_width_mm: float
+
+
+@dataclass(frozen=True, slots=True)
+class PrintedStarObstacle:
+    id: str
+    star_ids: frozenset[str]
+    page_point: PagePoint
+    magnitude: float
+    collision_radius_mm: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,3 +224,38 @@ def resolve_double_stars(
     return tuple(
         sorted(marks, key=lambda mark: (mark.page_point.x_mm, mark.page_point.y_mm, mark.system_id))
     )
+
+
+def printed_star_obstacles(
+    scene: ChartScene,
+    transform: PageTransform,
+    style: StyleConfig,
+) -> tuple[PrintedStarObstacle, ...]:
+    size_model = StarSizeModel.from_style(style.star)
+    marks = resolve_double_stars(scene, transform, style)
+    suppressed = frozenset(star_id for mark in marks for star_id in mark.suppress_star_ids)
+    obstacles = [
+        PrintedStarObstacle(
+            id=entry.star.id,
+            star_ids=frozenset((entry.star.id,)),
+            page_point=transform.to_page(entry.chart_point),
+            magnitude=entry.star.magnitude,
+            collision_radius_mm=size_model.radius_mm(entry.star.magnitude),
+        )
+        for entry in scene.stars
+        if entry.star.id not in suppressed
+    ]
+    obstacles.extend(
+        PrintedStarObstacle(
+            id=mark.system_id,
+            star_ids=mark.suppress_star_ids,
+            page_point=mark.page_point,
+            magnitude=mark.magnitude,
+            collision_radius_mm=max(
+                size_model.radius_mm(mark.magnitude),
+                (mark.marker_length_mm + mark.marker_line_width_mm) / 2.0,
+            ),
+        )
+        for mark in marks
+    )
+    return tuple(obstacles)

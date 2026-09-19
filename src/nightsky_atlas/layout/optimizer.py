@@ -21,7 +21,8 @@ from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle, score_candidate
 from nightsky_atlas.layout.spatial import RectIndex
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
-from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
+from nightsky_atlas.render.double_stars import printed_star_obstacles
+from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
 __all__ = ["OptimizationResult", "layout_cost", "layout_hash", "optimize_labels"]
@@ -49,14 +50,13 @@ class OptimizationResult:
 def _symbol_circles(
     scene: ChartScene, transform: PageTransform, style: StyleConfig
 ) -> tuple[SymbolCircle, ...]:
-    size_model = StarSizeModel.from_style(style.star)
     symbols: list[SymbolCircle] = []
-    for scene_star in scene.stars:
-        if scene_star.star.magnitude <= _IMPORTANT_STAR_MAGNITUDE:
+    for star in printed_star_obstacles(scene, transform, style):
+        if star.magnitude <= _IMPORTANT_STAR_MAGNITUDE:
             symbols.append(
                 SymbolCircle(
-                    center=transform.to_page(scene_star.chart_point),
-                    radius_mm=size_model.radius_mm(scene_star.star.magnitude),
+                    center=star.page_point,
+                    radius_mm=star.collision_radius_mm,
                 )
             )
     for scene_dso in scene.deep_sky_objects:
@@ -76,6 +76,9 @@ def _target_anchors(
     anchors: dict[str, PagePoint] = {}
     for scene_star in scene.stars:
         anchors[scene_star.star.id] = transform.to_page(scene_star.chart_point)
+    for obstacle in printed_star_obstacles(scene, transform, style):
+        for star_id in obstacle.star_ids:
+            anchors[star_id] = obstacle.page_point
     for scene_dso in scene.deep_sky_objects:
         anchors[scene_dso.dso.id] = transform.to_page(scene_dso.chart_point)
     anchors.update(constellation_label_anchors(scene, transform, style))

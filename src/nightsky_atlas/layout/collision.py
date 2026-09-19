@@ -15,7 +15,8 @@ from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
 from nightsky_atlas.layout.models import Label, LabelCandidate
-from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
+from nightsky_atlas.render.double_stars import printed_star_obstacles
+from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
 __all__ = [
@@ -195,19 +196,18 @@ def find_hard_violations(
                     )
                 )
 
-    size_model = StarSizeModel.from_style(style.star)
+    star_obstacles = tuple(
+        star for star in printed_star_obstacles(scene, transform, style)
+        if star.magnitude <= important_magnitude
+    )
     for label, candidate in placed:
-        for scene_star in scene.stars:
-            if scene_star.star.magnitude > important_magnitude:
-                continue
-            star_point = transform.to_page(scene_star.chart_point)
-            radius = size_model.radius_mm(scene_star.star.magnitude)
-            if circle_intersects_rect(star_point, radius, candidate.bounds):
+        for star in star_obstacles:
+            if circle_intersects_rect(star.page_point, star.collision_radius_mm, candidate.bounds):
                 issues.append(
                     _issue(
                         IssueType.LABEL_STAR,
-                        (label.id, scene_star.star.id),
-                        f"{label.id} overlaps star {scene_star.star.id}",
+                        (label.id, star.id),
+                        f"{label.id} overlaps star {star.id}",
                     )
                 )
 

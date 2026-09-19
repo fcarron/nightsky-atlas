@@ -619,6 +619,11 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     build.add_argument("--no-draft-report", action="store_true")
     build.add_argument(
+        "--publication",
+        action="store_true",
+        help="require complete coverage, core catalogues and matching provenance manifests",
+    )
+    build.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -1166,6 +1171,7 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         write_front_matter=not args.no_front_matter,
         write_overviews=not args.no_overviews,
         write_draft_report=not args.no_draft_report,
+        publication=args.publication,
         progress=progress,
     )
     print(

@@ -92,6 +92,10 @@ Raw and processed catalogue data are build inputs and are not committed. See
 .venv/bin/nightsky atlas build --star-store data/processed/stars/tycho2.sqlite
 ```
 
+Add `--publication` for a strict release build. It requires the complete chart
+set, full-sky coverage, nonempty processed star and DSO catalogues, and matching
+source manifests. Development subsets remain available without this flag.
+
 The combined `build/standard/atlas.pdf` opens with front matter and two
 whole-sky overview pages (northern and southern hemispheres) showing the
 constellation background, the bright stars and one trapezoidal cell per chart

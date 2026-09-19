@@ -20,6 +20,7 @@ from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.layout.candidates import compass_candidates
 from nightsky_atlas.layout.dso_labels import format_dso_label
 from nightsky_atlas.layout.models import Label
+from nightsky_atlas.render.double_stars import printed_star_obstacles
 from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
 from nightsky_atlas.render.text import TextMeasurer
 from nightsky_atlas.scene.models import ChartScene
@@ -153,6 +154,11 @@ def build_star_labels(
     if not star_names:
         return ()
     model = StarSizeModel.from_style(style.star)
+    printed_obstacle_by_star = {
+        star_id: obstacle
+        for obstacle in printed_star_obstacles(scene, transform, style)
+        for star_id in obstacle.star_ids
+    }
     measurer = TextMeasurer(style.label.font_family, style.label.font_size_pt)
     limit = style.star.label_magnitude_limit
     labels: list[Label] = []
@@ -168,12 +174,21 @@ def build_star_labels(
             continue
         label_id = f"label:star:{star.id}"
         metrics = measurer.measure_mm(text)
-        anchor = transform.to_page(scene_star.chart_point)
+        obstacle = printed_obstacle_by_star.get(star.id)
+        anchor = (
+            obstacle.page_point
+            if obstacle is not None
+            else transform.to_page(scene_star.chart_point)
+        )
         candidates = compass_candidates(
             label_id=label_id,
             metrics=metrics,
             anchor=anchor,
-            exclusion_radius_mm=model.radius_mm(star.magnitude),
+            exclusion_radius_mm=(
+                obstacle.collision_radius_mm
+                if obstacle is not None
+                else model.radius_mm(star.magnitude)
+            ),
             ring_count=style.label.candidate_rings,
             ring_gap_mm=style.label.ring_gap_mm,
         )

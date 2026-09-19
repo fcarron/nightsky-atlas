@@ -11,12 +11,13 @@ the deterministic engine owns the actual placement.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.chart.presentation import presentation_for
-from nightsky_atlas.layout.models import Label
+from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import layout_cost
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.furniture import furniture_obstacles
@@ -47,8 +48,16 @@ def _apply_one(label: Label, action: ReviewAction) -> Label | None:
             return None
         return label.with_placement(candidate_id)
     if action.type == ReviewActionType.MOVE_LABEL:
+        current = label.effective_candidate()
         candidates = [
-            item for item in label.candidates if item.position == action.preferred_direction
+            item
+            for item in label.candidates
+            if item.position == action.preferred_direction
+            and (
+                action.max_offset_mm is None
+                or current is None
+                or _candidate_offset_mm(current, item) <= action.max_offset_mm
+            )
         ]
         if not candidates:
             return None
@@ -74,6 +83,13 @@ def _apply_one(label: Label, action: ReviewAction) -> Label | None:
         candidate = label.effective_candidate()
         return label.with_placement(candidate.id, hidden=label.hidden) if candidate else None
     return None
+
+
+def _candidate_offset_mm(first: LabelCandidate, second: LabelCandidate) -> float:
+    return math.hypot(
+        first.anchor.x_mm - second.anchor.x_mm,
+        first.anchor.y_mm - second.anchor.y_mm,
+    )
 
 
 def _fine_adjustments(label: Label, action: ReviewAction) -> tuple[Label, ...]:
@@ -160,6 +176,7 @@ def _repair_candidate(
     furniture: tuple[PageRect, ...],
     baseline: set[str],
     current_cost: float,
+    max_offset_mm: float | None = None,
 ) -> tuple[tuple[Label, ...], set[str], float] | None:
     """Move a label to its cheapest hard-clean candidate.
 
@@ -173,6 +190,12 @@ def _repair_candidate(
     best: tuple[tuple[Label, ...], set[str], float] | None = None
     for candidate in label.candidates:
         if candidate.id == current_id:
+            continue
+        if (
+            max_offset_mm is not None
+            and current_candidate is not None
+            and _candidate_offset_mm(current_candidate, candidate) > max_offset_mm
+        ):
             continue
         candidate_labels = _replace(current, label.id, label.with_placement(candidate.id))
         issues = _hard_issues(candidate_labels, scene, transform, style, furniture)
@@ -266,7 +289,17 @@ def apply_review_actions(
             ReviewActionType.FINE_ADJUST_LABEL,
         ):
             repaired = _repair_candidate(
-                label, current, scene, transform, style, furniture, baseline, current_cost
+                label,
+                current,
+                scene,
+                transform,
+                style,
+                furniture,
+                baseline,
+                current_cost,
+                max_offset_mm=(
+                    action.max_offset_mm if action.type == ReviewActionType.MOVE_LABEL else None
+                ),
             )
             if repaired is not None:
                 current, baseline, current_cost = repaired

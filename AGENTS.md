@@ -485,7 +485,7 @@ Full plan, acceptance criteria and checkpoints: `docs/DEVELOPMENT_PLAN.md`.
   AI benchmark, tiling).
 - [~] M15 Standard atlas build: M15.1–M15.4 done; **M15.5 alpha/field test in
   progress**.
-- [x] M16.1 overrides; [ ] M16.2 atlas-wide issue report; [ ] M16.3 publication
+- [x] M16.1 overrides; [ ] M16.2 atlas-wide issue report; [~] M16.3 publication
   preflight; [~] M16.4 data-source/license documentation.
 - [x] M21.1–M21.4 observing-list-driven DSO selection (separate render/label
   priorities; Herschel 400 forced into Standard; per-type visibility evaluators

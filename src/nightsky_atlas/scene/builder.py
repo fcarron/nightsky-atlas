@@ -92,6 +92,7 @@ def build_scene(
             scene_stars.append(SceneStar(star=star, chart_point=point))
 
     scene_dsos: list[SceneDso] = []
+    selected_dso_ids: set[str] = set()
     for dso in deep_sky_objects:
         metadata = (
             select_dso(dso, index=observing_index, policy=selection_policy)
@@ -107,6 +108,7 @@ def build_scene(
             and dso.magnitude > dso_magnitude_limit
         ):
             continue
+        selected_dso_ids.add(dso.id)
         point = _project_inside(projector, definition, dso.ra_deg, dso.dec_deg)
         if point is not None:
             scene_dsos.append(SceneDso(dso=dso, chart_point=point, metadata=metadata))
@@ -150,7 +152,9 @@ def build_scene(
             constellation_boundaries, projector, definition, "boundary"
         ),
         nebula_outlines=_project_outlines(
-            nebula_outlines, projector, definition
+            (outline for outline in nebula_outlines if outline.dso_id in selected_dso_ids),
+            projector,
+            definition,
         ),
     )
 

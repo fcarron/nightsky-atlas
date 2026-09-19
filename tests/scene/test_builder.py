@@ -246,7 +246,9 @@ def test_outline_inside_field_is_closed() -> None:
         "NGC7000",
         ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0), (186.5, 13.0)),
     )
-    scene = build_scene(DEFINITION, [], [], nebula_outlines=[outline])
+    scene = build_scene(
+        DEFINITION, [], [make_dso("NGC7000", 187.5, 12.0, 8.0)], nebula_outlines=[outline]
+    )
     assert scene.outline_count == 1
     ring = scene.nebula_outlines[0]
     assert ring.dso_id == "NGC7000"
@@ -260,7 +262,9 @@ def test_outline_far_away_is_excluded() -> None:
         "FAR",
         ((0.0, -50.0), (2.0, -50.0), (2.0, -48.0)),
     )
-    scene = build_scene(DEFINITION, [], [], nebula_outlines=[outline])
+    scene = build_scene(
+        DEFINITION, [], [make_dso("FAR", 187.5, 12.0, 8.0)], nebula_outlines=[outline]
+    )
     assert scene.nebula_outlines == ()
 
 
@@ -269,11 +273,40 @@ def test_outline_partly_outside_field_is_clipped() -> None:
         "BIG",
         ((186.5, 10.0), (188.5, 10.0), (188.5, 20.0), (186.5, 20.0)),
     )
-    scene = build_scene(DEFINITION, [], [], nebula_outlines=[outline])
+    scene = build_scene(
+        DEFINITION, [], [make_dso("BIG", 187.5, 12.0, 8.0)], nebula_outlines=[outline]
+    )
     assert scene.outline_count >= 1
     for run in scene.nebula_outlines:
         for point in run.points:
             assert DEFINITION.contains(point)
+
+
+def test_outline_follows_dso_visibility() -> None:
+    outline = make_outline(
+        "NGC7000", ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0))
+    )
+    dso = make_dso("NGC7000", 187.5, 12.0, 12.0)
+    hidden = build_scene(
+        DEFINITION, [], [dso], dso_magnitude_limit=10.0, nebula_outlines=[outline]
+    )
+    visible = build_scene(
+        DEFINITION, [], [dso], dso_magnitude_limit=13.0, nebula_outlines=[outline]
+    )
+    assert hidden.deep_sky_objects == ()
+    assert hidden.nebula_outlines == ()
+    assert visible.dso_count == 1
+    assert visible.outline_count == 1
+
+
+def test_selected_outline_can_cross_chart_without_dso_center_inside() -> None:
+    outline = make_outline(
+        "EDGE", ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0))
+    )
+    dso = make_dso("EDGE", 210.0, 12.0, 8.0)
+    scene = build_scene(DEFINITION, [], [dso], nebula_outlines=[outline])
+    assert scene.dso_count == 0
+    assert scene.outline_count == 1
 
 
 FORCED_POLICY = SelectionPolicy(forced_lists=frozenset({"herschel400"}))

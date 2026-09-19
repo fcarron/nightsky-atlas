@@ -31,10 +31,13 @@ from nightsky_atlas.atlas.tiling import (
     resolve_ring_counts,
 )
 from nightsky_atlas.build.chart import (
+    DEFAULT_DOUBLE_STAR_PATH,
+    DEFAULT_DSO_PATH,
     build_chart_context,
     load_chart_inputs,
     load_star_systems,
 )
+from nightsky_atlas.build.preflight import collect_data_sources, validate_publication_inputs
 from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.models import Star
 from nightsky_atlas.catalog.sample import load_sample_stars
@@ -199,19 +202,6 @@ def _load_overview_stars(
     return ()
 
 
-def _data_sources() -> list[dict[str, Any]]:
-    manifest_paths = [
-        Path("data/processed/stars/tycho2.manifest.json"),
-        Path("data/processed/dso/openngc.manifest.json"),
-        Path("data/processed/double_stars/wds.manifest.json"),
-    ]
-    sources = []
-    for path in manifest_paths:
-        if path.exists():
-            sources.append(json.loads(path.read_text(encoding="utf-8")))
-    return sources
-
-
 def _draw_front_matter_pages(
     cr: cairo.Context[cairo.Surface],
     surface: cairo.Surface,
@@ -219,6 +209,9 @@ def _draw_front_matter_pages(
     style: StyleConfig,
     chart_count: int,
     scale_chart: ChartDefinition,
+    data_sources: list[dict[str, Any]],
+    geometry_inputs: dict[str, str | None],
+    geometry_catalogues: dict[str, list[str]],
 ) -> int:
     """Write the compact field guide and provenance page."""
     page = atlas.page.to_geometry()
@@ -236,38 +229,36 @@ def _draw_front_matter_pages(
         14.0,
         "bold",
     )
-    credits = (
+    credits = [
+        "The build manifest records selected input paths and their source metadata.",
+        "CATALOGUES USED",
+    ]
+    for source in data_sources:
+        metadata = source["manifest"] or {}
+        name = metadata.get("source") or metadata.get("catalogue") or "source unverified"
+        license_name = metadata.get("license") or "license unverified"
+        credits.append(f"{source['kind'].replace('_', ' ').title()}: {name}; {license_name}.")
+    credits.append("CONSTELLATIONS AND NAMES")
+    if geometry_inputs["constellations"] == "data/fixtures/constellations":
+        credits.append("IAU/MacRobert figures: Alan MacRobert et al. via dcf21; CC BY 4.0.")
+        credits.append("IAU boundaries: d3-celestial / Olaf Frohn; BSD-3-Clause.")
+    elif geometry_inputs["constellations"]:
+        credits.append(f"Constellation geometry: {geometry_inputs['constellations']}.")
+    if geometry_inputs["star_names"] == "data/fixtures/starnames":
+        credits.append("Star names: d3-celestial / Olaf Frohn; BSD-3-Clause.")
+    elif geometry_inputs["star_names"]:
+        credits.append(f"Star names: {geometry_inputs['star_names']}.")
+    if geometry_catalogues["outlines"]:
+        credits.append(f"Nebula outlines: {', '.join(geometry_catalogues['outlines'])}.")
+    credits.extend(
         (
-            "This publication is generated from versioned source catalogues and the exact "
-            "atlas definition",
-        ),
-        (
-            "recorded in its build manifest. Chart geometry, object selection and indexes "
-            "are reproducible.",
-        ),
-        ("STARS",),
-        ("Tycho-2 catalogue with Hipparcos bright-star supplement (ESA / CDS I/259 and I/239),",),
-        ("CC BY-NC 3.0 IGO. This restriction applies to data-derived atlas distribution.",),
-        ("DEEP-SKY OBJECTS",),
-        ("OpenNGC (mattiaverga/OpenNGC), CC BY-SA 4.0. Visual double-star overlay: Washington",),
-        ("Double Star Catalog, U.S. Naval Observatory, public domain; acknowledgement requested.",),
-        ("CONSTELLATIONS AND NAMES",),
-        ("IAU/MacRobert stick figures by Alan MacRobert et al., imported via Dominic Ford's",),
-        ("dcf21/constellation-stick-figures, CC BY 4.0. IAU boundaries and star-name data from",),
-        ("d3-celestial by Olaf Frohn, BSD-3-Clause.",),
-        ("PROJECT",),
-        (
-            "NightSky Atlas source code and project-authored artwork are released under "
-            "the MIT License.",
-        ),
-        (
-            "Third-party catalogue and geometry terms remain in force. Full provenance, "
-            "versions and",
-        ),
-        ("attribution text are included in docs/DATA_SOURCES.md and adjacent source manifests.",),
+            "PROJECT",
+            "NightSky Atlas source code and project-authored artwork: MIT License.",
+            "Third-party terms remain in force; see docs/DATA_SOURCES.md and source manifests.",
+        )
     )
-    for index, (line,) in enumerate(credits):
-        is_heading = line in {"STARS", "DEEP-SKY OBJECTS", "CONSTELLATIONS AND NAMES", "PROJECT"}
+    for index, line in enumerate(credits):
+        is_heading = line in {"CATALOGUES USED", "CONSTELLATIONS AND NAMES", "PROJECT"}
         draw_text(
             cr,
             line,
@@ -312,6 +303,7 @@ def build_atlas(
     write_front_matter: bool = True,
     write_overviews: bool = True,
     write_draft_report: bool = True,
+    publication: bool = False,
     progress: Progress | None = None,
 ) -> AtlasBuildResult:
     """Build an atlas subset or the whole atlas and write a manifest."""
@@ -332,12 +324,66 @@ def build_atlas(
     edition = atlas.resolved_edition()
     with progress.step("resolve chart definitions"):
         all_charts = chart_definitions(atlas)
+    if not all_charts:
+        raise ValueError(f"atlas {atlas.id!r} contains no charts")
+    if chart_ids is not None:
+        unknown = set(chart_ids) - {chart.id for chart in all_charts}
+        if unknown:
+            raise ValueError(f"unknown chart IDs: {', '.join(sorted(unknown))}")
+    if limit is not None and limit <= 0:
+        raise ValueError("limit must be positive")
     charts = all_charts
     if chart_ids is not None:
         wanted = set(chart_ids)
         charts = tuple(chart for chart in charts if chart.id in wanted)
     if limit is not None:
         charts = charts[:limit]
+    if not charts:
+        raise ValueError("no charts selected")
+    if publication:
+        if not optimize:
+            raise ValueError("publication requires deterministic layout optimization")
+        if not write_front_matter or not write_overviews or not style.overview.enabled:
+            raise ValueError("publication requires front matter and overview maps")
+    selected_sources = collect_data_sources(
+        star_store=star_store,
+        stars_csv=stars_csv,
+        dsos_path=dsos_path if dsos_path is not None else DEFAULT_DSO_PATH,
+        double_stars_path=(
+            DEFAULT_DOUBLE_STAR_PATH if double_stars_path is None else double_stars_path
+        ),
+    )
+    geometry_inputs = {
+        "constellations": (
+            None
+            if constellations_dir is False
+            else str(constellations_dir or "data/fixtures/constellations")
+        ),
+        "outlines": (
+            None if outlines_dir is False else str(outlines_dir or "data/fixtures/outlines")
+        ),
+        "star_names": (
+            None if star_names_dir is False else str(star_names_dir or STAR_NAMES_FIXTURE_DIR)
+        ),
+    }
+    geometry_catalogues = {
+        "constellation_lines": sorted(
+            {item.provenance.catalogue for item in inputs.constellations.lines}
+        ),
+        "constellation_boundaries": sorted(
+            {item.provenance.catalogue for item in inputs.constellations.boundaries}
+        ),
+        "outlines": sorted({item.provenance.catalogue for item in inputs.outlines}),
+    }
+    if publication:
+        validate_publication_inputs(
+            atlas,
+            all_charts,
+            charts,
+            star_store=star_store,
+            dso_count=len(inputs.dsos),
+            data_sources=selected_sources,
+        )
 
     library: OverridesLibrary | None = (
         load_override_library(overrides_path) if overrides_path is not None else None
@@ -366,7 +412,15 @@ def build_atlas(
     if write_front_matter:
         with progress.step("front matter", detail=True):
             front_matter_pages = _draw_front_matter_pages(
-                context, surface, atlas, style, len(charts), (charts or all_charts)[0]
+                context,
+                surface,
+                atlas,
+                style,
+                len(charts),
+                charts[0],
+                selected_sources,
+                geometry_inputs,
+                geometry_catalogues,
             )
 
     chart_directory = ()
@@ -633,7 +687,16 @@ def build_atlas(
         "total_hard_issues": sum(page_result.hard_issues for page_result in results),
         "overview_pages": overview_page_info,
         "index": {"page_count": index_pages, **atlas_index.to_dict()},
-        "data_sources": _data_sources(),
+        "data_sources": selected_sources,
+        "geometry_inputs": geometry_inputs,
+        "geometry_catalogues": geometry_catalogues,
+        "publication_preflight": {
+            "requested": publication,
+            "inputs_passed": True if publication else None,
+            "output_passed": (
+                not any(page.hard_issues for page in results) if publication else None
+            ),
+        },
         "pages": [page_result.to_dict() for page_result in results],
     }
     manifest_path = outroot / "manifest.json"
@@ -655,6 +718,12 @@ def build_atlas(
             )
         progress.info(f"draft report -> {draft_report_path}")
         print(render_text_summary(draft_report))
+
+    if publication and any(page.hard_issues for page in results):
+        raise ValueError(
+            f"publication failed: {sum(page.hard_issues for page in results)} hard layout issues; "
+            f"see {manifest_path}"
+        )
 
     return AtlasBuildResult(
         atlas_id=atlas.id,

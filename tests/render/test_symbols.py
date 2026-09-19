@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from itertools import pairwise
-from math import pi
+from math import hypot, pi
 from pathlib import Path
 
 import pytest
@@ -22,6 +22,7 @@ from nightsky_atlas.render.symbols import (
     SPOKED_CIRCLE_OUTER_FACTOR,
     DsoShape,
     StarSizeModel,
+    SymbolExtent,
     dso_shape,
     dso_symbol_extent,
     galaxy_ellipse,
@@ -419,6 +420,35 @@ def test_extent_shared_by_label_exclusion_and_optimizer() -> None:
     circles = _symbol_circles(scene, TRANSFORM, STYLE)
     assert len(circles) == 1
     assert circles[0].radius_mm == pytest.approx(extent.collision_radius_mm)
+
+
+@pytest.mark.parametrize("shape", (DsoShape.SQUARE, DsoShape.DASHED_SQUARE))
+def test_square_collision_radius_reaches_printed_corners(shape: DsoShape) -> None:
+    extent = SymbolExtent(shape=shape, width_mm=2.0, height_mm=2.0)
+    assert extent.collision_radius_mm == pytest.approx(hypot(1.0, 1.0))
+
+
+def test_hard_gate_catches_label_at_square_symbol_corner() -> None:
+    dso = make_dso(DsoType.BRIGHT_NEBULA)
+    scene = build_scene(CHART, (), (dso,))
+    extent = dso_symbol_extent(dso, mm_per_deg=TRANSFORM.mm_per_deg, style=STYLE)
+    center = TRANSFORM.center_page
+    half_side = extent.width_mm / 2.0
+    bounds = PageRect(
+        left_mm=center.x_mm + half_side * 0.9,
+        top_mm=center.y_mm + half_side * 0.9,
+        width_mm=half_side * 0.1,
+        height_mm=half_side * 0.1,
+    )
+    candidate = LabelCandidate(
+        id="label:square:N", position=CompassPosition.N, anchor=center, bounds=bounds
+    )
+    label = Label(
+        id="label:square", target_id=dso.id, text="X", priority=50,
+        mandatory=True, candidates=(candidate,),
+    )
+    issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    assert IssueType.LABEL_DSO in {issue.issue_type for issue in issues}
 
 
 def test_collision_detection_uses_real_symbol_extent() -> None:
