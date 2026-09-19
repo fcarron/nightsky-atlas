@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from nightsky_atlas.atlas.config import load_atlas_config
-from nightsky_atlas.build.atlas import build_atlas, chart_definitions
+from nightsky_atlas.build.atlas import AtlasBuildResult, build_atlas, chart_definitions
 from nightsky_atlas.build.chart import field_query_box, find_chart
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
 from nightsky_atlas.catalog.openngc import iter_openngc_objects
@@ -118,6 +118,9 @@ def test_build_atlas_subset(tmp_path: Path) -> None:
     ]
     assert manifest["data_sources"][0]["path"] == str(STARS)
     assert manifest["data_sources"][1]["path"].endswith("openngc.json")
+    assert manifest["input_fingerprints"]["atlas_config"]["sha256"]
+    assert manifest["input_fingerprints"]["style_config"]["sha256"]
+    assert manifest["input_fingerprints"]["code"]["sha256"]
     assert manifest["publication_preflight"] == {
         "requested": False,
         "inputs_passed": None,
@@ -155,6 +158,53 @@ def test_publication_rejects_partial_fixture_build(tmp_path: Path) -> None:
             publication=True,
         )
     assert not (tmp_path / "standard" / "atlas.pdf").exists()
+
+
+def test_failed_publication_preserves_previous_atlas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published = tmp_path / "standard"
+    published.mkdir()
+    (published / "atlas.pdf").write_bytes(b"old publication")
+
+    def fail_build(**_kwargs: object) -> AtlasBuildResult:
+        raise ValueError("render failed")
+
+    monkeypatch.setattr("nightsky_atlas.build.atlas._build_atlas_impl", fail_build)
+    with pytest.raises(ValueError, match="render failed"):
+        build_atlas(
+            atlas_path=SHIPPED_ATLAS, style_path=STYLE,
+            outdir=tmp_path, publication=True,
+        )
+    assert (published / "atlas.pdf").read_bytes() == b"old publication"
+    assert list(tmp_path.glob(".standard-staging-*")) == []
+
+
+def test_successful_publication_swaps_complete_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published = tmp_path / "standard"
+    published.mkdir()
+    (published / "atlas.pdf").write_bytes(b"old publication")
+
+    def stage_build(**kwargs: object) -> AtlasBuildResult:
+        staged = Path(kwargs["outdir"]) / "standard"
+        staged.mkdir()
+        (staged / "atlas.pdf").write_bytes(b"new publication")
+        (staged / "manifest.json").write_text("{}", encoding="utf-8")
+        return AtlasBuildResult(
+            atlas_id="standard", pages=(), combined_pdf=staged / "atlas.pdf",
+            manifest_path=staged / "manifest.json",
+        )
+
+    monkeypatch.setattr("nightsky_atlas.build.atlas._build_atlas_impl", stage_build)
+    result = build_atlas(
+        atlas_path=SHIPPED_ATLAS, style_path=STYLE,
+        outdir=tmp_path, publication=True,
+    )
+    assert result.combined_pdf == published / "atlas.pdf"
+    assert result.combined_pdf.read_bytes() == b"new publication"
+    assert (tmp_path / ".standard-previous" / "atlas.pdf").read_bytes() == b"old publication"
 
 
 def test_publication_requires_front_matter_and_overviews(tmp_path: Path) -> None:

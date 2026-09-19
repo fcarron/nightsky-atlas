@@ -257,9 +257,11 @@ page is visible.
   problems and a named-region review list; hard-error/cost aggregation and
   manual-override report still to add.
 - [~] **M16.3 Preflight command** — `nightsky atlas build --publication`
-  checks coverage, complete chart selection, core catalogues and matching
-  provenance before rendering; hard layout errors still fail the CLI. A
-  standalone post-build validator and freshness check remain open.
+  checks coverage, complete chart selection, core catalogues and checksummed
+  provenance before rendering. Input fingerprints are checked again after
+  rendering; successful builds replace the published directory via staging,
+  while the previous version is retained. A standalone post-build validator
+  remains open.
 - [~] **M16.4 Data-source/license documentation** — `docs/DATA_SOURCES.md` now
   exists with all current sources; review before redistribution.
 

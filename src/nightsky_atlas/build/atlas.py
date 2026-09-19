@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import subprocess
+import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -20,9 +22,11 @@ import cairo
 from nightsky_atlas.atlas.config import (
     AtlasConfig,
     StyleConfig,
+    load_atlas_config,
 )
 from nightsky_atlas.atlas.directory import build_chart_directory
 from nightsky_atlas.atlas.index import build_atlas_index
+from nightsky_atlas.atlas.observing_config import DEFAULT_CONFIG_PATH as OBSERVING_CONFIG_PATH
 from nightsky_atlas.atlas.overview import OverviewMap, build_overview, hemisphere_for
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 from nightsky_atlas.atlas.tiling import (
@@ -33,13 +37,21 @@ from nightsky_atlas.atlas.tiling import (
 from nightsky_atlas.build.chart import (
     DEFAULT_DOUBLE_STAR_PATH,
     DEFAULT_DSO_PATH,
+    OPENNGC_OUTLINE_DIR,
     build_chart_context,
     load_chart_inputs,
     load_star_systems,
 )
-from nightsky_atlas.build.preflight import collect_data_sources, validate_publication_inputs
+from nightsky_atlas.build.preflight import (
+    collect_build_inputs,
+    collect_data_sources,
+    validate_publication_inputs,
+)
 from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.models import Star
+from nightsky_atlas.catalog.observing_lists import (
+    DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
+)
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
@@ -280,7 +292,7 @@ def _draw_front_matter_pages(
     return 2
 
 
-def build_atlas(
+def _build_atlas_impl(
     *,
     atlas_path: str | Path,
     style_path: str | Path,
@@ -366,6 +378,27 @@ def build_atlas(
             None if star_names_dir is False else str(star_names_dir or STAR_NAMES_FIXTURE_DIR)
         ),
     }
+    input_paths = {
+        "atlas_config": atlas_path,
+        "style_config": style_path,
+        "code": Path(__file__).resolve().parents[1],
+        "constellations": geometry_inputs["constellations"],
+        "outlines": geometry_inputs["outlines"],
+        "openngc_outlines": (
+            str(OPENNGC_OUTLINE_DIR)
+            if geometry_inputs["outlines"] == "data/fixtures/outlines"
+            else None
+        ),
+        "star_names": geometry_inputs["star_names"],
+        "observing_lists": (
+            None
+            if observing_lists_dir is False
+            else str(observing_lists_dir or OBSERVING_LISTS_FIXTURE_DIR)
+        ),
+        "observing_config": str(observing_config_path or OBSERVING_CONFIG_PATH),
+        "overrides": overrides_path,
+    }
+    input_fingerprints = collect_build_inputs(input_paths)
     geometry_catalogues = {
         "constellation_lines": sorted(
             {item.provenance.catalogue for item in inputs.constellations.lines}
@@ -653,6 +686,19 @@ def build_atlas(
     with progress.step("finish combined PDF"):
         surface.finish()
 
+    if publication:
+        if collect_build_inputs(input_paths) != input_fingerprints:
+            raise ValueError("publication inputs changed during the build")
+        if collect_data_sources(
+            star_store=star_store,
+            stars_csv=stars_csv,
+            dsos_path=dsos_path if dsos_path is not None else DEFAULT_DSO_PATH,
+            double_stars_path=(
+                DEFAULT_DOUBLE_STAR_PATH if double_stars_path is None else double_stars_path
+            ),
+        ) != selected_sources:
+            raise ValueError("publication catalogues changed during the build")
+
     unused_chart_ids = (
         sorted(set(library.chart_ids()) - applied_chart_ids) if library is not None else []
     )
@@ -688,6 +734,7 @@ def build_atlas(
         "overview_pages": overview_page_info,
         "index": {"page_count": index_pages, **atlas_index.to_dict()},
         "data_sources": selected_sources,
+        "input_fingerprints": input_fingerprints,
         "geometry_inputs": geometry_inputs,
         "geometry_catalogues": geometry_catalogues,
         "publication_preflight": {
@@ -735,3 +782,84 @@ def build_atlas(
         front_matter_page_count=front_matter_pages,
         chart_directory_page_count=chart_directory_pages,
     )
+
+
+def _publish_staged_atlas(staged: Path, destination: Path) -> Path | None:
+    backup: Path | None = None
+    if destination.exists():
+        candidate = destination.with_name(f".{destination.name}-previous")
+        suffix = 2
+        while candidate.exists():
+            candidate = destination.with_name(f".{destination.name}-previous-{suffix}")
+            suffix += 1
+        os.replace(destination, candidate)
+        backup = candidate
+    try:
+        os.replace(staged, destination)
+    except OSError:
+        if backup is not None:
+            os.replace(backup, destination)
+        raise
+    return backup
+
+
+def build_atlas(
+    *,
+    atlas_path: str | Path,
+    style_path: str | Path,
+    outdir: str | Path,
+    star_store: str | Path | None = None,
+    stars_csv: str | Path | None = None,
+    dsos_path: str | Path | None = None,
+    constellations_dir: str | Path | bool | None = None,
+    outlines_dir: str | Path | bool | None = None,
+    star_names_dir: str | Path | bool | None = None,
+    observing_lists_dir: str | Path | bool | None = None,
+    observing_config_path: str | Path | None = None,
+    double_stars_path: str | Path | bool | None = None,
+    overrides_path: str | Path | None = None,
+    chart_ids: tuple[str, ...] | None = None,
+    limit: int | None = None,
+    optimize: bool = True,
+    render_png: bool = True,
+    png_dpi: float = 150.0,
+    write_front_matter: bool = True,
+    write_overviews: bool = True,
+    write_draft_report: bool = True,
+    publication: bool = False,
+    progress: Progress | None = None,
+) -> AtlasBuildResult:
+    options = dict(
+        atlas_path=atlas_path, style_path=style_path, outdir=outdir,
+        star_store=star_store, stars_csv=stars_csv, dsos_path=dsos_path,
+        constellations_dir=constellations_dir, outlines_dir=outlines_dir,
+        star_names_dir=star_names_dir, observing_lists_dir=observing_lists_dir,
+        observing_config_path=observing_config_path, double_stars_path=double_stars_path,
+        overrides_path=overrides_path, chart_ids=chart_ids, limit=limit,
+        optimize=optimize, render_png=render_png, png_dpi=png_dpi,
+        write_front_matter=write_front_matter, write_overviews=write_overviews,
+        write_draft_report=write_draft_report, publication=publication, progress=progress,
+    )
+    if not publication:
+        return _build_atlas_impl(**options)
+    atlas_id = load_atlas_config(atlas_path).id
+    if atlas_id in (".", "..") or Path(atlas_id).name != atlas_id:
+        raise ValueError("publication atlas id must be a single directory name")
+    output_parent = Path(outdir)
+    output_parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=f".{atlas_id}-staging-", dir=output_parent
+    ) as temporary:
+        result = _build_atlas_impl(**{**options, "outdir": temporary})
+        destination = output_parent / atlas_id
+        backup = _publish_staged_atlas(Path(temporary) / atlas_id, destination)
+        if backup is not None and progress is not None:
+            progress.info(f"previous publication retained -> {backup}")
+        return replace(
+            result,
+            combined_pdf=destination / "atlas.pdf",
+            manifest_path=destination / "manifest.json",
+            draft_report_path=(
+                destination / "draft-report.json" if result.draft_report_path is not None else None
+            ),
+        )

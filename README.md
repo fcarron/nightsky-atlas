@@ -94,7 +94,12 @@ Raw and processed catalogue data are build inputs and are not committed. See
 
 Add `--publication` for a strict release build. It requires the complete chart
 set, full-sky coverage, nonempty processed star and DSO catalogues, and matching
-source manifests. Development subsets remain available without this flag.
+source manifests with a `processed_sha256` checksum. Re-import older processed
+catalogues once to create checksummed manifests. The build records fingerprints
+of code, configuration and geometry inputs, then publishes from a staging
+directory only after validation. An earlier publication is retained as
+`build/.standard-previous` (or a numbered variant). Development subsets remain
+available without this flag.
 
 The combined `build/standard/atlas.pdf` opens with front matter and two
 whole-sky overview pages (northern and southern hemispheres) showing the

@@ -247,10 +247,12 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   Sagittarius and polar pages at 100% and use them under red light / at the
   telescope before treating Standard as publication-ready.
 - M16.3 is partial: `atlas build --publication` rejects subsets, coverage gaps,
-  missing/empty core catalogues and missing or mismatched source manifests
-  before rendering. The CLI still rejects builds with hard layout issues. A
-  separate post-build `atlas validate --publication` command and freshness
-  check remain open.
+  missing/empty core catalogues and source manifests whose processed checksum
+  does not match. Code/config/geometry fingerprints and catalogue hashes are
+  checked again after rendering. Publication is staged, and a previous output
+  is retained on success or left untouched on failure. The CLI still rejects
+  hard layout issues; a standalone post-build `atlas validate --publication`
+  command remains open.
 
 - The alpha artifacts predate the Hipparcos bright-star supplement and must be
   rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page

@@ -49,7 +49,7 @@ from nightsky_atlas.catalog.hipparcos import (
 from nightsky_atlas.catalog.hipparcos import (
     raw_path as hipparcos_raw_path,
 )
-from nightsky_atlas.catalog.manifest import write_manifest
+from nightsky_atlas.catalog.manifest import file_sha256, write_manifest
 from nightsky_atlas.catalog.merge import merge_stars
 from nightsky_atlas.catalog.openngc import (
     CATALOGUE as OPENNGC_CATALOGUE,
@@ -979,6 +979,7 @@ def _command_import_stars(args: argparse.Namespace) -> int:
         "raw_files": [path.name for path in parts],
         "star_count": count,
         "processed_file": args.out.name,
+        "processed_sha256": file_sha256(args.out),
         "bright_star_supplement": {
             "catalogue": HIPPARCOS_CATALOGUE,
             "version": HIPPARCOS_VERSION,
@@ -1037,6 +1038,7 @@ def _command_import_openngc(args: argparse.Namespace) -> int:
         "raw_files": [path.name for path in files],
         "object_count": count,
         "processed_file": args.out.name,
+        "processed_sha256": file_sha256(args.out),
     }
     write_manifest(args.manifest, manifest)
     print(f"imported {count} deep-sky objects -> {args.out}")
@@ -1075,6 +1077,7 @@ def _command_import_wds(args: argparse.Namespace) -> int:
         "raw_file": raw.name,
         "system_count": count,
         "processed_file": args.out.name,
+        "processed_sha256": file_sha256(args.out),
         "match_note": (
             "linked to Tycho-2 stars per chart; WDS never overwrites the star base"
         ),

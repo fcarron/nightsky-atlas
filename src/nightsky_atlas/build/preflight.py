@@ -4,23 +4,51 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from nightsky_atlas.atlas.config import AtlasConfig
 from nightsky_atlas.atlas.tiling import TilingSpec, coverage_report
+from nightsky_atlas.catalog.manifest import file_sha256
 from nightsky_atlas.catalog.store import StarStore
 from nightsky_atlas.chart.models import ChartDefinition
 
-__all__ = ["collect_data_sources", "validate_publication_inputs"]
+__all__ = ["collect_build_inputs", "collect_data_sources", "validate_publication_inputs"]
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def collect_build_inputs(
+    paths: Mapping[str, str | Path | None],
+) -> dict[str, dict[str, Any] | None]:
+    fingerprints: dict[str, dict[str, Any] | None] = {}
+    for name, selected in sorted(paths.items()):
+        if selected is None:
+            fingerprints[name] = None
+            continue
+        path = Path(selected)
+        if path.is_file():
+            fingerprints[name] = {
+                "path": str(path), "kind": "file", "sha256": file_sha256(path)
+            }
+        elif path.is_dir():
+            files = sorted(
+                item for item in path.rglob("*")
+                if item.is_file() and "__pycache__" not in item.parts and item.suffix != ".pyc"
+            )
+            digest = hashlib.sha256()
+            for item in files:
+                relative = item.relative_to(path).as_posix()
+                digest.update(relative.encode("utf-8"))
+                digest.update(b"\0")
+                digest.update(file_sha256(item).encode("ascii"))
+                digest.update(b"\0")
+            fingerprints[name] = {
+                "path": str(path), "kind": "directory", "sha256": digest.hexdigest(),
+                "file_count": len(files),
+            }
+        else:
+            fingerprints[name] = {"path": str(path), "kind": "missing", "sha256": None}
+    return fingerprints
 
 
 def collect_data_sources(
@@ -53,7 +81,7 @@ def collect_data_sources(
             {
                 "kind": kind,
                 "path": str(path),
-                "sha256": _sha256(path),
+                "sha256": file_sha256(path),
                 "manifest_path": str(manifest_path) if manifest is not None else None,
                 "manifest": manifest,
             }
@@ -100,6 +128,8 @@ def validate_publication_inputs(
             continue
         if manifest.get("processed_file") != Path(source["path"]).name:
             issues.append(f"provenance manifest does not match {source['path']}")
+        if manifest.get("processed_sha256") != source["sha256"]:
+            issues.append(f"processed catalogue checksum does not match {source['path']}")
         if not manifest.get("source") or not manifest.get("license"):
             issues.append(f"incomplete source or license metadata for {source['path']}")
     if issues:
