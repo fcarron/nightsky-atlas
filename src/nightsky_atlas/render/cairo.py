@@ -11,6 +11,7 @@ geometry is converted with :func:`nightsky_atlas.units.mm_to_pt`.
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ from pathlib import Path
 import cairo
 
 from nightsky_atlas.atlas.config import StyleConfig
+from nightsky_atlas.catalog.constellations import constellation_name
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.chart.presentation import (
@@ -42,7 +44,7 @@ from nightsky_atlas.render.symbols import (
     SymbolExtent,
     dso_symbol_extent,
 )
-from nightsky_atlas.render.text import draw_centered_text, draw_text
+from nightsky_atlas.render.text import TextMeasurer, draw_centered_text, draw_text
 from nightsky_atlas.scene.models import ChartScene, SceneOutline, SceneSegment
 from nightsky_atlas.units import mm_to_pt
 
@@ -771,6 +773,57 @@ def _draw_constellations(
                 if not label.hidden
                 if (candidate := label.effective_candidate()) is not None
             ),
+        )
+    if config.names.enabled and scene.constellation_lines:
+        _draw_constellation_names(cr, transform, scene, style)
+
+
+def _draw_constellation_names(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    scene: ChartScene,
+    style: StyleConfig,
+) -> None:
+    """Draw subdued names at the centres of visible stick figures.
+
+    Names are presentation-only and sit below stars, DSOs and labels.  The
+    scene keeps the source abbreviation, so this uses no renderer catalogue
+    lookup or special case per chart.
+    """
+    config = style.constellation.names
+    points_by_constellation: dict[str, list[PagePoint]] = defaultdict(list)
+    for segment in scene.constellation_lines:
+        if segment.constellation_id:
+            points_by_constellation[segment.constellation_id].extend(
+                transform.to_page(point) for point in segment.points
+            )
+    rect = transform.chart_rect
+    measurer = TextMeasurer(style.label.font_family, config.font_size_pt)
+    cr.set_source_rgb(config.gray, config.gray, config.gray)
+    for constellation_id, points in sorted(points_by_constellation.items()):
+        if len(points) < config.min_segments * 2:
+            continue
+        x_mm = sum(point.x_mm for point in points) / len(points)
+        y_mm = sum(point.y_mm for point in points) / len(points)
+        if not rect.left_mm <= x_mm <= rect.right_mm or not rect.top_mm <= y_mm <= rect.bottom_mm:
+            continue
+        text = constellation_name(constellation_id).upper()
+        metrics = measurer.measure_mm(text)
+        x_mm = min(
+            max(x_mm, rect.left_mm + metrics.width_mm / 2.0 + 2.0),
+            rect.right_mm - metrics.width_mm / 2.0 - 2.0,
+        )
+        y_mm = min(
+            max(y_mm, rect.top_mm + metrics.height_mm + 2.0),
+            rect.bottom_mm - 2.0,
+        )
+        draw_centered_text(
+            cr,
+            text,
+            mm_to_pt(x_mm),
+            mm_to_pt(y_mm),
+            style.label.font_family,
+            config.font_size_pt,
         )
 
 

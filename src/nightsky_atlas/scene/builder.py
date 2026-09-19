@@ -284,6 +284,7 @@ def _project_constellation_lines(
                     ChartPoint(xi_deg=clip_start[0], eta_deg=clip_start[1]),
                     ChartPoint(xi_deg=clip_end[0], eta_deg=clip_end[1]),
                 ),
+                constellation_id=source.constellation_id,
             )
         )
     return tuple(segments)
@@ -317,15 +318,17 @@ def _project_segments(
                 SceneSegment(
                     source_id=source.id,
                     points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in runs[0]),
+                    constellation_id=source.constellation_id,
                 )
             )
         else:
             for run_index, run in enumerate(runs):
                 segments.append(
-                    SceneSegment(
-                        source_id=f"{source.id}#{kind}:{run_index}",
-                        points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in run),
-                    )
+                SceneSegment(
+                    source_id=f"{source.id}#{kind}:{run_index}",
+                    points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in run),
+                    constellation_id=source.constellation_id,
+                )
                 )
     return tuple(segments)
 

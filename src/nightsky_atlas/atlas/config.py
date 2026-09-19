@@ -38,6 +38,7 @@ __all__ = [
     "ConfigError",
     "ConstellationBoundaryStyle",
     "ConstellationLineStyle",
+    "ConstellationNameStyle",
     "ConstellationStyle",
     "DoubleStarStyle",
     "DsoExtentStyle",
@@ -708,11 +709,21 @@ class ConstellationBoundaryStyle(_StrictModel):
     gap_mm: PositiveFloat = 1.2
 
 
+class ConstellationNameStyle(_StrictModel):
+    """Quiet full constellation names placed beneath chart content."""
+
+    enabled: bool = True
+    font_size_pt: PositiveFloat = 9.0
+    gray: float = 0.66
+    min_segments: int = Field(default=2, ge=1)
+
+
 class ConstellationStyle(_StrictModel):
     """Constellation line and boundary appearance."""
 
     lines: ConstellationLineStyle = Field(default_factory=ConstellationLineStyle)
     boundaries: ConstellationBoundaryStyle = Field(default_factory=ConstellationBoundaryStyle)
+    names: ConstellationNameStyle = Field(default_factory=ConstellationNameStyle)
 
 
 class ScaleBarStyle(_StrictModel):

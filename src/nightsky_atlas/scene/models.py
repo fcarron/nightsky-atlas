@@ -71,6 +71,7 @@ class SceneSegment:
 
     source_id: str
     points: tuple[ChartPoint, ...]
+    constellation_id: str = ""
 
     def __post_init__(self) -> None:
         if len(self.points) < 2:

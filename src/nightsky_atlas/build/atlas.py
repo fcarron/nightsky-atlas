@@ -225,7 +225,11 @@ def _draw_front_matter(
     lines = [
         f"{chart_count} charts",
         f"Stellar limit: magnitude {atlas.stellar_limit_magnitude}",
+        "Reference frame: J2000 / ICRS",
+        "Projection: stereographic",
     ]
+    if atlas.tiling is not None and atlas.tiling.mm_per_degree is not None:
+        lines.append(f"Chart scale: {atlas.tiling.mm_per_degree:g} mm/degree")
     for index, line in enumerate(lines):
         draw_text(
             cr,
@@ -235,19 +239,23 @@ def _draw_front_matter(
             family,
             9.0,
         )
-    legend = (
-        "Symbols: solid dot = star; ellipse = galaxy; "
-        "dashed circle = open cluster; circle+cross = globular cluster; "
-        "circle+spokes = planetary nebula; dashed square = nebula."
+    legend_lines = (
+        "Symbol key",
+        "Star: solid dot   Double star: dot with short horizontal marker",
+        "Galaxy: ellipse   Globular cluster: circle with cross   Open cluster: dashed circle",
+        "Planetary nebula: circle with outward spokes   Nebula: dashed square or outline",
+        "Constellation: grey stick figure   Boundary: fine dotted line",
+        "Ecliptic: fine dashed line",
     )
-    draw_text(
-        cr,
-        legend,
-        mm_to_pt(page.margin_mm + 8.0),
-        mm_to_pt(page.height_mm - page.margin_mm - 10.0),
-        family,
-        7.0,
-    )
+    for index, line in enumerate(legend_lines):
+        draw_text(
+            cr,
+            line,
+            mm_to_pt(page.margin_mm + 8.0),
+            mm_to_pt(page.height_mm - page.margin_mm - 27.0 + index * 4.0),
+            family,
+            7.5 if index == 0 else 6.5,
+        )
 
 
 def build_atlas(

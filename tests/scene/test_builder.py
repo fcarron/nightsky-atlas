@@ -125,9 +125,18 @@ def make_segment(
 
 
 def test_constellation_segment_inside_field_is_clipped() -> None:
-    segment = make_segment(170.0, 12.0, 205.0, 12.0)
+    segment = ConstellationSegment(
+        id="seg:Vir",
+        ra1_deg=170.0,
+        dec1_deg=12.0,
+        ra2_deg=205.0,
+        dec2_deg=12.0,
+        provenance=Provenance(catalogue="TEST", source_id="seg"),
+        constellation_id="Vir",
+    )
     scene = build_scene(DEFINITION, [], [], constellation_lines=[segment])
     assert len(scene.constellation_lines) == 1
+    assert scene.constellation_lines[0].constellation_id == "Vir"
     for point in scene.constellation_lines[0].points:
         assert DEFINITION.contains(point)
 
