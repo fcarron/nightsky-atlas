@@ -48,6 +48,7 @@ from nightsky_atlas.units import mm_to_pt
 
 __all__ = [
     "DebugOptions",
+    "draw_dso_symbol",
     "draw_chart_page",
     "render_chart",
     "render_magnitude_scale",
@@ -654,7 +655,7 @@ def _draw_dsos(
                 style.dso.star_overlap_halo_mm,
             )
             cr.set_source_rgb(0.0, 0.0, 0.0)
-        _draw_dso_symbol(cr, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), extent, style.dso.dash_mm)
+        draw_dso_symbol(cr, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), extent, style.dso.dash_mm)
     cr.restore()
 
 
@@ -706,7 +707,7 @@ def _draw_dso_knockout(
     cr.restore()
 
 
-def _draw_dso_symbol(
+def draw_dso_symbol(
     cr: cairo.Context[cairo.Surface],
     x: float,
     y: float,

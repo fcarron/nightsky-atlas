@@ -172,9 +172,7 @@ def test_build_applies_overrides(tmp_path: Path) -> None:
         yaml.safe_dump(
             {
                 "chart": "c1",
-                "labels": {
-                    "label:dso:NGC4486": {"candidate": "N", "locked": True}
-                },
+                "labels": {"label:dso:NGC4486": {"candidate": "N", "locked": True}},
             }
         ),
         encoding="utf-8",

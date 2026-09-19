@@ -45,9 +45,10 @@ from nightsky_atlas.catalog.star_names import (
     load_star_names,
 )
 from nightsky_atlas.catalog.store import QueryBox, StarStore
+from nightsky_atlas.chart.models import ChartDefinition
+from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import (
     presentation_from_edition,
-    product_edition_title,
 )
 from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.optimizer import layout_cost, layout_hash, optimize_labels
@@ -61,9 +62,10 @@ from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.atlas_index import draw_atlas_index_pages
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
 from nightsky_atlas.render.chart_directory import draw_chart_directory_pages
+from nightsky_atlas.render.front_matter import draw_field_guide
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.overview import LocatorInset, draw_overview_page
-from nightsky_atlas.render.text import draw_centered_text, draw_text
+from nightsky_atlas.render.text import draw_text
 from nightsky_atlas.scene.models import SceneDso
 from nightsky_atlas.units import mm_to_pt
 
@@ -216,122 +218,13 @@ def _draw_front_matter_pages(
     atlas: AtlasConfig,
     style: StyleConfig,
     chart_count: int,
+    scale_chart: ChartDefinition,
 ) -> int:
-    """Write the concise reader guide and provenance page before the maps."""
+    """Write the compact field guide and provenance page."""
     page = atlas.page.to_geometry()
     family = style.label.font_family
-    draw_centered_text(
-        cr,
-        product_edition_title(atlas.resolved_edition().name),
-        mm_to_pt(page.width_mm / 2.0),
-        mm_to_pt(page.margin_mm + 12.0),
-        family,
-        16.0,
-    )
-    overview_lines = [
-        f"{chart_count} {'chart' if chart_count == 1 else 'charts'}",
-        f"Stellar limit: magnitude {atlas.stellar_limit_magnitude}",
-        "Reference frame: J2000 / ICRS",
-        "Projection: stereographic",
-    ]
-    if atlas.tiling is not None and atlas.tiling.mm_per_degree is not None:
-        overview_lines.append(f"Chart scale: {atlas.tiling.mm_per_degree:g} mm/degree")
-    for index, line in enumerate(overview_lines):
-        draw_text(
-            cr,
-            line,
-            mm_to_pt(page.margin_mm + 8.0),
-            mm_to_pt(page.margin_mm + 30.0 + index * 5.0),
-            family,
-            9.0,
-        )
-    guide_lines = (
-        ("USING THE CHARTS", 10.0, "bold"),
-        (
-            "North is up and east is left. Coordinate labels around each chart give "
-            "right ascension",
-            7.5,
-            "normal",
-        ),
-        (
-            "and declination; the fine grid is a positional aid, not an observing target list.",
-            7.5,
-            "normal",
-        ),
-        (
-            "Charts overlap deliberately. Use the neighbour codes at the page edge, "
-            "the overview maps,",
-            7.5,
-            "normal",
-        ),
-        (
-            "or the chart directory to continue a star hop. The indexes at the back "
-            "use printed chart",
-            7.5,
-            "normal",
-        ),
-        ("codes (for example S029), never internal build identifiers.", 7.5, "normal"),
-        ("NOTATION AND SYMBOL KEY", 10.0, "bold"),
-        (
-            "Star: solid dot scaled by visual magnitude. Double: real components or "
-            "a short marker when",
-            7.0,
-            "normal",
-        ),
-        (
-            "unresolved at print scale. Galaxy: oriented ellipse. Globular: circle with cross.",
-            7.0,
-            "normal",
-        ),
-        (
-            "Open cluster: dashed circle. Planetary nebula: circle with outward spokes. "
-            "Diffuse nebula:",
-            7.0,
-            "normal",
-        ),
-        (
-            "dashed frame or true outline. Grey lines are constellation stick figures; "
-            "dotted lines are",
-            7.0,
-            "normal",
-        ),
-        ("IAU boundaries; the fine dashed curve is the ecliptic.", 7.0, "normal"),
-        (
-            "DSO labels use compact chart notation: 4565 means NGC 4565; I5070 means IC 5070;",
-            7.0,
-            "normal",
-        ),
-        (
-            "Messier designations stay M13, M31, etc. Bayer, Flamsteed and variable-star "
-            "designations",
-            7.0,
-            "normal",
-        ),
-        (
-            "identify stars (for example α Ori, 41 Ari, R CrB); this atlas does not "
-            "encode light curves.",
-            7.0,
-            "normal",
-        ),
-    )
-    for index, (line, size, weight) in enumerate(guide_lines):
-        draw_text(
-            cr,
-            line,
-            mm_to_pt(page.margin_mm + 8.0),
-            mm_to_pt(page.margin_mm + 62.0 + index * 4.3),
-            family,
-            size,
-            weight,
-        )
-    draw_text(
-        cr,
-        f"NightSky Atlas — {atlas.resolved_edition().name} · Reader guide",
-        mm_to_pt(page.margin_mm),
-        mm_to_pt(page.height_mm - page.margin_mm + 2.5),
-        family,
-        7.0,
-    )
+    mm_per_degree = PageTransform(scale_chart, page).mm_per_deg
+    draw_field_guide(cr, atlas, style, chart_count, mm_per_degree)
     surface.show_page()
 
     draw_text(
@@ -473,7 +366,7 @@ def build_atlas(
     if write_front_matter:
         with progress.step("front matter", detail=True):
             front_matter_pages = _draw_front_matter_pages(
-                context, surface, atlas, style, len(charts)
+                context, surface, atlas, style, len(charts), (charts or all_charts)[0]
             )
 
     chart_directory = ()
