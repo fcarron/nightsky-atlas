@@ -342,6 +342,43 @@ def test_galaxy_minimum_minor_axis_preserves_ratio() -> None:
 
 
 @pytest.mark.parametrize(
+    ("edition", "mm_per_deg", "expected_width_mm", "expected_height_mm"),
+    (
+        ("pocket", 5.0, 14.819, 5.805),
+        ("standard", 10.0, 29.638, 11.610),
+        ("deep", 20.0, 59.277, 23.220),
+    ),
+)
+def test_large_galaxy_keeps_true_scale_below_practical_cap(
+    edition: str,
+    mm_per_deg: float,
+    expected_width_mm: float,
+    expected_height_mm: float,
+) -> None:
+    """M31 must scale between editions rather than being flattened to 12 mm."""
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    extent = dso_symbol_extent(
+        make_galaxy(major_axis_arcmin=177.83, minor_axis_arcmin=69.66),
+        mm_per_deg=mm_per_deg,
+        style=style,
+    )
+    assert extent.uses_angular_size is True
+    assert extent.width_mm == pytest.approx(expected_width_mm, abs=0.001)
+    assert extent.height_mm == pytest.approx(expected_height_mm, abs=0.001)
+
+
+def test_chart_dominating_galaxy_still_has_a_conservative_physical_cap() -> None:
+    style = load_style_config(REPO_ROOT / "styles" / "deep.yaml")
+    extent = dso_symbol_extent(
+        make_galaxy(major_axis_arcmin=646.0, minor_axis_arcmin=550.0),
+        mm_per_deg=20.0,
+        style=style,
+    )
+    assert extent.width_mm == pytest.approx(60.0)
+    assert extent.height_mm == pytest.approx(60.0 * 550.0 / 646.0)
+
+
+@pytest.mark.parametrize(
     ("edition", "globular_mm", "open_cluster_mm", "diffuse_mm", "galaxy_minor_mm"),
     (
         ("pocket", 1.2, 1.6, 1.8, 1.0),

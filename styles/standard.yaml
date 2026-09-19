@@ -60,14 +60,15 @@ dso:
   # Per-class symbol extent.  Extended classes use the catalogue angular size
   # (scaled by the chart's mm-per-degree) when available; fallback_diameter_mm
   # covers missing/unreliable sizes, min_diameter_mm keeps small marks
-  # printable and max_diameter_mm caps genuinely huge fields.  Galaxies preserve
+  # printable and max_diameter_mm caps only genuinely chart-dominating fields.
+  # Galaxies preserve
   # their axis ratio and position angle; the diameters act on the major axis.
   galaxy:
     use_angular_size: true
     fallback_diameter_mm: 1.4
     min_diameter_mm: 0.7
     min_minor_axis_mm: 1.2
-    max_diameter_mm: 12.0
+    max_diameter_mm: 60.0
   globular_cluster:
     use_angular_size: true
     fallback_diameter_mm: 1.5
