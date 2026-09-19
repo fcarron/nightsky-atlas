@@ -61,8 +61,8 @@ def build_dso_labels(
     Label text is produced by :func:`~nightsky_atlas.layout.dso_labels.format_dso_label`
     and carries its own tier typography.  Faint objects beyond
     ``style.label.dso_label_magnitude_limit`` are still rendered but receive no
-    label unless they are mandatory (Messier, common name, bright DSO) or belong
-    to an observing list.
+    label unless they are mandatory (Messier, common name, bright DSO), belong
+    to an observing list, or their type is configured to always request one.
     """
     dso_labels = style.label.dso_labels
     measurers: dict[tuple[float, str], TextMeasurer] = {}
@@ -79,6 +79,7 @@ def build_dso_labels(
     labels: list[Label] = []
     for scene_dso in scene.deep_sky_objects:
         dso = scene_dso.dso
+        always_label = dso.object_type in style.label.selection.always_label_object_types
         memberships: frozenset[str] = frozenset()
         if scene_dso.metadata is not None:
             priority = scene_dso.metadata.label_priority
@@ -92,6 +93,7 @@ def build_dso_labels(
             limit is not None
             and not mandatory
             and not has_membership
+            and not always_label
             and dso.magnitude is not None
             and dso.magnitude > limit
         ):

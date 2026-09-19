@@ -30,23 +30,38 @@ def make_dso(
     *,
     magnitude: float = 11.0,
     cross_ids: tuple[str, ...] = (),
+    object_type: DsoType = DsoType.GALAXY,
 ) -> DeepSkyObject:
     return DeepSkyObject(
         id=object_id,
         ra_deg=ra_deg,
         dec_deg=dec_deg,
-        object_type=DsoType.GALAXY,
+        object_type=object_type,
         provenance=Provenance(catalogue="TEST", source_id=object_id),
         magnitude=magnitude,
         cross_ids=cross_ids,
     )
 
 
-def clustered_scene() -> tuple:
-    dsos = [make_dso("NGC4486", 187.5, 12.0, magnitude=9.0, cross_ids=("M87",))]
+def clustered_scene(*, object_type: DsoType = DsoType.GALAXY_CLUSTER) -> tuple:
+    dsos = [
+        make_dso(
+            "NGC4486",
+            187.5,
+            12.0,
+            magnitude=9.0,
+            cross_ids=("M87",),
+            object_type=object_type,
+        )
+    ]
     for index in range(24):
         dsos.append(
-            make_dso(f"NGC{9000 + index}", 187.5 + 0.02 * index, 12.0 + 0.01 * index)
+            make_dso(
+                f"NGC{9000 + index}",
+                187.5 + 0.02 * index,
+                12.0 + 0.01 * index,
+                object_type=object_type,
+            )
         )
     scene = build_scene(CHART, (), dsos)
     return scene, build_dso_labels(scene, TRANSFORM, STYLE)
@@ -65,8 +80,8 @@ def test_dense_field_thins_ordinary_labels_but_sparse_field_keeps_them() -> None
     dense = select_labels(dense_labels, _scene, TRANSFORM, STYLE)
 
     sparse_dsos = [
-        make_dso("NGC1000", 183.0, 8.0),
-        make_dso("NGC2000", 192.0, 16.0),
+        make_dso("NGC1000", 183.0, 8.0, object_type=DsoType.GALAXY_CLUSTER),
+        make_dso("NGC2000", 192.0, 16.0, object_type=DsoType.GALAXY_CLUSTER),
     ]
     sparse_scene = build_scene(CHART, (), sparse_dsos)
     sparse_labels = build_dso_labels(sparse_scene, TRANSFORM, STYLE)
@@ -74,6 +89,13 @@ def test_dense_field_thins_ordinary_labels_but_sparse_field_keeps_them() -> None
 
     assert len(dense) < len(dense_labels) / 2
     assert len(sparse) == len(sparse_labels)
+
+
+def test_rendered_galaxies_request_labels_and_bypass_density_thinning() -> None:
+    scene, labels = clustered_scene(object_type=DsoType.GALAXY)
+    selected = select_labels(labels, scene, TRANSFORM, STYLE)
+
+    assert len(selected) == len(labels)
 
 
 def test_semantic_duplicates_collapse_to_one_label() -> None:

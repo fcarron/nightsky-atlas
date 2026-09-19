@@ -67,6 +67,11 @@ def select_labels(
     protected.update(
         label.id for label in labels if label.id.startswith("label:constellation:")
     )
+    protected.update(
+        f"label:dso:{scene_dso.dso.id}"
+        for scene_dso in scene.deep_sky_objects
+        if scene_dso.dso.object_type in selection.always_label_object_types
+    )
     kept = _thin_by_density(deduplicated, anchors, style, protected_ids=protected)
     kept_ids = {label.id for label in kept}
     return tuple(label for label in labels if label.id in kept_ids)

@@ -423,6 +423,7 @@ class LabelSelectionStyle(_StrictModel):
     density_radius_mm: PositiveFloat = 15.0
     medium_density_budget: PositiveFloat = 0.12
     low_density_budget: PositiveFloat = 0.05
+    always_label_object_types: tuple[DsoType, ...] = ()
 
 
 class LabelStyle(_StrictModel):
@@ -432,7 +433,8 @@ class LabelStyle(_StrictModel):
     are still rendered; ``None`` labels every selected object.  Mandatory labels
     (Messier, common name, bright DSO) and observing-list members are exempt.
     ``dso_labels`` carries the deep-sky label size/weight hierarchy.
-    ``selection`` controls which candidate labels survive to placement.
+    ``selection`` controls which candidate labels survive to placement,
+    including object types that must request a label whenever rendered.
     """
 
     font_family: str

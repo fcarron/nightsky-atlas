@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -205,9 +206,23 @@ def test_build_dso_labels_uses_metadata_priority() -> None:
 def test_dso_label_magnitude_limit_omits_faint_object() -> None:
     assert STYLE.label.dso_label_magnitude_limit is not None
     faint = STYLE.label.dso_label_magnitude_limit + 0.5
-    scene = build_scene(CHART, (), [make_dso("NGC9999", magnitude=faint)])
+    scene = build_scene(
+        CHART,
+        (),
+        [replace(make_dso("NGC9999", magnitude=faint), object_type=DsoType.GALAXY_CLUSTER)],
+    )
     labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE)
     assert labels == ()
+
+
+def test_rendered_faint_galaxy_is_exempt_from_label_magnitude_limit() -> None:
+    assert STYLE.label.dso_label_magnitude_limit is not None
+    faint = STYLE.label.dso_label_magnitude_limit + 0.5
+    scene = build_scene(CHART, (), [make_dso("NGC9999", magnitude=faint)])
+
+    labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE)
+
+    assert {label.id for label in labels} == {"label:dso:NGC9999"}
 
 
 def test_dso_label_magnitude_limit_keeps_mandatory_faint_object() -> None:
