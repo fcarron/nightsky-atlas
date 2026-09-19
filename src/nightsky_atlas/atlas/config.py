@@ -776,19 +776,10 @@ class MagnitudeLegendStyle(_StrictModel):
     """
 
     enabled: bool = True
-    magnitudes: tuple[float, ...] = (2.0, 4.0, 6.0, 8.0)
     font_size_pt: PositiveFloat = 6.0
     gray: float = 0.55
     spacing_mm: PositiveFloat = 6.0
     label: str = "mag"
-
-    @field_validator("magnitudes")
-    @classmethod
-    def _at_least_one(cls, value: tuple[float, ...]) -> tuple[float, ...]:
-        if not value:
-            raise ValueError("magnitude legend needs at least one reference value")
-        return value
-
 
 class FurnitureStyle(_StrictModel):
     """Chart title/footer, scale bar, magnitude legend and navigation styling."""

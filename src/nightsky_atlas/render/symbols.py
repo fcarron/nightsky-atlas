@@ -30,7 +30,18 @@ __all__ = [
     "dso_shape",
     "dso_symbol_extent",
     "galaxy_ellipse",
+    "star_reference_magnitudes",
 ]
+
+
+def star_reference_magnitudes(style: StarStyle) -> tuple[float, ...]:
+    """Whole magnitudes through the print limit, including a fractional endpoint."""
+    low = math.ceil(style.bright_magnitude)
+    high = math.floor(style.faint_magnitude)
+    values = tuple(float(value) for value in range(low, high + 1))
+    if not values or not math.isclose(values[-1], style.faint_magnitude):
+        return (*values, style.faint_magnitude)
+    return values
 
 
 class DsoShape(StrEnum):

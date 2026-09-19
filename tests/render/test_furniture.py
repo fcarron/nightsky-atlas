@@ -12,7 +12,7 @@ from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_for
 from nightsky_atlas.render.furniture import build_furniture_plan
 from nightsky_atlas.render.overview import locator_rect
-from nightsky_atlas.render.symbols import StarSizeModel
+from nightsky_atlas.render.symbols import StarSizeModel, star_reference_magnitudes
 from nightsky_atlas.render.text import TextMeasurer
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -116,14 +116,33 @@ def test_navigation_rectangles_are_label_obstacles() -> None:
     )
 
 
-def test_legend_dots_use_real_star_size_model() -> None:
-    plan, _ = build_plan()
-    assert plan.legend is not None
-    model = StarSizeModel.from_style(STYLE.star)
-    magnitudes = STYLE.furniture.magnitude_legend.magnitudes
-    assert [dot.diameter_mm for dot in plan.legend.dots] == pytest.approx(
-        [model.diameter_mm(magnitude) for magnitude in magnitudes]
+@pytest.mark.parametrize(
+    ("edition", "expected_magnitudes"),
+    [
+        ("pocket", (*range(8), 7.5)),
+        ("standard", tuple(range(10))),
+        ("deep", tuple(range(11))),
+    ],
+)
+def test_legend_dots_use_real_star_size_model(
+    edition: str, expected_magnitudes: tuple[float, ...]
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    transform = make_transform()
+    plan = build_furniture_plan(
+        transform, transform.chart, style, presentation_for(transform.chart)
     )
+    assert plan.legend is not None
+    model = StarSizeModel.from_style(style.star)
+    assert star_reference_magnitudes(style.star) == expected_magnitudes
+    assert tuple(number.text for number in plan.legend.numbers) == tuple(
+        f"{magnitude:g}" for magnitude in expected_magnitudes
+    )
+    assert [dot.diameter_mm for dot in plan.legend.dots] == pytest.approx(
+        [model.diameter_mm(magnitude) for magnitude in expected_magnitudes]
+    )
+    assert plan.scale_bar is not None
+    assert plan.legend.dots[-1].x_mm < plan.scale_bar.left_mm
 
 
 def test_scale_bar_length_follows_mm_per_degree() -> None:

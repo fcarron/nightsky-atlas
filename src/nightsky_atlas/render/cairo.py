@@ -41,6 +41,7 @@ from nightsky_atlas.render.symbols import (
     StarSizeModel,
     SymbolExtent,
     dso_symbol_extent,
+    star_reference_magnitudes,
 )
 from nightsky_atlas.render.text import draw_centered_text, draw_text
 from nightsky_atlas.scene.models import ChartScene, SceneDso, SceneOutline, SceneSegment
@@ -167,7 +168,7 @@ def render_magnitude_scale(
     """Render a diagnostic page showing star size against magnitude."""
     size_model = StarSizeModel.from_style(style.star)
     if magnitudes is None:
-        magnitude_values = _curve_magnitudes(style)
+        magnitude_values = star_reference_magnitudes(style.star)
     else:
         magnitude_values = tuple(float(value) for value in magnitudes)
     if not magnitude_values:
@@ -265,7 +266,7 @@ def render_edition_magnitude_scale(
         for index, (edition, style) in enumerate(editions):
             block_top = top + mm_to_pt(8.0) + index * block_height
             model = StarSizeModel.from_style(style.star)
-            magnitudes = _curve_magnitudes(style)
+            magnitudes = star_reference_magnitudes(style.star)
             _draw_centered_text(
                 cr,
                 edition.upper(),
@@ -305,16 +306,6 @@ def render_edition_magnitude_scale(
                 )
 
     _render_outputs(page, draw, pdf_path=pdf_path, png_path=png_path, png_dpi=png_dpi)
-
-
-def _curve_magnitudes(style: StyleConfig) -> tuple[float, ...]:
-    """Return integer magnitude references plus the exact faint endpoint."""
-    low = math.floor(style.star.bright_magnitude)
-    high = math.floor(style.star.faint_magnitude)
-    values = tuple(float(value) for value in range(low, high + 1))
-    if not math.isclose(values[-1], style.star.faint_magnitude):
-        return (*values, style.star.faint_magnitude)
-    return values
 
 
 def _render_outputs(

@@ -194,7 +194,6 @@ furniture:
   # Compact magnitude reference using the real star size model.
   magnitude_legend:
     enabled: true
-    magnitudes: [2.0, 4.0, 6.0, 8.0]
     font_size_pt: 5.5
     gray: 0.55
     spacing_mm: 6.0

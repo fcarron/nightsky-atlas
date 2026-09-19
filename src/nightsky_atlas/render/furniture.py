@@ -28,7 +28,7 @@ from nightsky_atlas.chart.presentation import (
     presentation_for,
 )
 from nightsky_atlas.render.overview import locator_rect
-from nightsky_atlas.render.symbols import StarSizeModel
+from nightsky_atlas.render.symbols import StarSizeModel, star_reference_magnitudes
 from nightsky_atlas.render.text import (
     TextMeasurer,
     TextMetrics,
@@ -101,7 +101,7 @@ class LegendDot:
 
 @dataclass(frozen=True, slots=True)
 class MagnitudeLegend:
-    """Compact ``mag 2 4 6 8`` reference built from the real star size model."""
+    """Complete star-magnitude reference built from the real star size model."""
 
     label: PlacedText
     numbers: tuple[PlacedText, ...]
@@ -241,6 +241,7 @@ def _magnitude_legend(
         return None
     family = style.label.font_family
     size_model = StarSizeModel.from_style(style.star)
+    magnitudes = star_reference_magnitudes(style.star)
     measurer = TextMeasurer(family, legend.font_size_pt)
     label_metrics = measurer.measure_mm(legend.label)
     number_top = page.height_mm - _FOOTER_TEXT_FROM_BOTTOM_MM
@@ -254,7 +255,7 @@ def _magnitude_legend(
             "center",
             legend.font_size_pt,
         )
-        for index, magnitude in enumerate(legend.magnitudes)
+        for index, magnitude in enumerate(magnitudes)
     )
     dots = tuple(
         LegendDot(
@@ -262,7 +263,7 @@ def _magnitude_legend(
             y_mm=dot_center,
             diameter_mm=size_model.diameter_mm(magnitude),
         )
-        for index, magnitude in enumerate(legend.magnitudes)
+        for index, magnitude in enumerate(magnitudes)
     )
     return MagnitudeLegend(
         label=PlacedText(
