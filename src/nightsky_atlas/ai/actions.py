@@ -11,10 +11,10 @@ the deterministic engine owns the actual placement.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from nightsky_atlas.atlas.config import StyleConfig
-from nightsky_atlas.chart.page import PageRect, PageTransform
+from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.chart.presentation import presentation_for
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.optimizer import layout_cost
@@ -27,6 +27,8 @@ __all__ = ["ApplyResult", "apply_review_actions"]
 
 _COST_EPSILON = 1e-9
 DEFAULT_SOFT_COST_EPSILON = 0.25
+_FINE_ADJUST_STEP_MM = 0.5
+_FINE_ADJUST_LIMIT_MM = 3.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,23 +58,6 @@ def _apply_one(label: Label, action: ReviewAction) -> Label | None:
             candidates, key=lambda item: (abs(item.ring - wanted_ring), item.ring, item.id)
         )
         return label.with_placement(candidate.id)
-    if action.type == ReviewActionType.FINE_ADJUST_LABEL:
-        # Intent is deliberately mapped to the nearest existing legal candidate;
-        # no reviewer-supplied page coordinate ever enters the layout document.
-        current = label.effective_candidate()
-        if current is None:
-            return None
-        wanted_x = current.bounds.center.x_mm + (action.offset_x_mm or 0.0)
-        wanted_y = current.bounds.center.y_mm + (action.offset_y_mm or 0.0)
-        candidate = min(
-            label.candidates,
-            key=lambda item: (
-                (item.bounds.center.x_mm - wanted_x) ** 2
-                + (item.bounds.center.y_mm - wanted_y) ** 2,
-                item.id,
-            ),
-        )
-        return label.with_placement(candidate.id)
     if action.type == ReviewActionType.SHOW_OPTIONAL_LABEL:
         candidate = label.effective_candidate()
         if candidate is None:
@@ -89,6 +74,64 @@ def _apply_one(label: Label, action: ReviewAction) -> Label | None:
         candidate = label.effective_candidate()
         return label.with_placement(candidate.id, hidden=label.hidden) if candidate else None
     return None
+
+
+def _fine_adjustments(label: Label, action: ReviewAction) -> tuple[Label, ...]:
+    """Return local, deterministic placements ordered by the requested intent.
+
+    The reviewer supplies only a bounded desired displacement.  The layout
+    engine snaps that intent to a fixed 0.5-mm lattice and subsequently applies
+    the normal hard gate to every possible placement.  The generated candidate
+    is retained in the layout document, so replay needs neither a reviewer nor
+    an unvalidated page coordinate.
+    """
+    current = label.effective_candidate()
+    if current is None:
+        return ()
+    wanted_x = action.offset_x_mm or 0.0
+    wanted_y = action.offset_y_mm or 0.0
+    steps = range(
+        int(-_FINE_ADJUST_LIMIT_MM / _FINE_ADJUST_STEP_MM),
+        int(_FINE_ADJUST_LIMIT_MM / _FINE_ADJUST_STEP_MM) + 1,
+    )
+    offsets = [
+        (step_x * _FINE_ADJUST_STEP_MM, step_y * _FINE_ADJUST_STEP_MM)
+        for step_x in steps
+        for step_y in steps
+        if step_x != 0 or step_y != 0
+    ]
+    offsets.sort(
+        key=lambda item: (
+            (item[0] - wanted_x) ** 2 + (item[1] - wanted_y) ** 2,
+            item[0] ** 2 + item[1] ** 2,
+            item,
+        )
+    )
+    adjusted: list[Label] = []
+    for offset_x, offset_y in offsets:
+        candidate = replace(
+            current,
+            id=f"{current.id}:fine:{offset_x:+.1f}:{offset_y:+.1f}",
+            anchor=PagePoint(
+                current.anchor.x_mm + offset_x,
+                current.anchor.y_mm + offset_y,
+            ),
+            bounds=PageRect(
+                current.bounds.left_mm + offset_x,
+                current.bounds.top_mm + offset_y,
+                current.bounds.width_mm,
+                current.bounds.height_mm,
+            ),
+        )
+        adjusted.append(
+            replace(
+                label,
+                candidates=(*label.candidates, candidate),
+                selected_candidate_id=candidate.id,
+                hidden=False,
+            )
+        )
+    return tuple(adjusted)
 
 
 def _replace(labels: tuple[Label, ...], label_id: str, updated: Label) -> tuple[Label, ...]:
@@ -182,6 +225,28 @@ def apply_review_actions(
             continue
         if label.locked:
             rejected.append((issue.element_id, "label is locked by an override"))
+            continue
+
+        if action.type == ReviewActionType.FINE_ADJUST_LABEL:
+            for updated in _fine_adjustments(label, action):
+                candidate_labels = _replace(current, label.id, updated)
+                issues = _hard_issues(candidate_labels, scene, transform, style, furniture)
+                if not issues <= baseline:
+                    continue
+                cost = layout_cost(candidate_labels, scene, transform, style)[0]
+                if not require_cost_non_increase or cost <= current_cost + soft_cost_epsilon:
+                    current, baseline, current_cost = candidate_labels, issues, cost
+                    applied.append(issue.element_id)
+                    break
+            else:
+                repaired = _repair_candidate(
+                    label, current, scene, transform, style, furniture, baseline, current_cost
+                )
+                if repaired is not None:
+                    current, baseline, current_cost = repaired
+                    applied.append(issue.element_id)
+                else:
+                    rejected.append((issue.element_id, "no legal fine adjustment"))
             continue
 
         updated = _apply_one(label, action)

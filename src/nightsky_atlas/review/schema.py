@@ -113,6 +113,8 @@ def _validate_action(action: ReviewAction, label_ids: set[str], element_id: str)
     if action.type == ReviewActionType.FINE_ADJUST_LABEL:
         if action.offset_x_mm is None or action.offset_y_mm is None:
             raise ReviewValidationError(f"{element_id}: fine_adjust_label requires both offsets")
+        if action.offset_x_mm == 0.0 and action.offset_y_mm == 0.0:
+            raise ReviewValidationError(f"{element_id}: fine_adjust_label requires an offset")
     if action.type == ReviewActionType.SELECT_DISPLAY_NAME_VARIANT:
         if action.display_name_variant is None:
             raise ReviewValidationError(

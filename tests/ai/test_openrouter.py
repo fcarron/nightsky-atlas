@@ -134,6 +134,10 @@ def test_prompt_lists_element_candidates() -> None:
                 kind="label",
                 text="M87",
                 candidates=("N", "S"),
+                current_candidate="N",
+                allowed_distances=("near", "medium", "far"),
+                fine_adjust_radius_mm=3.0,
+                constellation_line_conflict=True,
             ),
         ),
     )
@@ -143,3 +147,6 @@ def test_prompt_lists_element_candidates() -> None:
     reviewer.review(request)
     prompt = captured["body"]["messages"][1]["content"][0]["text"]
     assert "candidates=[N,S]" in prompt
+    assert "current_candidate=N" in prompt
+    assert "fine_adjust_label uses offset_x_mm and offset_y_mm" in prompt
+    assert "constellation_line_overlap" in prompt

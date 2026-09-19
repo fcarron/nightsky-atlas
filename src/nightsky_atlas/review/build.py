@@ -12,8 +12,8 @@ from nightsky_atlas.scene.models import ChartScene
 
 __all__ = ["build_review_request"]
 
-PROMPT_VERSION = "m10-2"
-SCHEMA_VERSION = "m10-1"
+PROMPT_VERSION = "m10-3"
+SCHEMA_VERSION = "m10-2"
 _IMPORTANT_STAR_MAGNITUDE = 6.0
 
 # Actions the reviewer is told about.  ``select_display_name_variant`` is only
@@ -31,10 +31,10 @@ _ADVERTISED_ACTIONS: tuple[ReviewActionType, ...] = (
 
 
 def _permitted_actions(elements: list[ReviewElement]) -> tuple[str, ...]:
-    actions = [action.value for action in _ADVERTISED_ACTIONS]
-    if any(element.display_name_variants for element in elements):
-        actions.append(ReviewActionType.SELECT_DISPLAY_NAME_VARIANT.value)
-    return tuple(actions)
+    # Display-name variants remain intentionally unavailable until the layout
+    # document can carry a selected variant through rendering and replay.
+    del elements
+    return tuple(action.value for action in _ADVERTISED_ACTIONS)
 
 
 def build_review_request(

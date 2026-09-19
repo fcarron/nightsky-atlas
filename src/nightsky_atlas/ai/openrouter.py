@@ -30,13 +30,10 @@ _API_KEY_ENV = "OPENROUTER_API_KEY"
 
 _SYSTEM_PROMPT = (
     "You are a meticulous star-atlas cartographer reviewing one printed chart. "
-    "Identify only genuine label placement problems (ambiguous association, "
-    "overlapping labels, unreadable labels, wrong position, missing labels). "
-    "You may only request whitelisted actions. select_candidate must include a "
-    "candidate value; select_display_name_variant must include a "
-    "display_name_variant value and must not be used otherwise. If no action is "
-    "clearly correct, omit the action. Respond with a single JSON object and "
-    "nothing else."
+    "Identify only genuine presentation problems. Astronomy and chart geometry "
+    "are immutable. You may request only whitelisted layout actions; never give "
+    "arbitrary page coordinates. If no action is clearly correct, omit it. "
+    "Respond with a single JSON object and nothing else."
 )
 
 
@@ -79,6 +76,14 @@ def _element_lines(request: ReviewRequest) -> str:
             parts.append(
                 f"variants=[{','.join(element.display_name_variants)}]"
             )
+        if element.current_candidate is not None:
+            parts.append(f"current_candidate={element.current_candidate}")
+        if element.allowed_distances:
+            parts.append(f"distances=[{','.join(element.allowed_distances)}]")
+        if element.fine_adjust_radius_mm is not None:
+            parts.append(f"fine_adjust_radius_mm={element.fine_adjust_radius_mm:.1f}")
+        if element.constellation_line_conflict:
+            parts.append("constellation_line_conflict=true")
         lines.append(" ".join(parts))
     return "\n".join(lines)
 
@@ -87,19 +92,27 @@ def _user_prompt(request: ReviewRequest) -> str:
     return (
         f"Page: {request.page_id}\n"
         f"Permitted actions: {', '.join(request.permitted_actions)}\n"
-        f"Issue types: ambiguous_association, overlapping_labels, unreadable_label, "
-        f"wrong_position, missing_label, other\n"
+        "Issue types: ambiguous_association, overlapping_labels, unreadable_label, "
+        "wrong_position, missing_label, constellation_line_overlap, "
+        "label_too_close_to_symbol, label_cluster_too_dense, poor_visual_balance, "
+        "leader_line_needed, display_name_too_long, other\n"
         f"Current diagnostics: {json.dumps(request.diagnostics, sort_keys=True)}\n\n"
         "Elements (id kind [text] [box left,top,width,height in mm] "
         "[candidates=...] [variants=...]):\n"
         f"{_element_lines(request)}\n\n"
-        "Rules: select_candidate must use one of the candidates listed for that "
-        "element (compass position of the label relative to its anchor). "
-        "select_display_name_variant only when the element lists variants. "
-        "If no listed option is clearly better, omit the action.\n\n"
+        "Action fields: select_candidate uses candidate=N|NE|E|SE|S|SW|W|NW from "
+        "the listed candidates. move_label uses preferred_direction plus optional "
+        "distance=near|medium|far and max_offset_mm<=3. fine_adjust_label uses "
+        "offset_x_mm and offset_y_mm within the listed radius; the engine snaps "
+        "this intent to a legal 0.5-mm local placement. show_optional_label and "
+        "hide_optional_label take no extra field. request_line_knockout may only "
+        "be used for constellation_line_overlap. If no listed option is clearly "
+        "better, omit the action.\n\n"
         "Return JSON: {\"page_score\": 0-10, \"issues\": [{\"element_id\": str, "
         "\"issue_type\": str, \"severity\": 1-10, \"action\": {\"type\": str, "
-        "\"candidate\": \"N|NE|E|SE|S|SW|W|NW\" (only for select_candidate)} }]}"
+        "\"candidate\": \"N|NE|E|SE|S|SW|W|NW\", \"preferred_direction\": "
+        "\"N|NE|E|SE|S|SW|W|NW\", \"distance\": \"near|medium|far\", "
+        "\"offset_x_mm\": number, \"offset_y_mm\": number} }]}"
     )
 
 

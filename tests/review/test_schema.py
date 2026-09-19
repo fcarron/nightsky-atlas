@@ -99,6 +99,17 @@ def test_display_name_variant_requires_value() -> None:
         validate_review(payload, known_element_ids=KNOWN)
 
 
+def test_fine_adjust_requires_a_nonzero_bounded_intent() -> None:
+    payload = valid_payload()
+    payload["issues"][0]["action"] = {
+        "type": "fine_adjust_label",
+        "offset_x_mm": 0.0,
+        "offset_y_mm": 0.0,
+    }
+    with pytest.raises(ReviewValidationError):
+        validate_review(payload, known_element_ids=KNOWN)
+
+
 def test_visibility_action_requires_label_element() -> None:
     payload = {
         "page_score": 8.0,

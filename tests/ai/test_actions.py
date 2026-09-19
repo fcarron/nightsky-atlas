@@ -88,6 +88,26 @@ def test_select_candidate_applied() -> None:
     assert outcome.labels[0].selected_candidate_id == "label:x:S"
 
 
+def test_fine_adjust_snaps_to_a_local_deterministic_grid() -> None:
+    outcome = apply_review_actions(
+        (make_label(),),
+        make_result(
+            "label:x",
+            {"type": "fine_adjust_label", "offset_x_mm": 0.8, "offset_y_mm": -0.6},
+        ),
+        SCENE,
+        TRANSFORM,
+        STYLE,
+    )
+
+    adjusted = outcome.labels[0].selected_candidate()
+    assert outcome.applied == ("label:x",)
+    assert adjusted is not None
+    assert adjusted.id == "label:x:N:fine:+1.0:-0.5"
+    assert adjusted.bounds.left_mm == 101.0
+    assert adjusted.bounds.top_mm == 99.5
+
+
 def test_low_severity_actions_ignored() -> None:
     result = ReviewResult(
         page_score=5.0,
