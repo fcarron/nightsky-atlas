@@ -285,9 +285,11 @@ AI is first-class but optional; the atlas always builds with AI disabled.
   `max_iterations`, `max_cost_per_chart_usd`.
 - **18.3 Structured output only** — validated schema; never parse prose. All
   responses pass schema validation before affecting layout.
-- **18.4 Allowed actions** — whitelist only: `select_candidate`,
-  `show_optional_label`, `hide_optional_label`, `use_leader_line`,
-  `remove_leader_line`, `select_display_name_variant`; unknown actions rejected.
+- **18.4 Allowed actions** — whitelist only: `select_candidate`, `move_label`
+  (direction/distance intent), `fine_adjust_label` (bounded local intent),
+  `show_optional_label`, `hide_optional_label` and `request_line_knockout`.
+  Leader-line and display-name actions may only be advertised once their state
+  exists in the layout document; unknown actions are rejected.
 - **18.5 AI cannot approve invalid geometry** — apply permitted actions to a
   copied layout, run deterministic validation, compute cost, reject changes that
   add hard violations, re-render only if accepted. AI is advisory.
@@ -488,15 +490,17 @@ Full plan, acceptance criteria and checkpoints: `docs/DEVELOPMENT_PLAN.md`.
 - [x] M21.1–M21.4 observing-list-driven DSO selection (separate render/label
   priorities; Herschel 400 forced into Standard; per-type visibility evaluators
   decide which objects are drawn); [ ] M21.5 further observing lists.
-- [ ] M17 Pocket, M18 Deep data expansion, M19 extended structures, M20 Deep
-  atlas.
+- [~] M17 Pocket: preset/style and representative renders done; complete Pocket
+  build and field test remain. [~] M18 Deep: preset/style and representative
+  renders done; data expansion remains. M19 extended structures and M20 Deep
+  atlas remain.
 
 Artifacts, frozen geometry and open issues: `docs/STATE.md`.
 
 ## 38. Explicit deferred features
 
 Constellation artwork; artistic colour Milky Way; eyepiece orientation modes;
-web viewer; GUI; custom atlas wizard; observing-list integration; finder/FOV
+web viewer; GUI; custom atlas wizard; finder/FOV
 overlays; variable-star charts; photographic overlays; translated editions;
 print-on-demand. Do not implement because they seem useful. List:
 `docs/PRODUCT.md`.

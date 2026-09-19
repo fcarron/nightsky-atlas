@@ -40,6 +40,10 @@ page is visible.
 - M21.1–M21.4 complete (observing-list-driven DSO selection with per-type
   visibility; Herschel 400 forced into Standard). M21.5 not started.
 - M11.4 and M13.3 complete (live OpenRouter review and model selection).
+- Deterministic index pages, constellation-line label avoidance/knockouts,
+  edition-specific symbol curves and bounded AI move/fine-adjust intents are
+  complete. Pocket and Deep presets exist and have representative renders, but
+  neither complete edition has yet been field-tested.
 - Live snapshot of progress, artifacts and open issues: `docs/STATE.md`.
 
 ## M0 — Repository and executable skeleton
@@ -261,10 +265,10 @@ page is visible.
 
 Only begin after Standard is stable.
 
-- [ ] **M17.1 Pocket atlas configuration** — reduce stellar depth, DSO density
+- [x] **M17.1 Pocket atlas configuration** — reduce stellar depth, DSO density
   and label density; increase field size/usability.
 - [ ] **M17.2 Pocket tiling** — may differ substantially from Standard.
-- [ ] **M17.3 Pocket style** — prioritize quick recognition and uncluttered
+- [x] **M17.3 Pocket style** — prioritize quick recognition and uncluttered
   navigation.
 - [ ] **M17.4 Build and field-test Pocket alpha**.
 
@@ -272,7 +276,8 @@ Only begin after Standard is stable.
 
 Only begin after Standard/Pocket architecture proves stable.
 
-- [ ] **M18.1 Deep data requirements** — which additional catalogues materially
+- [~] **M18.1 Deep data requirements** — a provisional Deep preset (20 mm/deg,
+  magnitude 10.0, denser labels) exists; which additional catalogues materially
   improve visual observing.
 - [ ] **M18.2 License review per proposed dataset** — no ingestion before a
   license/provenance decision.

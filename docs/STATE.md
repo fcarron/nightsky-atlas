@@ -5,7 +5,8 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 
 ## Progress
 
-- M0–M14 complete. M15.1–M15.4 complete. M15.5 in progress (alpha built, field test pending).
+- M0–M14 complete. M15.1–M15.4 complete. M15.5 in progress (a full current
+  Standard rebuild and field test remain).
 - M16.1 complete (manual Stable-ID label overrides, including locked placements).
 - M11.4 and M13.3 complete (live AI review through OpenRouter).
 - Grid coordinate edge labels added (RA along top/bottom, Dec along left/right),
@@ -74,9 +75,10 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   the catalogue angular size (like galaxies) instead of fixed ~1.4 mm marks;
   galaxies still preserve axis ratio and position angle. Missing/unreliable
   sizes fall back to per-class `fallback_diameter_mm`, floored by
-  `min_diameter_mm` and capped by `max_diameter_mm` only where required
-  (`use_angular_size` opts a class in; planetary/bright/dark nebulae and galaxy
-  clusters remain semantic fixed-size until reviewed). Renderer, debug zones,
+  `min_diameter_mm` and capped by `max_diameter_mm` only where required.
+  Planetary nebulae now use reliable angular sizes too (with a 1.4-mm Standard
+  fallback); remaining extended classes retain configured semantic fallbacks
+  until better outline data exists. Renderer, debug zones,
   label exclusion and collision detection all consume the same extent. Config
   lives under `dso.<class>` in `styles/standard.yaml`.
 - Deterministic label selection and central priorities: `catalog/priority.py`
@@ -112,7 +114,26 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   dark, neighbours mid-grey).  Constellation full names come from the IAU
   abbreviation registry in `catalog/constellations.py`. Manifest records
   `overview_pages` with `star_count`.
-- `make check`: Ruff clean, 639 tests passing.
+- Deterministic atlas index: appended vector index pages contain canonical DSO
+  designations, type, constellation and primary/secondary chart codes, plus a
+  footprint-derived constellation index. Index entries are generated only from
+  the edition's rendered/forced objects; no manual object list is maintained.
+- Label/constellation-line geometry is centralised: line intersections and a
+  0.4-mm safety margin contribute soft cost; final stick-figure segments are
+  knocked out beneath labels when necessary. Grid and astronomical geometry are
+  unchanged.
+- AI review now receives candidate directions, distance steps, local fine-adjust
+  radius and constellation-line conflict metadata. `move_label` expresses
+  direction/distance intent; `fine_adjust_label` snaps to a deterministic
+  0.5-mm grid within +/-3 mm and passes the normal hard gate. Leader-line and
+  display-name actions remain deliberately unavailable until their presentation
+  state exists.
+- Pocket and Deep presets are implemented with physical 10-mm overlap targets,
+  P/S/D chart codes, edition-specific DSO visibility and star-size curves.
+  Representative renders exist; do not build the complete Deep atlas yet.
+- Chart pages now show subdued constellation names. Front matter records frame,
+  projection and scale and has an expanded observing-symbol key.
+- `make check`: Ruff clean, 677 tests passing.
 - Standard v0.2 full-sky tiling (draft): explicit declination rings every
   16 deg (-72 ... +72), stereographic polar caps, RA staggering, frozen
   config-driven counts.  Ordering is north-to-south (reading order):
@@ -218,6 +239,16 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   `nightsky chart render --chart test-orion --star-store ... --optimize`.
 
 ## Open issues
+
+- Re-run the complete 116-chart Standard build after `d915a6c`; the prior run
+  stopped at `standard-036` on an unrendered WDS component, now covered by a
+  regression test. `standard-036` itself rebuilds with zero hard issues.
+- M15.5 remains a human checkpoint: print Orion, Cygnus, Virgo/Coma,
+  Sagittarius and polar pages at 100% and use them under red light / at the
+  telescope before treating Standard as publication-ready.
+- M16.3 publication preflight is still missing. It should reject hard layout
+  issues, incomplete coverage, missing provenance and a stale/failed atlas
+  build in one command.
 
 - The alpha artifacts predate the Hipparcos bright-star supplement and must be
   rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page
