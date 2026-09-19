@@ -12,6 +12,7 @@ from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.build.preflight import (
     collect_build_inputs,
     collect_data_sources,
+    validate_atlas_output,
     validate_publication_inputs,
 )
 from nightsky_atlas.catalog.manifest import file_sha256
@@ -144,3 +145,17 @@ def test_build_input_fingerprints_change_with_file_content(tmp_path: Path) -> No
     source.write_text("second", encoding="utf-8")
     after = collect_build_inputs({"geometry": directory})
     assert before["geometry"]["sha256"] != after["geometry"]["sha256"]
+
+
+def test_output_validator_rejects_unsafe_artifact_path(tmp_path: Path) -> None:
+    atlas_root = tmp_path / "atlas"
+    atlas_root.mkdir()
+    (atlas_root / "manifest.json").write_text(
+        json.dumps({
+            "pages": [], "chart_count": 0, "total_hard_issues": 0,
+            "output_artifacts": {"../outside.pdf": "invalid"},
+        }),
+        encoding="utf-8",
+    )
+    issues = validate_atlas_output(atlas_root)
+    assert "unsafe output path: ../outside.pdf" in issues

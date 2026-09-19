@@ -45,9 +45,11 @@ from nightsky_atlas.build.chart import (
 from nightsky_atlas.build.preflight import (
     collect_build_inputs,
     collect_data_sources,
+    validate_atlas_output,
     validate_publication_inputs,
 )
 from nightsky_atlas.build.progress import Progress, null_progress
+from nightsky_atlas.catalog.manifest import file_sha256
 from nightsky_atlas.catalog.models import Star
 from nightsky_atlas.catalog.observing_lists import (
     DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
@@ -725,6 +727,7 @@ def _build_atlas_impl(
             "forced": forced_lists,
         },
         "chart_count": len(results),
+        "render_png": render_png,
         "front_matter_page_count": front_matter_pages,
         "chart_directory": {
             "page_count": chart_directory_pages,
@@ -746,12 +749,6 @@ def _build_atlas_impl(
         },
         "pages": [page_result.to_dict() for page_result in results],
     }
-    manifest_path = outroot / "manifest.json"
-    with progress.step("write manifest", detail=True):
-        manifest_path.write_text(
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-
     draft_report_path: Path | None = None
     if write_draft_report and atlas.tiling is not None:
         with progress.step("write draft report", detail=True):
@@ -765,6 +762,28 @@ def _build_atlas_impl(
             )
         progress.info(f"draft report -> {draft_report_path}")
         print(render_text_summary(draft_report))
+
+    artifact_paths = ["atlas.pdf"]
+    for page_result in results:
+        artifact_paths.append(f"charts/{page_result.chart_id}/chart.pdf")
+        if render_png:
+            artifact_paths.append(f"charts/{page_result.chart_id}/preview.png")
+    if draft_report_path is not None:
+        artifact_paths.append("draft-report.json")
+    manifest["draft_report_written"] = draft_report_path is not None
+    manifest["output_artifacts"] = {
+        relative: file_sha256(outroot / relative) for relative in artifact_paths
+    }
+    manifest_path = outroot / "manifest.json"
+    with progress.step("write manifest", detail=True):
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+
+    if publication:
+        output_issues = validate_atlas_output(outroot, publication=True)
+        if output_issues:
+            raise ValueError("publication output validation failed: " + "; ".join(output_issues))
 
     if publication and any(page.hard_issues for page in results):
         raise ValueError(

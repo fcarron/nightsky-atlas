@@ -33,6 +33,7 @@ from nightsky_atlas.atlas.tiling import (
 )
 from nightsky_atlas.build.atlas import build_atlas
 from nightsky_atlas.build.chart import build_chart_context
+from nightsky_atlas.build.preflight import validate_atlas_output
 from nightsky_atlas.build.progress import Progress
 from nightsky_atlas.catalog.constellations import load_constellations
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
@@ -545,6 +546,15 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     report.add_argument("--coverage-step", type=float, default=None)
     report.add_argument("--out", type=Path, default=None)
     report.set_defaults(handler=_command_atlas_report)
+
+    validate = atlas_subparsers.add_parser(
+        "validate", help="check a built atlas and its recorded input fingerprints"
+    )
+    _add_edition_argument(validate)
+    validate.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
+    validate.add_argument("--outdir", type=Path, default=_DEFAULT_OUTDIR)
+    validate.add_argument("--publication", action="store_true")
+    validate.set_defaults(handler=_command_atlas_validate)
 
     build = atlas_subparsers.add_parser("build", help="build pages and a combined PDF")
     _add_edition_argument(build)
@@ -1144,6 +1154,18 @@ def _command_atlas_report(args: argparse.Namespace) -> int:
     )
     print(render_text_summary(report))
     print(f"-> {out}")
+    return 0
+
+
+def _command_atlas_validate(args: argparse.Namespace) -> int:
+    atlas = load_atlas_config(args.atlas)
+    outroot = args.outdir / atlas.id
+    issues = validate_atlas_output(outroot, publication=args.publication)
+    if issues:
+        for issue in issues:
+            print(f"issue: {issue}")
+        return 1
+    print(f"{atlas.id}: atlas output valid -> {outroot}")
     return 0
 
 

@@ -12,10 +12,12 @@ import yaml
 from nightsky_atlas.atlas.config import load_atlas_config
 from nightsky_atlas.build.atlas import AtlasBuildResult, build_atlas, chart_definitions
 from nightsky_atlas.build.chart import field_query_box, find_chart
+from nightsky_atlas.build.preflight import validate_atlas_output
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
 from nightsky_atlas.catalog.openngc import iter_openngc_objects
 from nightsky_atlas.catalog.store import chart_query_box
 from nightsky_atlas.chart.models import ChartDefinition
+from nightsky_atlas.cli import main
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = REPO_ROOT / "styles" / "standard.yaml"
@@ -126,6 +128,33 @@ def test_build_atlas_subset(tmp_path: Path) -> None:
         "inputs_passed": None,
         "output_passed": None,
     }
+    assert validate_atlas_output(tmp_path / "test") == ()
+
+
+def test_atlas_validate_detects_changed_output(tmp_path: Path) -> None:
+    atlas_path = make_atlas_file(tmp_path)
+    result = build_atlas(
+        atlas_path=atlas_path,
+        style_path=STYLE,
+        outdir=tmp_path,
+        stars_csv=STARS,
+        dsos_path=make_dso_json(tmp_path),
+        render_png=False,
+        write_draft_report=False,
+    )
+    assert main([
+        "atlas", "validate", "--atlas", str(atlas_path), "--outdir", str(tmp_path)
+    ]) == 0
+    assert main([
+        "atlas", "validate", "--atlas", str(atlas_path), "--outdir", str(tmp_path),
+        "--publication",
+    ]) == 1
+    atlas_path.write_text(atlas_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    assert "atlas input fingerprints are stale" in validate_atlas_output(
+        tmp_path / "test", publication=True
+    )
+    result.combined_pdf.write_bytes(b"changed")
+    assert "output checksum mismatch: atlas.pdf" in validate_atlas_output(tmp_path / "test")
 
 
 def test_build_rejects_unknown_or_empty_chart_selection(tmp_path: Path) -> None:

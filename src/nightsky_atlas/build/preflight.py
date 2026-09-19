@@ -5,16 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
-from nightsky_atlas.atlas.config import AtlasConfig
-from nightsky_atlas.atlas.tiling import TilingSpec, coverage_report
+from nightsky_atlas.atlas.config import AtlasConfig, load_atlas_config
+from nightsky_atlas.atlas.tiling import TilingSpec, chart_definitions, coverage_report
 from nightsky_atlas.catalog.manifest import file_sha256
 from nightsky_atlas.catalog.store import StarStore
 from nightsky_atlas.chart.models import ChartDefinition
 
-__all__ = ["collect_build_inputs", "collect_data_sources", "validate_publication_inputs"]
+__all__ = [
+    "collect_build_inputs",
+    "collect_data_sources",
+    "validate_atlas_output",
+    "validate_publication_inputs",
+]
 
 
 def collect_build_inputs(
@@ -134,3 +139,122 @@ def validate_publication_inputs(
             issues.append(f"incomplete source or license metadata for {source['path']}")
     if issues:
         raise ValueError("publication preflight failed: " + "; ".join(issues))
+
+
+def validate_atlas_output(outroot: str | Path, *, publication: bool = False) -> tuple[str, ...]:
+    root = Path(outroot)
+    manifest_path = root / "manifest.json"
+    if not manifest_path.is_file():
+        return (f"missing atlas manifest: {manifest_path}",)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return (f"invalid atlas manifest: {exc}",)
+    if not isinstance(manifest, dict):
+        return ("atlas manifest must be a JSON object",)
+
+    issues: list[str] = []
+    pages = manifest.get("pages")
+    if not isinstance(pages, list) or not all(isinstance(page, dict) for page in pages):
+        return ("atlas manifest has no valid page list",)
+    chart_ids = [page.get("chart_id") for page in pages]
+    valid_chart_ids = all(isinstance(chart_id, str) for chart_id in chart_ids)
+    if not valid_chart_ids:
+        issues.append("atlas manifest contains invalid chart IDs")
+    elif len(set(chart_ids)) != len(chart_ids):
+        issues.append("atlas manifest contains duplicate chart IDs")
+    if manifest.get("chart_count") != len(pages):
+        issues.append("atlas manifest chart count does not match page list")
+    hard_counts = [page.get("hard_issues") for page in pages]
+    if not all(isinstance(count, int) and count >= 0 for count in hard_counts):
+        issues.append("atlas manifest contains invalid hard-issue counts")
+    elif manifest.get("total_hard_issues") != sum(hard_counts):
+        issues.append("atlas manifest hard-issue total does not match pages")
+
+    expected_artifacts = {"atlas.pdf"}
+    for chart_id in chart_ids:
+        if isinstance(chart_id, str):
+            expected_artifacts.add(f"charts/{chart_id}/chart.pdf")
+            if manifest.get("render_png") is True:
+                expected_artifacts.add(f"charts/{chart_id}/preview.png")
+    if manifest.get("draft_report_written") is True:
+        expected_artifacts.add("draft-report.json")
+    artifacts = manifest.get("output_artifacts")
+    if not isinstance(artifacts, dict):
+        issues.append("atlas manifest has no output checksums")
+        artifacts = {}
+    for relative in sorted(expected_artifacts - artifacts.keys()):
+        issues.append(f"missing output checksum: {relative}")
+    for relative, checksum in sorted(artifacts.items()):
+        path = PurePosixPath(relative)
+        if path.is_absolute() or ".." in path.parts or not path.parts:
+            issues.append(f"unsafe output path: {relative}")
+            continue
+        target = root.joinpath(*path.parts)
+        if not target.resolve().is_relative_to(root.resolve()):
+            issues.append(f"unsafe output path: {relative}")
+            continue
+        if not target.is_file():
+            issues.append(f"missing output file: {relative}")
+        elif not isinstance(checksum, str) or file_sha256(target) != checksum:
+            issues.append(f"output checksum mismatch: {relative}")
+
+    if publication:
+        publication_state = manifest.get("publication_preflight")
+        if (
+            not isinstance(publication_state, dict)
+            or publication_state.get("requested") is not True
+        ):
+            issues.append("atlas was not built in publication mode")
+        elif publication_state.get("output_passed") is not True:
+            issues.append("publication build did not pass output validation")
+        if manifest.get("total_hard_issues") != 0:
+            issues.append("atlas contains hard layout issues")
+        fingerprints = manifest.get("input_fingerprints")
+        if not isinstance(fingerprints, dict) or not fingerprints:
+            issues.append("atlas manifest has no input fingerprints")
+        else:
+            paths = {
+                name: entry.get("path") if isinstance(entry, dict) else None
+                for name, entry in fingerprints.items()
+            }
+            if collect_build_inputs(paths) != fingerprints:
+                issues.append("atlas input fingerprints are stale")
+        sources = manifest.get("data_sources")
+        if not isinstance(sources, list) or not sources:
+            issues.append("atlas manifest has no catalogue sources")
+        else:
+            for source in sources:
+                if not isinstance(source, dict):
+                    issues.append("invalid catalogue source entry")
+                    continue
+                selected = source.get("path")
+                if not isinstance(selected, str) or not Path(selected).is_file():
+                    issues.append(f"missing catalogue source: {selected}")
+                    continue
+                if file_sha256(selected) != source.get("sha256"):
+                    issues.append(f"catalogue source changed: {selected}")
+                source_manifest = source.get("manifest_path")
+                if source_manifest is not None:
+                    try:
+                        current = json.loads(Path(source_manifest).read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        current = None
+                    if current != source.get("manifest"):
+                        issues.append(f"catalogue provenance changed: {selected}")
+        config = manifest.get("config")
+        atlas_config = config.get("atlas") if isinstance(config, dict) else None
+        if isinstance(atlas_config, str) and Path(atlas_config).is_file():
+            atlas = load_atlas_config(atlas_config)
+            charts = chart_definitions(atlas)
+            if chart_ids != [chart.id for chart in charts]:
+                issues.append("atlas chart set differs from the current definition")
+            if atlas.tiling is None:
+                issues.append("atlas has no full-sky tiling")
+            else:
+                spec = TilingSpec.from_config(atlas.tiling)
+                if not coverage_report(charts, step_deg=spec.coverage_step_deg).covers_all:
+                    issues.append("atlas chart tiling has coverage gaps")
+        else:
+            issues.append("missing atlas definition for publication validation")
+    return tuple(issues)

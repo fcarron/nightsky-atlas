@@ -101,6 +101,12 @@ directory only after validation. An earlier publication is retained as
 `build/.standard-previous` (or a numbered variant). Development subsets remain
 available without this flag.
 
+After building, verify the files and recorded inputs without rendering again:
+
+```bash
+.venv/bin/nightsky atlas validate --edition standard --publication
+```
+
 The combined `build/standard/atlas.pdf` opens with front matter and two
 whole-sky overview pages (northern and southern hemispheres) showing the
 constellation background, the bright stars and one trapezoidal cell per chart
