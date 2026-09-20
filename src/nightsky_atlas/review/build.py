@@ -15,10 +15,8 @@ PROMPT_VERSION = "m10-3"
 SCHEMA_VERSION = "m10-2"
 _IMPORTANT_STAR_MAGNITUDE = 6.0
 
-# Actions the reviewer is told about.  ``select_display_name_variant`` is only
-# advertised when an element actually lists variants; leader-line actions are
-# omitted until the layout model carries leader-line state, so the reviewer is
-# never invited to request something the action engine cannot apply.
+# Actions the reviewer is told about.  Display-name variants remain unavailable
+# until the layout document carries a selected variant through replay.
 _ADVERTISED_ACTIONS: tuple[ReviewActionType, ...] = (
     ReviewActionType.SELECT_CANDIDATE,
     ReviewActionType.SHOW_OPTIONAL_LABEL,
@@ -26,6 +24,8 @@ _ADVERTISED_ACTIONS: tuple[ReviewActionType, ...] = (
     ReviewActionType.MOVE_LABEL,
     ReviewActionType.FINE_ADJUST_LABEL,
     ReviewActionType.REQUEST_LINE_KNOCKOUT,
+    ReviewActionType.ENABLE_LEADER_LINE,
+    ReviewActionType.REMOVE_LEADER_LINE,
 )
 
 
@@ -102,6 +102,10 @@ def build_review_request(
                 allowed_distances=("near", "medium", "far"),
                 fine_adjust_radius_mm=3.0,
                 constellation_line_conflict=line_conflict,
+                leader_line_capable=any(
+                    item.dso.id == label.target_id for item in scene.deep_sky_objects
+                ),
+                leader_line_enabled=label.leader_line,
                 hidden=label.hidden,
             )
         )

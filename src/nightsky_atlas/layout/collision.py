@@ -14,6 +14,7 @@ from enum import StrEnum
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
+from nightsky_atlas.layout.leader_lines import resolve_leader_lines
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.render.double_stars import printed_star_obstacles
 from nightsky_atlas.render.symbols import dso_symbol_extent
@@ -41,6 +42,7 @@ class IssueType(StrEnum):
     MISSING_CANDIDATE = "missing_candidate"
     DUPLICATE_LABEL_ID = "duplicate_label_id"
     UNKNOWN_TARGET = "unknown_target"
+    INVALID_LEADER_LINE = "invalid_leader_line"
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +153,18 @@ def find_hard_violations(
             )
 
     placed = placed_candidates(labels)
+    legal_lines = {
+        line.label_id for line in resolve_leader_lines(labels, scene, transform, style)
+    }
+    for label in labels:
+        if label.leader_line and label.id not in legal_lines:
+            issues.append(
+                _issue(
+                    IssueType.INVALID_LEADER_LINE,
+                    (label.id,),
+                    f"{label.id} has no legal leader-line route",
+                )
+            )
     printable = PageRect(
         left_mm=transform.page.margin_mm,
         top_mm=transform.page.margin_mm,

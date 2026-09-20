@@ -96,6 +96,10 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   no valid candidate in the dense field. Review previews for the acceptance
   fields: `build/label-selection/standard/charts/{standard-001,021,031,053,
   063,083,116}/preview.png`.
+- Distant deep-sky labels can now carry a serialized leader-line state. The
+  optimizer enables it only for legal far-ring placements; AI may request it
+  for an individual DSO label, subject to the same deterministic route and
+  hard gate. Vector PDF and PNG draw the same resolved segment.
 - Footer/navigation: chart title is 8.5 pt with a bold chart code, and
   neighbour navigation is 7.5 pt with a bold code. E/W references are rotated
   along the narrow side margin so they stay outside the chart field without

@@ -26,6 +26,7 @@ from nightsky_atlas.chart.presentation import (
     presentation_for,
 )
 from nightsky_atlas.layout.geometry import expand_rect
+from nightsky_atlas.layout.leader_lines import resolve_leader_lines
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
@@ -144,6 +145,7 @@ def draw_chart_page(
     _draw_labels(cr, constellation_labels, style)
     _draw_chart_border(cr, transform, style)
     _draw_outlines(cr, transform, scene, style)
+    _draw_leader_lines(cr, label_list, scene, transform, style)
     _draw_stars(cr, transform, scene, size_model, style)
     _draw_dsos(cr, transform, scene, size_model, style, bold_symbol_ids)
     _draw_stars_over_dso_symbols(cr, transform, scene, size_model, style)
@@ -798,6 +800,28 @@ def _draw_labels(
             label.font_size_pt if label.font_size_pt is not None else style.label.font_size_pt,
             label.font_weight,
         )
+
+
+def _draw_leader_lines(
+    cr: cairo.Context[cairo.Surface],
+    labels: tuple[Label, ...],
+    scene: ChartScene,
+    transform: PageTransform,
+    style: StyleConfig,
+) -> None:
+    lines = resolve_leader_lines(labels, scene, transform, style)
+    if not lines:
+        return
+    line_style = style.label.leader_lines
+    cr.save()
+    cr.set_source_rgb(line_style.gray, line_style.gray, line_style.gray)
+    cr.set_line_width(mm_to_pt(line_style.width_mm))
+    cr.set_line_cap(cairo.LINE_CAP_ROUND)
+    for line in lines:
+        cr.move_to(mm_to_pt(line.start.x_mm), mm_to_pt(line.start.y_mm))
+        cr.line_to(mm_to_pt(line.end.x_mm), mm_to_pt(line.end.y_mm))
+    cr.stroke()
+    cr.restore()
 
 
 def _draw_debug(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 
@@ -50,6 +52,14 @@ def test_candidate_lookup_unknown_returns_none() -> None:
 def test_label_serialization_round_trip() -> None:
     label = make_label().with_selection("label:dso:M87:N")
     assert Label.from_dict(label.to_dict()) == label
+
+
+def test_leader_line_state_round_trip_and_placement_change() -> None:
+    label = replace(make_label().with_selection("label:dso:M87:N"), leader_line=True)
+    assert Label.from_dict(label.to_dict()) == label
+    assert label.with_placement("label:dso:M87:SW").leader_line is False
+    assert label.with_placement("label:dso:M87:N").leader_line is True
+    assert label.with_placement(None, hidden=True).leader_line is False
 
 
 def test_label_typography_round_trip() -> None:

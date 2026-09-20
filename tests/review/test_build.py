@@ -103,11 +103,12 @@ def test_label_elements_list_available_candidates() -> None:
     label_elements = [element for element in request.elements if element.kind == "label"]
     assert label_elements
     assert all(element.candidates for element in label_elements)
-    # No element carries display-name variants yet, so the reviewer is not
-    # invited to request them, and unsupported leader-line actions stay hidden.
+    # No element carries display-name variants yet; DSO leader-line state is exposed.
     assert "select_display_name_variant" not in request.permitted_actions
     assert "use_leader_line" not in request.permitted_actions
-    assert "remove_leader_line" not in request.permitted_actions
+    assert "enable_leader_line" in request.permitted_actions
+    assert "remove_leader_line" in request.permitted_actions
+    assert all(element.leader_line_capable for element in label_elements)
 
 
 def test_hidden_optional_label_is_available_for_show_action() -> None:

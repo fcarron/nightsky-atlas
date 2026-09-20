@@ -101,6 +101,7 @@ class Label:
     locked: bool = False
     font_size_pt: float | None = None
     font_weight: str = "normal"
+    leader_line: bool = False
 
     def candidate(self, candidate_id: str) -> LabelCandidate | None:
         """Return the candidate with the given ID, if present."""
@@ -142,6 +143,7 @@ class Label:
             locked=self.locked,
             font_size_pt=self.font_size_pt,
             font_weight=self.font_weight,
+            leader_line=self.leader_line and candidate_id == self.selected_candidate_id,
         )
 
     def with_placement(
@@ -164,6 +166,9 @@ class Label:
             locked=self.locked if locked is None else locked,
             font_size_pt=self.font_size_pt,
             font_weight=self.font_weight,
+            leader_line=(
+                self.leader_line and not hidden and candidate_id == self.selected_candidate_id
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -178,6 +183,7 @@ class Label:
             "locked": self.locked,
             "font_size_pt": self.font_size_pt,
             "font_weight": self.font_weight,
+            "leader_line": self.leader_line,
             "selected_candidate_id": self.selected_candidate_id,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
@@ -201,4 +207,5 @@ class Label:
                 None if data.get("font_size_pt") is None else float(data["font_size_pt"])
             ),
             font_weight=str(data.get("font_weight", "normal")),
+            leader_line=bool(data.get("leader_line", False)),
         )

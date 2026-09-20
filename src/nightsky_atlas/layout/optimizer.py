@@ -10,13 +10,14 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
 from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
 from nightsky_atlas.layout.labels import constellation_label_anchors
+from nightsky_atlas.layout.leader_lines import leader_line_for, resolve_leader_lines
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle, score_candidate
 from nightsky_atlas.layout.spatial import RectIndex
@@ -262,6 +263,22 @@ def optimize_labels(
         label.with_placement(placements.get(label.id), hidden=placements.get(label.id) is None)
         for label in labels
     )
+    auto_labels = list(optimized)
+    for index, label in enumerate(auto_labels):
+        candidate = label.effective_candidate()
+        if (
+            label.hidden
+            or candidate is None
+            or candidate.ring < style.label.leader_lines.auto_min_ring
+            or leader_line_for(label, tuple(auto_labels), scene, transform, style) is None
+        ):
+            continue
+        proposed = list(auto_labels)
+        proposed[index] = replace(label, leader_line=True)
+        enabled_count = sum(item.leader_line for item in proposed)
+        if len(resolve_leader_lines(tuple(proposed), scene, transform, style)) == enabled_count:
+            auto_labels = proposed
+    optimized = tuple(auto_labels)
     placed_count = sum(1 for value in placements.values() if value is not None)
     return OptimizationResult(
         labels=optimized,
@@ -403,7 +420,7 @@ def _evaluate(
 def layout_hash(labels: tuple[Label, ...]) -> str:
     """Return a stable hash of placements for repeated-layout detection."""
     payload = [
-        [label.id, label.selected_candidate_id, label.hidden]
+        [label.id, label.selected_candidate_id, label.hidden, label.leader_line]
         for label in sorted(labels, key=lambda item: item.id)
     ]
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("ascii")

@@ -20,6 +20,15 @@ label:
   font_size_pt: 6.0
   candidate_rings: 3
   ring_gap_mm: 3.0
+  leader_lines:
+    enabled: true
+    auto_min_ring: 2
+    min_length_mm: 2.5
+    max_length_mm: 12.0
+    symbol_gap_mm: 0.25
+    label_gap_mm: 0.4
+    width_mm: 0.12
+    gray: 0.4
   # Faint selected objects are drawn but not labelled (Messier, common names,
   # bright DSOs and observing-list members are exempt).
   dso_label_magnitude_limit: 12.5

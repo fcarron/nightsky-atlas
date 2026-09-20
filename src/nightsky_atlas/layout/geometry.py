@@ -21,8 +21,36 @@ __all__ = [
     "rects_overlap",
     "expand_rect",
     "segment_intersects_rect",
+    "segments_intersect",
     "split_segment_at_rect",
 ]
+
+
+def segments_intersect(
+    first_start: PagePoint,
+    first_end: PagePoint,
+    second_start: PagePoint,
+    second_end: PagePoint,
+) -> bool:
+    """Whether two finite segments cross or touch."""
+    if (
+        max(first_start.x_mm, first_end.x_mm) < min(second_start.x_mm, second_end.x_mm)
+        or max(second_start.x_mm, second_end.x_mm) < min(first_start.x_mm, first_end.x_mm)
+        or max(first_start.y_mm, first_end.y_mm) < min(second_start.y_mm, second_end.y_mm)
+        or max(second_start.y_mm, second_end.y_mm) < min(first_start.y_mm, first_end.y_mm)
+    ):
+        return False
+
+    def cross(a: PagePoint, b: PagePoint, c: PagePoint) -> float:
+        return (b.x_mm - a.x_mm) * (c.y_mm - a.y_mm) - (
+            b.y_mm - a.y_mm
+        ) * (c.x_mm - a.x_mm)
+
+    first_side_a = cross(first_start, first_end, second_start)
+    first_side_b = cross(first_start, first_end, second_end)
+    second_side_a = cross(second_start, second_end, first_start)
+    second_side_b = cross(second_start, second_end, first_end)
+    return first_side_a * first_side_b <= 0.0 and second_side_a * second_side_b <= 0.0
 
 
 def expand_rect(rect: PageRect, margin_mm: float) -> PageRect:

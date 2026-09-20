@@ -75,7 +75,17 @@ def _apply_one(label: Label, action: ReviewAction) -> Label | None:
     if action.type == ReviewActionType.HIDE_OPTIONAL_LABEL:
         if label.mandatory:
             return None
-        return label.with_placement(None, hidden=True)
+        return replace(label.with_placement(None, hidden=True), leader_line=False)
+    if action.type in (ReviewActionType.ENABLE_LEADER_LINE, ReviewActionType.USE_LEADER_LINE):
+        if (
+            not label.id.startswith("label:dso:")
+            or label.hidden
+            or label.effective_candidate() is None
+        ):
+            return None
+        return replace(label, leader_line=True)
+    if action.type == ReviewActionType.REMOVE_LEADER_LINE:
+        return replace(label, leader_line=False) if label.leader_line else None
     if action.type == ReviewActionType.REQUEST_LINE_KNOCKOUT:
         # Knockouts are derived from every final visible label by the renderer.
         # Returning the same placement records the review intent without letting

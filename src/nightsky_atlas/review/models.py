@@ -39,6 +39,8 @@ class ReviewElement:
     allowed_distances: tuple[str, ...] = ()
     fine_adjust_radius_mm: float | None = None
     constellation_line_conflict: bool = False
+    leader_line_capable: bool = False
+    leader_line_enabled: bool = False
     hidden: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -68,6 +70,10 @@ class ReviewElement:
             payload["fine_adjust_radius_mm"] = self.fine_adjust_radius_mm
         if self.constellation_line_conflict:
             payload["constellation_line_conflict"] = True
+        if self.leader_line_capable:
+            payload["leader_line_capable"] = True
+        if self.leader_line_enabled:
+            payload["leader_line_enabled"] = True
         if self.hidden:
             payload["hidden"] = True
         return payload

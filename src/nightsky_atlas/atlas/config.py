@@ -426,6 +426,19 @@ class LabelSelectionStyle(_StrictModel):
     always_label_object_types: tuple[DsoType, ...] = ()
 
 
+class LeaderLineStyle(_StrictModel):
+    """Physical drawing and eligibility rules for exceptional DSO callouts."""
+
+    enabled: bool = True
+    auto_min_ring: int = Field(default=2, ge=1)
+    min_length_mm: PositiveFloat = 2.5
+    max_length_mm: PositiveFloat = 12.0
+    symbol_gap_mm: PositiveFloat = 0.25
+    label_gap_mm: PositiveFloat = 0.4
+    width_mm: PositiveFloat = 0.12
+    gray: float = Field(default=0.4, ge=0.0, le=1.0)
+
+
 class LabelStyle(_StrictModel):
     """Label typography and candidate generation.
 
@@ -441,6 +454,7 @@ class LabelStyle(_StrictModel):
     font_size_pt: PositiveFloat
     candidate_rings: int = Field(default=2, ge=1)
     ring_gap_mm: PositiveFloat = 2.5
+    leader_lines: LeaderLineStyle = Field(default_factory=LeaderLineStyle)
     dso_label_magnitude_limit: float | None = None
     dso_labels: DsoLabelStyle = Field(default_factory=DsoLabelStyle)
     selection: LabelSelectionStyle = Field(default_factory=LabelSelectionStyle)

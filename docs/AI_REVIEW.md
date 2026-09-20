@@ -78,16 +78,16 @@ Initial whitelist:
 select_candidate
 show_optional_label
 hide_optional_label
-use_leader_line
+enable_leader_line
 remove_leader_line
 select_display_name_variant
 ```
 
 Later, tightly bounded offset adjustments may be added. Any unknown action is
-rejected. An action is only *advertised* to the reviewer once the layout model
-can honour it: `use_leader_line`/`remove_leader_line` stay hidden until labels
-carry leader-line state, and `select_display_name_variant` is only offered when
-an element lists variants.
+rejected. Leader-line actions apply only to deep-sky labels: the reviewer
+requests the state, while deterministic geometry and hard validation decide
+whether the route is printable. `select_display_name_variant` is only offered
+when an element lists variants.
 
 After every AI change:
 
