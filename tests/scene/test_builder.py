@@ -309,6 +309,94 @@ def test_selected_outline_can_cross_chart_without_dso_center_inside() -> None:
     assert scene.outline_count == 1
 
 
+def test_outline_alias_suppresses_only_its_nebula_fallback_symbol() -> None:
+    nebula = DeepSkyObject(
+        id="NGC7000",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.BRIGHT_NEBULA,
+        provenance=Provenance(catalogue="TEST", source_id="NGC7000"),
+        cross_ids=("C 020",),
+    )
+    galaxy = DeepSkyObject(
+        id="NGC7001",
+        ra_deg=188.0,
+        dec_deg=12.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance(catalogue="TEST", source_id="NGC7001"),
+    )
+    outlines = (
+        make_outline("C020", ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0))),
+        make_outline("NGC7001", ((187.5, 11.0), (188.5, 11.0), (188.5, 13.0))),
+    )
+    scene = build_scene(DEFINITION, (), (nebula, galaxy), nebula_outlines=outlines)
+
+    by_id = {item.dso.id: item for item in scene.deep_sky_objects}
+    assert by_id["NGC7000"].symbol_visible is False
+    assert by_id["NGC7001"].symbol_visible is True
+    assert {outline.dso_id for outline in scene.nebula_outlines} == {"NGC7000", "NGC7001"}
+
+
+def test_supernova_remnant_outline_is_solid_and_suppresses_fallback_symbol() -> None:
+    remnant = DeepSkyObject(
+        id="NGC6960",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.SUPERNOVA_REMNANT,
+        provenance=Provenance(catalogue="TEST", source_id="NGC6960"),
+    )
+    outlines = (
+        make_outline("NGC6960", ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0))),
+        make_outline("NGC6960", ((186.5, 12.5), (188.5, 12.5), (188.5, 13.5))),
+    )
+    scene = build_scene(DEFINITION, (), (remnant,), nebula_outlines=outlines)
+
+    assert scene.deep_sky_objects[0].symbol_visible is False
+    assert len(scene.nebula_outlines) == 2
+    assert all(not outline.dashed for outline in scene.nebula_outlines)
+
+
+@pytest.mark.parametrize("object_type", (DsoType.BRIGHT_NEBULA, DsoType.SUPERNOVA_REMNANT))
+def test_bright_nebula_and_supernova_remnant_outlines_are_solid(object_type: DsoType) -> None:
+    dso = DeepSkyObject(
+        id="NGC7000",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=object_type,
+        provenance=Provenance(catalogue="TEST", source_id="NGC7000"),
+    )
+    scene = build_scene(
+        DEFINITION,
+        (),
+        (dso,),
+        nebula_outlines=(
+            make_outline("NGC7000", ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0))),
+        ),
+    )
+
+    assert scene.nebula_outlines[0].dashed is False
+
+
+def test_dark_nebula_outline_is_dashed() -> None:
+    dso = DeepSkyObject(
+        id="B168",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.DARK_NEBULA,
+        provenance=Provenance(catalogue="TEST", source_id="B168"),
+    )
+    scene = build_scene(
+        DEFINITION,
+        (),
+        (dso,),
+        nebula_outlines=(
+            make_outline("B168", ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0))),
+        ),
+    )
+
+    assert scene.nebula_outlines[0].dashed is True
+
+
 FORCED_POLICY = SelectionPolicy(forced_lists=frozenset({"herschel400"}))
 OBSERVING_INDEX = {"NGC869": frozenset({"herschel400"})}
 

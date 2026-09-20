@@ -247,7 +247,10 @@ def _prefer_openngc_outlines(
 ) -> tuple[NebulaOutline, ...]:
     """Prefer OpenNGC contours only for large diffuse nebulae."""
     eligible_ids = {
-        dso.id for dso in dsos if dso.object_type in (DsoType.BRIGHT_NEBULA, DsoType.DARK_NEBULA)
+        dso.id
+        for dso in dsos
+        if dso.object_type
+        in (DsoType.BRIGHT_NEBULA, DsoType.SUPERNOVA_REMNANT, DsoType.DARK_NEBULA)
     }
     preferred = tuple(outline for outline in openngc if outline.dso_id in eligible_ids)
     preferred_ids = {outline.dso_id for outline in preferred}

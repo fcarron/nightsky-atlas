@@ -626,6 +626,8 @@ class DsoStyle(_StrictModel):
             return self.planetary_nebula
         if object_type == DsoType.BRIGHT_NEBULA:
             return self.bright_nebula
+        if object_type == DsoType.SUPERNOVA_REMNANT:
+            return self.bright_nebula
         if object_type == DsoType.DARK_NEBULA:
             return self.dark_nebula
         if object_type == DsoType.GALAXY_CLUSTER:

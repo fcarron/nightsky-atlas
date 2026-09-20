@@ -28,6 +28,7 @@ class DsoType(StrEnum):
     GLOBULAR_CLUSTER = "globular_cluster"
     PLANETARY_NEBULA = "planetary_nebula"
     BRIGHT_NEBULA = "bright_nebula"
+    SUPERNOVA_REMNANT = "supernova_remnant"
     DARK_NEBULA = "dark_nebula"
     GALAXY_CLUSTER = "galaxy_cluster"
     DOUBLE_STAR = "double_star"

@@ -226,6 +226,8 @@ def find_hard_violations(
                 )
 
         for scene_dso in scene.deep_sky_objects:
+            if not scene_dso.symbol_visible:
+                continue
             dso = scene_dso.dso
             extent = dso_symbol_extent(
                 dso, mm_per_deg=transform.mm_per_deg, style=style

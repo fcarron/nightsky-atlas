@@ -486,6 +486,7 @@ _EVALUATORS: dict[DsoType, VisibilityEvaluator] = {
     DsoType.GLOBULAR_CLUSTER: GlobularClusterEvaluator(),
     DsoType.PLANETARY_NEBULA: PlanetaryNebulaEvaluator(),
     DsoType.BRIGHT_NEBULA: BrightNebulaEvaluator(),
+    DsoType.SUPERNOVA_REMNANT: BrightNebulaEvaluator(),
     DsoType.DARK_NEBULA: DarkNebulaEvaluator(),
     DsoType.GALAXY_CLUSTER: GalaxyClusterEvaluator(),
     DsoType.STAR: StarEvaluator(),

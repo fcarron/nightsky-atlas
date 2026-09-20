@@ -409,7 +409,20 @@ def _draw_stars(
             knockout_mm=style.star.close_overlap_halo_mm,
         )
 
+    foreground_stars, foreground_marks = _foreground_star_double_marks(
+        scene, transform, size_model, suppressed, marks
+    )
+    for mark in foreground_marks:
+        _draw_double_star_mark(
+            cr,
+            mark,
+            size_model,
+            knockout_mm=style.star.close_overlap_halo_mm,
+        )
+
     for point, radius_mm in _foreground_close_stars(scene, transform, size_model, suppressed):
+        _draw_star_with_halo(cr, point, radius_mm, style.star.close_overlap_halo_mm)
+    for point, radius_mm in foreground_stars:
         _draw_star_with_halo(cr, point, radius_mm, style.star.close_overlap_halo_mm)
     cr.restore()
 
@@ -503,6 +516,8 @@ def _dso_marks_requiring_foreground(
 ) -> tuple[tuple[PagePoint, SymbolExtent], ...]:
     marks = []
     for item in scene.deep_sky_objects:
+        if not item.symbol_visible:
+            continue
         extent = dso_symbol_extent(item.dso, mm_per_deg=transform.mm_per_deg, style=style)
         if _dso_overlaps_bright_star(item, scene, transform, size_model, extent, style):
             continue
@@ -575,6 +590,45 @@ def _foreground_double_star_marks(
     return tuple(foreground)
 
 
+def _foreground_star_double_marks(
+    scene: ChartScene,
+    transform: PageTransform,
+    size_model: StarSizeModel,
+    suppressed: set[str],
+    marks: tuple[DoubleStarMark, ...],
+) -> tuple[tuple[tuple[PagePoint, float], ...], tuple[DoubleStarMark, ...]]:
+    """Return the foreground layer for ordinary-star/double-marker overlaps.
+
+    A collapsed double mark is one printed stellar symbol, so it follows the
+    same brightness and stable-ID tie break as two ordinary stars.  This keeps
+    adjacent marks distinct without changing their astronomical positions.
+    """
+    foreground_stars = []
+    foreground_marks = []
+    for scene_star in scene.stars:
+        if scene_star.star.id in suppressed:
+            continue
+        point = transform.to_page(scene_star.chart_point)
+        radius = size_model.radius_mm(scene_star.star.magnitude)
+        for mark in marks:
+            mark_radius = max(
+                size_model.radius_mm(mark.magnitude),
+                (mark.marker_length_mm + mark.marker_line_width_mm) / 2.0,
+            )
+            if math.hypot(point.x_mm - mark.page_point.x_mm, point.y_mm - mark.page_point.y_mm) >= (
+                radius + mark_radius
+            ):
+                continue
+            if mark.magnitude < scene_star.star.magnitude or (
+                math.isclose(mark.magnitude, scene_star.star.magnitude)
+                and mark.system_id < scene_star.star.id
+            ):
+                foreground_stars.append((point, radius))
+            else:
+                foreground_marks.append(mark)
+    return tuple(foreground_stars), tuple(foreground_marks)
+
+
 def _draw_double_star_mark(
     cr: cairo.Context[cairo.Surface],
     mark: DoubleStarMark,
@@ -634,6 +688,8 @@ def _draw_dsos(
     )
     cr.clip()
     for scene_dso in scene.deep_sky_objects:
+        if not scene_dso.symbol_visible:
+            continue
         dso = scene_dso.dso
         bold = dso.id in bold_symbol_ids
         cr.set_line_width(mm_to_pt(_dso_line_width_mm(style, bold=bold)))
@@ -986,14 +1042,26 @@ def _draw_outlines(
 ) -> None:
     if not scene.nebula_outlines:
         return
-    _draw_segments(
-        cr,
-        transform,
-        scene.nebula_outlines,
-        gray=style.dso.outline_gray,
-        line_width_mm=style.dso.outline_line_width_mm,
-        dash_mm=(style.dso.outline_dash_mm, style.dso.outline_dash_mm),
-    )
+    dashed = tuple(outline for outline in scene.nebula_outlines if outline.dashed)
+    solid = tuple(outline for outline in scene.nebula_outlines if not outline.dashed)
+    if dashed:
+        _draw_segments(
+            cr,
+            transform,
+            dashed,
+            gray=style.dso.outline_gray,
+            line_width_mm=style.dso.outline_line_width_mm,
+            dash_mm=(style.dso.outline_dash_mm, style.dso.outline_dash_mm),
+        )
+    if solid:
+        _draw_segments(
+            cr,
+            transform,
+            solid,
+            gray=style.dso.outline_gray,
+            line_width_mm=style.dso.outline_line_width_mm,
+            dash_mm=None,
+        )
 
 
 def _draw_segments(

@@ -206,6 +206,7 @@ def test_decorative_symbol_reach_stays_within_extent() -> None:
         (DsoType.GLOBULAR_CLUSTER, DsoShape.CIRCLE_CROSS),
         (DsoType.PLANETARY_NEBULA, DsoShape.SPOKED_CIRCLE),
         (DsoType.BRIGHT_NEBULA, DsoShape.DASHED_SQUARE),
+        (DsoType.SUPERNOVA_REMNANT, DsoShape.DASHED_SQUARE),
         (DsoType.GALAXY_CLUSTER, DsoShape.SQUARE),
     ],
 )

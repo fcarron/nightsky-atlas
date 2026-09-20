@@ -10,6 +10,7 @@ import pytest
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
+from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.selection import SelectionPolicy
 from nightsky_atlas.catalog.star_names import StarName
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
@@ -41,6 +42,7 @@ PAGE = PageGeometry(width_mm=297.0, height_mm=210.0, margin_mm=12.0)
 def make_dso(
     object_id: str,
     *,
+    object_type: DsoType = DsoType.GALAXY,
     cross_ids: tuple[str, ...] = (),
     common_name: str | None = None,
     magnitude: float | None = 8.0,
@@ -49,7 +51,7 @@ def make_dso(
         id=object_id,
         ra_deg=187.6,
         dec_deg=12.1,
-        object_type=DsoType.GALAXY,
+        object_type=object_type,
         provenance=Provenance(catalogue="TEST", source_id=object_id),
         magnitude=magnitude,
         cross_ids=cross_ids,
@@ -63,6 +65,24 @@ def test_priority_messier_is_mandatory() -> None:
 
 def test_priority_bright_dso_high_but_optional() -> None:
     assert label_priority(make_dso("X", magnitude=8.0))[1] is False
+
+
+def test_contour_alias_keeps_one_catalogue_label() -> None:
+    dso = make_dso(
+        "NGC7000",
+        object_type=DsoType.BRIGHT_NEBULA,
+        cross_ids=("C 020",),
+    )
+    outline = NebulaOutline(
+        id="outline:C020",
+        dso_id="C020",
+        points=((186.5, 11.0), (188.5, 11.0), (188.5, 13.0)),
+        provenance=Provenance(catalogue="TEST", source_id="outline:C020"),
+    )
+    scene = build_scene(CHART, (), (dso,), nebula_outlines=(outline,))
+    labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE)
+
+    assert [label.id for label in labels] == ["label:dso:NGC7000"]
     assert label_priority(make_dso("Y", magnitude=13.0))[1] is False
 
 

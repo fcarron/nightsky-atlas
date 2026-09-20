@@ -63,6 +63,7 @@ class SceneDso:
     dso: DeepSkyObject
     chart_point: ChartPoint
     metadata: DsoMetadata | None = None
+    symbol_visible: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,11 +87,14 @@ class SceneOutline:
     ``points`` form an open run of the projected outline; a fully contained
     outline is closed (its first and last points coincide), otherwise it is the
     portion inside the chart field.  Outlines are stroke-only furniture.
+    ``dashed`` is resolved from the object's semantic class; only dark nebulae
+    use a dashed contour.
     """
 
     outline_id: str
     dso_id: str
     points: tuple[ChartPoint, ...]
+    dashed: bool = False
 
     def __post_init__(self) -> None:
         if not self.outline_id.strip():

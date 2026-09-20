@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 
 from nightsky_atlas.catalog.constellations import ConstellationSegment
-from nightsky_atlas.catalog.models import DeepSkyObject, Star
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
+from nightsky_atlas.catalog.observing_lists import canonical_designation
 from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.selection import SelectionPolicy, select_dso
 from nightsky_atlas.catalog.systems import StarSystem
@@ -92,7 +94,7 @@ def build_scene(
             scene_stars.append(SceneStar(star=star, chart_point=point))
 
     scene_dsos: list[SceneDso] = []
-    selected_dso_ids: set[str] = set()
+    selected_dsos: list[DeepSkyObject] = []
     for dso in deep_sky_objects:
         metadata = (
             select_dso(dso, index=observing_index, policy=selection_policy)
@@ -108,7 +110,7 @@ def build_scene(
             and dso.magnitude > dso_magnitude_limit
         ):
             continue
-        selected_dso_ids.add(dso.id)
+        selected_dsos.append(dso)
         point = _project_inside(projector, definition, dso.ra_deg, dso.dec_deg)
         if point is not None:
             scene_dsos.append(SceneDso(dso=dso, chart_point=point, metadata=metadata))
@@ -140,6 +142,22 @@ def build_scene(
             )
         )
 
+    projected_outlines = _project_outlines(
+        _outline_sources(nebula_outlines, selected_dsos), projector, definition
+    )
+    outlined_ids = {outline.dso_id for outline in projected_outlines}
+    scene_dsos = [
+        replace(
+            scene_dso,
+            symbol_visible=not (
+                scene_dso.dso.id in outlined_ids
+                and scene_dso.dso.object_type
+                in (DsoType.BRIGHT_NEBULA, DsoType.SUPERNOVA_REMNANT, DsoType.DARK_NEBULA)
+            ),
+        )
+        for scene_dso in scene_dsos
+    ]
+
     return ChartScene(
         definition=definition,
         stars=tuple(scene_stars),
@@ -151,11 +169,7 @@ def build_scene(
         constellation_boundaries=_project_segments(
             constellation_boundaries, projector, definition, "boundary"
         ),
-        nebula_outlines=_project_outlines(
-            (outline for outline in nebula_outlines if outline.dso_id in selected_dso_ids),
-            projector,
-            definition,
-        ),
+        nebula_outlines=projected_outlines,
     )
 
 
@@ -338,8 +352,25 @@ def _project_segments(
     return tuple(segments)
 
 
+def _outline_sources(
+    outlines: Iterable[NebulaOutline], dsos: Iterable[DeepSkyObject]
+) -> tuple[tuple[NebulaOutline, DeepSkyObject], ...]:
+    aliases: dict[str, set[DeepSkyObject]] = {}
+    for dso in dsos:
+        for identifier in (dso.id, *dso.cross_ids):
+            key = canonical_designation(identifier)
+            if key:
+                aliases.setdefault(key, set()).add(dso)
+    sources = []
+    for outline in outlines:
+        targets = aliases.get(canonical_designation(outline.dso_id), set())
+        if len(targets) == 1:
+            sources.append((outline, next(iter(targets))))
+    return tuple(sources)
+
+
 def _project_outlines(
-    sources: Iterable[NebulaOutline],
+    sources: Iterable[tuple[NebulaOutline, DeepSkyObject]],
     projector: StereographicProjection,
     definition: ChartDefinition,
 ) -> tuple[SceneOutline, ...]:
@@ -347,7 +378,7 @@ def _project_outlines(
     half_width = definition.width_deg / 2.0
     half_height = definition.height_deg / 2.0
     outlines: list[SceneOutline] = []
-    for source in sources:
+    for source, dso in sources:
         vertices = list(source.points)
         chart_points: list[tuple[float, float]] = []
         failed = False
@@ -370,8 +401,9 @@ def _project_outlines(
             outlines.append(
                 SceneOutline(
                     outline_id=f"{source.id}{suffix}",
-                    dso_id=source.dso_id,
+                    dso_id=dso.id,
                     points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in run),
+                    dashed=dso.object_type == DsoType.DARK_NEBULA,
                 )
             )
     return tuple(outlines)

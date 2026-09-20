@@ -16,6 +16,7 @@ import pytest
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
+from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageTransform
@@ -23,10 +24,12 @@ from nightsky_atlas.layout.models import Label
 from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.cairo import (
     _bold_symbol_ids,
+    _draw_outlines,
     _dso_line_width_mm,
     _dso_overlaps_bright_star,
     _foreground_close_stars,
     _foreground_double_star_marks,
+    _foreground_star_double_marks,
     _foreground_stars_over_dsos,
     draw_chart_page,
     render_chart,
@@ -34,7 +37,7 @@ from nightsky_atlas.render.cairo import (
     render_magnitude_scale,
 )
 from nightsky_atlas.render.double_stars import DoubleStarMark
-from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
+from nightsky_atlas.render.symbols import DsoShape, StarSizeModel, dso_symbol_extent
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
 from nightsky_atlas.scene.models import ChartScene, SceneStar
 from nightsky_atlas.units import mm_to_pt
@@ -305,6 +308,125 @@ def test_star_overlapping_large_nebula_symbol_is_redrawn_in_foreground() -> None
     )
 
 
+def test_contour_suppresses_only_matching_dashed_square_fallback(monkeypatch) -> None:
+    nebula = DeepSkyObject(
+        id="NGC7000",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.BRIGHT_NEBULA,
+        provenance=Provenance("TEST", "NGC7000"),
+        cross_ids=("C 020",),
+    )
+    outline = NebulaOutline(
+        id="outline:C020",
+        dso_id="C020",
+        points=((186.5, 11.0), (188.5, 11.0), (188.5, 13.0)),
+        provenance=Provenance("TEST", "outline:C020"),
+    )
+    outlined_scene = build_scene(CHART, (), (nebula,), nebula_outlines=(outline,))
+    fallback_scene = build_scene(CHART, (), (nebula,))
+    drawn_shapes = []
+    monkeypatch.setattr(
+        "nightsky_atlas.render.cairo.draw_dso_symbol",
+        lambda _cr, _x, _y, extent, _dash: drawn_shapes.append(extent.shape),
+    )
+    transform = PageTransform(chart=CHART, page=PAGE)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
+
+    draw_chart_page(cairo.Context(surface), outlined_scene, transform, STYLE)
+    assert drawn_shapes == []
+    draw_chart_page(cairo.Context(surface), fallback_scene, transform, STYLE)
+    assert drawn_shapes == [DsoShape.DASHED_SQUARE]
+
+
+def test_supernova_remnant_contours_are_solid(monkeypatch) -> None:
+    remnant = DeepSkyObject(
+        id="NGC6960",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.SUPERNOVA_REMNANT,
+        provenance=Provenance("TEST", "NGC6960"),
+    )
+    outline = NebulaOutline(
+        id="outline:NGC6960",
+        dso_id="NGC6960",
+        points=((186.5, 11.0), (188.5, 11.0), (188.5, 13.0)),
+        provenance=Provenance("TEST", "outline:NGC6960"),
+    )
+    scene = build_scene(CHART, (), (remnant,), nebula_outlines=(outline,))
+    calls = []
+    monkeypatch.setattr(
+        "nightsky_atlas.render.cairo._draw_segments",
+        lambda _cr, _transform, segments, **kwargs: calls.append(
+            (tuple(segments), kwargs["dash_mm"])
+        ),
+    )
+    transform = PageTransform(chart=CHART, page=PAGE)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
+
+    _draw_outlines(cairo.Context(surface), transform, scene, STYLE)
+
+    assert len(calls) == 1
+    assert calls[0][1] is None
+    assert all(not outline.dashed for outline in calls[0][0])
+
+
+def test_only_dark_nebula_contours_are_dashed(monkeypatch) -> None:
+    bright = DeepSkyObject(
+        id="NGC7000",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.BRIGHT_NEBULA,
+        provenance=Provenance("TEST", "NGC7000"),
+    )
+    dark = DeepSkyObject(
+        id="B168",
+        ra_deg=188.0,
+        dec_deg=12.0,
+        object_type=DsoType.DARK_NEBULA,
+        provenance=Provenance("TEST", "B168"),
+    )
+    scene = build_scene(
+        CHART,
+        (),
+        (bright, dark),
+        nebula_outlines=(
+            NebulaOutline(
+                id="outline:NGC7000",
+                dso_id="NGC7000",
+                points=((186.5, 11.0), (188.5, 11.0), (188.5, 13.0)),
+                provenance=Provenance("TEST", "outline:NGC7000"),
+            ),
+            NebulaOutline(
+                id="outline:B168",
+                dso_id="B168",
+                points=((187.0, 11.0), (189.0, 11.0), (189.0, 13.0)),
+                provenance=Provenance("TEST", "outline:B168"),
+            ),
+        ),
+    )
+    calls = []
+    monkeypatch.setattr(
+        "nightsky_atlas.render.cairo._draw_segments",
+        lambda _cr, _transform, segments, **kwargs: calls.append(
+            (tuple(segments), kwargs["dash_mm"])
+        ),
+    )
+    transform = PageTransform(chart=CHART, page=PAGE)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
+
+    _draw_outlines(cairo.Context(surface), transform, scene, STYLE)
+
+    solid_ids = {
+        outline.dso_id for outlines, dash in calls if dash is None for outline in outlines
+    }
+    dashed_ids = {
+        outline.dso_id for outlines, dash in calls if dash is not None for outline in outlines
+    }
+    assert solid_ids == {"NGC7000"}
+    assert dashed_ids == {"B168"}
+
+
 def test_equal_brightness_overlapping_stars_get_one_deterministic_halo() -> None:
     transform = PageTransform(chart=CHART, page=PAGE)
     first = Star("A", 187.5, 12.0, 6.0, Provenance("TEST", "A"))
@@ -347,3 +469,29 @@ def test_overlapping_double_star_markers_get_one_deterministic_halo() -> None:
     )
 
     assert _foreground_double_star_marks(marks, size_model) == (marks[1],)
+
+
+def test_star_and_double_star_marker_get_one_deterministic_halo() -> None:
+    transform = PageTransform(chart=CHART, page=PAGE)
+    star = Star("z-star", 187.5, 12.0, 6.0, Provenance("TEST", "z-star"))
+    scene = ChartScene(
+        definition=CHART,
+        stars=(SceneStar(star, ChartPoint(0.0, 0.0)),),
+    )
+    size_model = StarSizeModel.from_style(STYLE.star)
+    mark = DoubleStarMark(
+        "system:wds:A",
+        transform.to_page(ChartPoint(0.05, 0.0)),
+        6.0,
+        frozenset({"double:A", "double:B"}),
+        2.0,
+        0.15,
+    )
+
+    foreground_stars, foreground_marks = _foreground_star_double_marks(
+        scene, transform, size_model, set(), (mark,)
+    )
+
+    expected = (transform.to_page(ChartPoint(0.0, 0.0)), size_model.radius_mm(6.0))
+    assert foreground_stars == (expected,)
+    assert foreground_marks == ()

@@ -62,6 +62,8 @@ def _symbol_circles(
                 )
             )
     for scene_dso in scene.deep_sky_objects:
+        if not scene_dso.symbol_visible:
+            continue
         extent = dso_symbol_extent(scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style)
         symbols.append(
             SymbolCircle(

@@ -82,7 +82,7 @@ def test_missing_optional_fields_are_none() -> None:
         ("GCl", DsoType.GLOBULAR_CLUSTER),
         ("PN", DsoType.PLANETARY_NEBULA),
         ("Cl+N", DsoType.BRIGHT_NEBULA),
-        ("SNR", DsoType.BRIGHT_NEBULA),
+        ("SNR", DsoType.SUPERNOVA_REMNANT),
         ("GPair", DsoType.GALAXY_CLUSTER),
         ("**", DsoType.DOUBLE_STAR),
     ],

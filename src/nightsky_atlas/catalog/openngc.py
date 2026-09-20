@@ -55,7 +55,7 @@ _TYPE_MAP: dict[str, DsoType] = {
     "Neb": DsoType.BRIGHT_NEBULA,
     "EmN": DsoType.BRIGHT_NEBULA,
     "RfN": DsoType.BRIGHT_NEBULA,
-    "SNR": DsoType.BRIGHT_NEBULA,
+    "SNR": DsoType.SUPERNOVA_REMNANT,
     "**": DsoType.DOUBLE_STAR,
     "*": DsoType.STAR,
     "Nova": DsoType.STAR,
