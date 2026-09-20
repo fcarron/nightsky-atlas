@@ -83,9 +83,7 @@ def test_optimizer_avoids_furniture() -> None:
         ),
     )
     furniture = (PageRect(left_mm=98.0, top_mm=99.0, width_mm=12.0, height_mm=5.0),)
-    result = optimize_labels(
-        (label,), EMPTY_SCENE, TRANSFORM, STYLE, furniture=furniture
-    )
+    result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE, furniture=furniture)
     assert result.labels[0].selected_candidate_id == "label:a:S"
 
 
@@ -98,6 +96,80 @@ def test_optional_label_outside_page_is_hidden() -> None:
     result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
     assert result.labels[0].hidden is True
     assert result.hidden_count == 1
+
+
+def test_star_variant_prefers_combined_when_clean() -> None:
+    full = LabelCandidate(
+        id="label:star:1:full:N",
+        position=CompassPosition.N,
+        anchor=PagePoint(100.0, 100.0),
+        bounds=PageRect(100.0, 100.0, 22.0, 2.5),
+        display_text="Deneb α Cyg",
+        variant_rank=0,
+    )
+    short = LabelCandidate(
+        id="label:star:1:short:N",
+        position=CompassPosition.N,
+        anchor=PagePoint(100.0, 100.0),
+        bounds=PageRect(100.0, 100.0, 10.0, 2.5),
+        display_text="Deneb",
+        variant_rank=1,
+    )
+    label = make_label("label:star:1", (full, short))
+    placed = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE).labels[0]
+    assert placed.text == "Deneb α Cyg"
+    assert placed.selected_candidate_id == full.id
+
+
+def test_star_variant_falls_back_to_short_when_combined_collides() -> None:
+    full = LabelCandidate(
+        id="label:star:1:full:N",
+        position=CompassPosition.N,
+        anchor=PagePoint(100.0, 100.0),
+        bounds=PageRect(100.0, 100.0, 22.0, 2.5),
+        display_text="Deneb α Cyg",
+        variant_rank=0,
+    )
+    short = LabelCandidate(
+        id="label:star:1:short:N",
+        position=CompassPosition.N,
+        anchor=PagePoint(100.0, 100.0),
+        bounds=PageRect(100.0, 100.0, 10.0, 2.5),
+        display_text="Deneb",
+        variant_rank=1,
+    )
+    label = make_label("label:star:1", (full, short))
+    furniture = (PageRect(112.0, 100.0, 4.0, 2.5),)
+    placed = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE, furniture=furniture).labels[0]
+    assert placed.text == "Deneb"
+    assert placed.selected_candidate_id == short.id
+    assert Label.from_dict(placed.to_dict()) == placed
+
+
+def test_star_variant_can_shorten_when_combined_is_visually_poor() -> None:
+    full = LabelCandidate(
+        id="label:star:1:full:N",
+        position=CompassPosition.N,
+        anchor=PagePoint(270.0, 100.0),
+        bounds=PageRect(270.0, 100.0, 14.0, 2.5),
+        display_text="Deneb α Cyg",
+        variant_rank=0,
+    )
+    short = LabelCandidate(
+        id="label:star:1:short:N",
+        position=CompassPosition.N,
+        anchor=PagePoint(260.0, 100.0),
+        bounds=PageRect(260.0, 100.0, 10.0, 2.5),
+        display_text="Deneb",
+        variant_rank=1,
+    )
+    placed = optimize_labels(
+        (make_label("label:star:1", (full, short)),),
+        EMPTY_SCENE,
+        TRANSFORM,
+        STYLE,
+    ).labels[0]
+    assert placed.text == "Deneb"
 
 
 def test_mandatory_label_outside_page_is_placed() -> None:

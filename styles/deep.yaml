@@ -16,6 +16,12 @@ dso:
   dark_nebula: {min_diameter_mm: 1.6}
   galaxy_cluster: {min_diameter_mm: 1.6}
 label:
+  star_labels:
+    bayer: {enabled: true, max_magnitude: 6.5}
+    flamsteed: {enabled: true, max_magnitude: 6.0}
+    variables: {enabled: true, max_magnitude: 7.0}
+    combined_names: false
+    constellation_suffix: {default: true, allow_ambiguity_fallback: false}
   dso_label_magnitude_limit: 14.0
   selection: {medium_density_budget: 0.18, low_density_budget: 0.09}
 furniture:

@@ -1,0 +1,219 @@
+# NightSky Atlas observer-oriented selection; canonical spelling and HIP IDs: IAU-CSN 2022-04-04.
+# Selection/tiering is original NightSky editorial work, not copied from an atlas.
+source: iau-csn-2022-04-04
+proper_names:
+  core:
+    - {hip: 32349, name: "Sirius"}
+    - {hip: 30438, name: "Canopus"}
+    - {hip: 69673, name: "Arcturus"}
+    - {hip: 91262, name: "Vega"}
+    - {hip: 24608, name: "Capella"}
+    - {hip: 24436, name: "Rigel"}
+    - {hip: 37279, name: "Procyon"}
+    - {hip: 7588, name: "Achernar"}
+    - {hip: 27989, name: "Betelgeuse"}
+    - {hip: 68702, name: "Hadar"}
+    - {hip: 97649, name: "Altair"}
+    - {hip: 60718, name: "Acrux"}
+    - {hip: 21421, name: "Aldebaran"}
+    - {hip: 65474, name: "Spica"}
+    - {hip: 80763, name: "Antares"}
+    - {hip: 37826, name: "Pollux"}
+    - {hip: 113368, name: "Fomalhaut"}
+    - {hip: 102098, name: "Deneb"}
+    - {hip: 49669, name: "Regulus"}
+    - {hip: 36850, name: "Castor"}
+    - {hip: 25336, name: "Bellatrix"}
+    - {hip: 25428, name: "Elnath"}
+    - {hip: 26311, name: "Alnilam"}
+    - {hip: 26727, name: "Alnitak"}
+    - {hip: 62956, name: "Alioth"}
+    - {hip: 15863, name: "Mirfak"}
+    - {hip: 54061, name: "Dubhe"}
+    - {hip: 67301, name: "Alkaid"}
+    - {hip: 11767, name: "Polaris"}
+    - {hip: 46390, name: "Alphard"}
+    - {hip: 9884, name: "Hamal"}
+    - {hip: 50583, name: "Algieba"}
+    - {hip: 3419, name: "Diphda"}
+    - {hip: 92855, name: "Nunki"}
+    - {hip: 72607, name: "Kochab"}
+    - {hip: 677, name: "Alpheratz"}
+    - {hip: 27366, name: "Saiph"}
+    - {hip: 5447, name: "Mirach"}
+    - {hip: 86032, name: "Rasalhague"}
+    - {hip: 14576, name: "Algol"}
+    - {hip: 57632, name: "Denebola"}
+    - {hip: 9640, name: "Almach"}
+    - {hip: 100453, name: "Sadr"}
+    - {hip: 39429, name: "Naos"}
+    - {hip: 87833, name: "Eltanin"}
+    - {hip: 76267, name: "Alphecca"}
+    - {hip: 3179, name: "Schedar"}
+    - {hip: 65378, name: "Mizar"}
+    - {hip: 25930, name: "Mintaka"}
+    - {hip: 746, name: "Caph"}
+    - {hip: 53910, name: "Merak"}
+    - {hip: 107315, name: "Enif"}
+    - {hip: 58001, name: "Phecda"}
+    - {hip: 105199, name: "Alderamin"}
+    - {hip: 113963, name: "Markab"}
+    - {hip: 72105, name: "Izar"}
+    - {hip: 113881, name: "Scheat"}
+    - {hip: 54872, name: "Zosma"}
+    - {hip: 14135, name: "Menkar"}
+    - {hip: 74785, name: "Zubeneschamali"}
+    - {hip: 93506, name: "Ascella"}
+    - {hip: 78820, name: "Acrab"}
+    - {hip: 8903, name: "Sheratan"}
+    - {hip: 85696, name: "Lesath"}
+    - {hip: 6686, name: "Ruchbah"}
+    - {hip: 67927, name: "Muphrid"}
+    - {hip: 89931, name: "Kaus Media"}
+    - {hip: 97278, name: "Tarazed"}
+    - {hip: 79593, name: "Yed Prior"}
+    - {hip: 72622, name: "Zubenelgenubi"}
+    - {hip: 26241, name: "Hatysa"}
+    - {hip: 86742, name: "Cebalrai"}
+    - {hip: 80816, name: "Kornephoros"}
+    - {hip: 90496, name: "Kaus Borealis"}
+    - {hip: 63608, name: "Vindemiatrix"}
+    - {hip: 17702, name: "Alcyone"}
+    - {hip: 63125, name: "Cor Caroli"}
+    - {hip: 106278, name: "Sadalsuud"}
+    - {hip: 109074, name: "Sadalmelik"}
+    - {hip: 75097, name: "Pherkad"}
+    - {hip: 95947, name: "Albireo"}
+    - {hip: 68756, name: "Thuban"}
+    - {hip: 93194, name: "Sulafat"}
+    - {hip: 92420, name: "Sheliak"}
+    - {hip: 84345, name: "Rasalgethi"}
+    - {hip: 59774, name: "Megrez"}
+    - {hip: 61941, name: "Porrima"}
+    - {hip: 26207, name: "Meissa"}
+    - {hip: 65477, name: "Alcor"}
+    - {hip: 33579, name: "Adhara"}
+    - {hip: 31681, name: "Alhena"}
+    - {hip: 109268, name: "Alnair"}
+    - {hip: 61084, name: "Gacrux"}
+    - {hip: 90185, name: "Kaus Australis"}
+    - {hip: 28360, name: "Menkalinan"}
+    - {hip: 30324, name: "Mirzam"}
+    - {hip: 100751, name: "Peacock"}
+    - {hip: 85927, name: "Shaula"}
+    - {hip: 34444, name: "Wezen"}
+  standard:
+    - {hip: 3821, name: "Achird"}
+    - {hip: 44066, name: "Acubens"}
+    - {hip: 50335, name: "Adhafera"}
+    - {hip: 20889, name: "Ain"}
+    - {hip: 59199, name: "Alchiba"}
+    - {hip: 1067, name: "Algenib"}
+    - {hip: 60965, name: "Algorab"}
+    - {hip: 102488, name: "Aljanah"}
+    - {hip: 53740, name: "Alkes"}
+    - {hip: 88635, name: "Alnasl"}
+    - {hip: 9487, name: "Alrescha"}
+    - {hip: 98036, name: "Alshain"}
+    - {hip: 94376, name: "Altais"}
+    - {hip: 35904, name: "Aludra"}
+    - {hip: 110003, name: "Ancha"}
+    - {hip: 2081, name: "Ankaa"}
+    - {hip: 25985, name: "Arneb"}
+    - {hip: 42911, name: "Asellus Australis"}
+    - {hip: 42806, name: "Asellus Borealis"}
+    - {hip: 17847, name: "Atlas"}
+    - {hip: 82273, name: "Atria"}
+    - {hip: 41037, name: "Avior"}
+    - {hip: 13701, name: "Azha"}
+    - {hip: 8645, name: "Baten Kaitos"}
+    - {hip: 109427, name: "Biham"}
+    - {hip: 73714, name: "Brachium"}
+    - {hip: 61317, name: "Chara"}
+    - {hip: 54879, name: "Chertan"}
+    - {hip: 23875, name: "Cursa"}
+    - {hip: 100345, name: "Dabih"}
+    - {hip: 107556, name: "Deneb Algedi"}
+    - {hip: 78401, name: "Dschubba"}
+    - {hip: 75458, name: "Edasich"}
+    - {hip: 116727, name: "Errai"}
+    - {hip: 59803, name: "Gienah"}
+    - {hip: 36188, name: "Gomeisa"}
+    - {hip: 112029, name: "Homam"}
+    - {hip: 61359, name: "Kraz"}
+    - {hip: 68933, name: "Menkent"}
+    - {hip: 45238, name: "Miaplacidus"}
+    - {hip: 8796, name: "Mothallah"}
+    - {hip: 106985, name: "Nashira"}
+    - {hip: 25606, name: "Nihal"}
+    - {hip: 26634, name: "Phact"}
+    - {hip: 85670, name: "Rastaban"}
+    - {hip: 101769, name: "Rotanev"}
+    - {hip: 84012, name: "Sabik"}
+    - {hip: 86228, name: "Sargas"}
+    - {hip: 8886, name: "Segin"}
+    - {hip: 71075, name: "Seginus"}
+    - {hip: 44816, name: "Suhail"}
+    - {hip: 101958, name: "Sualocin"}
+    - {hip: 30343, name: "Tejat"}
+    - {hip: 77070, name: "Unukalhai"}
+    - {hip: 35550, name: "Wasat"}
+    - {hip: 18543, name: "Zaurak"}
+    - {hip: 13847, name: "Acamar"}
+    - {hip: 100064, name: "Algedi"}
+    - {hip: 7097, name: "Alpherg"}
+    - {hip: 55203, name: "Alula Australis"}
+    - {hip: 55219, name: "Alula Borealis"}
+    - {hip: 95771, name: "Anser"}
+    - {hip: 106032, name: "Alfirk"}
+    - {hip: 13288, name: "Angetenar"}
+    - {hip: 45556, name: "Aspidiske"}
+    - {hip: 17448, name: "Atik"}
+    - {hip: 80112, name: "Alniyat"}
+    - {hip: 92946, name: "Alya"}
+    - {hip: 107136, name: "Azelfafage"}
+    - {hip: 19587, name: "Beid"}
+    - {hip: 14838, name: "Botein"}
+    - {hip: 64241, name: "Diadem"}
+    - {hip: 30122, name: "Furud"}
+    - {hip: 104987, name: "Kitalpha"}
+    - {hip: 112158, name: "Matar"}
+    - {hip: 94114, name: "Meridiana"}
+    - {hip: 75695, name: "Nusakan"}
+    - {hip: 17378, name: "Rana"}
+    - {hip: 95347, name: "Rukbat"}
+    - {hip: 96757, name: "Sham"}
+    - {hip: 113136, name: "Skat"}
+    - {hip: 44127, name: "Talitha"}
+    - {hip: 50801, name: "Tania Australis"}
+    - {hip: 50372, name: "Tania Borealis"}
+    - {hip: 40526, name: "Tarf"}
+    - {hip: 79882, name: "Yed Posterior"}
+  extended:
+    - {hip: 92761, name: "Ainalrami"}
+    - {hip: 94141, name: "Albaldah"}
+    - {hip: 102618, name: "Albali"}
+    - {hip: 75411, name: "Alkalurops"}
+    - {hip: 100310, name: "Alshat"}
+    - {hip: 32362, name: "Alzirr"}
+    - {hip: 14879, name: "Dalim"}
+    - {hip: 97165, name: "Fawaris"}
+    - {hip: 56211, name: "Giausar"}
+    - {hip: 17573, name: "Maia"}
+    - {hip: 17608, name: "Merope"}
+    - {hip: 17851, name: "Pleione"}
+    - {hip: 110395, name: "Sadachbia"}
+    - {hip: 84379, name: "Sarin"}
+    - {hip: 17531, name: "Taygeta"}
+    - {hip: 60129, name: "Zaniah"}
+    - {hip: 57757, name: "Zavijava"}
+variables:
+  - {hip: 77442, designation: R CrB}
+  - {hip: 92862, designation: R Lyr}
+  - {hip: 87072, designation: X Sgr}
+  - {hip: 62223, designation: Y CVn}
+preferred_designations:
+  - {hip: 19849, kind: flamsteed}
+  - {hip: 104214, kind: flamsteed}
+  - {hip: 104217, kind: flamsteed}
+  - {hip: 102453, kind: flamsteed}

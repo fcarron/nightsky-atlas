@@ -69,6 +69,23 @@ The store merges Tycho-2 with the Hipparcos main catalogue because Tycho-2 omits
 the brightest stars (Deneb, Vega, Altair, Sirius, ...). See
 `docs/DATA_SOURCES.md` for provenance and licensing.
 
+Standard follows the field-readability philosophy of *Sky Atlas 2000.0*
+without copying its label selection. Star labels are observer-oriented, not
+exhaustive: curated familiar names, Bayer designations, selective Flamsteed
+numbers, then relevant variable/special designations. Important names may
+appear as `Deneb α`; Bayer labels are normally Greek letters alone and
+Flamsteed labels numbers alone. Constellation suffixes are omitted on the map
+in normal cases, and a star normally shows Bayer *or* Flamsteed, not both.
+Shorter or unambiguous longer variants remain available to the deterministic
+layout. Obscure official names and HIP/HD/TYC IDs are not normally printed.
+Full designations, aliases and catalogue identities remain separate from the
+edition-configurable display text; imported cross-ID provenance is tracked in
+`docs/DATA_SOURCES.md`. To count eligible labels before chart placement, run:
+
+```bash
+.venv/bin/nightsky data star-label-report --edition standard
+```
+
 ### Double/multiple stars (WDS overlay)
 
 ```bash

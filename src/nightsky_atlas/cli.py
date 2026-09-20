@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -250,8 +252,7 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         "--double-stars",
         type=Path,
         default=None,
-        help="processed WDS double/multiple star overlay JSON "
-        "(default: processed WDS if present)",
+        help="processed WDS double/multiple star overlay JSON (default: processed WDS if present)",
     )
     parser.add_argument("--no-double-stars", action="store_true", help="omit the WDS overlay")
     parser.add_argument(
@@ -302,9 +303,7 @@ def _protected_label_ids(overrides: ChartOverrides | None) -> frozenset[str]:
     if overrides is None:
         return frozenset()
     return frozenset(
-        label_id
-        for label_id, spec in overrides.labels.items()
-        if spec.hidden is not True
+        label_id for label_id, spec in overrides.labels.items() if spec.hidden is not True
     )
 
 
@@ -452,6 +451,15 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     counter.add_argument("--store", type=Path, default=_DEFAULT_STORE)
     counter.set_defaults(handler=_command_star_count)
 
+    labels = data_subparsers.add_parser(
+        "star-label-report", help="count eligible stellar label types for an edition"
+    )
+    _add_edition_argument(labels)
+    labels.add_argument("--style", type=Path, default=_DEFAULT_STYLE)
+    labels.add_argument("--store", type=Path, default=_DEFAULT_STORE)
+    labels.add_argument("--star-names", type=Path, default=_DEFAULT_STAR_NAMES)
+    labels.set_defaults(handler=_command_star_label_report)
+
     reindex = data_subparsers.add_parser(
         "reindex-stars", help="rebuild star-store indexes in place (safe to re-run)"
     )
@@ -506,9 +514,7 @@ def _add_benchmark_commands(subparsers: argparse._SubParsersAction) -> None:
     run.add_argument("--outdir", type=Path, default=_DEFAULT_BENCH_OUT)
     run.add_argument("--model", default=None, help="OpenRouter model to benchmark")
     run.add_argument("--ai-config", type=Path, default=Path("ai.yaml"))
-    run.add_argument(
-        "--recorded", type=Path, default=None, help="replay recorded review results"
-    )
+    run.add_argument("--recorded", type=Path, default=None, help="replay recorded review results")
     run.set_defaults(handler=_command_benchmark_ai_review)
 
 
@@ -523,9 +529,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     tile.add_argument("--no-neighbours", action="store_true")
     tile.set_defaults(handler=_command_atlas_tile)
 
-    coverage = atlas_subparsers.add_parser(
-        "coverage", help="check sky coverage of the tiling"
-    )
+    coverage = atlas_subparsers.add_parser("coverage", help="check sky coverage of the tiling")
     _add_edition_argument(coverage)
     coverage.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     coverage.add_argument("--step", type=float, default=2.0)
@@ -605,8 +609,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
         "--double-stars",
         type=Path,
         default=None,
-        help="processed WDS double/multiple star overlay JSON "
-        "(default: processed WDS if present)",
+        help="processed WDS double/multiple star overlay JSON (default: processed WDS if present)",
     )
     build.add_argument("--no-double-stars", action="store_true", help="omit the WDS overlay")
     build.add_argument(
@@ -745,9 +748,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
     furniture = furniture_obstacles(transform, definition, style, presentation)
     result: OptimizationResult | None = None
     if args.optimize:
-        result = optimize_labels(
-            labels, scene, transform, style, furniture=furniture
-        )
+        result = optimize_labels(labels, scene, transform, style, furniture=furniture)
         labels = result.labels
         print(
             f"optimized: cost {result.cost_before:.1f} -> {result.cost_after:.1f}, "
@@ -784,9 +785,7 @@ def _command_chart_review(args: argparse.Namespace) -> int:
     presentation = presentation_from_edition(definition, atlas.resolved_edition())
     furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
-        result = optimize_labels(
-            labels, scene, transform, style, furniture=furniture
-        )
+        result = optimize_labels(labels, scene, transform, style, furniture=furniture)
         labels = result.labels
     validation = validate_layout(labels, scene, transform, style, furniture=furniture)
 
@@ -824,18 +823,14 @@ def _command_chart_review(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_one_step_review(
-    args: argparse.Namespace, request: ReviewRequest, outdir: Path
-) -> None:
+def _run_one_step_review(args: argparse.Namespace, request: ReviewRequest, outdir: Path) -> None:
     timeout_s = 60.0
     max_retries = 3
     if args.ai_config.exists():
         config = load_ai_config(args.ai_config)
         timeout_s = config.timeout_s
         max_retries = config.max_retries
-    reviewer = OpenRouterReviewer(
-        model=args.model, timeout_s=timeout_s, max_retries=max_retries
-    )
+    reviewer = OpenRouterReviewer(model=args.model, timeout_s=timeout_s, max_retries=max_retries)
     result = reviewer.review(request)
     (outdir / "review-result.json").write_text(
         json.dumps(result.model_dump(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -860,9 +855,7 @@ def _write_layout_json(
             "star_count": scene.star_count,
             "dso_count": scene.dso_count,
             "star_system_count": scene.star_system_count,
-            "star_systems": [
-                scene_system.system.to_dict() for scene_system in scene.star_systems
-            ],
+            "star_systems": [scene_system.system.to_dict() for scene_system in scene.star_systems],
             "deep_sky_objects": [
                 {"id": scene_dso.dso.id, **scene_dso.metadata.to_dict()}
                 for scene_dso in scene.deep_sky_objects
@@ -892,17 +885,13 @@ def _command_chart_validate(args: argparse.Namespace) -> int:
     presentation = presentation_from_edition(definition, atlas.resolved_edition())
     furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
-        result = optimize_labels(
-            labels, scene, transform, style, furniture=furniture
-        )
+        result = optimize_labels(labels, scene, transform, style, furniture=furniture)
         labels = result.labels
         print(
             f"optimized: cost {result.cost_before:.1f} -> {result.cost_after:.1f}, "
             f"{result.placed_count} placed, {result.hidden_count} hidden"
         )
-    result_validation = validate_layout(
-        labels, scene, transform, style, furniture=furniture
-    )
+    result_validation = validate_layout(labels, scene, transform, style, furniture=furniture)
 
     print(f"{definition.id}: {len(labels)} labels")
     if result_validation.is_valid:
@@ -1015,6 +1004,63 @@ def _command_star_count(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_star_label_report(args: argparse.Namespace) -> int:
+    style = load_style_config(args.style)
+    names = load_star_names(args.star_names)
+    if not args.store.exists():
+        raise FileNotFoundError(f"star store not found: {args.store}")
+    connection = sqlite3.connect(f"file:{args.store.resolve()}?mode=ro", uri=True)
+    counts: Counter[str] = Counter()
+    tiers: Counter[str] = Counter()
+    try:
+        total = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM stars WHERE magnitude <= ?",
+                (style.star.faint_magnitude,),
+            ).fetchone()[0]
+        )
+        rows = connection.execute(
+            "SELECT hip_id, MIN(magnitude) FROM stars "
+            "WHERE hip_id IS NOT NULL AND magnitude <= ? GROUP BY hip_id",
+            (style.star.faint_magnitude,),
+        )
+        for hip_id, magnitude in rows:
+            from nightsky_atlas.catalog.star_names import hip_number
+
+            name = names.get(hip_number(hip_id))
+            if name is None:
+                continue
+            variants = name.display_variants(
+                style.label.star_labels,
+                magnitude,
+                proper_magnitude_limit=style.star.label_magnitude_limit,
+            )
+            if variants:
+                kind = variants[0][1]
+                if kind == "combined" or kind.startswith("proper_"):
+                    counts["proper"] += 1
+                    tier = (
+                        name.proper_name_tier
+                        if kind == "combined"
+                        else kind.removeprefix("proper_")
+                    )
+                    if tier is not None:
+                        tiers[tier] += 1
+                else:
+                    counts[kind] += 1
+    finally:
+        connection.close()
+    counts["unlabeled"] = total - sum(counts.values())
+    print(f"{style.id}: {total} rendered stars; eligible labels before layout")
+    for kind in ("proper", "bayer", "flamsteed", "variable", "unlabeled"):
+        print(f"  {kind}: {counts[kind]}")
+    print(
+        "  proper-name tiers: "
+        + ", ".join(f"{tier}={tiers[tier]}" for tier in ("core", "standard", "extended"))
+    )
+    return 0
+
+
 def _command_reindex_stars(args: argparse.Namespace) -> int:
     with StarStore.open(args.store) as store:
         store.reindex()
@@ -1065,9 +1111,7 @@ def _command_fetch_wds(args: argparse.Namespace) -> int:
 def _command_import_wds(args: argparse.Namespace) -> int:
     raw = wds_raw_path(args.raw)
     if not raw.exists():
-        raise ConfigError(
-            f"missing raw WDS {raw}; run 'nightsky data fetch-wds' first"
-        )
+        raise ConfigError(f"missing raw WDS {raw}; run 'nightsky data fetch-wds' first")
     systems = list(iter_wds_systems(raw))
     count = write_system_catalog(args.out, systems)
     manifest = {
@@ -1081,16 +1125,13 @@ def _command_import_wds(args: argparse.Namespace) -> int:
             "latest-epoch separation/position angle where present, first-epoch fallback"
         ),
         "magnitude_rule": (
-            "component magnitudes mag1/mag2; combined via "
-            "-2.5 * log10(sum(10 ** (-0.4 * m_i)))"
+            "component magnitudes mag1/mag2; combined via -2.5 * log10(sum(10 ** (-0.4 * m_i)))"
         ),
         "raw_file": raw.name,
         "system_count": count,
         "processed_file": args.out.name,
         "processed_sha256": file_sha256(args.out),
-        "match_note": (
-            "linked to Tycho-2 stars per chart; WDS never overwrites the star base"
-        ),
+        "match_note": ("linked to Tycho-2 stars per chart; WDS never overwrites the star base"),
     }
     write_manifest(args.manifest, manifest)
     print(f"imported {count} star systems -> {args.out}")
@@ -1134,9 +1175,7 @@ def _command_atlas_coverage(args: argparse.Namespace) -> int:
 def _command_atlas_report(args: argparse.Namespace) -> int:
     atlas = load_atlas_config(args.atlas)
     manifest_path = (
-        args.manifest
-        if args.manifest is not None
-        else args.outdir / atlas.id / "manifest.json"
+        args.manifest if args.manifest is not None else args.outdir / atlas.id / "manifest.json"
     )
     pages = None
     if manifest_path.exists():
@@ -1149,9 +1188,7 @@ def _command_atlas_report(args: argparse.Namespace) -> int:
     )
     out = args.out if args.out is not None else args.outdir / atlas.id / "draft-report.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(render_text_summary(report))
     print(f"-> {out}")
     return 0
@@ -1236,9 +1273,7 @@ def _command_benchmark_ai_review(args: argparse.Namespace) -> int:
     )
     out = Path(args.outdir) / "report.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    out.write_text(json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     summary = report.to_dict()["summary"]
     print(
         f"cases={summary['cases']} schema={summary['schema_compliance']:.2f} "

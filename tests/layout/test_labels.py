@@ -105,7 +105,13 @@ def make_star(star_id: str, magnitude: float, *, hip_id: str | None) -> Star:
 
 
 STAR_NAMES = {
-    12345: StarName(hip_number=12345, name="Teststar", constellation="Cyg"),
+    12345: StarName(
+        hip_number=12345,
+        name="Teststar",
+        curated_name="Teststar",
+        proper_name_tier="core",
+        constellation="Cyg",
+    ),
     23456: StarName(hip_number=23456, bayer="α", constellation="Lyr"),
     34567: StarName(hip_number=34567, flamsteed="50", constellation="Cyg"),
 }
@@ -126,7 +132,7 @@ def test_build_star_labels_bayer_fallback_and_optional() -> None:
     star = make_star("HIP 23456", 4.5, hip_id="HIP 23456")
     scene = build_scene(CHART, [star])
     labels = build_star_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE, STAR_NAMES)
-    assert labels[0].text == "α Lyr"
+    assert labels[0].text == "α"
     assert labels[0].mandatory is False
 
 
@@ -144,9 +150,7 @@ def test_build_star_labels_skips_unnamed_or_faint_or_unmatched() -> None:
 def test_build_labels_combines_star_and_dso() -> None:
     star = make_star("HIP 34567", 3.0, hip_id="HIP 34567")
     scene = build_scene(CHART, [star], [make_dso("NGC4486", cross_ids=("M87",))])
-    labels = build_labels(
-        scene, PageTransform(chart=CHART, page=PAGE), STYLE, STAR_NAMES
-    )
+    labels = build_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE, STAR_NAMES)
     assert {label.id for label in labels} == {"label:dso:NGC4486", "label:star:HIP 34567"}
 
 

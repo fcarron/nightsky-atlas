@@ -7,6 +7,7 @@ Priority and mandatory status follow the conceptual ordering in section 14.3.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.catalog.constellations import constellation_name
@@ -40,9 +41,7 @@ def label_priority(dso: DeepSkyObject) -> tuple[int, bool]:
     return base_label_priority(dso)
 
 
-def _exclusion_radius_mm(
-    dso: DeepSkyObject, transform: PageTransform, style: StyleConfig
-) -> float:
+def _exclusion_radius_mm(dso: DeepSkyObject, transform: PageTransform, style: StyleConfig) -> float:
     """Return the label exclusion radius from the central symbol extent.
 
     This is exactly the same geometry the renderer draws and collision detects,
@@ -128,13 +127,53 @@ def build_dso_labels(
     return tuple(labels)
 
 
-def _star_label_priority(star: Star, star_name: StarName) -> tuple[int, bool]:
+def _star_label_priority(star: Star, star_name: StarName, kind: str) -> tuple[int, bool]:
     """Return ``(priority, mandatory)`` for a named/designated star.
 
     Delegates to the central priority scale so the star and deep-sky orderings
     cannot diverge.
     """
-    return star_label_priority(star, star_name)
+    return star_label_priority(star, star_name, kind)
+
+
+def _ambiguous_star_designations(
+    scene: ChartScene,
+    transform: PageTransform,
+    style: StyleConfig,
+    star_names: dict[int, StarName],
+) -> set[int]:
+    policy = style.label.star_labels
+    suffix = policy.constellation_suffix
+    if suffix.default or not suffix.allow_ambiguity_fallback:
+        return set()
+    by_compact: dict[str, list[tuple[int, str, PagePoint]]] = defaultdict(list)
+    for scene_star in scene.stars:
+        star = scene_star.star
+        number = hip_number(star.hip_id)
+        if number is None or number not in star_names:
+            continue
+        name = star_names[number]
+        variants = name.display_variants(
+            policy, star.magnitude, proper_magnitude_limit=style.star.label_magnitude_limit
+        )
+        systematic = next((text for text, kind in variants if kind in {"bayer", "flamsteed"}), None)
+        if systematic is not None and name.constellation is not None:
+            by_compact[systematic].append(
+                (number, name.constellation, transform.to_page(scene_star.chart_point))
+            )
+    ambiguous: set[int] = set()
+    radius_sq = suffix.ambiguity_radius_mm**2
+    for entries in by_compact.values():
+        for index, (left_hip, left_constellation, left_point) in enumerate(entries):
+            for right_hip, right_constellation, right_point in entries[index + 1 :]:
+                if left_hip == right_hip or left_constellation == right_constellation:
+                    continue
+                distance_sq = (left_point.x_mm - right_point.x_mm) ** 2 + (
+                    left_point.y_mm - right_point.y_mm
+                ) ** 2
+                if distance_sq <= radius_sq:
+                    ambiguous.update((left_hip, right_hip))
+    return ambiguous
 
 
 def build_star_labels(
@@ -160,39 +199,68 @@ def build_star_labels(
         for star_id in obstacle.star_ids
     }
     measurer = TextMeasurer(style.label.font_family, style.label.font_size_pt)
-    limit = style.star.label_magnitude_limit
+    policy = style.label.star_labels
+    ambiguous_hips = _ambiguous_star_designations(scene, transform, style, star_names)
+    limit = max(
+        style.star.label_magnitude_limit,
+        policy.bayer.max_magnitude if policy.bayer.enabled else 0.0,
+        policy.flamsteed.max_magnitude if policy.flamsteed.enabled else 0.0,
+        policy.variables.max_magnitude if policy.variables.enabled else 0.0,
+    )
     labels: list[Label] = []
-    for scene_star in scene.stars:
+    seen_hips: set[int] = set()
+    for scene_star in sorted(scene.stars, key=lambda item: (item.star.magnitude, item.star.id)):
         star = scene_star.star
         if star.magnitude > limit:
             continue
-        star_name = star_names.get(hip_number(star.hip_id))
+        number = hip_number(star.hip_id)
+        if number is None or number in seen_hips:
+            continue
+        star_name = star_names.get(number)
         if star_name is None:
             continue
-        text = star_name.display_text()
-        if not text:
+        variants = star_name.display_variants(
+            policy,
+            star.magnitude,
+            proper_magnitude_limit=style.star.label_magnitude_limit,
+            ambiguous=number in ambiguous_hips,
+        )
+        if not variants:
             continue
+        seen_hips.add(number)
+        text, kind = variants[0]
+        if kind == "combined" or kind.startswith("proper_"):
+            semantic_key = f"star:name:{star_name.curated_name}"
+        elif kind == "bayer":
+            semantic_key = f"star:bayer:{star_name.full_bayer_designation}"
+        elif kind == "flamsteed":
+            semantic_key = f"star:flamsteed:{star_name.full_flamsteed_designation}"
+        else:
+            semantic_key = f"star:variable:{text}"
         label_id = f"label:star:{star.id}"
-        metrics = measurer.measure_mm(text)
         obstacle = printed_obstacle_by_star.get(star.id)
         anchor = (
             obstacle.page_point
             if obstacle is not None
             else transform.to_page(scene_star.chart_point)
         )
-        candidates = compass_candidates(
-            label_id=label_id,
-            metrics=metrics,
-            anchor=anchor,
-            exclusion_radius_mm=(
-                obstacle.collision_radius_mm
-                if obstacle is not None
-                else model.radius_mm(star.magnitude)
-            ),
-            ring_count=style.label.candidate_rings,
-            ring_gap_mm=style.label.ring_gap_mm,
+        candidates = tuple(
+            replace(candidate, display_text=variant_text, variant_rank=variant_index)
+            for variant_index, (variant_text, variant_kind) in enumerate(variants)
+            for candidate in compass_candidates(
+                label_id=(label_id if len(variants) == 1 else f"{label_id}:v{variant_index}"),
+                metrics=measurer.measure_mm(variant_text),
+                anchor=anchor,
+                exclusion_radius_mm=(
+                    obstacle.collision_radius_mm
+                    if obstacle is not None
+                    else model.radius_mm(star.magnitude)
+                ),
+                ring_count=(1 if variant_kind == "combined" else style.label.candidate_rings),
+                ring_gap_mm=style.label.ring_gap_mm,
+            )
         )
-        priority, mandatory = _star_label_priority(star, star_name)
+        priority, mandatory = _star_label_priority(star, star_name, kind)
         labels.append(
             Label(
                 id=label_id,
@@ -202,6 +270,7 @@ def build_star_labels(
                 mandatory=mandatory,
                 candidates=candidates,
                 selected_candidate_id=candidates[0].id if candidates else None,
+                semantic_key=semantic_key,
             )
         )
     return tuple(labels)
@@ -293,7 +362,5 @@ def build_labels(
     if star_names is None:
         return dso_labels + constellation_labels
     return (
-        dso_labels
-        + constellation_labels
-        + build_star_labels(scene, transform, style, star_names)
+        dso_labels + constellation_labels + build_star_labels(scene, transform, style, star_names)
     )

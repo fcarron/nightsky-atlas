@@ -159,14 +159,32 @@ def dso_label_priority(
     return ORDINARY_DSO_PRIORITY
 
 
-def star_label_priority(star: Star, star_name: StarName) -> tuple[int, bool]:
+def star_label_priority(
+    star: Star, star_name: StarName, designation_kind: str | None = None
+) -> tuple[int, bool]:
     """Return ``(priority, mandatory)`` for a named/designated star.
 
     A proper name outranks a Bayer designation, which outranks Flamsteed and
     finally any other designation.  Only bright Bayer stars count as
     constellation main stars; a faint Bayer star is a medium-priority label.
     """
-    if star_name.name:
+    if designation_kind == "combined" and star_name.proper_name_tier == "core":
+        priority = 95
+    elif designation_kind == "combined" and star_name.proper_name_tier == "standard":
+        priority = 80
+    elif designation_kind == "proper_core":
+        priority = 95
+    elif designation_kind == "proper_standard":
+        priority = 80
+    elif designation_kind == "proper_extended":
+        priority = 30
+    elif designation_kind == "variable":
+        priority = 70
+    elif designation_kind == "flamsteed":
+        priority = 70 if star_name.preferred_designation == "flamsteed" else STAR_FLAMSTEED_PRIORITY
+    elif designation_kind == "bayer":
+        priority = 90 if star.magnitude <= _MAIN_STAR_MAGNITUDE else 65
+    elif star_name.name:
         priority = STAR_NAME_PRIORITY
     elif star_name.bayer:
         if star.magnitude <= _MAIN_STAR_MAGNITUDE:

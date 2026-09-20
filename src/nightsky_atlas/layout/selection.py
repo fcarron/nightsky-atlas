@@ -142,7 +142,7 @@ def _remove_duplicates(
     """Collapse labels that print the same name onto one primary label."""
     chosen: dict[str, Label] = {}
     for label in labels:
-        key = _normalise_text(label.text)
+        key = _normalise_text(label.semantic_key or label.text)
         if not key:
             continue
         current = chosen.get(key)

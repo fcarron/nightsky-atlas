@@ -426,6 +426,38 @@ class LabelSelectionStyle(_StrictModel):
     always_label_object_types: tuple[DsoType, ...] = ()
 
 
+class StarDesignationStyle(_StrictModel):
+    enabled: bool = True
+    max_magnitude: float = 5.5
+
+
+class ProperNameTierStyle(_StrictModel):
+    core: bool = True
+    standard: bool = True
+    extended: bool = False
+
+
+class ConstellationSuffixStyle(_StrictModel):
+    default: bool = True
+    allow_ambiguity_fallback: bool = False
+    ambiguity_radius_mm: PositiveFloat = 18.0
+
+
+class StarLabelStyle(_StrictModel):
+    proper_names: ProperNameTierStyle = Field(default_factory=ProperNameTierStyle)
+    bayer: StarDesignationStyle = Field(default_factory=StarDesignationStyle)
+    flamsteed: StarDesignationStyle = Field(
+        default_factory=lambda: StarDesignationStyle(max_magnitude=5.0)
+    )
+    variables: StarDesignationStyle = Field(
+        default_factory=lambda: StarDesignationStyle(max_magnitude=6.5)
+    )
+    combined_names: bool = False
+    constellation_suffix: ConstellationSuffixStyle = Field(
+        default_factory=ConstellationSuffixStyle
+    )
+
+
 class LeaderLineStyle(_StrictModel):
     """Physical drawing and eligibility rules for exceptional DSO callouts."""
 
@@ -457,6 +489,7 @@ class LabelStyle(_StrictModel):
     leader_lines: LeaderLineStyle = Field(default_factory=LeaderLineStyle)
     dso_label_magnitude_limit: float | None = None
     dso_labels: DsoLabelStyle = Field(default_factory=DsoLabelStyle)
+    star_labels: StarLabelStyle = Field(default_factory=StarLabelStyle)
     selection: LabelSelectionStyle = Field(default_factory=LabelSelectionStyle)
 
 
@@ -795,6 +828,7 @@ class MagnitudeLegendStyle(_StrictModel):
     gray: float = 0.55
     spacing_mm: PositiveFloat = 6.0
     label: str = "mag"
+
 
 class FurnitureStyle(_StrictModel):
     """Chart title/footer, scale bar, magnitude legend and navigation styling."""

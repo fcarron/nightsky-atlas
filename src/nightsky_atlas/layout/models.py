@@ -35,7 +35,7 @@ class LabelCandidate:
 
     ``ring`` identifies concentric candidate rings; ring 0 is the nearest
     legal placement and is the only ring referenced by the compass action
-    schema.
+    schema. Star-label candidates may also carry their measured display variant.
     """
 
     id: str
@@ -43,10 +43,12 @@ class LabelCandidate:
     anchor: PagePoint
     bounds: PageRect
     ring: int = 0
+    display_text: str | None = None
+    variant_rank: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable mapping of this candidate."""
-        return {
+        data = {
             "id": self.id,
             "position": self.position.value,
             "ring": self.ring,
@@ -58,6 +60,10 @@ class LabelCandidate:
                 "height_mm": self.bounds.height_mm,
             },
         }
+        if self.display_text is not None:
+            data["display_text"] = self.display_text
+            data["variant_rank"] = self.variant_rank
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> LabelCandidate:
@@ -75,6 +81,8 @@ class LabelCandidate:
                 height_mm=float(bounds["height_mm"]),
             ),
             ring=int(data.get("ring", 0)),
+            display_text=data.get("display_text"),
+            variant_rank=int(data.get("variant_rank", 0)),
         )
 
 
@@ -88,6 +96,7 @@ class Label:
     manual override and must not be moved by later optimizers (``AGENTS.md``
     section 22).  ``font_size_pt`` and ``font_weight`` carry the per-label
     typography; ``None``/``normal`` fall back to the style default.
+    ``text`` is the selected variant once a candidate has been placed.
     """
 
     id: str
@@ -102,6 +111,7 @@ class Label:
     font_size_pt: float | None = None
     font_weight: str = "normal"
     leader_line: bool = False
+    semantic_key: str | None = None
 
     def candidate(self, candidate_id: str) -> LabelCandidate | None:
         """Return the candidate with the given ID, if present."""
@@ -131,10 +141,11 @@ class Label:
 
     def with_selection(self, candidate_id: str | None) -> Label:
         """Return a copy with a different selected candidate."""
+        selected = self.candidate(candidate_id) if candidate_id is not None else None
         return Label(
             id=self.id,
             target_id=self.target_id,
-            text=self.text,
+            text=selected.display_text if selected and selected.display_text else self.text,
             priority=self.priority,
             mandatory=self.mandatory,
             candidates=self.candidates,
@@ -144,6 +155,7 @@ class Label:
             font_size_pt=self.font_size_pt,
             font_weight=self.font_weight,
             leader_line=self.leader_line and candidate_id == self.selected_candidate_id,
+            semantic_key=self.semantic_key,
         )
 
     def with_placement(
@@ -154,10 +166,11 @@ class Label:
         ``locked`` is preserved when omitted, so optimizer passes never unlock a
         manual override.
         """
+        selected = self.candidate(candidate_id) if candidate_id is not None else None
         return Label(
             id=self.id,
             target_id=self.target_id,
-            text=self.text,
+            text=selected.display_text if selected and selected.display_text else self.text,
             priority=self.priority,
             mandatory=self.mandatory,
             candidates=self.candidates,
@@ -169,11 +182,12 @@ class Label:
             leader_line=(
                 self.leader_line and not hidden and candidate_id == self.selected_candidate_id
             ),
+            semantic_key=self.semantic_key,
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable mapping of this label."""
-        return {
+        data = {
             "id": self.id,
             "target_id": self.target_id,
             "text": self.text,
@@ -187,6 +201,9 @@ class Label:
             "selected_candidate_id": self.selected_candidate_id,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
+        if self.semantic_key is not None:
+            data["semantic_key"] = self.semantic_key
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Label:
@@ -197,9 +214,7 @@ class Label:
             text=data["text"],
             priority=int(data["priority"]),
             mandatory=bool(data["mandatory"]),
-            candidates=tuple(
-                LabelCandidate.from_dict(item) for item in data["candidates"]
-            ),
+            candidates=tuple(LabelCandidate.from_dict(item) for item in data["candidates"]),
             selected_candidate_id=data.get("selected_candidate_id"),
             hidden=bool(data.get("hidden", False)),
             locked=bool(data.get("locked", False)),
@@ -208,4 +223,5 @@ class Label:
             ),
             font_weight=str(data.get("font_weight", "normal")),
             leader_line=bool(data.get("leader_line", False)),
+            semantic_key=data.get("semantic_key"),
         )

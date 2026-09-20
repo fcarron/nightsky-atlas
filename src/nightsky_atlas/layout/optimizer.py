@@ -33,6 +33,7 @@ _CROWDING_RADIUS_MM = 6.0
 _EDGE_MARGIN_MM = 8.0
 _MAX_REPAIR_PASSES = 4
 _GRID_CELL_MM = 8.0
+_VARIANT_RANK_COST = 12.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,7 +202,7 @@ def optimize_labels(
     for label in ordered:
         if label.id in placements:
             continue
-        best: tuple[tuple[float, float, int], LabelCandidate] | None = None
+        best: tuple[tuple[float, float, int, int], LabelCandidate] | None = None
         for candidate in label.candidates:
             nearby_bounds = tuple(
                 placed_index.query(
@@ -229,7 +230,8 @@ def optimize_labels(
             )
             key = (
                 0.0 if valid else 1.0,
-                breakdown.total(weights),
+                breakdown.total(weights) + candidate.variant_rank * _VARIANT_RANK_COST,
+                candidate.variant_rank,
                 _preference_rank(candidate),
             )
             if best is None or key < best[0]:
@@ -329,7 +331,7 @@ def _local_repair(
                 weights=weights,
                 edge_margin_mm=_EDGE_MARGIN_MM,
                 constellation_lines=constellation_lines,
-            ).total(weights)
+            ).total(weights) + current.variant_rank * _VARIANT_RANK_COST
             for candidate in label.candidates:
                 if candidate.id == current_id:
                     continue
@@ -353,7 +355,7 @@ def _local_repair(
                     weights=weights,
                     edge_margin_mm=_EDGE_MARGIN_MM,
                     constellation_lines=constellation_lines,
-                ).total(weights)
+                ).total(weights) + candidate.variant_rank * _VARIANT_RANK_COST
                 if cost < best_cost - 1e-9:
                     best_cost = cost
                     best_id = candidate.id

@@ -235,6 +235,15 @@ its licensing is resolved.
 | Transformations | derived from the raw d3-celestial file, keeping only name/designation/constellation fields; thin spaces stripped |
 | Committed | yes (~207 kB); build must be reproducible offline |
 
+Standard's printed proper names are an original, HIP-keyed editorial subset
+(`data/fixtures/starnames/curated.yaml`: 99 core, 86 standard, 17 extended).
+Canonical spellings and HIP identities were checked against the IAU Catalog of
+Star Names, 2022-04-04 snapshot (IAU-produced data, Creative Commons
+Attribution; version unspecified in the snapshot); see
+`data/fixtures/starnames/SOURCE.md` for the IAU citation and snapshot URL.
+The source list is retained independently as d3-celestial BSD-3-Clause data;
+uncurated names remain available as aliases but are not automatically printed.
+
 ## Committed versus ignored
 
 Git-ignored (regenerate, do not commit): `data/raw/`, `data/processed/`,

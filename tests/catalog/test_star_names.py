@@ -55,3 +55,21 @@ def test_non_numeric_key_is_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="non-numeric"):
         load_star_names(tmp_path)
+
+
+def test_curated_duplicate_preferred_name_is_rejected(tmp_path: Path) -> None:
+    (tmp_path / "starnames.json").write_text(
+        json.dumps({"1": {}, "2": {}}), encoding="utf-8"
+    )
+    (tmp_path / "curated.yaml").write_text(
+        "source: test\n"
+        "proper_names:\n"
+        "  core: [{hip: 1, name: Same}, {hip: 2, name: Same}]\n"
+        "  standard: []\n"
+        "  extended: []\n"
+        "variables: []\n"
+        "preferred_designations: []\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="duplicate curated name"):
+        load_star_names(tmp_path)

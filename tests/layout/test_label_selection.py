@@ -118,8 +118,8 @@ def test_semantic_duplicates_collapse_to_one_label() -> None:
         ),
     ]
     names = {
-        1: StarName(hip_number=1, name="Ruchba"),
-        2: StarName(hip_number=2, name="Ruchba"),
+        1: StarName(hip_number=1, name="Ruchba", curated_name="Ruchba", proper_name_tier="core"),
+        2: StarName(hip_number=2, name="Ruchba", curated_name="Ruchba", proper_name_tier="core"),
     }
     scene = build_scene(CHART, stars)
     labels = build_star_labels(scene, TRANSFORM, STYLE, names)
@@ -127,6 +127,30 @@ def test_semantic_duplicates_collapse_to_one_label() -> None:
     selected = select_labels(labels, scene, TRANSFORM, STYLE)
     assert len(selected) == 1
     assert selected[0].target_id == "TYC 1-1-1"
+
+
+def test_same_compact_bayer_from_different_constellations_is_not_a_duplicate() -> None:
+    stars = [
+        Star(
+            id=f"TYC {number}-1-1",
+            ra_deg=ra,
+            dec_deg=12.0,
+            magnitude=4.0,
+            provenance=Provenance(catalogue="TEST", source_id=str(number)),
+            hip_id=f"HIP {number}",
+        )
+        for number, ra in ((1, 184.0), (2, 191.0))
+    ]
+    names = {
+        1: StarName(1, bayer="δ", constellation="Vir"),
+        2: StarName(2, bayer="δ", constellation="Com"),
+    }
+    scene = build_scene(CHART, stars)
+    labels = build_star_labels(scene, TRANSFORM, STYLE, names)
+    assert [label.text for label in labels] == ["δ", "δ"]
+    assert {label.semantic_key for label in labels} == {"star:bayer:δ Vir", "star:bayer:δ Com"}
+    selected = select_labels(labels, scene, TRANSFORM, STYLE)
+    assert len(selected) == 2
 
 
 def test_selection_can_be_disabled() -> None:
@@ -146,14 +170,10 @@ def test_protected_ids_are_always_kept() -> None:
     scene, labels = clustered_scene()
     unprotected = select_labels(labels, scene, TRANSFORM, STYLE)
     unprotected_ids = {label.id for label in unprotected}
-    dropped = [
-        label.id for label in labels if label.id not in unprotected_ids
-    ]
+    dropped = [label.id for label in labels if label.id not in unprotected_ids]
     assert dropped, "expected the dense field to drop some ordinary labels"
     protected = dropped[0]
-    selected = select_labels(
-        labels, scene, TRANSFORM, STYLE, protected_ids=[protected]
-    )
+    selected = select_labels(labels, scene, TRANSFORM, STYLE, protected_ids=[protected])
     assert protected in {label.id for label in selected}
 
 
