@@ -15,6 +15,10 @@ tiling:
   stagger_ra_centers: false
   auto_adjust_counts: true
 visibility:
+  # Deep renders every genuine deep-sky object in OpenNGC, not just the
+  # per-type visible subset.  ``star``/``double_star`` catalogue entries are
+  # still excluded (they are not drawn as deep-sky symbols).
+  include_all: true
   integrated_magnitude_limit: 14.5
   surface_brightness_limit: 24.5
   min_axis_arcmin: 0.8

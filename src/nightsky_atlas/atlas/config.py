@@ -237,6 +237,9 @@ class VisibilityConfig(_StrictModel):
     reference_magnitude: float = 8.0
     reference_surface_brightness: float = 21.0
     reference_axis_arcmin: PositiveFloat = 10.0
+    # Render every genuine deep-sky object in the catalogue, ignoring the
+    # per-type limits above.  ``star``/``double_star`` entries stay excluded.
+    include_all: bool = False
 
     @model_validator(mode="after")
     def _references_sit_inside_limits(self) -> VisibilityConfig:
@@ -260,6 +263,7 @@ class VisibilityConfig(_StrictModel):
             reference_magnitude=self.reference_magnitude,
             reference_surface_brightness=self.reference_surface_brightness,
             reference_axis_arcmin=self.reference_axis_arcmin,
+            include_all=self.include_all,
         )
 
 
@@ -801,9 +805,9 @@ class ConstellationLineStyle(_StrictModel):
     enabled: bool = True
     gray: float = 0.5
     line_width_mm: PositiveFloat = 0.22
-    bold_width_mm: PositiveFloat = 0.23
+    bold_width_mm: PositiveFloat = 0.25
     normal_width_mm: PositiveFloat = 0.16
-    thin_width_mm: PositiveFloat = 0.11
+    thin_width_mm: PositiveFloat = 0.10
     star_gap_extra_mm: NonNegativeFloat = 0.2
     star_match_tolerance_mm: PositiveFloat = 0.6
 
@@ -830,7 +834,7 @@ class ConstellationNameStyle(_StrictModel):
     """Quiet full constellation names placed beneath chart content."""
 
     enabled: bool = True
-    font_size_pt: PositiveFloat = 9.0
+    font_size_pt: PositiveFloat = 10.2
     gray: float = 0.66
     min_segments: int = Field(default=2, ge=1)
 
@@ -890,9 +894,9 @@ class MagnitudeLegendStyle(_StrictModel):
 
     enabled: bool = True
     font_size_pt: PositiveFloat = 6.0
-    gray: float = 0.55
-    spacing_mm: PositiveFloat = 6.0
-    label: str = "mag"
+    gray: float = 0.0
+    spacing_mm: PositiveFloat = 3.5
+    label: str = "stars to mag"
 
 
 class FurnitureStyle(_StrictModel):

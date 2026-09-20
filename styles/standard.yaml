@@ -151,9 +151,9 @@ constellation:
     enabled: true
     gray: 0.5
     line_width_mm: 0.16
-    bold_width_mm: 0.23
+    bold_width_mm: 0.25
     normal_width_mm: 0.16
-    thin_width_mm: 0.11
+    thin_width_mm: 0.10
     star_gap_extra_mm: 0.2
   boundaries:
     enabled: true
@@ -161,6 +161,8 @@ constellation:
     line_width_mm: 0.1
     dash_mm: 0.5
     gap_mm: 1.0
+  names:
+    font_size_pt: 10.2
 
 grid:
   enabled: true
@@ -221,9 +223,9 @@ furniture:
   magnitude_legend:
     enabled: true
     font_size_pt: 5.5
-    gray: 0.55
-    spacing_mm: 6.0
-    label: "mag"
+    gray: 0.0
+    spacing_mm: 3.5
+    label: "stars to mag"
 
 # Front-of-atlas whole-sky overview pages: a pole-centred azimuthal equidistant
 # disk per hemisphere showing a simplified constellation background, the bright

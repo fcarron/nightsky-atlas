@@ -163,6 +163,6 @@ def test_all_weights_keep_star_gap_and_label_knockout(weight: str) -> None:
 
 def test_semantic_weights_resolve_to_configured_physical_widths() -> None:
     config = STYLE.constellation.lines
-    assert config.width_mm_for("bold") == pytest.approx(0.23)
+    assert config.width_mm_for("bold") == pytest.approx(0.25)
     assert config.width_mm_for("normal") == pytest.approx(0.16)
-    assert config.width_mm_for("thin") == pytest.approx(0.11)
+    assert config.width_mm_for("thin") == pytest.approx(0.10)

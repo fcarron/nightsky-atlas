@@ -17,7 +17,7 @@ forces an object in regardless of this assessment (``AGENTS.md`` section 15).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import ClassVar, Protocol
 
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType
@@ -48,9 +48,14 @@ class VisibilityLimits:
     reference_magnitude: float = 8.0
     reference_surface_brightness: float = 21.0
     reference_axis_arcmin: float = 10.0
+    include_all: bool = False
 
 
 DEFAULT_LIMITS = VisibilityLimits()
+
+# Catalogue entries that are not deep-sky objects: they are never drawn as a
+# DSO symbol, even when ``include_all`` is set.
+_NON_DSO_TYPES = frozenset({DsoType.STAR, DsoType.DOUBLE_STAR})
 
 
 @dataclass(frozen=True, slots=True)
@@ -505,5 +510,18 @@ def evaluator_for(object_type: DsoType) -> VisibilityEvaluator:
 def evaluate_visibility(
     dso: DeepSkyObject, limits: VisibilityLimits = DEFAULT_LIMITS
 ) -> VisibilityAssessment:
-    """Evaluate one deep-sky object against ``limits``."""
-    return evaluator_for(dso.object_type).evaluate(dso, limits)
+    """Evaluate one deep-sky object against ``limits``.
+
+    When ``limits.include_all`` is set, every genuine deep-sky type is visible
+    regardless of the per-type limits (the real score is retained for ranking);
+    ``star``/``double_star`` catalogue entries stay excluded because they are not
+    drawn as deep-sky symbols.
+    """
+    assessment = evaluator_for(dso.object_type).evaluate(dso, limits)
+    if (
+        limits.include_all
+        and dso.object_type not in _NON_DSO_TYPES
+        and not assessment.visible
+    ):
+        return replace(assessment, visible=True, reasons=("include-all",))
+    return assessment

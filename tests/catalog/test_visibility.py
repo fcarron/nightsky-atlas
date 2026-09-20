@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
 from nightsky_atlas.catalog.selection import SelectionPolicy, select_dso
 from nightsky_atlas.catalog.visibility import (
@@ -148,3 +150,28 @@ def test_forced_object_is_rendered_despite_invisible_assessment() -> None:
     assert metadata.visible is False
     assert metadata.forced is True
     assert metadata.visual_score >= 0.0
+
+
+def test_include_all_renders_every_dso_type() -> None:
+    limits = replace(DEFAULT_LIMITS, include_all=True)
+    faint = make_dso(
+        object_type=DsoType.GALAXY,
+        magnitude=18.0,
+        major_axis_arcmin=0.2,
+        minor_axis_arcmin=0.2,
+    )
+    no_photometry = make_dso(object_type=DsoType.GALAXY)
+    for dso in (faint, no_photometry):
+        assessment = evaluate_visibility(dso, limits)
+        assert assessment.visible is True
+        assert assessment.reasons == ("include-all",)
+
+
+def test_include_all_keeps_star_entries_excluded() -> None:
+    limits = replace(DEFAULT_LIMITS, include_all=True)
+    for object_type in (DsoType.STAR, DsoType.DOUBLE_STAR):
+        assessment = evaluate_visibility(
+            make_dso(object_type=object_type, magnitude=5.0), limits
+        )
+        assert assessment.visible is False
+        assert "excluded-type" in assessment.reasons

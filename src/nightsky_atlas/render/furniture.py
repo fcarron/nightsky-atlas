@@ -53,8 +53,9 @@ Align = Literal["left", "center", "right"]
 _FOOTER_DOT_CENTER_FROM_BOTTOM_MM = 4.2
 _FOOTER_TITLE_CENTER_FROM_BOTTOM_MM = 4.3
 _LEGEND_LABEL_GAP_MM = 2.0
-_LEGEND_DOT_NUMBER_GAP_MM = 0.8
+_LEGEND_DOT_NUMBER_GAP_MM = 0.6
 _LEGEND_CENTER_FROM_BOTTOM_MM = 5.0
+_LEGEND_BOTTOM_SAFE_MM = 2.0
 _SCALE_LABEL_GAP_MM = 0.6
 _SIDE_NAVIGATION_ANGLE_RAD = math.pi / 2.0
 
@@ -248,9 +249,19 @@ def _magnitude_legend(
     size_model = StarSizeModel.from_style(style.star)
     magnitudes = star_reference_magnitudes(style.star)
     measurer = TextMeasurer(family, legend.font_size_pt)
-    label_metrics = measurer.measure_mm(legend.label)
-    dot_center = page.height_mm - _LEGEND_CENTER_FROM_BOTTOM_MM
-    number_top = dot_center - measurer.measure_mm("0").height_mm / 2.0
+    # The limit is derived from the same star style used to select plotted
+    # stars, so Pocket/Standard/Deep legends cannot drift out of sync.
+    limit_label = f"{legend.label} {style.star.faint_magnitude:g}"
+    label_metrics = measurer.measure_mm(limit_label)
+    number_height = measurer.measure_mm("0").height_mm
+    max_diameter = max(size_model.diameter_mm(magnitude) for magnitude in magnitudes)
+    # Keep the largest legend dot clear of the print-safe bottom margin; the
+    # standard centre distance is a floor so Pocket/Standard stay unchanged and
+    # only editions with larger symbols (Deep) move the row up.
+    dot_center = page.height_mm - max(
+        _LEGEND_CENTER_FROM_BOTTOM_MM, _LEGEND_BOTTOM_SAFE_MM + max_diameter / 2.0
+    )
+    number_top = dot_center - max_diameter / 2.0 - _LEGEND_DOT_NUMBER_GAP_MM - number_height
     next_left = page.margin_mm + label_metrics.width_mm + _LEGEND_LABEL_GAP_MM
     dots_list: list[LegendDot] = []
     numbers_list: list[PlacedText] = []
@@ -259,20 +270,14 @@ def _magnitude_legend(
         center_x = next_left + diameter_mm / 2.0
         dots_list.append(LegendDot(center_x, dot_center, diameter_mm))
         numbers_list.append(
-            PlacedText(
-                f"{magnitude:g}",
-                next_left + diameter_mm + _LEGEND_DOT_NUMBER_GAP_MM,
-                number_top,
-                "left",
-                legend.font_size_pt,
-            )
+            PlacedText(f"{magnitude:g}", center_x, number_top, "center", legend.font_size_pt)
         )
         next_left += diameter_mm + legend.spacing_mm
     dots = tuple(dots_list)
     numbers = tuple(numbers_list)
     return MagnitudeLegend(
         label=PlacedText(
-            legend.label,
+            limit_label,
             page.margin_mm,
             dot_center - label_metrics.height_mm / 2.0,
             "left",
@@ -341,9 +346,7 @@ def build_furniture_plan(
 
     legend = _magnitude_legend(page, style)
     if legend is not None:
-        legend_metrics = TextMeasurer(family, legend.numbers[-1].font_size_pt).measure_mm(
-            legend.numbers[-1].text
-        )
+        legend_metrics = TextMeasurer(family, legend.numbers[-1].font_size_pt)
         top = min(
             legend.label.y_mm,
             legend.numbers[0].y_mm,
@@ -351,14 +354,22 @@ def build_furniture_plan(
         )
         bottom = max(
             legend.label.y_mm + _measure_placed(legend.label, family).height_mm,
-            legend.numbers[0].y_mm + legend_metrics.height_mm,
+                legend.numbers[0].y_mm
+                + legend_metrics.measure_mm(legend.numbers[0].text).height_mm,
             max(dot.y_mm + dot.diameter_mm / 2.0 for dot in legend.dots),
         )
         obstacles.append(
             PageRect(
                 left_mm=page.margin_mm,
                 top_mm=top,
-                width_mm=legend.numbers[-1].x_mm + legend_metrics.width_mm - page.margin_mm,
+                width_mm=max(
+                    legend.label.x_mm + _measure_placed(legend.label, family).width_mm,
+                    *(
+                        number.x_mm + legend_metrics.measure_mm(number.text).width_mm / 2.0
+                        for number in legend.numbers
+                    ),
+                )
+                - page.margin_mm,
                 height_mm=bottom - top,
             )
         )

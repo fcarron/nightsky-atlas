@@ -147,7 +147,8 @@ def test_legend_dots_use_real_star_size_model(
         [model.diameter_mm(magnitude) for magnitude in expected_magnitudes]
     )
     assert all(
-        number.x_mm >= dot.x_mm + dot.diameter_mm / 2.0 + 0.8 - 1e-9
+        number.x_mm == pytest.approx(dot.x_mm)
+        and number.y_mm < dot.y_mm - dot.diameter_mm / 2.0
         for dot, number in zip(plan.legend.dots, plan.legend.numbers, strict=True)
     )
     assert all(
@@ -158,7 +159,7 @@ def test_legend_dots_use_real_star_size_model(
     )
     measurer = TextMeasurer(style.label.font_family, style.furniture.magnitude_legend.font_size_pt)
     assert all(
-        number.x_mm + measurer.measure_mm(number.text).width_mm
+        number.x_mm + measurer.measure_mm(number.text).width_mm / 2.0
         < right.x_mm - right.diameter_mm / 2.0
         for number, right in zip(plan.legend.numbers[:-1], plan.legend.dots[1:], strict=True)
     )

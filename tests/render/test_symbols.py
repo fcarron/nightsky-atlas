@@ -60,7 +60,7 @@ def test_from_style_matches_configuration() -> None:
 
 @pytest.mark.parametrize(
     ("edition", "magnitude_limit", "mag_six_diameter_mm"),
-    (("pocket", 7.5, 0.65), ("standard", 9.0, 1.10), ("deep", 10.0, 0.85)),
+    (("pocket", 7.5, 0.65), ("standard", 9.0, 1.10), ("deep", 10.0, 1.85)),
 )
 def test_edition_star_curves_are_calibrated(
     edition: str, magnitude_limit: float, mag_six_diameter_mm: float
@@ -80,6 +80,23 @@ def test_edition_star_curves_are_calibrated(
     magnitudes = [value / 10.0 for value in range(-10, int((magnitude_limit + 2.0) * 10))]
     diameters = [model.diameter_mm(magnitude) for magnitude in magnitudes]
     assert all(later <= earlier + 1e-12 for earlier, later in pairwise(diameters))
+
+
+def test_deeper_editions_print_larger_symbols() -> None:
+    """More plotted stars (deeper limit) must not shrink a given magnitude."""
+    models = {
+        edition: StarSizeModel.from_style(
+            load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml").star
+        )
+        for edition in ("pocket", "standard", "deep")
+    }
+    for magnitude in (value / 2.0 for value in range(16)):
+        assert models["pocket"].diameter_mm(magnitude) < models["standard"].diameter_mm(
+            magnitude
+        )
+        assert models["standard"].diameter_mm(magnitude) < models["deep"].diameter_mm(
+            magnitude
+        )
 
 
 def test_star_diameter_is_a_physical_circle() -> None:
