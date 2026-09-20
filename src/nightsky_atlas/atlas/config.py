@@ -773,6 +773,7 @@ class MagnitudeLegendStyle(_StrictModel):
 
     The reference dots use the same :class:`StarSizeModel` as the chart, so the
     legend shows the real printed symbol sizes rather than a symbolic redraw.
+    ``spacing_mm`` is the clear edge-to-edge gap between neighbouring dots.
     """
 
     enabled: bool = True

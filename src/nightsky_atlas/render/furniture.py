@@ -51,9 +51,11 @@ __all__ = [
 Align = Literal["left", "center", "right"]
 
 _FOOTER_DOT_CENTER_FROM_BOTTOM_MM = 4.2
-_FOOTER_TEXT_FROM_BOTTOM_MM = 2.4
-_FOOTER_TITLE_CENTER_FROM_BOTTOM_MM = 3.3
+_FOOTER_TITLE_CENTER_FROM_BOTTOM_MM = 4.3
 _LEGEND_LABEL_GAP_MM = 2.0
+_LEGEND_DOT_NUMBER_GAP_MM = 0.8
+_LEGEND_CENTER_FROM_BOTTOM_MM = 5.0
+_SCALE_LABEL_GAP_MM = 0.6
 _SIDE_NAVIGATION_ANGLE_RAD = math.pi / 2.0
 
 
@@ -221,12 +223,15 @@ def _scale_bar(
         return None
     label = f"{bar.length_deg:g}\N{DEGREE SIGN}"
     line_y = page.height_mm - _FOOTER_DOT_CENTER_FROM_BOTTOM_MM
+    label_height = TextMeasurer(style.label.font_family, bar.font_size_pt).measure_mm(
+        label
+    ).height_mm
     return ScaleBar(
         left_mm=page.width_mm / 2.0 - length_mm / 2.0,
         right_mm=page.width_mm / 2.0 + length_mm / 2.0,
         line_y_mm=line_y,
         label_x_mm=page.width_mm / 2.0,
-        label_y_mm=page.height_mm - _FOOTER_TEXT_FROM_BOTTOM_MM,
+        label_y_mm=line_y - bar.tick_mm / 2.0 - _SCALE_LABEL_GAP_MM - label_height,
         label=label,
         font_size_pt=bar.font_size_pt,
         tick_mm=bar.tick_mm,
@@ -244,30 +249,34 @@ def _magnitude_legend(
     magnitudes = star_reference_magnitudes(style.star)
     measurer = TextMeasurer(family, legend.font_size_pt)
     label_metrics = measurer.measure_mm(legend.label)
-    number_top = page.height_mm - _FOOTER_TEXT_FROM_BOTTOM_MM
-    dot_center = page.height_mm - _FOOTER_DOT_CENTER_FROM_BOTTOM_MM
-    first_cell = page.margin_mm + label_metrics.width_mm + _LEGEND_LABEL_GAP_MM
-    numbers = tuple(
-        PlacedText(
-            f"{magnitude:g}",
-            first_cell + legend.spacing_mm * (index + 0.5),
-            number_top,
-            "center",
-            legend.font_size_pt,
+    dot_center = page.height_mm - _LEGEND_CENTER_FROM_BOTTOM_MM
+    number_top = dot_center - measurer.measure_mm("0").height_mm / 2.0
+    next_left = page.margin_mm + label_metrics.width_mm + _LEGEND_LABEL_GAP_MM
+    dots_list: list[LegendDot] = []
+    numbers_list: list[PlacedText] = []
+    for magnitude in magnitudes:
+        diameter_mm = size_model.diameter_mm(magnitude)
+        center_x = next_left + diameter_mm / 2.0
+        dots_list.append(LegendDot(center_x, dot_center, diameter_mm))
+        numbers_list.append(
+            PlacedText(
+                f"{magnitude:g}",
+                next_left + diameter_mm + _LEGEND_DOT_NUMBER_GAP_MM,
+                number_top,
+                "left",
+                legend.font_size_pt,
+            )
         )
-        for index, magnitude in enumerate(magnitudes)
-    )
-    dots = tuple(
-        LegendDot(
-            x_mm=first_cell + legend.spacing_mm * (index + 0.5),
-            y_mm=dot_center,
-            diameter_mm=size_model.diameter_mm(magnitude),
-        )
-        for index, magnitude in enumerate(magnitudes)
-    )
+        next_left += diameter_mm + legend.spacing_mm
+    dots = tuple(dots_list)
+    numbers = tuple(numbers_list)
     return MagnitudeLegend(
         label=PlacedText(
-            legend.label, page.margin_mm, number_top, "left", legend.font_size_pt
+            legend.label,
+            page.margin_mm,
+            dot_center - label_metrics.height_mm / 2.0,
+            "left",
+            legend.font_size_pt,
         ),
         numbers=numbers,
         dots=dots,
@@ -320,34 +329,37 @@ def build_furniture_plan(
 
     scale_bar = _scale_bar(transform, style)
     if scale_bar is not None:
-        scale_metrics = TextMeasurer(family, scale_bar.font_size_pt).measure_mm(
-            scale_bar.label
-        )
         obstacles.append(
             PageRect(
                 left_mm=scale_bar.left_mm,
-                top_mm=scale_bar.line_y_mm - scale_bar.tick_mm / 2.0,
+                top_mm=scale_bar.label_y_mm,
                 width_mm=scale_bar.right_mm - scale_bar.left_mm,
-                height_mm=(scale_bar.label_y_mm + scale_metrics.height_mm)
-                - (scale_bar.line_y_mm - scale_bar.tick_mm / 2.0),
+                height_mm=scale_bar.line_y_mm + scale_bar.tick_mm / 2.0
+                - scale_bar.label_y_mm,
             )
         )
 
     legend = _magnitude_legend(page, style)
     if legend is not None:
-        legend_metrics = TextMeasurer(family, legend.numbers[0].font_size_pt).measure_mm(
+        legend_metrics = TextMeasurer(family, legend.numbers[-1].font_size_pt).measure_mm(
             legend.numbers[-1].text
         )
-        max_diameter = max(dot.diameter_mm for dot in legend.dots)
-        first_x = min(dot.x_mm for dot in legend.dots) - max_diameter / 2.0
-        last_x = max(dot.x_mm for dot in legend.dots) + max_diameter / 2.0
+        top = min(
+            legend.label.y_mm,
+            legend.numbers[0].y_mm,
+            min(dot.y_mm - dot.diameter_mm / 2.0 for dot in legend.dots),
+        )
+        bottom = max(
+            legend.label.y_mm + _measure_placed(legend.label, family).height_mm,
+            legend.numbers[0].y_mm + legend_metrics.height_mm,
+            max(dot.y_mm + dot.diameter_mm / 2.0 for dot in legend.dots),
+        )
         obstacles.append(
             PageRect(
                 left_mm=page.margin_mm,
-                top_mm=(legend.dots[0].y_mm - max_diameter / 2.0),
-                width_mm=max(last_x, first_x + legend_metrics.width_mm) - page.margin_mm,
-                height_mm=(legend.numbers[0].y_mm + legend_metrics.height_mm)
-                - (legend.dots[0].y_mm - max_diameter / 2.0),
+                top_mm=top,
+                width_mm=legend.numbers[-1].x_mm + legend_metrics.width_mm - page.margin_mm,
+                height_mm=bottom - top,
             )
         )
 

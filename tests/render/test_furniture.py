@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -45,6 +46,10 @@ def test_title_uses_short_code_and_footer_position() -> None:
     assert plan.title.align == "right"
     assert plan.title.x_mm == pytest.approx(PAGE.width_mm - PAGE.margin_mm)
     assert plan.title.y_mm > PAGE.height_mm / 2.0
+    title_height = TextMeasurer(
+        STYLE.label.font_family, plan.title.font_size_pt
+    ).measure_markup_mm(plan.title.markup).height_mm
+    assert plan.title.y_mm + title_height <= PAGE.height_mm - 2.0
 
 
 def test_navigation_sits_outside_the_chart_frame_with_short_codes() -> None:
@@ -141,8 +146,38 @@ def test_legend_dots_use_real_star_size_model(
     assert [dot.diameter_mm for dot in plan.legend.dots] == pytest.approx(
         [model.diameter_mm(magnitude) for magnitude in expected_magnitudes]
     )
+    assert all(
+        number.x_mm >= dot.x_mm + dot.diameter_mm / 2.0 + 0.8 - 1e-9
+        for dot, number in zip(plan.legend.dots, plan.legend.numbers, strict=True)
+    )
+    assert all(
+        right.x_mm - right.diameter_mm / 2.0
+        - (left.x_mm + left.diameter_mm / 2.0)
+        == pytest.approx(style.furniture.magnitude_legend.spacing_mm)
+        for left, right in pairwise(plan.legend.dots)
+    )
+    measurer = TextMeasurer(style.label.font_family, style.furniture.magnitude_legend.font_size_pt)
+    assert all(
+        number.x_mm + measurer.measure_mm(number.text).width_mm
+        < right.x_mm - right.diameter_mm / 2.0
+        for number, right in zip(plan.legend.numbers[:-1], plan.legend.dots[1:], strict=True)
+    )
+    assert all(
+        dot.y_mm - dot.diameter_mm / 2.0 > transform.chart_rect.bottom_mm
+        for dot in plan.legend.dots
+    )
+    assert all(
+        number.y_mm + measurer.measure_mm(number.text).height_mm
+        <= PAGE.height_mm - 2.0
+        for number in plan.legend.numbers
+    )
+    assert all(dot.y_mm + dot.diameter_mm / 2.0 <= PAGE.height_mm - 2.0 for dot in plan.legend.dots)
     assert plan.scale_bar is not None
-    assert plan.legend.dots[-1].x_mm < plan.scale_bar.left_mm
+    assert (
+        plan.legend.numbers[-1].x_mm
+        + measurer.measure_mm(plan.legend.numbers[-1].text).width_mm
+        < plan.scale_bar.left_mm
+    )
 
 
 def test_scale_bar_length_follows_mm_per_degree() -> None:
@@ -152,6 +187,11 @@ def test_scale_bar_length_follows_mm_per_degree() -> None:
     assert (plan.scale_bar.right_mm - plan.scale_bar.left_mm) == pytest.approx(expected)
     assert plan.scale_bar.label.endswith("\N{DEGREE SIGN}")
     assert "deg" not in plan.scale_bar.label
+    label_height = TextMeasurer(
+        STYLE.label.font_family, plan.scale_bar.font_size_pt
+    ).measure_mm(plan.scale_bar.label).height_mm
+    assert plan.scale_bar.label_y_mm + label_height < plan.scale_bar.line_y_mm
+    assert plan.scale_bar.line_y_mm + STYLE.furniture.scale_bar.tick_mm / 2.0 < PAGE.height_mm - 2.0
 
 
 def test_footer_sits_below_the_chart_frame() -> None:
