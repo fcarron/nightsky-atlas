@@ -86,20 +86,20 @@ def test_label_overlapping_star_and_dso() -> None:
     assert IssueType.LABEL_DSO in types
 
 
-def test_nearby_rendered_faint_star_requires_optical_clearance() -> None:
+def test_nearby_rendered_faint_star_is_not_a_hard_blocker() -> None:
     scene = build_scene(CHART, [make_star(magnitude=11.0)], [])
     label = make_label("label:a", CENTER.x_mm - 4.0, CENTER.y_mm - 1.0)
     issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
-    assert IssueType.LABEL_STAR in {issue.issue_type for issue in issues}
+    assert IssueType.LABEL_STAR not in {issue.issue_type for issue in issues}
 
 
-def test_foreign_star_with_subminimum_edge_clearance_is_illegal() -> None:
-    star = make_star(magnitude=6.0)
+def test_significant_foreign_star_with_subminimum_edge_clearance_is_illegal() -> None:
+    star = make_star(magnitude=3.0)
     scene = build_scene(CHART, [star], [])
-    radius = StarSizeModel.from_style(STYLE.star).radius_mm(6.0)
+    radius = StarSizeModel.from_style(STYLE.star).radius_mm(3.0)
     label = make_label(
         "label:foreign",
-        CENTER.x_mm + radius + 0.2,
+        CENTER.x_mm + radius + 0.02,
         CENTER.y_mm - 1.25,
     )
     issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)

@@ -24,12 +24,16 @@ label:
     flamsteed: {enabled: true, max_magnitude: 5.0}
     variables: {enabled: true, max_magnitude: 6.5}
     combined_names: true
+    separate_name_and_designation: true
+    proper_names_always_visible: true
+    proper_name_candidate_rings: 3
+    candidate_ring_gap_mm: 0.75
     constellation_suffix: {default: false, allow_ambiguity_fallback: true}
   candidate_rings: 3
   ring_gap_mm: 3.0
   star_clearance:
-    foreign: {hard_min_mm: 0.4, soft_clear_mm: 1.0, weight: 10.0}
-    associated: {hard_min_mm: 0.35, soft_clear_mm: 0.55, clearance_weight: 8.0, preferred_max_mm: 4.5, distance_weight: 0.5}
+    foreign: {hard_min_mm: 0.05, hard_radius_mm: 0.75, soft_clear_mm: 0.35, radius_clearance_factor: 1.0, importance_reference_radius_mm: 0.6, maximum_importance: 2.0, weight: 10.0}
+    associated: {hard_min_mm: 0.35, soft_clear_mm: 0.45, preferred_min_mm: 0.45, clearance_weight: 8.0, preferred_max_mm: 0.75, distance_weight: 30.0}
   leader_lines:
     enabled: true
     auto_min_ring: 2

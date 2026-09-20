@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 
 from nightsky_atlas.chart.page import PagePoint, PageRect
+from nightsky_atlas.layout.geometry import circle_rect_edge_distance_mm
 from nightsky_atlas.layout.models import CompassPosition, LabelCandidate
 from nightsky_atlas.render.text import TextMetrics
 
@@ -52,6 +53,7 @@ def compass_candidates(
     anchor: PagePoint,
     exclusion_radius_mm: float,
     padding_mm: float = 0.6,
+    exact_edge_gap_mm: float | None = None,
     ring_count: int = 1,
     ring_gap_mm: float = 2.5,
 ) -> tuple[LabelCandidate, ...]:
@@ -87,6 +89,23 @@ def compass_candidates(
                 width_mm=metrics.width_mm,
                 height_mm=metrics.height_mm,
             )
+            if exact_edge_gap_mm is not None:
+                for _ in range(3):
+                    gap = circle_rect_edge_distance_mm(anchor, exclusion_radius_mm, bounds)
+                    adjustment = gap - exact_edge_gap_mm
+                    if abs(adjustment) < 0.001:
+                        break
+                    radial_x = bounds.center.x_mm - anchor.x_mm
+                    radial_y = bounds.center.y_mm - anchor.y_mm
+                    radial_length = math.hypot(radial_x, radial_y)
+                    if radial_length == 0.0:
+                        break
+                    bounds = PageRect(
+                        left_mm=bounds.left_mm - radial_x / radial_length * adjustment,
+                        top_mm=bounds.top_mm - radial_y / radial_length * adjustment,
+                        width_mm=bounds.width_mm,
+                        height_mm=bounds.height_mm,
+                    )
             candidate_id = (
                 f"{label_id}:{position.value}"
                 if ring == 0
@@ -96,7 +115,7 @@ def compass_candidates(
                 LabelCandidate(
                     id=candidate_id,
                     position=position,
-                    anchor=PagePoint(x_mm=left, y_mm=top),
+                    anchor=PagePoint(x_mm=bounds.left_mm, y_mm=bounds.top_mm),
                     bounds=bounds,
                     ring=ring,
                 )

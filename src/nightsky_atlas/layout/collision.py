@@ -20,6 +20,7 @@ from nightsky_atlas.layout.geometry import (
 )
 from nightsky_atlas.layout.leader_lines import resolve_leader_lines
 from nightsky_atlas.layout.models import Label, LabelCandidate
+from nightsky_atlas.layout.scoring import foreign_star_hard_min_mm
 from nightsky_atlas.render.double_stars import printed_star_obstacles
 from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
@@ -217,7 +218,7 @@ def find_hard_violations(
             hard_min = (
                 style.label.star_clearance.associated.hard_min_mm
                 if associated
-                else style.label.star_clearance.foreign.hard_min_mm
+                else foreign_star_hard_min_mm(star.collision_radius_mm, style.label.star_clearance)
             )
             clearance = circle_rect_edge_distance_mm(
                 star.page_point, star.collision_radius_mm, candidate.bounds

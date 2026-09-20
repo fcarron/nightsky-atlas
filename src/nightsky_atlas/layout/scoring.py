@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from nightsky_atlas.atlas.config import StarLabelClearanceStyle
+from nightsky_atlas.atlas.config import ForeignStarClearanceStyle, StarLabelClearanceStyle
 from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
 from nightsky_atlas.layout.geometry import (
@@ -21,7 +21,14 @@ from nightsky_atlas.layout.geometry import (
 )
 from nightsky_atlas.layout.models import LabelCandidate
 
-__all__ = ["CostBreakdown", "CostWeights", "StarCircle", "SymbolCircle", "score_candidate"]
+__all__ = [
+    "CostBreakdown",
+    "CostWeights",
+    "StarCircle",
+    "SymbolCircle",
+    "foreign_star_hard_min_mm",
+    "score_candidate",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,10 +180,8 @@ def score_candidate(
             )
             association_distance += max(0.0, distance - clearance.associated.preferred_max_mm)
         else:
-            foreign_penalty += _clearance_penalty(
-                distance,
-                clearance.foreign.hard_min_mm,
-                clearance.foreign.soft_clear_mm,
+            foreign_penalty += _foreign_star_proximity_penalty(
+                distance, star.radius_mm, clearance.foreign
             )
 
     return CostBreakdown(
@@ -201,6 +206,27 @@ def _clearance_penalty(distance_mm: float, hard_min_mm: float, soft_clear_mm: fl
         return 1.0
     fraction = (soft_clear_mm - distance_mm) / (soft_clear_mm - hard_min_mm)
     return fraction * fraction
+
+
+def foreign_star_hard_min_mm(radius_mm: float, clearance: StarLabelClearanceStyle) -> float:
+    """Return a hard clearance only for visually significant foreign stars."""
+    if radius_mm < clearance.foreign.hard_radius_mm:
+        return float("-inf")
+    return clearance.foreign.hard_min_mm
+
+
+def _foreign_star_proximity_penalty(
+    distance_mm: float, radius_mm: float, clearance: ForeignStarClearanceStyle
+) -> float:
+    soft_clear = clearance.soft_clear_mm + radius_mm * clearance.radius_clearance_factor
+    if distance_mm >= soft_clear:
+        return 0.0
+    fraction = (soft_clear - distance_mm) / soft_clear
+    importance = min(
+        clearance.maximum_importance,
+        radius_mm / clearance.importance_reference_radius_mm,
+    )
+    return importance * fraction * fraction
 
 
 def _symbol_rect(symbol: SymbolCircle) -> PageRect:

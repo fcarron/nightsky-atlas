@@ -8,7 +8,7 @@ from pathlib import Path
 from nightsky_atlas.ai.actions import apply_review_actions
 from nightsky_atlas.ai.recorded import RecordedReviewer, write_recorded_reviews
 from nightsky_atlas.atlas.config import load_style_config
-from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.geometry import segments_intersect
@@ -36,6 +36,14 @@ DSO = DeepSkyObject(
     magnitude=8.0,
 )
 SCENE = build_scene(CHART, [], [DSO])
+STAR = Star(
+    id="HIP 1",
+    ra_deg=187.5,
+    dec_deg=12.0,
+    magnitude=2.0,
+    provenance=Provenance(catalogue="TEST", source_id="HIP 1"),
+)
+STAR_SCENE = build_scene(CHART, [STAR], [])
 
 
 def test_segment_crossing_ignores_disjoint_collinear_segments() -> None:
@@ -81,6 +89,28 @@ def test_optimizer_adds_line_only_to_distant_dso_label() -> None:
     assert validate_layout((far,), SCENE, TRANSFORM, STYLE).is_valid
     near = optimize_labels((make_label(ring=0),), SCENE, TRANSFORM, STYLE).labels[0]
     assert not near.leader_line
+
+
+def test_optimizer_never_adds_line_for_distant_proper_star_name() -> None:
+    candidate = LabelCandidate(
+        id="label:star:HIP 1:name:E:2",
+        position=CompassPosition.E,
+        anchor=PagePoint(160.0, 104.0),
+        bounds=PageRect(160.0, 104.0, 8.0, 2.5),
+        ring=2,
+    )
+    label = Label(
+        id="label:star:HIP 1:name",
+        target_id="HIP 1",
+        text="Test name",
+        priority=95,
+        mandatory=True,
+        candidates=(candidate,),
+        selected_candidate_id=candidate.id,
+    )
+    optimized = optimize_labels((label,), STAR_SCENE, TRANSFORM, STYLE).labels[0]
+    assert not optimized.leader_line
+    assert not resolve_leader_lines((optimized,), STAR_SCENE, TRANSFORM, STYLE)
 
 
 def test_near_clean_candidate_is_preferred_over_distant_callout() -> None:

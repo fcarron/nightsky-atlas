@@ -23,7 +23,13 @@ from nightsky_atlas.layout.geometry import (
 from nightsky_atlas.layout.labels import constellation_label_anchors
 from nightsky_atlas.layout.leader_lines import leader_line_for, resolve_leader_lines
 from nightsky_atlas.layout.models import Label, LabelCandidate
-from nightsky_atlas.layout.scoring import CostWeights, StarCircle, SymbolCircle, score_candidate
+from nightsky_atlas.layout.scoring import (
+    CostWeights,
+    StarCircle,
+    SymbolCircle,
+    foreign_star_hard_min_mm,
+    score_candidate,
+)
 from nightsky_atlas.layout.spatial import RectIndex
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.double_stars import printed_star_obstacles
@@ -57,14 +63,6 @@ def _symbol_circles(
     scene: ChartScene, transform: PageTransform, style: StyleConfig
 ) -> tuple[SymbolCircle, ...]:
     symbols: list[SymbolCircle] = []
-    for star in printed_star_obstacles(scene, transform, style):
-        if star.magnitude <= _IMPORTANT_STAR_MAGNITUDE:
-            symbols.append(
-                SymbolCircle(
-                    center=star.page_point,
-                    radius_mm=star.collision_radius_mm,
-                )
-            )
     for scene_dso in scene.deep_sky_objects:
         if not scene_dso.symbol_visible:
             continue
@@ -167,10 +165,26 @@ def _resolved_weights(style: StyleConfig, weights: CostWeights | None) -> CostWe
 
 
 def _star_query_margin_mm(style: StyleConfig) -> float:
+    foreign = style.label.star_clearance.foreign
     return max(
-        style.label.star_clearance.foreign.soft_clear_mm,
+        foreign.soft_clear_mm + style.star.max_diameter_mm / 2.0 * foreign.radius_clearance_factor,
         style.label.star_clearance.associated.preferred_max_mm,
     )
+
+
+def _nearby_stars(
+    label: Label,
+    bounds: PageRect,
+    index: RectIndex[StarCircle],
+    stars: tuple[StarCircle, ...],
+    style: StyleConfig,
+) -> tuple[StarCircle, ...]:
+    queried = tuple(index.query(bounds, margin_mm=_star_query_margin_mm(style)))
+    known_ids = {star.id for star in queried}
+    associated = tuple(
+        star for star in stars if label.target_id in star.star_ids and star.id not in known_ids
+    )
+    return tuple(sorted((*queried, *associated), key=lambda star: star.id))
 
 
 def _is_valid(
@@ -201,7 +215,7 @@ def _is_valid(
         hard_min = (
             style.label.star_clearance.associated.hard_min_mm
             if associated & star.star_ids
-            else style.label.star_clearance.foreign.hard_min_mm
+            else foreign_star_hard_min_mm(star.radius_mm, style.label.star_clearance)
         )
         if circle_rect_edge_distance_mm(star.center, star.radius_mm, bounds) < hard_min:
             return False
@@ -276,12 +290,7 @@ def optimize_labels(
                 )
             )
             nearby_symbols = tuple(symbols_index.query(candidate.bounds))
-            nearby_stars = tuple(
-                stars_index.query(
-                    candidate.bounds,
-                    margin_mm=_star_query_margin_mm(style),
-                )
-            )
+            nearby_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
             valid = _is_valid(
                 label,
                 candidate.bounds,
@@ -405,12 +414,7 @@ def _local_repair(
                 placed_index.query(current.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
             )
             nearby_symbols = tuple(symbols_index.query(current.bounds))
-            nearby_stars = tuple(
-                stars_index.query(
-                    current.bounds,
-                    margin_mm=_star_query_margin_mm(style),
-                )
-            )
+            nearby_stars = _nearby_stars(label, current.bounds, stars_index, stars, style)
             best_cost = score_candidate(
                 current,
                 target_anchor=anchor,
@@ -436,12 +440,7 @@ def _local_repair(
                     )
                 )
                 cand_symbols = tuple(symbols_index.query(candidate.bounds))
-                cand_stars = tuple(
-                    stars_index.query(
-                        candidate.bounds,
-                        margin_mm=_star_query_margin_mm(style),
-                    )
-                )
+                cand_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
                 if not _is_valid(
                     label,
                     candidate.bounds,
@@ -516,12 +515,7 @@ def _evaluate(
             placed_index.query(candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
         )
         nearby_symbols = tuple(symbols_index.query(candidate.bounds))
-        nearby_stars = tuple(
-            stars_index.query(
-                candidate.bounds,
-                margin_mm=_star_query_margin_mm(style),
-            )
-        )
+        nearby_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
         breakdown = score_candidate(
             candidate,
             target_anchor=_anchor_for(label, anchors, candidate),

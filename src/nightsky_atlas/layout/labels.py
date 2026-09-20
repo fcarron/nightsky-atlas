@@ -136,6 +136,16 @@ def _star_label_priority(star: Star, star_name: StarName, kind: str) -> tuple[in
     return star_label_priority(star, star_name, kind)
 
 
+def _star_semantic_key(star_name: StarName, text: str, kind: str) -> str:
+    if kind.startswith("proper_"):
+        return f"star:name:{star_name.curated_name}"
+    if kind == "bayer":
+        return f"star:bayer:{star_name.full_bayer_designation}"
+    if kind == "flamsteed":
+        return f"star:flamsteed:{star_name.full_flamsteed_designation}"
+    return f"star:variable:{text}"
+
+
 def _ambiguous_star_designations(
     scene: ChartScene,
     transform: PageTransform,
@@ -228,15 +238,58 @@ def build_star_labels(
         if not variants:
             continue
         seen_hips.add(number)
+        if policy.separate_name_and_designation:
+            for component_text, component_kind in star_name.display_components(
+                policy,
+                star.magnitude,
+                proper_magnitude_limit=style.star.label_magnitude_limit,
+                ambiguous=number in ambiguous_hips,
+            ):
+                component_id = "name" if component_kind.startswith("proper_") else "designation"
+                label_id = f"label:star:{star.id}:{component_id}"
+                obstacle = printed_obstacle_by_star.get(star.id)
+                anchor = (
+                    obstacle.page_point
+                    if obstacle is not None
+                    else transform.to_page(scene_star.chart_point)
+                )
+                candidates = compass_candidates(
+                    label_id=label_id,
+                    metrics=measurer.measure_mm(component_text),
+                    anchor=anchor,
+                    exclusion_radius_mm=(
+                        obstacle.collision_radius_mm
+                        if obstacle is not None
+                        else model.radius_mm(star.magnitude)
+                    ),
+                    padding_mm=style.label.star_clearance.associated.preferred_min_mm,
+                    exact_edge_gap_mm=style.label.star_clearance.associated.preferred_min_mm,
+                    ring_count=(
+                        policy.proper_name_candidate_rings
+                        if component_kind.startswith("proper_")
+                        else style.label.candidate_rings
+                    ),
+                    ring_gap_mm=policy.candidate_ring_gap_mm,
+                )
+                priority, mandatory = _star_label_priority(star, star_name, component_kind)
+                is_proper_name = component_kind.startswith("proper_")
+                labels.append(
+                    Label(
+                        id=label_id,
+                        target_id=star.id,
+                        text=component_text,
+                        priority=priority,
+                        mandatory=mandatory or (
+                            is_proper_name and policy.proper_names_always_visible
+                        ),
+                        candidates=candidates,
+                        selected_candidate_id=candidates[0].id if candidates else None,
+                        semantic_key=_star_semantic_key(star_name, component_text, component_kind),
+                    )
+                )
+            continue
         text, kind = variants[0]
-        if kind == "combined" or kind.startswith("proper_"):
-            semantic_key = f"star:name:{star_name.curated_name}"
-        elif kind == "bayer":
-            semantic_key = f"star:bayer:{star_name.full_bayer_designation}"
-        elif kind == "flamsteed":
-            semantic_key = f"star:flamsteed:{star_name.full_flamsteed_designation}"
-        else:
-            semantic_key = f"star:variable:{text}"
+        semantic_key = _star_semantic_key(star_name, text, kind)
         label_id = f"label:star:{star.id}"
         obstacle = printed_obstacle_by_star.get(star.id)
         anchor = (

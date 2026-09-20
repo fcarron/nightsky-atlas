@@ -133,6 +133,28 @@ class StarName:
         variants.sort(key=lambda item: -ranks[item[1]])
         return tuple(variants)
 
+    def display_components(
+        self,
+        policy: StarLabelStyle,
+        magnitude: float,
+        *,
+        proper_magnitude_limit: float | None = None,
+        ambiguous: bool = False,
+    ) -> tuple[tuple[str, str], ...]:
+        """Return the independently placeable labels selected by presentation policy."""
+        variants = self.display_variants(
+            policy,
+            magnitude,
+            proper_magnitude_limit=proper_magnitude_limit,
+            ambiguous=ambiguous,
+        )
+        proper = next((item for item in variants if item[1].startswith("proper_")), None)
+        systematic = next(
+            (item for item in variants if item[1] in {"bayer", "flamsteed", "variable"}),
+            None,
+        )
+        return tuple(item for item in (proper, systematic) if item is not None)
+
     def display_text(self) -> str | None:
         """Return the raw legacy fallback; map labels use ``display_variants``."""
         if self.name:

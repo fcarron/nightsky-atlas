@@ -453,6 +453,10 @@ class StarLabelStyle(_StrictModel):
         default_factory=lambda: StarDesignationStyle(max_magnitude=6.5)
     )
     combined_names: bool = False
+    separate_name_and_designation: bool = False
+    proper_names_always_visible: bool = False
+    proper_name_candidate_rings: int = Field(default=3, ge=1)
+    candidate_ring_gap_mm: PositiveFloat = 1.25
     constellation_suffix: ConstellationSuffixStyle = Field(
         default_factory=ConstellationSuffixStyle
     )
@@ -474,14 +478,21 @@ class LeaderLineStyle(_StrictModel):
 class ForeignStarClearanceStyle(_StrictModel):
     """Optical text clearance for stars unrelated to a label target."""
 
-    hard_min_mm: NonNegativeFloat = 0.4
-    soft_clear_mm: PositiveFloat = 1.0
+    hard_min_mm: NonNegativeFloat = 0.05
+    hard_radius_mm: PositiveFloat = 0.75
+    soft_clear_mm: PositiveFloat = 0.35
+    radius_clearance_factor: NonNegativeFloat = 1.0
+    importance_reference_radius_mm: PositiveFloat = 0.6
+    maximum_importance: PositiveFloat = 2.0
     weight: NonNegativeFloat = 10.0
 
     @model_validator(mode="after")
     def _soft_clear_not_below_hard_minimum(self) -> ForeignStarClearanceStyle:
-        if self.soft_clear_mm < self.hard_min_mm:
-            raise ValueError("soft_clear_mm must be >= hard_min_mm")
+        maximum_soft_clearance = (
+            self.soft_clear_mm + self.hard_radius_mm * self.radius_clearance_factor
+        )
+        if self.hard_min_mm > maximum_soft_clearance:
+            raise ValueError("hard_min_mm exceeds the bright-star soft clearance")
         return self
 
 
@@ -489,15 +500,18 @@ class AssociatedStarClearanceStyle(_StrictModel):
     """Clearance and association-distance rules for a star's own label."""
 
     hard_min_mm: NonNegativeFloat = 0.35
-    soft_clear_mm: PositiveFloat = 0.55
+    soft_clear_mm: PositiveFloat = 0.45
+    preferred_min_mm: PositiveFloat = 0.45
     clearance_weight: NonNegativeFloat = 8.0
-    preferred_max_mm: PositiveFloat = 4.5
-    distance_weight: NonNegativeFloat = 0.5
+    preferred_max_mm: PositiveFloat = 0.75
+    distance_weight: NonNegativeFloat = 9.0
 
     @model_validator(mode="after")
     def _associated_soft_clear_not_below_hard_minimum(self) -> AssociatedStarClearanceStyle:
         if self.soft_clear_mm < self.hard_min_mm:
             raise ValueError("soft_clear_mm must be >= hard_min_mm")
+        if not self.soft_clear_mm <= self.preferred_min_mm <= self.preferred_max_mm:
+            raise ValueError("preferred own-star range must begin after the clean clearance")
         return self
 
 

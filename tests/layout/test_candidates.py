@@ -6,6 +6,7 @@ import pytest
 
 from nightsky_atlas.chart.page import PagePoint
 from nightsky_atlas.layout.candidates import compass_candidates
+from nightsky_atlas.layout.geometry import circle_rect_edge_distance_mm
 from nightsky_atlas.layout.models import CompassPosition
 from nightsky_atlas.render.text import TextMetrics
 
@@ -58,3 +59,18 @@ def test_bounds_match_metrics() -> None:
     for candidate in make_candidates():
         assert candidate.bounds.width_mm == pytest.approx(METRICS.width_mm)
         assert candidate.bounds.height_mm == pytest.approx(METRICS.height_mm)
+
+
+def test_exact_edge_gap_refines_diagonal_candidates() -> None:
+    candidates = compass_candidates(
+        label_id="label:star:X",
+        metrics=METRICS,
+        anchor=ANCHOR,
+        exclusion_radius_mm=2.0,
+        padding_mm=0.5,
+        exact_edge_gap_mm=0.5,
+    )
+    for candidate in candidates:
+        assert circle_rect_edge_distance_mm(ANCHOR, 2.0, candidate.bounds) == pytest.approx(
+            0.5, abs=0.01
+        )

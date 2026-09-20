@@ -142,10 +142,10 @@ def test_build_star_labels_uses_common_name() -> None:
     scene = build_scene(CHART, [star])
     labels = build_star_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE, STAR_NAMES)
     assert len(labels) == 1
-    assert labels[0].id == "label:star:HIP 12345"
+    assert labels[0].id == "label:star:HIP 12345:name"
     assert labels[0].text == "Teststar"
     assert labels[0].mandatory is True
-    assert labels[0].candidates[0].id == "label:star:HIP 12345:N"
+    assert labels[0].candidates[0].id == "label:star:HIP 12345:name:N"
 
 
 def test_build_star_labels_bayer_fallback_and_optional() -> None:
@@ -171,7 +171,10 @@ def test_build_labels_combines_star_and_dso() -> None:
     star = make_star("HIP 34567", 3.0, hip_id="HIP 34567")
     scene = build_scene(CHART, [star], [make_dso("NGC4486", cross_ids=("M87",))])
     labels = build_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE, STAR_NAMES)
-    assert {label.id for label in labels} == {"label:dso:NGC4486", "label:star:HIP 34567"}
+    assert {label.id for label in labels} == {
+        "label:dso:NGC4486",
+        "label:star:HIP 34567:designation",
+    }
 
 
 def test_build_labels_without_names_is_dso_only() -> None:

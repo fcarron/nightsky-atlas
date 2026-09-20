@@ -124,6 +124,15 @@ def test_edge_distance_uses_rendered_star_radius() -> None:
     assert large_cost > small_cost
 
 
+def test_equally_close_bright_foreign_star_costs_more_than_faint_star() -> None:
+    candidate = make_candidate(CompassPosition.N, 140.0, 95.0)
+    faint = _star_at_clearance(candidate, 0.05, radius_mm=0.2)
+    bright = _star_at_clearance(candidate, 0.05, radius_mm=1.2)
+    faint_cost = score(candidate, stars=(faint,)).label_foreign_star_clearance
+    bright_cost = score(candidate, stars=(bright,)).label_foreign_star_clearance
+    assert bright_cost > faint_cost * 5.0
+
+
 def test_associated_star_uses_smaller_clearance_and_far_distance_penalty() -> None:
     candidate = make_candidate(CompassPosition.N, 140.0, 95.0)
     star = _star_at_clearance(candidate, 0.5)

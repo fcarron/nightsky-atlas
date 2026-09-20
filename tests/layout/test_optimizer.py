@@ -235,10 +235,10 @@ def test_component_totals_are_exposed() -> None:
 
 
 def test_optimizer_prefers_candidate_with_cleaner_foreign_star_clearance() -> None:
-    star = Star("foreign", 187.5, 12.0, 6.0, Provenance("TEST", "foreign"))
+    star = Star("foreign", 187.5, 12.0, 0.0, Provenance("TEST", "foreign"))
     scene = build_scene(CHART, (star,), ())
     center = TRANSFORM.center_page
-    radius = StarSizeModel.from_style(STYLE.star).radius_mm(6.0)
+    radius = StarSizeModel.from_style(STYLE.star).radius_mm(0.0)
     near = LabelCandidate(
         id="label:dso:near",
         position=CompassPosition.N,

@@ -11,7 +11,7 @@ from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.collision import IssueType, find_hard_violations
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
-from nightsky_atlas.layout.optimizer import _symbol_circles, _target_anchors
+from nightsky_atlas.layout.optimizer import _star_circles, _target_anchors
 from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.double_stars import printed_star_obstacles, resolve_double_stars
 from nightsky_atlas.render.symbols import StarSizeModel
@@ -103,7 +103,7 @@ def test_collapsed_pair_uses_printed_extent_in_optimizer_and_hard_gate() -> None
     assert obstacle.magnitude < 6.0
     original_radius = StarSizeModel.from_style(STYLE.star).radius_mm(6.2)
     assert obstacle.collision_radius_mm > original_radius
-    circles = _symbol_circles(scene, TRANSFORM, STYLE)
+    circles = _star_circles(scene, TRANSFORM, STYLE)
     assert len(circles) == 1
     assert circles[0].radius_mm == obstacle.collision_radius_mm
     assert _target_anchors((), scene, TRANSFORM, STYLE)["B"] == obstacle.page_point
