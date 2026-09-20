@@ -13,7 +13,11 @@ from enum import StrEnum
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageRect, PageTransform
-from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
+from nightsky_atlas.layout.geometry import (
+    circle_intersects_rect,
+    circle_rect_edge_distance_mm,
+    rects_overlap,
+)
 from nightsky_atlas.layout.leader_lines import resolve_leader_lines
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.render.double_stars import printed_star_obstacles
@@ -26,9 +30,6 @@ __all__ = [
     "find_hard_violations",
     "placed_candidates",
 ]
-
-_IMPORTANT_STAR_MAGNITUDE = 6.0
-
 
 class IssueType(StrEnum):
     """Categories of hard layout violation."""
@@ -88,7 +89,6 @@ def find_hard_violations(
     transform: PageTransform,
     style: StyleConfig,
     *,
-    important_magnitude: float = _IMPORTANT_STAR_MAGNITUDE,
     furniture: Iterable[PageRect] = (),
 ) -> tuple[LayoutIssue, ...]:
     """Return all hard label violations for a layout.
@@ -210,18 +210,24 @@ def find_hard_violations(
                     )
                 )
 
-    star_obstacles = tuple(
-        star for star in printed_star_obstacles(scene, transform, style)
-        if star.magnitude <= important_magnitude
-    )
+    star_obstacles = printed_star_obstacles(scene, transform, style)
     for label, candidate in placed:
         for star in star_obstacles:
-            if circle_intersects_rect(star.page_point, star.collision_radius_mm, candidate.bounds):
+            associated = label.target_id in star.star_ids
+            hard_min = (
+                style.label.star_clearance.associated.hard_min_mm
+                if associated
+                else style.label.star_clearance.foreign.hard_min_mm
+            )
+            clearance = circle_rect_edge_distance_mm(
+                star.page_point, star.collision_radius_mm, candidate.bounds
+            )
+            if clearance < hard_min:
                 issues.append(
                     _issue(
                         IssueType.LABEL_STAR,
                         (label.id, star.id),
-                        f"{label.id} overlaps star {star.id}",
+                        f"{label.id} clears star {star.id} by only {clearance:.2f} mm",
                     )
                 )
 

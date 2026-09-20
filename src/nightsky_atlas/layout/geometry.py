@@ -14,6 +14,7 @@ from nightsky_atlas.chart.page import PagePoint, PageRect
 
 __all__ = [
     "circle_intersects_rect",
+    "circle_rect_edge_distance_mm",
     "clamp_point_to_rect",
     "point_in_rect",
     "rect_distance_mm",
@@ -167,3 +168,14 @@ def circle_intersects_rect(center: PagePoint, radius_mm: float, rect: PageRect) 
     """Return whether a circle intersects a rectangle."""
     closest = clamp_point_to_rect(center, rect)
     return math.hypot(closest.x_mm - center.x_mm, closest.y_mm - center.y_mm) <= radius_mm
+
+
+def circle_rect_edge_distance_mm(center: PagePoint, radius_mm: float, rect: PageRect) -> float:
+    """Return the signed edge-to-edge distance from a circle to a rectangle.
+
+    Positive values are a clean physical gap; zero means touching; negative
+    values mean that the rendered circular mark enters the label bounds.  This
+    is shared by hard validation and soft optical-clearance scoring.
+    """
+    closest = clamp_point_to_rect(center, rect)
+    return math.hypot(closest.x_mm - center.x_mm, closest.y_mm - center.y_mm) - radius_mm

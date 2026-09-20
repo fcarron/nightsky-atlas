@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from nightsky_atlas.atlas.config import StarLabelClearanceStyle
 from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
+    circle_rect_edge_distance_mm,
     expand_rect,
     rect_overlap_area_mm2,
     rects_overlap,
@@ -19,7 +21,7 @@ from nightsky_atlas.layout.geometry import (
 )
 from nightsky_atlas.layout.models import LabelCandidate
 
-__all__ = ["CostBreakdown", "CostWeights", "SymbolCircle", "score_candidate"]
+__all__ = ["CostBreakdown", "CostWeights", "StarCircle", "SymbolCircle", "score_candidate"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,12 +35,25 @@ class CostWeights:
     preference_rank: float = 0.5
     crowding: float = 1.0
     constellation_line_overlap: float = 35.0
+    label_foreign_star_clearance: float = 18.0
+    label_associated_star_clearance: float = 8.0
+    label_association_distance: float = 0.5
 
 
 @dataclass(frozen=True, slots=True)
 class SymbolCircle:
     """A symbol exclusion zone approximated by a circle."""
 
+    center: PagePoint
+    radius_mm: float
+
+
+@dataclass(frozen=True, slots=True)
+class StarCircle:
+    """One actually printed stellar mark, including collapsed double systems."""
+
+    id: str
+    star_ids: frozenset[str]
     center: PagePoint
     radius_mm: float
 
@@ -54,6 +69,9 @@ class CostBreakdown:
     preference_rank: float = 0.0
     crowding: float = 0.0
     constellation_line_overlap: float = 0.0
+    label_foreign_star_clearance: float = 0.0
+    label_associated_star_clearance: float = 0.0
+    label_association_distance_mm: float = 0.0
 
     def total(self, weights: CostWeights) -> float:
         """Return the weighted total cost."""
@@ -65,6 +83,9 @@ class CostBreakdown:
             + self.preference_rank * weights.preference_rank
             + self.crowding * weights.crowding
             + self.constellation_line_overlap * weights.constellation_line_overlap
+            + self.label_foreign_star_clearance * weights.label_foreign_star_clearance
+            + self.label_associated_star_clearance * weights.label_associated_star_clearance
+            + self.label_association_distance_mm * weights.label_association_distance
         )
 
     def components(self) -> dict[str, float]:
@@ -77,6 +98,9 @@ class CostBreakdown:
             "preference_rank": self.preference_rank,
             "crowding": self.crowding,
             "constellation_line_overlap": self.constellation_line_overlap,
+            "label_foreign_star_clearance": self.label_foreign_star_clearance,
+            "label_associated_star_clearance": self.label_associated_star_clearance,
+            "label_association_distance_mm": self.label_association_distance_mm,
         }
 
 
@@ -99,6 +123,9 @@ def score_candidate(
     target_anchor: PagePoint,
     placed_bounds: tuple[PageRect, ...],
     symbols: tuple[SymbolCircle, ...],
+    stars: tuple[StarCircle, ...] = (),
+    associated_star_ids: frozenset[str] = frozenset(),
+    star_clearance: StarLabelClearanceStyle | None = None,
     printable: PageRect,
     crowding_radius_mm: float,
     weights: CostWeights,
@@ -132,6 +159,25 @@ def score_candidate(
             for start, end in constellation_lines
         )
     )
+    clearance = star_clearance or StarLabelClearanceStyle()
+    foreign_penalty = 0.0
+    associated_penalty = 0.0
+    association_distance = 0.0
+    for star in stars:
+        distance = circle_rect_edge_distance_mm(star.center, star.radius_mm, bounds)
+        if associated_star_ids & star.star_ids:
+            associated_penalty += _clearance_penalty(
+                distance,
+                clearance.associated.hard_min_mm,
+                clearance.associated.soft_clear_mm,
+            )
+            association_distance += max(0.0, distance - clearance.associated.preferred_max_mm)
+        else:
+            foreign_penalty += _clearance_penalty(
+                distance,
+                clearance.foreign.hard_min_mm,
+                clearance.foreign.soft_clear_mm,
+            )
 
     return CostBreakdown(
         label_label_overlap_mm2=label_overlap,
@@ -141,7 +187,20 @@ def score_candidate(
         preference_rank=float(CANDIDATE_PREFERENCE.index(candidate.position)),
         crowding=crowding,
         constellation_line_overlap=line_overlap,
+        label_foreign_star_clearance=foreign_penalty,
+        label_associated_star_clearance=associated_penalty,
+        label_association_distance_mm=association_distance,
     )
+
+
+def _clearance_penalty(distance_mm: float, hard_min_mm: float, soft_clear_mm: float) -> float:
+    """Return a smooth 0..1 near-miss penalty above a hard clearance floor."""
+    if distance_mm >= soft_clear_mm:
+        return 0.0
+    if distance_mm <= hard_min_mm:
+        return 1.0
+    fraction = (soft_clear_mm - distance_mm) / (soft_clear_mm - hard_min_mm)
+    return fraction * fraction
 
 
 def _symbol_rect(symbol: SymbolCircle) -> PageRect:

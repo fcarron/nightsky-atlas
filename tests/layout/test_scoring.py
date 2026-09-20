@@ -6,7 +6,7 @@ import pytest
 
 from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.models import CompassPosition, LabelCandidate
-from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle, score_candidate
+from nightsky_atlas.layout.scoring import CostWeights, StarCircle, SymbolCircle, score_candidate
 
 PRINTABLE = PageRect(left_mm=12.0, top_mm=12.0, width_mm=273.0, height_mm=186.0)
 
@@ -78,8 +78,66 @@ def test_total_is_weighted_sum() -> None:
         "preference_rank": "preference_rank",
         "crowding": "crowding",
         "constellation_line_overlap": "constellation_line_overlap",
+        "label_foreign_star_clearance": "label_foreign_star_clearance",
+        "label_associated_star_clearance": "label_associated_star_clearance",
+        "label_association_distance_mm": "label_association_distance",
     }
     expected = sum(
         value * getattr(weights, weight_for[name]) for name, value in breakdown.components().items()
     )
     assert breakdown.total(weights) == pytest.approx(expected)
+
+
+def _star_at_clearance(
+    candidate: LabelCandidate, clearance_mm: float, radius_mm: float = 0.5
+) -> StarCircle:
+    return StarCircle(
+        id="star:foreign",
+        star_ids=frozenset({"star:foreign"}),
+        center=PagePoint(
+            candidate.bounds.left_mm - radius_mm - clearance_mm,
+            candidate.bounds.center.y_mm,
+        ),
+        radius_mm=radius_mm,
+    )
+
+
+@pytest.mark.parametrize(
+    ("clearance_mm", "expect_penalty"),
+    ((0.5, True), (0.8, True), (1.01, False)),
+)
+def test_foreign_star_clearance_penalty_is_graded(
+    clearance_mm: float, expect_penalty: bool
+) -> None:
+    candidate = make_candidate(CompassPosition.N, 140.0, 95.0)
+    breakdown = score(candidate, stars=(_star_at_clearance(candidate, clearance_mm),))
+    assert (breakdown.label_foreign_star_clearance > 0.0) is expect_penalty
+
+
+def test_edge_distance_uses_rendered_star_radius() -> None:
+    candidate = make_candidate(CompassPosition.N, 140.0, 95.0)
+    center = PagePoint(candidate.bounds.left_mm - 1.0, candidate.bounds.center.y_mm)
+    small = StarCircle("small", frozenset({"small"}), center, 0.2)
+    large = StarCircle("large", frozenset({"large"}), center, 0.8)
+    small_cost = score(candidate, stars=(small,)).label_foreign_star_clearance
+    large_cost = score(candidate, stars=(large,)).label_foreign_star_clearance
+    assert large_cost > small_cost
+
+
+def test_associated_star_uses_smaller_clearance_and_far_distance_penalty() -> None:
+    candidate = make_candidate(CompassPosition.N, 140.0, 95.0)
+    star = _star_at_clearance(candidate, 0.5)
+    associated = score(
+        candidate,
+        stars=(star,),
+        associated_star_ids=frozenset({"star:foreign"}),
+    )
+    foreign = score(candidate, stars=(star,))
+    far = _star_at_clearance(candidate, 6.0)
+    far_associated = score(
+        candidate,
+        stars=(far,),
+        associated_star_ids=frozenset({"star:foreign"}),
+    )
+    assert associated.label_associated_star_clearance < foreign.label_foreign_star_clearance
+    assert far_associated.label_association_distance_mm > 0.0

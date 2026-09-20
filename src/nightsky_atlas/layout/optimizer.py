@@ -15,11 +15,15 @@ from dataclasses import dataclass, replace
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
-from nightsky_atlas.layout.geometry import circle_intersects_rect, rects_overlap
+from nightsky_atlas.layout.geometry import (
+    circle_intersects_rect,
+    circle_rect_edge_distance_mm,
+    rects_overlap,
+)
 from nightsky_atlas.layout.labels import constellation_label_anchors
 from nightsky_atlas.layout.leader_lines import leader_line_for, resolve_leader_lines
 from nightsky_atlas.layout.models import Label, LabelCandidate
-from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle, score_candidate
+from nightsky_atlas.layout.scoring import CostWeights, StarCircle, SymbolCircle, score_candidate
 from nightsky_atlas.layout.spatial import RectIndex
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.double_stars import printed_star_obstacles
@@ -74,6 +78,21 @@ def _symbol_circles(
     return tuple(symbols)
 
 
+def _star_circles(
+    scene: ChartScene, transform: PageTransform, style: StyleConfig
+) -> tuple[StarCircle, ...]:
+    """Return every actual printed stellar disk for label-clearance geometry."""
+    return tuple(
+        StarCircle(
+            id=star.id,
+            star_ids=star.star_ids,
+            center=star.page_point,
+            radius_mm=star.collision_radius_mm,
+        )
+        for star in printed_star_obstacles(scene, transform, style)
+    )
+
+
 def _target_anchors(
     labels: tuple[Label, ...], scene: ChartScene, transform: PageTransform, style: StyleConfig
 ) -> dict[str, PagePoint]:
@@ -123,11 +142,45 @@ def _build_symbol_index(symbols: tuple[SymbolCircle, ...]) -> RectIndex[SymbolCi
     return index
 
 
+def _build_star_index(stars: tuple[StarCircle, ...]) -> RectIndex[StarCircle]:
+    index: RectIndex[StarCircle] = RectIndex(_GRID_CELL_MM)
+    for star in stars:
+        index.set(star.id, _symbol_bounds(SymbolCircle(star.center, star.radius_mm)), star)
+    return index
+
+
+def _associated_star_ids(label: Label, stars: tuple[StarCircle, ...]) -> frozenset[str]:
+    return frozenset(
+        star_id for star in stars for star_id in star.star_ids if star_id == label.target_id
+    )
+
+
+def _resolved_weights(style: StyleConfig, weights: CostWeights | None) -> CostWeights:
+    if weights is not None:
+        return weights
+    clearance = style.label.star_clearance
+    return CostWeights(
+        label_foreign_star_clearance=clearance.foreign.weight,
+        label_associated_star_clearance=clearance.associated.clearance_weight,
+        label_association_distance=clearance.associated.distance_weight,
+    )
+
+
+def _star_query_margin_mm(style: StyleConfig) -> float:
+    return max(
+        style.label.star_clearance.foreign.soft_clear_mm,
+        style.label.star_clearance.associated.preferred_max_mm,
+    )
+
+
 def _is_valid(
+    label: Label,
     bounds: PageRect,
     placed_bounds: tuple[PageRect, ...],
     printable: PageRect,
     symbols: tuple[SymbolCircle, ...],
+    stars: tuple[StarCircle, ...],
+    style: StyleConfig,
     furniture: tuple[PageRect, ...] = (),
 ) -> bool:
     if (
@@ -141,9 +194,18 @@ def _is_valid(
         return False
     if any(rects_overlap(bounds, obstacle) for obstacle in furniture):
         return False
-    return not any(
-        circle_intersects_rect(symbol.center, symbol.radius_mm, bounds) for symbol in symbols
-    )
+    if any(circle_intersects_rect(symbol.center, symbol.radius_mm, bounds) for symbol in symbols):
+        return False
+    associated = _associated_star_ids(label, stars)
+    for star in stars:
+        hard_min = (
+            style.label.star_clearance.associated.hard_min_mm
+            if associated & star.star_ids
+            else style.label.star_clearance.foreign.hard_min_mm
+        )
+        if circle_rect_edge_distance_mm(star.center, star.radius_mm, bounds) < hard_min:
+            return False
+    return True
 
 
 def _preference_rank(candidate: LabelCandidate) -> int:
@@ -165,15 +227,17 @@ def optimize_labels(
     may overlap, so the optimizer never places a label onto the title,
     navigation, scale bar or legend (``AGENTS.md`` sections 15.1 and 16).
     """
-    weights = weights or CostWeights()
+    weights = _resolved_weights(style, weights)
     furniture_rects = tuple(furniture)
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
+    stars = _star_circles(scene, transform, style)
     constellation_lines = tuple(
         (stroke.start, stroke.end)
         for stroke in resolve_constellation_lines(scene, transform, style)
     )
     symbols_index = _build_symbol_index(symbols)
+    stars_index = _build_star_index(stars)
     anchors = _target_anchors(labels, scene, transform, style)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
@@ -185,7 +249,7 @@ def optimize_labels(
         candidate = label.effective_candidate()
         before[label.id] = candidate.id if candidate is not None else None
     cost_before, totals_before = _evaluate(
-        ordered, before, anchors, printable, symbols, weights, constellation_lines
+        ordered, before, anchors, printable, symbols, stars, style, weights, constellation_lines
     )
 
     placements: dict[str, str | None] = {}
@@ -212,11 +276,20 @@ def optimize_labels(
                 )
             )
             nearby_symbols = tuple(symbols_index.query(candidate.bounds))
+            nearby_stars = tuple(
+                stars_index.query(
+                    candidate.bounds,
+                    margin_mm=_star_query_margin_mm(style),
+                )
+            )
             valid = _is_valid(
+                label,
                 candidate.bounds,
                 nearby_bounds,
                 printable,
                 nearby_symbols,
+                nearby_stars,
+                style,
                 furniture_rects,
             )
             breakdown = score_candidate(
@@ -224,6 +297,9 @@ def optimize_labels(
                 target_anchor=_anchor_for(label, anchors, candidate),
                 placed_bounds=nearby_bounds,
                 symbols=nearby_symbols,
+                stars=nearby_stars,
+                associated_star_ids=_associated_star_ids(label, nearby_stars),
+                star_clearance=style.label.star_clearance,
                 printable=printable,
                 crowding_radius_mm=_CROWDING_RADIUS_MM,
                 weights=weights,
@@ -255,12 +331,15 @@ def optimize_labels(
         printable,
         placed_index,
         symbols_index,
+        stars_index,
+        stars,
+        style,
         weights,
         furniture_rects,
         constellation_lines,
     )
     cost_after, totals_after = _evaluate(
-        ordered, placements, anchors, printable, symbols, weights, constellation_lines
+        ordered, placements, anchors, printable, symbols, stars, style, weights, constellation_lines
     )
 
     optimized = tuple(
@@ -302,6 +381,9 @@ def _local_repair(
     printable: PageRect,
     placed_index: RectIndex[PageRect],
     symbols_index: RectIndex[SymbolCircle],
+    stars_index: RectIndex[StarCircle],
+    stars: tuple[StarCircle, ...],
+    style: StyleConfig,
     weights: CostWeights,
     furniture: tuple[PageRect, ...] = (),
     constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
@@ -323,11 +405,20 @@ def _local_repair(
                 placed_index.query(current.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
             )
             nearby_symbols = tuple(symbols_index.query(current.bounds))
+            nearby_stars = tuple(
+                stars_index.query(
+                    current.bounds,
+                    margin_mm=_star_query_margin_mm(style),
+                )
+            )
             best_cost = score_candidate(
                 current,
                 target_anchor=anchor,
                 placed_bounds=nearby_bounds,
                 symbols=nearby_symbols,
+                stars=nearby_stars,
+                associated_star_ids=_associated_star_ids(label, nearby_stars),
+                star_clearance=style.label.star_clearance,
                 printable=printable,
                 crowding_radius_mm=_CROWDING_RADIUS_MM,
                 weights=weights,
@@ -345,13 +436,31 @@ def _local_repair(
                     )
                 )
                 cand_symbols = tuple(symbols_index.query(candidate.bounds))
-                if not _is_valid(candidate.bounds, cand_bounds, printable, cand_symbols, furniture):
+                cand_stars = tuple(
+                    stars_index.query(
+                        candidate.bounds,
+                        margin_mm=_star_query_margin_mm(style),
+                    )
+                )
+                if not _is_valid(
+                    label,
+                    candidate.bounds,
+                    cand_bounds,
+                    printable,
+                    cand_symbols,
+                    cand_stars,
+                    style,
+                    furniture,
+                ):
                     continue
                 cost = score_candidate(
                     candidate,
                     target_anchor=anchor,
                     placed_bounds=cand_bounds,
                     symbols=cand_symbols,
+                    stars=cand_stars,
+                    associated_star_ids=_associated_star_ids(label, cand_stars),
+                    star_clearance=style.label.star_clearance,
                     printable=printable,
                     crowding_radius_mm=_CROWDING_RADIUS_MM,
                     weights=weights,
@@ -378,6 +487,8 @@ def _evaluate(
     anchors: dict[str, PagePoint],
     printable: PageRect,
     symbols: tuple[SymbolCircle, ...],
+    stars: tuple[StarCircle, ...],
+    style: StyleConfig,
     weights: CostWeights,
     constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
 ) -> tuple[float, dict[str, float]]:
@@ -391,6 +502,7 @@ def _evaluate(
         if placed_candidate is not None:
             placed_index.set(label_id, placed_candidate.bounds, placed_candidate.bounds)
     symbols_index = _build_symbol_index(symbols)
+    stars_index = _build_star_index(stars)
     total = 0.0
     totals: dict[str, float] = {}
     for label in ordered:
@@ -404,11 +516,20 @@ def _evaluate(
             placed_index.query(candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
         )
         nearby_symbols = tuple(symbols_index.query(candidate.bounds))
+        nearby_stars = tuple(
+            stars_index.query(
+                candidate.bounds,
+                margin_mm=_star_query_margin_mm(style),
+            )
+        )
         breakdown = score_candidate(
             candidate,
             target_anchor=_anchor_for(label, anchors, candidate),
             placed_bounds=nearby_bounds,
             symbols=nearby_symbols,
+            stars=nearby_stars,
+            associated_star_ids=_associated_star_ids(label, nearby_stars),
+            star_clearance=style.label.star_clearance,
             printable=printable,
             crowding_radius_mm=_CROWDING_RADIUS_MM,
             weights=weights,
@@ -440,9 +561,10 @@ def layout_cost(
     weights: CostWeights | None = None,
 ) -> tuple[float, dict[str, float]]:
     """Return the total soft cost and component totals for a layout."""
-    weights = weights or CostWeights()
+    weights = _resolved_weights(style, weights)
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
+    stars = _star_circles(scene, transform, style)
     constellation_lines = tuple(
         (stroke.start, stroke.end)
         for stroke in resolve_constellation_lines(scene, transform, style)
@@ -454,4 +576,6 @@ def layout_cost(
     for label in labels:
         candidate = None if label.hidden else label.effective_candidate()
         placements[label.id] = candidate.id if candidate is not None else None
-    return _evaluate(ordered, placements, anchors, printable, symbols, weights, constellation_lines)
+    return _evaluate(
+        ordered, placements, anchors, printable, symbols, stars, style, weights, constellation_lines
+    )

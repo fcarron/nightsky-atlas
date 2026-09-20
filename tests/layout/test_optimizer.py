@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from nightsky_atlas.atlas.config import load_style_config
+from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import optimize_labels
+from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -230,3 +232,35 @@ def test_component_totals_are_exposed() -> None:
     result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
     assert "anchor_distance_mm" in result.component_totals_after
     assert "preference_rank" in result.component_totals_after
+
+
+def test_optimizer_prefers_candidate_with_cleaner_foreign_star_clearance() -> None:
+    star = Star("foreign", 187.5, 12.0, 6.0, Provenance("TEST", "foreign"))
+    scene = build_scene(CHART, (star,), ())
+    center = TRANSFORM.center_page
+    radius = StarSizeModel.from_style(STYLE.star).radius_mm(6.0)
+    near = LabelCandidate(
+        id="label:dso:near",
+        position=CompassPosition.N,
+        anchor=center,
+        bounds=PageRect(center.x_mm + radius + 0.5, center.y_mm - 1.25, 8.0, 2.5),
+    )
+    clean = LabelCandidate(
+        id="label:dso:clean",
+        position=CompassPosition.S,
+        anchor=center,
+        bounds=PageRect(center.x_mm + 8.0, center.y_mm + 6.0, 8.0, 2.5),
+    )
+    label = Label(
+        id="label:dso",
+        target_id="dso:missing",
+        text="7000",
+        priority=50,
+        mandatory=True,
+        candidates=(near, clean),
+    )
+
+    result = optimize_labels((label,), scene, TRANSFORM, STYLE)
+
+    assert result.labels[0].selected_candidate_id == clean.id
+    assert result.component_totals_after["label_foreign_star_clearance"] == 0.0

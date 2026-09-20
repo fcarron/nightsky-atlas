@@ -13,6 +13,7 @@ from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.collision import IssueType, find_hard_violations
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.validation import validate_layout
+from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -85,9 +86,42 @@ def test_label_overlapping_star_and_dso() -> None:
     assert IssueType.LABEL_DSO in types
 
 
-def test_faint_star_is_not_important() -> None:
+def test_nearby_rendered_faint_star_requires_optical_clearance() -> None:
     scene = build_scene(CHART, [make_star(magnitude=11.0)], [])
     label = make_label("label:a", CENTER.x_mm - 4.0, CENTER.y_mm - 1.0)
+    issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    assert IssueType.LABEL_STAR in {issue.issue_type for issue in issues}
+
+
+def test_foreign_star_with_subminimum_edge_clearance_is_illegal() -> None:
+    star = make_star(magnitude=6.0)
+    scene = build_scene(CHART, [star], [])
+    radius = StarSizeModel.from_style(STYLE.star).radius_mm(6.0)
+    label = make_label(
+        "label:foreign",
+        CENTER.x_mm + radius + 0.2,
+        CENTER.y_mm - 1.25,
+    )
+    issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    assert IssueType.LABEL_STAR in {issue.issue_type for issue in issues}
+
+
+def test_associated_star_uses_its_own_smaller_clearance_rule() -> None:
+    star = make_star(magnitude=6.0)
+    scene = build_scene(CHART, [star], [])
+    radius = StarSizeModel.from_style(STYLE.star).radius_mm(6.0)
+    bounds = PageRect(CENTER.x_mm + radius + 0.36, CENTER.y_mm - 1.25, 8.0, 2.5)
+    candidate = LabelCandidate(
+        id="label:star:N", position=CompassPosition.N, anchor=bounds.center, bounds=bounds
+    )
+    label = Label(
+        id="label:star",
+        target_id="s1",
+        text="Star",
+        priority=50,
+        mandatory=True,
+        candidates=(candidate,),
+    )
     issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
     assert IssueType.LABEL_STAR not in {issue.issue_type for issue in issues}
 
