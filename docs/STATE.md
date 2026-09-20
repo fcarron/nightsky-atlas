@@ -180,11 +180,13 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   the store with a 3 arcsec positional match (Tycho-2 wins); 1,319 stars added.
   Store: 2,541,232 stars (2,539,913 TYC2 + 1,319 HIP).
 - OpenNGC, **CC-BY-SA-4.0**. Processed JSON, 13,372 objects.
-- Constellation geometry: IAU/MacRobert stick figures, **CC BY 4.0**, via
-  Dominic Ford's `dcf21/constellation-stick-figures`; d3-celestial (Olaf Frohn)
+- Constellation geometry: Stellarium Western (Sky & Telescope) stick figures,
+  **CC BY-SA 2.0**, pinned at `014fbb5e59233d133c22f9811af96b67d05a95c9`;
+  d3-celestial (Olaf Frohn)
   IAU boundary polygons, **BSD-3-Clause**. Vendored as
   `data/fixtures/constellations/{constellations.lines,constellations.bounds}.json`
-  with `LICENSE` and `SOURCE.md`. 89 stick figures + 785 deduplicated boundary segments.
+  with `LICENSE`, `SOURCE.md` and a line-data manifest. 88 stick figures + 785
+  deduplicated boundary segments.
 - Schematic nebula outlines: project-authored (proprietary), vendored as
   `data/fixtures/outlines/nebulae.json` with `SOURCE.md`. 5 Cygnus-region outlines;
   stable IDs `outline:dso:<dso_id>`.

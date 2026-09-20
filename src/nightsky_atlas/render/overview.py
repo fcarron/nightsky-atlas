@@ -314,6 +314,11 @@ def _draw_disk(
         overview.constellation_lines,
         disk_style.constellation_gray,
         disk_style.constellation_line_width_mm,
+        weight_ratios={
+            weight: style.constellation.lines.width_mm_for(weight)
+            / style.constellation.lines.normal_width_mm
+            for weight in ("bold", "normal", "thin")
+        },
     )
     if disk_style.show_stars:
         _draw_stars(cr, transform, overview, disk_style)
@@ -419,11 +424,15 @@ def _stroke_segments(
     segments: tuple[OverviewSegment, ...],
     gray: float,
     width_mm: float,
+    *,
+    weight_ratios: dict[str, float] | None = None,
 ) -> None:
     tone = min(max(gray, 0.0), 1.0)
     cr.set_source_rgb(tone, tone, tone)
     cr.set_line_width(mm_to_pt(width_mm))
     for segment in segments:
+        if weight_ratios is not None:
+            cr.set_line_width(mm_to_pt(width_mm * weight_ratios[segment.weight]))
         _stroke_run(cr, transform, segment.points)
 
 

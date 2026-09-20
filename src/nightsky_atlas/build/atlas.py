@@ -254,7 +254,10 @@ def _draw_front_matter_pages(
         credits.append(f"{source['kind'].replace('_', ' ').title()}: {name}; {license_name}.")
     credits.append("CONSTELLATIONS AND NAMES")
     if geometry_inputs["constellations"] == "data/fixtures/constellations":
-        credits.append("IAU/MacRobert figures: Alan MacRobert et al. via dcf21; CC BY 4.0.")
+        credits.append(
+            "Stellarium Western (Sky & Telescope) figures: Paul Krizak, Jonathan E. "
+            "Piskor and Stellarium Team; CC BY-SA 2.0."
+        )
         credits.append("IAU boundaries: d3-celestial / Olaf Frohn; BSD-3-Clause.")
     elif geometry_inputs["constellations"]:
         credits.append(f"Constellation geometry: {geometry_inputs['constellations']}.")

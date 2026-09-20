@@ -1,0 +1,13 @@
+{
+  "counts": {
+    "bold": 20,
+    "constellations": 88,
+    "normal": 165,
+    "thin": 24
+  },
+  "license": "CC BY-SA 2.0",
+  "revision": "014fbb5e59233d133c22f9811af96b67d05a95c9",
+  "sha256": "7c61c6f88f50b84e43e276c3f9f67422faec63f4a13ca8e60c22bfc3da064340",
+  "source": "Stellarium Western (Sky & Telescope)",
+  "url": "https://raw.githubusercontent.com/Stellarium/stellarium-skycultures/014fbb5e59233d133c22f9811af96b67d05a95c9/western_SnT/index.json"
+}

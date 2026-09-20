@@ -2,19 +2,20 @@
 
 The two fixture files have distinct provenance and licenses.
 
-## IAU/MacRobert stick figures
+## Western (Sky & Telescope) stick figures
 
 - **File:** `constellations.lines.json`
-- **Source:** Dominic Ford's
-  [`dcf21/constellation-stick-figures`](https://github.com/dcf21/constellation-stick-figures),
-  `constellation_lines_iau.dat`, commit
-  `75d29c207bbd752023c447ddd1f9f4ff0eb47538`.
-- **Copyright / attribution:** Alan MacRobert et al.; imported via Dominic
-  Ford's data conversion.
-- **License:** [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-- **Transformation:** Hipparcos identifiers were resolved to J2000 RA/Dec and
-  written as GeoJSON `MultiLineString` features. Segment connectivity is
-  unchanged.
+- **Source:** Stellarium Sky Cultures, `western_SnT/index.json`, commit
+  `014fbb5e59233d133c22f9811af96b67d05a95c9`.
+- **Upstream:** https://github.com/Stellarium/stellarium-skycultures/tree/014fbb5e59233d133c22f9811af96b67d05a95c9/western_SnT
+- **Source SHA-256:** `7c61c6f88f50b84e43e276c3f9f67422faec63f4a13ca8e60c22bfc3da064340`.
+- **Attribution:** Paul Krizak and Jonathan E. Piskor; rework by the Stellarium Team.
+- **License:** [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0/).
+- **Transformation:** HIP polylines and bold/normal/thin classes are retained;
+  consecutive duplicate IDs (zero-length steps) removed. HIP coordinates come
+  from NightSky's Tycho-2/Hipparcos catalog, not Stellarium.
+- **Rebuild:** `nightsky data fetch-stellarium-figures` then
+  `nightsky data import-stellarium-figures`.
 
 ## IAU constellation boundaries
 
@@ -25,6 +26,6 @@ The two fixture files have distinct provenance and licenses.
 - **Transformation:** none on import. Boundary polygons are converted to a
   deduplicated segment set at load time.
 
-These committed fixtures make an offline build reproducible. Further catalogue
-licensing and attribution requirements are recorded in
+These committed fixtures make an offline build reproducible. The stick-figure
+data is not MIT-licensed; see `THIRD_PARTY_LICENSES.md` and
 `docs/DATA_SOURCES.md`.

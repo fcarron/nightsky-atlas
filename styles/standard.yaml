@@ -143,7 +143,10 @@ constellation:
   lines:
     enabled: true
     gray: 0.5
-    line_width_mm: 0.22
+    line_width_mm: 0.16
+    bold_width_mm: 0.23
+    normal_width_mm: 0.16
+    thin_width_mm: 0.11
     star_gap_extra_mm: 0.2
   boundaries:
     enabled: true

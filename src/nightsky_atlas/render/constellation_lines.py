@@ -34,6 +34,7 @@ class ConstellationStroke:
     source_id: str
     start: PagePoint
     end: PagePoint
+    weight: str = "normal"
 
 
 def _star_grid(
@@ -121,6 +122,7 @@ def resolve_constellation_lines(
                 for piece in split_segment_at_rect(*part, expand_rect(bounds, knockout_margin_mm))
             )
         strokes.extend(
-            ConstellationStroke(source_id=segment.source_id, start=a, end=b) for a, b in parts
+            ConstellationStroke(source_id=segment.source_id, start=a, end=b, weight=segment.weight)
+            for a, b in parts
         )
     return tuple(strokes)

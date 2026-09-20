@@ -36,7 +36,7 @@ BOUNDARIES_FILENAME = "constellations.bounds.json"
 
 # IAU three-letter abbreviations to full constellation names.  This is factual
 # reference data (no creative content) used only to label overview maps. The
-# vendored geometry has separate provenance for the IAU/MacRobert stick figures
+# vendored geometry has separate provenance for the Stellarium S&T stick figures
 # and d3-celestial boundary polygons; see the fixture SOURCE.md.
 CONSTELLATION_NAMES: dict[str, str] = {
     "And": "Andromeda",
@@ -155,6 +155,8 @@ class ConstellationSegment:
     dec2_deg: float
     provenance: Provenance
     constellation_id: str = ""
+    weight: str = "normal"
+    hip_ids: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
         for name in ("ra1_deg", "dec1_deg", "ra2_deg", "dec2_deg"):
@@ -162,6 +164,8 @@ class ConstellationSegment:
                 raise ValueError(f"{name} must be finite")
         if not -90.0 <= self.dec1_deg <= 90.0 or not -90.0 <= self.dec2_deg <= 90.0:
             raise ValueError("declination must be within [-90, 90]")
+        if self.weight not in {"bold", "normal", "thin"}:
+            raise ValueError(f"unknown constellation line weight: {self.weight}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,8 +224,18 @@ def _line_segments(data: dict[str, Any]) -> tuple[ConstellationSegment, ...]:
             source_id=str(properties.get("source_id", "lines")),
         )
         constellation_id = str(feature.get("id", ""))
+        weights = properties.get("weights", ["normal"] * len(geometry.get("coordinates", ())))
+        hip_paths = properties.get("hip_paths", [None] * len(weights))
+        if len(weights) != len(geometry.get("coordinates", ())) or len(hip_paths) != len(weights):
+            raise ValueError(f"constellation path metadata length mismatch: {constellation_id}")
         for path_index, polyline in enumerate(geometry.get("coordinates", ())):
             vertices = _vertices(polyline, LINES_FILENAME)
+            weight = weights[path_index]
+            if weight not in {"bold", "normal", "thin"}:
+                raise ValueError(f"unknown constellation line weight: {weight}")
+            hips = hip_paths[path_index]
+            if hips is not None and len(hips) != len(vertices):
+                raise ValueError(f"HIP path length mismatch: {constellation_id}:{path_index}")
             for index in range(len(vertices) - 1):
                 (ra1, dec1), (ra2, dec2) = vertices[index], vertices[index + 1]
                 if (ra1, dec1) == (ra2, dec2):
@@ -235,6 +249,8 @@ def _line_segments(data: dict[str, Any]) -> tuple[ConstellationSegment, ...]:
                         dec2_deg=dec2,
                         provenance=provenance,
                         constellation_id=constellation_id,
+                        weight=weight,
+                        hip_ids=(int(hips[index]), int(hips[index + 1])) if hips else None,
                     )
                 )
     return tuple(segments)

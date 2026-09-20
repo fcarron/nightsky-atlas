@@ -37,7 +37,9 @@ def test_segments_have_finite_in_range_coordinates() -> None:
     for segment in (*catalogue.lines, *catalogue.boundaries):
         assert -90.0 <= segment.dec1_deg <= 90.0
         assert -90.0 <= segment.dec2_deg <= 90.0
-    assert {segment.provenance.catalogue for segment in catalogue.lines} == {"IAU/MacRobert"}
+    assert {segment.provenance.catalogue for segment in catalogue.lines} == {
+        "Stellarium Western (Sky & Telescope)"
+    }
     assert {segment.provenance.catalogue for segment in catalogue.boundaries} == {"d3-celestial"}
 
 
@@ -53,6 +55,15 @@ def test_segments_carry_constellation_id() -> None:
     assert "And" in ids
     assert "Ori" in ids
     assert "" not in ids
+
+
+def test_stellarium_line_weights_and_hip_identities() -> None:
+    catalogue = load_constellations(FIXTURE_DIR)
+    assert {line.weight for line in catalogue.lines} == {"bold", "normal", "thin"}
+    assert all(line.hip_ids is not None for line in catalogue.lines)
+    cygnus = [line for line in catalogue.lines if line.constellation_id == "Cyg"]
+    assert {line.weight for line in cygnus} == {"bold", "normal"}
+    assert (102098, 100453) in {line.hip_ids for line in cygnus}
 
 
 def test_constellation_name_registry() -> None:

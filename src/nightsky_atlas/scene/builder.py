@@ -289,6 +289,7 @@ def _project_constellation_lines(
                     ChartPoint(xi_deg=clip_end[0], eta_deg=clip_end[1]),
                 ),
                 constellation_id=source.constellation_id,
+                weight=source.weight,
             )
         )
     return tuple(segments)

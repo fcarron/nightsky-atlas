@@ -142,6 +142,7 @@ def test_constellation_lines_are_straight_chords(charts, constellations) -> None
     assert overview.constellation_lines
     assert all(len(segment.points) == 2 for segment in overview.constellation_lines)
     assert all(len(segment.points) == 2 for segment in overview.constellation_boundaries)
+    assert "bold" in {segment.weight for segment in overview.constellation_lines}
 
 
 def _point_in_polygon(point, polygon) -> bool:

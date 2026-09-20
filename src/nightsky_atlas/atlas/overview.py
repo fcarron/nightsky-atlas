@@ -100,6 +100,7 @@ class OverviewSegment:
     """A projected polyline run on the overview plane, in degrees."""
 
     points: tuple[ChartPoint, ...]
+    weight: str = "normal"
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,7 +433,7 @@ def _project_segments(
             continue
         run = _clip_segment_to_disk(start, end, radius_deg)
         if run is not None:
-            result.append(OverviewSegment(points=run))
+            result.append(OverviewSegment(points=run, weight=segment.weight))
     return tuple(result)
 
 

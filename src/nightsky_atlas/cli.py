@@ -68,6 +68,19 @@ from nightsky_atlas.catalog.star_names import (
 from nightsky_atlas.catalog.star_names import (
     load_star_names,
 )
+from nightsky_atlas.catalog.stellarium_figures import (
+    REVISION as STELLARIUM_FIGURES_REVISION,
+)
+from nightsky_atlas.catalog.stellarium_figures import (
+    SHA256 as STELLARIUM_FIGURES_SHA256,
+)
+from nightsky_atlas.catalog.stellarium_figures import (
+    SOURCE_URL as STELLARIUM_FIGURES_URL,
+)
+from nightsky_atlas.catalog.stellarium_figures import (
+    fetch_stellarium_figures,
+    import_stellarium_figures,
+)
 from nightsky_atlas.catalog.store import StarStore, build_star_store
 from nightsky_atlas.catalog.systems import write_system_catalog
 from nightsky_atlas.catalog.tycho import (
@@ -130,6 +143,7 @@ _DEFAULT_WDS_RAW = Path("data/raw/wds")
 _DEFAULT_WDS_OUT = Path("data/processed/double_stars/wds.json")
 _DEFAULT_WDS_MANIFEST = Path("data/processed/double_stars/wds.manifest.json")
 _DEFAULT_CONSTELLATIONS = Path("data/fixtures/constellations")
+_DEFAULT_STELLARIUM_RAW = Path("data/raw/stellarium/western_SnT/index.json")
 _DEFAULT_OUTLINES = Path("data/fixtures/outlines")
 _DEFAULT_STAR_NAMES = STAR_NAMES_FIXTURE_DIR
 _DEFAULT_OBSERVING_LISTS = Path("data/fixtures/observing_lists")
@@ -417,6 +431,23 @@ def _add_chart_commands(subparsers: argparse._SubParsersAction) -> None:
 def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     data = subparsers.add_parser("data", help="fetch and import catalogue data")
     data_subparsers = data.add_subparsers(dest="data_command")
+
+    figure_fetch = data_subparsers.add_parser(
+        "fetch-stellarium-figures", help="download pinned Western (Sky & Telescope) figures"
+    )
+    figure_fetch.add_argument("--dest", type=Path, default=_DEFAULT_STELLARIUM_RAW)
+    figure_fetch.set_defaults(handler=_command_fetch_stellarium_figures)
+
+    figure_import = data_subparsers.add_parser(
+        "import-stellarium-figures", help="normalize pinned HIP stick figures and line weights"
+    )
+    figure_import.add_argument("--source", type=Path, default=_DEFAULT_STELLARIUM_RAW)
+    figure_import.add_argument("--store", type=Path, default=_DEFAULT_STORE)
+    figure_import.add_argument(
+        "--hipparcos-raw", type=Path, default=_DEFAULT_HIP_RAW / "hip_main.dat"
+    )
+    figure_import.add_argument("--dest", type=Path, default=_DEFAULT_CONSTELLATIONS)
+    figure_import.set_defaults(handler=_command_import_stellarium_figures)
 
     fetch = data_subparsers.add_parser(
         "fetch-stars", help="download raw Tycho-2 parts (network access)"
@@ -941,6 +972,34 @@ def _command_magnitude_scale(args: argparse.Namespace) -> int:
 def _command_fetch_stars(args: argparse.Namespace) -> int:
     paths = download_tycho2(args.dest, base_url=args.base_url)
     print(f"downloaded {len(paths)} parts -> {args.dest}")
+    return 0
+
+
+def _command_fetch_stellarium_figures(args: argparse.Namespace) -> int:
+    path = fetch_stellarium_figures(args.dest)
+    print(f"Pinned Stellarium Western (Sky & Telescope): {path}")
+    return 0
+
+
+def _command_import_stellarium_figures(args: argparse.Namespace) -> int:
+    counts = import_stellarium_figures(
+        args.source,
+        args.store,
+        args.dest,
+        hipparcos_raw=args.hipparcos_raw if args.hipparcos_raw.exists() else None,
+    )
+    write_manifest(
+        args.dest / "constellations.lines.manifest.json",
+        {
+            "source": "Stellarium Western (Sky & Telescope)",
+            "url": STELLARIUM_FIGURES_URL,
+            "revision": STELLARIUM_FIGURES_REVISION,
+            "sha256": STELLARIUM_FIGURES_SHA256,
+            "license": "CC BY-SA 2.0",
+            "counts": counts,
+        },
+    )
+    print(f"Imported Stellarium figures: {json.dumps(counts, sort_keys=True)}")
     return 0
 
 

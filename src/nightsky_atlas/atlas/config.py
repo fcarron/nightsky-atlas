@@ -747,8 +747,19 @@ class ConstellationLineStyle(_StrictModel):
     enabled: bool = True
     gray: float = 0.5
     line_width_mm: PositiveFloat = 0.22
+    bold_width_mm: PositiveFloat = 0.23
+    normal_width_mm: PositiveFloat = 0.16
+    thin_width_mm: PositiveFloat = 0.11
     star_gap_extra_mm: NonNegativeFloat = 0.2
     star_match_tolerance_mm: PositiveFloat = 0.6
+
+    def width_mm_for(self, weight: str) -> float:
+        widths = {
+            "bold": self.bold_width_mm,
+            "normal": self.normal_width_mm,
+            "thin": self.thin_width_mm,
+        }
+        return widths[weight]
 
 
 class ConstellationBoundaryStyle(_StrictModel):

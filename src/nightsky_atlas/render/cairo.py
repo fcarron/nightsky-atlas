@@ -937,7 +937,6 @@ def _draw_constellations(
             scene,
             style,
             gray=config.lines.gray,
-            line_width_mm=config.lines.line_width_mm,
             knockout_bounds=tuple(
                 candidate.bounds
                 for label in labels
@@ -954,7 +953,6 @@ def _draw_constellation_lines(
     style: StyleConfig,
     *,
     gray: float,
-    line_width_mm: float,
     knockout_bounds: tuple[PageRect, ...] = (),
 ) -> None:
     """Draw straight stick-figure lines, trimmed clear of their star symbols."""
@@ -972,8 +970,8 @@ def _draw_constellation_lines(
     )
     cr.clip()
     cr.set_source_rgb(tone, tone, tone)
-    cr.set_line_width(mm_to_pt(line_width_mm))
     for stroke in strokes:
+        cr.set_line_width(mm_to_pt(style.constellation.lines.width_mm_for(stroke.weight)))
         cr.move_to(mm_to_pt(stroke.start.x_mm), mm_to_pt(stroke.start.y_mm))
         cr.line_to(mm_to_pt(stroke.end.x_mm), mm_to_pt(stroke.end.y_mm))
         cr.stroke()

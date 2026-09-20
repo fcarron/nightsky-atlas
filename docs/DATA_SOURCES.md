@@ -200,15 +200,15 @@ its licensing is resolved.
 
 | Field | Value |
 | --- | --- |
-| Stick figures | IAU/MacRobert design, via Dominic Ford's `dcf21/constellation-stick-figures`, `constellation_lines_iau.dat`, commit `75d29c207bbd752023c447ddd1f9f4ff0eb47538` |
-| Stick-figure license | **CC BY 4.0**; attribution: Alan MacRobert et al., imported via Dominic Ford |
+| Stick figures | Stellarium Western (Sky & Telescope), `western_SnT/index.json`, commit `014fbb5e59233d133c22f9811af96b67d05a95c9` |
+| Stick-figure license | **CC BY-SA 2.0**; attribution: Paul Krizak and Jonathan E. Piskor; rework by Stellarium Team |
 | Boundaries | d3-celestial (Olaf Frohn), `master`, fetched 2026-09-16 |
 | Boundary license | **BSD-3-Clause** |
 | Files | `data/fixtures/constellations/{constellations.lines,constellations.bounds}.json` |
-| Companion | `LICENSE`, `SOURCE.md` in the same directory |
-| Content | 89 IAU/MacRobert stick figures; 785 deduplicated IAU boundary segments |
-| Transformations | stick-figure Hipparcos IDs resolved to J2000 RA/Dec without changing connectivity; boundary polygons converted to a deduplicated segment set at load time |
-| Committed | yes (~68 kB); build must be reproducible offline |
+| Companion | `SOURCE.md`, `constellations.lines.manifest.json`, `THIRD_PARTY_LICENSES.md`; boundary `LICENSE` |
+| Content | 88 S&T figures (20 bold, 165 normal, 24 thin polylines); 785 deduplicated IAU boundary segments |
+| Transformations | HIP references preserved; consecutive repeated IDs removed; HIP positions resolved via NightSky stellar catalog; boundaries deduplicated at load time |
+| Committed | yes; atlas builds remain offline and reproducible |
 
 ### Schematic nebula outlines
 

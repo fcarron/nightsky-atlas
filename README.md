@@ -141,8 +141,12 @@ current snapshot in `docs/STATE.md`.
 The NightSky Atlas source code is licensed under the [MIT License](LICENSE).
 This does not relicense the included fixtures or downloaded catalogues: they
 remain under their own terms, recorded in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
-In particular, the IAU/MacRobert constellation stick figures are CC BY 4.0 and
-the IAU boundary polygons are BSD-3-Clause. Generated atlases must retain all
-applicable source attribution and licence obligations.
+Constellation stick figures follow the Sky & Telescope tradition via
+Stellarium's Western (Sky & Telescope) sky culture. They are conventional
+figures, separate from official IAU boundaries. Their HIP-referenced primary
+and supplementary strokes retain bold/normal/thin hierarchy, with physical
+widths configurable by style. The figure data is CC BY-SA 2.0; the IAU boundary
+polygons are BSD-3-Clause. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
+for attribution and terms that generated atlases must retain.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and contribution rules.

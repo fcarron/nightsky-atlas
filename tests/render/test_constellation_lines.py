@@ -40,7 +40,8 @@ def make_star(star_id: str, ra_deg: float, dec_deg: float, magnitude: float) -> 
 
 
 def make_segment(
-    ra1_deg: float, dec1_deg: float, ra2_deg: float, dec2_deg: float
+    ra1_deg: float, dec1_deg: float, ra2_deg: float, dec2_deg: float,
+    weight: str = "normal",
 ) -> ConstellationSegment:
     return ConstellationSegment(
         id=f"seg:{ra1_deg}:{dec1_deg}:{ra2_deg}:{dec2_deg}",
@@ -49,6 +50,7 @@ def make_segment(
         ra2_deg=ra2_deg,
         dec2_deg=dec2_deg,
         provenance=Provenance(catalogue="TEST", source_id="seg"),
+        weight=weight,
     )
 
 
@@ -137,3 +139,30 @@ def test_line_is_split_around_label_knockout() -> None:
     assert len(knocked_out) == 2
     gap_edges = sorted((knocked_out[0].end.x_mm, knocked_out[1].start.x_mm))
     assert gap_edges[0] < middle_x < gap_edges[1]
+
+
+@pytest.mark.parametrize("weight", ("bold", "normal", "thin"))
+def test_all_weights_keep_star_gap_and_label_knockout(weight: str) -> None:
+    stars = [make_star("s1", -2.0, 0.0, 3.0), make_star("s2", 2.0, 0.0, 3.0)]
+    line = make_segment(-2.0, 0.0, 2.0, 0.0, weight)
+    scene = build_scene(DEFINITION, stars, constellation_lines=[line])
+    original = resolve_constellation_lines(scene, TRANSFORM, STYLE)
+    assert len(original) == 1
+    assert original[0].weight == weight
+    first_star = TRANSFORM.to_page(scene.stars[0].chart_point)
+    assert math.hypot(
+        original[0].start.x_mm - first_star.x_mm,
+        original[0].start.y_mm - first_star.y_mm,
+    ) >= StarSizeModel.from_style(STYLE.star).radius_mm(3.0)
+    center_x = (original[0].start.x_mm + original[0].end.x_mm) / 2
+    bounds = PageRect(center_x - 1, original[0].start.y_mm - 1, 2, 2)
+    knocked = resolve_constellation_lines(scene, TRANSFORM, STYLE, knockout_bounds=(bounds,))
+    assert len(knocked) == 2
+    assert all(stroke.weight == weight for stroke in knocked)
+
+
+def test_semantic_weights_resolve_to_configured_physical_widths() -> None:
+    config = STYLE.constellation.lines
+    assert config.width_mm_for("bold") == pytest.approx(0.23)
+    assert config.width_mm_for("normal") == pytest.approx(0.16)
+    assert config.width_mm_for("thin") == pytest.approx(0.11)
