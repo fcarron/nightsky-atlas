@@ -31,8 +31,9 @@ from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.chart.presentation import PRODUCT_NAME
 from nightsky_atlas.projection.azimuthal import AzimuthalEquidistantProjection
 from nightsky_atlas.projection.base import ChartPoint
+from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.render.symbols import StarSizeModel
-from nightsky_atlas.render.text import draw_centered_text
+from nightsky_atlas.render.text import TextMeasurer, draw_centered_text
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = [
@@ -191,6 +192,7 @@ def draw_overview_page(
     overview: OverviewMap,
     page: PageGeometry,
     style: StyleConfig,
+    pdf_navigation: PdfNavigation | None = None,
 ) -> None:
     """Draw a full-page hemisphere overview."""
     config = style.overview
@@ -228,7 +230,17 @@ def draw_overview_page(
     )
 
     disk_style = _page_disk_style(style)
-    _draw_disk(cr, transform, overview, style, radius_mm, disk_style, None, frozenset())
+    _draw_disk(
+        cr,
+        transform,
+        overview,
+        style,
+        radius_mm,
+        disk_style,
+        None,
+        frozenset(),
+        pdf_navigation,
+    )
     _draw_rim_labels(cr, transform, overview, style, radius_mm)
     _draw_centre_marker(cr, transform, overview, style)
 
@@ -263,6 +275,7 @@ def draw_locator_inset(
         disk_style,
         inset.current_chart_id,
         inset.neighbour_ids if style.locator.show_neighbours else frozenset(),
+        None,
     )
     cr.restore()
 
@@ -282,6 +295,7 @@ def _draw_disk(
     disk_style: _DiskStyle,
     current_chart_id: str | None,
     neighbour_ids: frozenset[str],
+    pdf_navigation: PdfNavigation | None,
 ) -> None:
     """Draw grid, constellation background, footprints and codes, clipped to the disk."""
     cr.save()
@@ -334,14 +348,34 @@ def _draw_disk(
             cr.set_source_rgb(
                 disk_style.code_gray, disk_style.code_gray, disk_style.code_gray
             )
-            draw_centered_text(
-                cr,
-                cell.chart_code,
-                mm_to_pt(page_point.x_mm),
-                mm_to_pt(page_point.y_mm),
-                style.label.font_family,
-                disk_style.code_font_size_pt,
+            metrics = TextMeasurer(
+                style.label.font_family, disk_style.code_font_size_pt
+            ).measure_mm(cell.chart_code)
+            rect = PageRect(
+                left_mm=page_point.x_mm - metrics.width_mm / 2.0,
+                top_mm=page_point.y_mm - metrics.height_mm / 2.0,
+                width_mm=metrics.width_mm,
+                height_mm=metrics.height_mm,
             )
+            if pdf_navigation is None:
+                draw_centered_text(
+                    cr,
+                    cell.chart_code,
+                    mm_to_pt(page_point.x_mm),
+                    mm_to_pt(page_point.y_mm),
+                    style.label.font_family,
+                    disk_style.code_font_size_pt,
+                )
+            else:
+                with pdf_navigation.link(cr, cell.chart_code, rect):
+                    draw_centered_text(
+                        cr,
+                        cell.chart_code,
+                        mm_to_pt(page_point.x_mm),
+                        mm_to_pt(page_point.y_mm),
+                        style.label.font_family,
+                        disk_style.code_font_size_pt,
+                    )
     cr.restore()
 
 

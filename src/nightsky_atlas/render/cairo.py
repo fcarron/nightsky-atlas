@@ -34,6 +34,7 @@ from nightsky_atlas.render.ecliptic import build_ecliptic
 from nightsky_atlas.render.furniture import build_furniture_plan, draw_furniture
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
 from nightsky_atlas.render.overview import LocatorInset, draw_locator_inset
+from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.render.symbols import (
     CIRCLE_CROSS_REACH_FACTOR,
     SPOKED_CIRCLE_INNER_FACTOR,
@@ -123,6 +124,7 @@ def draw_chart_page(
     debug: DebugOptions | None = None,
     presentation: ChartPresentation | None = None,
     locator: LocatorInset | None = None,
+    pdf_navigation: PdfNavigation | None = None,
 ) -> None:
     """Draw one chart page into an existing context, in point units.
 
@@ -155,7 +157,7 @@ def draw_chart_page(
         draw_locator_inset(cr, locator, transform, style)
     if debug is not None:
         _draw_debug(cr, transform, scene, label_list, style, debug)
-    draw_furniture(cr, plan, style)
+    draw_furniture(cr, plan, style, pdf_navigation)
 
 
 def render_magnitude_scale(

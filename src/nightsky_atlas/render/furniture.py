@@ -28,6 +28,7 @@ from nightsky_atlas.chart.presentation import (
     presentation_for,
 )
 from nightsky_atlas.render.overview import locator_rect
+from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.render.symbols import StarSizeModel, star_reference_magnitudes
 from nightsky_atlas.render.text import (
     TextMeasurer,
@@ -77,6 +78,7 @@ class PlacedText:
     font_size_pt: float
     markup: str | None = None
     rotation_rad: float = 0.0
+    target_chart_code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +171,7 @@ def _navigation(
                     "center",
                     nav.font_size_pt,
                     markup,
+                    target_chart_code=code,
                 )
             )
         elif direction == "S":
@@ -180,6 +183,7 @@ def _navigation(
                     "center",
                     nav.font_size_pt,
                     markup,
+                    target_chart_code=code,
                 )
             )
         elif direction == "E":
@@ -195,6 +199,7 @@ def _navigation(
                     nav.font_size_pt,
                     markup,
                     -_SIDE_NAVIGATION_ANGLE_RAD,
+                    code,
                 )
             )
         elif direction == "W":
@@ -207,6 +212,7 @@ def _navigation(
                     nav.font_size_pt,
                     markup,
                     _SIDE_NAVIGATION_ANGLE_RAD,
+                    code,
                 )
             )
     return tuple(placed)
@@ -460,7 +466,10 @@ def _draw_placed_text(
 
 
 def draw_furniture(
-    cr: cairo.Context[cairo.Surface], plan: FurniturePlan, style: StyleConfig
+    cr: cairo.Context[cairo.Surface],
+    plan: FurniturePlan,
+    style: StyleConfig,
+    pdf_navigation: PdfNavigation | None = None,
 ) -> None:
     """Draw a resolved furniture plan; always after all sky content."""
     family = style.label.font_family
@@ -513,4 +522,12 @@ def draw_furniture(
 
     nav_gray = style.furniture.navigation.gray
     for nav_text in plan.navigation:
-        _draw_placed_text(cr, nav_text, family, nav_gray)
+        if pdf_navigation is None or nav_text.target_chart_code is None:
+            _draw_placed_text(cr, nav_text, family, nav_gray)
+            continue
+        with pdf_navigation.link(
+            cr,
+            nav_text.target_chart_code,
+            _obstacle_for_text(nav_text, family),
+        ):
+            _draw_placed_text(cr, nav_text, family, nav_gray)

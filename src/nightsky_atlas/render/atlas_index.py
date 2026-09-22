@@ -13,7 +13,9 @@ from nightsky_atlas.atlas.index import (
     DsoIndexEntry,
     NamedStarIndexEntry,
 )
-from nightsky_atlas.render.text import draw_text
+from nightsky_atlas.chart.page import PageRect
+from nightsky_atlas.render.pdf_navigation import PdfNavigation
+from nightsky_atlas.render.text import TextMeasurer, draw_text
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = ["draw_atlas_index_pages", "index_page_count"]
@@ -58,18 +60,28 @@ def _footer(
 
 
 def _draw_dso_row(
-    cr: cairo.Context[cairo.Surface], entry: DsoIndexEntry, x: float, y: float, family: str
+    cr: cairo.Context[cairo.Surface],
+    entry: DsoIndexEntry,
+    x: float,
+    y: float,
+    family: str,
+    pdf_navigation: PdfNavigation | None,
 ) -> None:
-    charts = entry.primary_chart + (
-        f" ({', '.join(entry.secondary_charts)})" if entry.secondary_charts else ""
-    )
     for text, offset in (
         (entry.designation, 0),
         (entry.object_type, 30),
         (entry.constellation, 76),
-        (charts, 91),
     ):
         draw_text(cr, text, mm_to_pt(x + offset), mm_to_pt(y), family, _FONT_SIZE_PT)
+    _draw_chart_references(
+        cr,
+        (entry.primary_chart, *entry.secondary_charts),
+        x + 91,
+        y,
+        family,
+        pdf_navigation,
+        parenthesize_after_first=True,
+    )
 
 
 def _draw_constellation_row(
@@ -78,18 +90,19 @@ def _draw_constellation_row(
     x: float,
     y: float,
     family: str,
+    pdf_navigation: PdfNavigation | None,
 ) -> None:
     draw_text(
         cr, f"{entry.name} ({entry.abbreviation})", mm_to_pt(x), mm_to_pt(y), family, _FONT_SIZE_PT
     )
     for line_number, chart_line in enumerate(_chart_lines(entry.chart_ids)):
-        draw_text(
+        _draw_chart_references(
             cr,
-            chart_line,
-            mm_to_pt(x + 52),
-            mm_to_pt(y + line_number * 3.4),
+            tuple(part.strip() for part in chart_line.split(",")),
+            x + 52,
+            y + line_number * 3.4,
             family,
-            _FONT_SIZE_PT,
+            pdf_navigation,
         )
 
 
@@ -118,18 +131,57 @@ def _draw_alias_row(
 
 
 def _draw_named_star_row(
-    cr: cairo.Context[cairo.Surface], entry: NamedStarIndexEntry, x: float, y: float, family: str
+    cr: cairo.Context[cairo.Surface],
+    entry: NamedStarIndexEntry,
+    x: float,
+    y: float,
+    family: str,
+    pdf_navigation: PdfNavigation | None,
 ) -> None:
-    charts = entry.primary_chart + (
-        f" ({', '.join(entry.secondary_charts)})" if entry.secondary_charts else ""
-    )
     for text, offset in (
         (entry.name, 0),
         (entry.designation, 35),
         (entry.constellation, 75),
-        (charts, 90),
     ):
         draw_text(cr, text, mm_to_pt(x + offset), mm_to_pt(y), family, _FONT_SIZE_PT)
+    _draw_chart_references(
+        cr,
+        (entry.primary_chart, *entry.secondary_charts),
+        x + 90,
+        y,
+        family,
+        pdf_navigation,
+        parenthesize_after_first=True,
+    )
+
+
+def _draw_chart_references(
+    cr: cairo.Context[cairo.Surface],
+    chart_ids: tuple[str, ...],
+    x: float,
+    y: float,
+    family: str,
+    pdf_navigation: PdfNavigation | None,
+    *,
+    parenthesize_after_first: bool = False,
+) -> None:
+    measurer = TextMeasurer(family, _FONT_SIZE_PT)
+    cursor = x
+    for index, chart_id in enumerate(chart_ids):
+        if index:
+            separator = " (" if parenthesize_after_first and index == 1 else ", "
+            draw_text(cr, separator, mm_to_pt(cursor), mm_to_pt(y), family, _FONT_SIZE_PT)
+            cursor += measurer.measure_mm(separator).width_mm
+        metrics = measurer.measure_mm(chart_id)
+        rect = PageRect(cursor, y, metrics.width_mm, metrics.height_mm)
+        if pdf_navigation is None:
+            draw_text(cr, chart_id, mm_to_pt(cursor), mm_to_pt(y), family, _FONT_SIZE_PT)
+        else:
+            with pdf_navigation.link(cr, chart_id, rect):
+                draw_text(cr, chart_id, mm_to_pt(cursor), mm_to_pt(y), family, _FONT_SIZE_PT)
+        cursor += metrics.width_mm
+    if parenthesize_after_first and len(chart_ids) > 1:
+        draw_text(cr, ")", mm_to_pt(cursor), mm_to_pt(y), family, _FONT_SIZE_PT)
 
 
 def _draw_headers(
@@ -159,6 +211,7 @@ def _draw_section(
     edition: EditionConfig,
     page_number: int,
     row_mm: float = _ROW_MM,
+    pdf_navigation: PdfNavigation | None = None,
 ) -> int:
     capacity_per_column = _capacity(page, row_mm) // _COLUMNS
     capacity = capacity_per_column * _COLUMNS
@@ -181,11 +234,11 @@ def _draw_section(
             column, row = divmod(local, capacity_per_column)
             x, y = page.margin_mm + column * column_width, page.margin_mm + 14 + row * row_mm
             if isinstance(entry, DsoIndexEntry):
-                _draw_dso_row(cr, entry, x, y, family)
+                _draw_dso_row(cr, entry, x, y, family, pdf_navigation)
             elif isinstance(entry, ConstellationIndexEntry):
-                _draw_constellation_row(cr, entry, x, y, family)
+                _draw_constellation_row(cr, entry, x, y, family, pdf_navigation)
             elif isinstance(entry, NamedStarIndexEntry):
-                _draw_named_star_row(cr, entry, x, y, family)
+                _draw_named_star_row(cr, entry, x, y, family, pdf_navigation)
             else:
                 _draw_alias_row(cr, entry, x, y, family)
         _footer(cr, page, edition, page_number, family)
@@ -201,6 +254,7 @@ def draw_atlas_index_pages(
     page: PageGeometry,
     style: StyleConfig,
     edition: EditionConfig,
+    pdf_navigation: PdfNavigation | None = None,
 ) -> int:
     """Append compact vector index pages and return the number written."""
     cr.set_source_rgb(0.0, 0.0, 0.0)
@@ -214,6 +268,7 @@ def draw_atlas_index_pages(
         style,
         edition,
         1,
+        pdf_navigation=pdf_navigation,
     )
     next_page = _draw_section(
         cr,
@@ -226,6 +281,7 @@ def draw_atlas_index_pages(
         edition,
         next_page,
         _CONSTELLATION_ROW_MM,
+        pdf_navigation,
     )
     if index.aliases:
         next_page = _draw_section(
@@ -238,6 +294,7 @@ def draw_atlas_index_pages(
             style,
             edition,
             next_page,
+            pdf_navigation=pdf_navigation,
         )
     if index.named_star_entries:
         _draw_section(
@@ -250,5 +307,6 @@ def draw_atlas_index_pages(
             style,
             edition,
             next_page,
+            pdf_navigation=pdf_navigation,
         )
     return index_page_count(index, page)

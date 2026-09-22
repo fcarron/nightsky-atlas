@@ -8,7 +8,9 @@ import cairo
 
 from nightsky_atlas.atlas.config import EditionConfig, PageGeometry, StyleConfig
 from nightsky_atlas.atlas.directory import ChartDirectoryEntry
-from nightsky_atlas.render.text import draw_text
+from nightsky_atlas.chart.page import PageRect
+from nightsky_atlas.render.pdf_navigation import PdfNavigation
+from nightsky_atlas.render.text import TextMeasurer, draw_text
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = ["chart_directory_page_count", "draw_chart_directory_pages"]
@@ -52,6 +54,7 @@ def draw_chart_directory_pages(
     page: PageGeometry,
     style: StyleConfig,
     edition: EditionConfig,
+    pdf_navigation: PdfNavigation | None = None,
 ) -> int:
     """Append paginated directory pages and return the number written."""
     family = style.label.font_family
@@ -85,7 +88,15 @@ def draw_chart_directory_pages(
             column, row = divmod(local, capacity_per_column)
             x = page.margin_mm + column * column_width
             y = page.margin_mm + 14 + row * _ROW_MM
-            draw_text(cr, entry.chart_code, mm_to_pt(x), mm_to_pt(y), family, 7.5, "bold")
+            code_metrics = TextMeasurer(family, 7.5).measure_mm(entry.chart_code)
+            code_rect = PageRect(x, y, code_metrics.width_mm, code_metrics.height_mm)
+            if pdf_navigation is None:
+                draw_text(cr, entry.chart_code, mm_to_pt(x), mm_to_pt(y), family, 7.5, "bold")
+            else:
+                with pdf_navigation.link(cr, entry.chart_code, code_rect):
+                    draw_text(
+                        cr, entry.chart_code, mm_to_pt(x), mm_to_pt(y), family, 7.5, "bold"
+                    )
             draw_text(
                 cr,
                 f"{entry.center_ra} {entry.center_dec}",

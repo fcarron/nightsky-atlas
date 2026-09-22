@@ -82,6 +82,7 @@ from nightsky_atlas.render.chart_directory import draw_chart_directory_pages
 from nightsky_atlas.render.front_matter import draw_field_guide
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.overview import LocatorInset, draw_overview_page
+from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.render.text import draw_text
 from nightsky_atlas.scene.models import SceneDso
 from nightsky_atlas.units import mm_to_pt
@@ -446,6 +447,18 @@ def _build_atlas_impl(
 
     surface = cairo.PDFSurface(str(combined_pdf), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm))
     context = cairo.Context(surface)
+    chart_codes = {
+        chart.id: presentation_from_edition(chart, edition).chart_code for chart in charts
+    }
+    pdf_navigation = PdfNavigation(frozenset(chart_codes.values()))
+    outline_root = pdf_navigation.add_outline(
+        surface,
+        cairo.PDF_OUTLINE_ROOT,
+        edition.name,
+        chart_codes[charts[0].id],
+        open_item=True,
+    )
+    assert outline_root is not None
     front_matter_pages = 0
     if write_front_matter:
         with progress.step("front matter", detail=True):
@@ -467,7 +480,13 @@ def _build_atlas_impl(
         chart_directory = build_chart_directory(charts, edition)
         with progress.step("chart directory", detail=True):
             chart_directory_pages = draw_chart_directory_pages(
-                context, surface, chart_directory, page, style, edition
+                context,
+                surface,
+                chart_directory,
+                page,
+                style,
+                edition,
+                pdf_navigation,
             )
 
     overviews: dict[str, OverviewMap] = {}
@@ -494,7 +513,7 @@ def _build_atlas_impl(
         with progress.step("overview pages", detail=True):
             for hemisphere in ("north", "south"):
                 overview = overviews[hemisphere]
-                draw_overview_page(context, overview, page, style)
+                draw_overview_page(context, overview, page, style, pdf_navigation)
                 surface.show_page()
                 overview_page_info.append(
                     {
@@ -639,6 +658,14 @@ def _build_atlas_impl(
             labels=labels,
             presentation=presentation,
             locator=locator,
+            pdf_navigation=pdf_navigation,
+        )
+        pdf_navigation.mark_chart_page(surface, context, presentation.chart_code)
+        pdf_navigation.add_outline(
+            surface,
+            outline_root,
+            presentation.chart_code,
+            presentation.chart_code,
         )
         surface.show_page()
         compose_s = time.perf_counter() - stage_start
@@ -686,7 +713,15 @@ def _build_atlas_impl(
         star_names=star_names,
     )
     with progress.step("append atlas index", detail=True):
-        index_pages = draw_atlas_index_pages(context, surface, atlas_index, page, style, edition)
+        index_pages = draw_atlas_index_pages(
+            context,
+            surface,
+            atlas_index,
+            page,
+            style,
+            edition,
+            pdf_navigation,
+        )
 
     with progress.step("finish combined PDF"):
         surface.finish()

@@ -58,6 +58,8 @@ def test_navigation_sits_outside_the_chart_frame_with_short_codes() -> None:
     by_direction = {text.text.split(":")[0]: text for text in plan.navigation}
     assert by_direction["N"].text == "N: S082"
     assert by_direction["S"].text == "S: S054"
+    assert by_direction["N"].target_chart_code == "S082"
+    assert by_direction["S"].target_chart_code == "S054"
     assert by_direction["N"].y_mm < rect.top_mm
     assert by_direction["S"].y_mm > rect.bottom_mm
 
