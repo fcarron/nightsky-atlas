@@ -29,19 +29,39 @@ def test_edition_presets_load_with_expected_scale_and_codes(
     assert presentation_from_edition(chart, atlas.resolved_edition()).chart_code == f"{code}001"
 
 
-def test_physical_print_style_is_shared_and_overlap_is_mm_derived() -> None:
+def test_physical_print_style_is_shared_across_editions() -> None:
     standard = load_style_config(ROOT / "styles" / "standard.yaml")
     for edition in ("pocket", "deep"):
-        atlas = load_atlas_config(ROOT / "atlas" / f"{edition}.yaml")
         style = load_style_config(ROOT / "styles" / f"{edition}.yaml")
-        spec = TilingSpec.from_config(atlas.tiling)
         assert style.label.font_size_pt == standard.label.font_size_pt
         assert style.label.dso_labels.normal_size_pt == standard.label.dso_labels.normal_size_pt
         assert style.grid.line_width_mm == standard.grid.line_width_mm
         assert style.grid.label_padding_mm == standard.grid.label_padding_mm
         assert style.constellation.lines.line_width_mm == standard.constellation.lines.line_width_mm
         assert style.furniture.navigation.font_size_pt == standard.furniture.navigation.font_size_pt
-        assert spec.overlap_deg == pytest.approx(10.0 / atlas.tiling.mm_per_degree)
+
+
+def test_pocket_overlap_is_mm_derived() -> None:
+    pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
+    spec = TilingSpec.from_config(pocket.tiling)
+    assert spec.overlap_deg == pytest.approx(10.0 / pocket.tiling.mm_per_degree)
+
+
+def test_deep_tiling_mirrors_standard_ring_design() -> None:
+    standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
+    deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
+    assert deep.tiling.polar_caps is True
+    assert deep.tiling.stagger_ra_centers is True
+    assert deep.tiling.auto_adjust_counts is False
+    assert deep.tiling.declination_centers
+    assert deep.tiling.target_overlap.vertical_deg == pytest.approx(
+        standard.tiling.target_overlap.vertical_deg / 2.0
+    )
+    assert deep.tiling.target_overlap.horizontal_min_deg == pytest.approx(
+        standard.tiling.target_overlap.horizontal_min_deg / 2.0
+    )
+    spec = TilingSpec.from_config(deep.tiling)
+    assert spec.is_ring_mode
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))

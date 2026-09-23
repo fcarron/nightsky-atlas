@@ -43,7 +43,6 @@ _CROWDING_RADIUS_MM = 6.0
 _EDGE_MARGIN_MM = 8.0
 _MAX_REPAIR_PASSES = 4
 _GRID_CELL_MM = 8.0
-_VARIANT_RANK_COST = 12.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,9 +70,32 @@ def _symbol_circles(
             SymbolCircle(
                 center=transform.to_page(scene_dso.chart_point),
                 radius_mm=extent.collision_radius_mm,
+                id=scene_dso.dso.id,
             )
         )
     return tuple(symbols)
+
+
+def _dso_source_circles(
+    scene: ChartScene, transform: PageTransform, style: StyleConfig
+) -> tuple[SymbolCircle, ...]:
+    """Return source geometry for every DSO, including contour-backed objects."""
+    outlines_by_dso: dict[str, list[tuple[PagePoint, ...]]] = {}
+    for outline in scene.nebula_outlines:
+        outlines_by_dso.setdefault(outline.dso_id, []).append(
+            tuple(transform.to_page(point) for point in outline.points)
+        )
+    return tuple(
+        SymbolCircle(
+            center=transform.to_page(scene_dso.chart_point),
+            radius_mm=dso_symbol_extent(
+                scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style
+            ).collision_radius_mm,
+            id=scene_dso.dso.id,
+            outline_paths=tuple(outlines_by_dso.get(scene_dso.dso.id, ())),
+        )
+        for scene_dso in scene.deep_sky_objects
+    )
 
 
 def _star_circles(
@@ -161,6 +183,12 @@ def _resolved_weights(style: StyleConfig, weights: CostWeights | None) -> CostWe
         label_foreign_star_clearance=clearance.foreign.weight,
         label_associated_star_clearance=clearance.associated.clearance_weight,
         label_association_distance=clearance.associated.distance_weight,
+        label_source_distance=style.label.source_association.distance_weight,
+        label_source_corridor=style.label.source_association.corridor_weight,
+        label_competing_source_ambiguity=style.label.source_association.ambiguity_weight,
+        label_foreign_object_proximity=(
+            style.label.source_association.foreign_object_weight
+        ),
     )
 
 
@@ -226,6 +254,17 @@ def _preference_rank(candidate: LabelCandidate) -> int:
     return CANDIDATE_PREFERENCE.index(candidate.position)
 
 
+def _association_scale(label: Label, style: StyleConfig) -> float:
+    compact = len("".join(label.text.split())) <= 3
+    return style.label.source_association.compact_label_factor if compact else 1.0
+
+
+def _association_source_id(label: Label) -> str | None:
+    if label.id.startswith(("label:star:", "label:dso:")):
+        return label.target_id
+    return None
+
+
 def optimize_labels(
     labels: tuple[Label, ...],
     scene: ChartScene,
@@ -245,6 +284,7 @@ def optimize_labels(
     furniture_rects = tuple(furniture)
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
+    sources = _dso_source_circles(scene, transform, style)
     stars = _star_circles(scene, transform, style)
     constellation_lines = tuple(
         (stroke.start, stroke.end)
@@ -263,7 +303,16 @@ def optimize_labels(
         candidate = label.effective_candidate()
         before[label.id] = candidate.id if candidate is not None else None
     cost_before, totals_before = _evaluate(
-        ordered, before, anchors, printable, symbols, stars, style, weights, constellation_lines
+        ordered,
+        before,
+        anchors,
+        printable,
+        symbols,
+        sources,
+        stars,
+        style,
+        weights,
+        constellation_lines,
     )
 
     placements: dict[str, str | None] = {}
@@ -309,6 +358,10 @@ def optimize_labels(
                 stars=nearby_stars,
                 associated_star_ids=_associated_star_ids(label, nearby_stars),
                 star_clearance=style.label.star_clearance,
+                target_source_id=_association_source_id(label),
+                source_association=style.label.source_association,
+                source_symbols=sources,
+                association_scale=_association_scale(label, style),
                 printable=printable,
                 crowding_radius_mm=_CROWDING_RADIUS_MM,
                 weights=weights,
@@ -317,7 +370,7 @@ def optimize_labels(
             )
             key = (
                 0.0 if valid else 1.0,
-                breakdown.total(weights) + candidate.variant_rank * _VARIANT_RANK_COST,
+                breakdown.total(weights),
                 candidate.variant_rank,
                 _preference_rank(candidate),
             )
@@ -340,6 +393,8 @@ def optimize_labels(
         printable,
         placed_index,
         symbols_index,
+        symbols,
+        sources,
         stars_index,
         stars,
         style,
@@ -348,7 +403,16 @@ def optimize_labels(
         constellation_lines,
     )
     cost_after, totals_after = _evaluate(
-        ordered, placements, anchors, printable, symbols, stars, style, weights, constellation_lines
+        ordered,
+        placements,
+        anchors,
+        printable,
+        symbols,
+        sources,
+        stars,
+        style,
+        weights,
+        constellation_lines,
     )
 
     optimized = tuple(
@@ -390,6 +454,8 @@ def _local_repair(
     printable: PageRect,
     placed_index: RectIndex[PageRect],
     symbols_index: RectIndex[SymbolCircle],
+    symbols: tuple[SymbolCircle, ...],
+    sources: tuple[SymbolCircle, ...],
     stars_index: RectIndex[StarCircle],
     stars: tuple[StarCircle, ...],
     style: StyleConfig,
@@ -423,12 +489,16 @@ def _local_repair(
                 stars=nearby_stars,
                 associated_star_ids=_associated_star_ids(label, nearby_stars),
                 star_clearance=style.label.star_clearance,
+                target_source_id=_association_source_id(label),
+                source_association=style.label.source_association,
+                source_symbols=sources,
+                association_scale=_association_scale(label, style),
                 printable=printable,
                 crowding_radius_mm=_CROWDING_RADIUS_MM,
                 weights=weights,
                 edge_margin_mm=_EDGE_MARGIN_MM,
                 constellation_lines=constellation_lines,
-            ).total(weights) + current.variant_rank * _VARIANT_RANK_COST
+            ).total(weights)
             for candidate in label.candidates:
                 if candidate.id == current_id:
                     continue
@@ -460,12 +530,16 @@ def _local_repair(
                     stars=cand_stars,
                     associated_star_ids=_associated_star_ids(label, cand_stars),
                     star_clearance=style.label.star_clearance,
+                    target_source_id=_association_source_id(label),
+                    source_association=style.label.source_association,
+                    source_symbols=sources,
+                    association_scale=_association_scale(label, style),
                     printable=printable,
                     crowding_radius_mm=_CROWDING_RADIUS_MM,
                     weights=weights,
                     edge_margin_mm=_EDGE_MARGIN_MM,
                     constellation_lines=constellation_lines,
-                ).total(weights) + candidate.variant_rank * _VARIANT_RANK_COST
+                ).total(weights)
                 if cost < best_cost - 1e-9:
                     best_cost = cost
                     best_id = candidate.id
@@ -486,6 +560,7 @@ def _evaluate(
     anchors: dict[str, PagePoint],
     printable: PageRect,
     symbols: tuple[SymbolCircle, ...],
+    sources: tuple[SymbolCircle, ...],
     stars: tuple[StarCircle, ...],
     style: StyleConfig,
     weights: CostWeights,
@@ -500,7 +575,6 @@ def _evaluate(
         placed_candidate = placed_label.candidate(candidate_id)
         if placed_candidate is not None:
             placed_index.set(label_id, placed_candidate.bounds, placed_candidate.bounds)
-    symbols_index = _build_symbol_index(symbols)
     stars_index = _build_star_index(stars)
     total = 0.0
     totals: dict[str, float] = {}
@@ -514,16 +588,19 @@ def _evaluate(
         nearby_bounds = tuple(
             placed_index.query(candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
         )
-        nearby_symbols = tuple(symbols_index.query(candidate.bounds))
         nearby_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
         breakdown = score_candidate(
             candidate,
             target_anchor=_anchor_for(label, anchors, candidate),
             placed_bounds=nearby_bounds,
-            symbols=nearby_symbols,
+            symbols=symbols,
             stars=nearby_stars,
             associated_star_ids=_associated_star_ids(label, nearby_stars),
             star_clearance=style.label.star_clearance,
+            target_source_id=_association_source_id(label),
+            source_association=style.label.source_association,
+            source_symbols=sources,
+            association_scale=_association_scale(label, style),
             printable=printable,
             crowding_radius_mm=_CROWDING_RADIUS_MM,
             weights=weights,
@@ -558,6 +635,7 @@ def layout_cost(
     weights = _resolved_weights(style, weights)
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
+    sources = _dso_source_circles(scene, transform, style)
     stars = _star_circles(scene, transform, style)
     constellation_lines = tuple(
         (stroke.start, stroke.end)
@@ -571,5 +649,14 @@ def layout_cost(
         candidate = None if label.hidden else label.effective_candidate()
         placements[label.id] = candidate.id if candidate is not None else None
     return _evaluate(
-        ordered, placements, anchors, printable, symbols, stars, style, weights, constellation_lines
+        ordered,
+        placements,
+        anchors,
+        printable,
+        symbols,
+        sources,
+        stars,
+        style,
+        weights,
+        constellation_lines,
     )

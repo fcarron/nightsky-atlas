@@ -30,8 +30,27 @@ __all__ = [
     "dso_shape",
     "dso_symbol_extent",
     "galaxy_ellipse",
+    "compact_star_reference_magnitudes",
     "star_reference_magnitudes",
 ]
+
+
+def compact_star_reference_magnitudes(
+    limiting_magnitude: float, *, interval: float = 2.0
+) -> tuple[float, ...]:
+    """Return compact magnitude samples plus the exact configured limit."""
+    if not math.isfinite(limiting_magnitude) or limiting_magnitude < 0.0:
+        raise ValueError("limiting_magnitude must be finite and non-negative")
+    if not math.isfinite(interval) or interval <= 0.0:
+        raise ValueError("interval must be finite and positive")
+    values: list[float] = []
+    value = 0.0
+    while value <= limiting_magnitude:
+        values.append(value)
+        value += interval
+    if not values or not math.isclose(values[-1], limiting_magnitude):
+        values.append(limiting_magnitude)
+    return tuple(values)
 
 
 def star_reference_magnitudes(style: StarStyle) -> tuple[float, ...]:

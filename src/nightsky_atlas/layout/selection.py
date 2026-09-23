@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Sequence
+from dataclasses import replace
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.catalog.priority import LabelPriorityTier, tier_for
@@ -54,7 +55,7 @@ def select_labels(
     """
     selection = style.label.selection
     if not selection.enabled:
-        return tuple(labels)
+        return _make_selected_labels_mandatory(labels)
 
     anchors = _anchors(scene, transform, style)
     magnitudes = _magnitudes(scene)
@@ -74,7 +75,19 @@ def select_labels(
     )
     kept = _thin_by_density(deduplicated, anchors, style, protected_ids=protected)
     kept_ids = {label.id for label in kept}
-    return tuple(label for label in labels if label.id in kept_ids)
+    return _make_selected_labels_mandatory(
+        label for label in labels if label.id in kept_ids
+    )
+
+
+def _make_selected_labels_mandatory(labels: Iterable[Label]) -> tuple[Label, ...]:
+    """Freeze visibility after semantic selection, before geometric placement."""
+    return tuple(
+        replace(label, mandatory=True, hidden=False)
+        if label.id.startswith(("label:star:", "label:dso:"))
+        else label
+        for label in labels
+    )
 
 
 def _anchors(

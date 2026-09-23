@@ -157,64 +157,68 @@ def _navigation(
     rect = transform.chart_rect
     family = style.label.font_family
     placed: list[PlacedText] = []
+    grouped: dict[str, list[str]] = {direction: [] for direction in ("N", "E", "S", "W")}
     for direction, neighbour_id in definition.neighbours:
-        code = neighbour_code(neighbour_id, presentation.edition_code)
-        text = f"{direction}: {code}"
-        markup = neighbour_markup(direction, neighbour_id, presentation.edition_code)
-        metrics = TextMeasurer(family, nav.font_size_pt).measure_markup_mm(markup)
-        if direction == "N":
-            placed.append(
-                PlacedText(
-                    text,
-                    page.width_mm / 2.0,
-                    rect.top_mm - nav.frame_gap_mm - metrics.height_mm,
-                    "center",
-                    nav.font_size_pt,
-                    markup,
-                    target_chart_code=code,
+        if direction in grouped and len(grouped[direction]) < 3:
+            grouped[direction].append(neighbour_id)
+    for direction in ("N", "E", "S", "W"):
+        neighbour_ids = grouped[direction]
+        for position, neighbour_id in enumerate(neighbour_ids):
+            along_edge = (position + 1) / (len(neighbour_ids) + 1)
+            code = neighbour_code(neighbour_id, presentation.edition_code)
+            text = f"{direction}: {code}"
+            markup = neighbour_markup(direction, neighbour_id, presentation.edition_code)
+            metrics = TextMeasurer(family, nav.font_size_pt).measure_markup_mm(markup)
+            if direction == "N":
+                placed.append(
+                    PlacedText(
+                        text,
+                        rect.left_mm + rect.width_mm * along_edge,
+                        rect.top_mm - nav.frame_gap_mm - metrics.height_mm,
+                        "center",
+                        nav.font_size_pt,
+                        markup,
+                        target_chart_code=code,
+                    )
                 )
-            )
-        elif direction == "S":
-            placed.append(
-                PlacedText(
-                    text,
-                    page.width_mm / 2.0,
-                    rect.bottom_mm + nav.frame_gap_mm,
-                    "center",
-                    nav.font_size_pt,
-                    markup,
-                    target_chart_code=code,
+            elif direction == "S":
+                placed.append(
+                    PlacedText(
+                        text,
+                        rect.left_mm + rect.width_mm * along_edge,
+                        rect.bottom_mm + nav.frame_gap_mm,
+                        "center",
+                        nav.font_size_pt,
+                        markup,
+                        target_chart_code=code,
+                    )
                 )
-            )
-        elif direction == "E":
-            # East is left (north up, east left).  The side margin is narrower
-            # than the enlarged reference, so it is rotated to read bottom-to-top
-            # and centred on the page edge; (x_mm, y_mm) is the rotation centre.
-            placed.append(
-                PlacedText(
-                    text,
-                    nav.side_inset_mm + metrics.height_mm / 2.0,
-                    page.height_mm / 2.0,
-                    "center",
-                    nav.font_size_pt,
-                    markup,
-                    -_SIDE_NAVIGATION_ANGLE_RAD,
-                    code,
+            elif direction == "E":
+                placed.append(
+                    PlacedText(
+                        text,
+                        nav.side_inset_mm + metrics.height_mm / 2.0,
+                        rect.bottom_mm - rect.height_mm * along_edge,
+                        "center",
+                        nav.font_size_pt,
+                        markup,
+                        -_SIDE_NAVIGATION_ANGLE_RAD,
+                        code,
+                    )
                 )
-            )
-        elif direction == "W":
-            placed.append(
-                PlacedText(
-                    text,
-                    page.width_mm - nav.side_inset_mm - metrics.height_mm / 2.0,
-                    page.height_mm / 2.0,
-                    "center",
-                    nav.font_size_pt,
-                    markup,
-                    _SIDE_NAVIGATION_ANGLE_RAD,
-                    code,
+            elif direction == "W":
+                placed.append(
+                    PlacedText(
+                        text,
+                        page.width_mm - nav.side_inset_mm - metrics.height_mm / 2.0,
+                        rect.bottom_mm - rect.height_mm * along_edge,
+                        "center",
+                        nav.font_size_pt,
+                        markup,
+                        _SIDE_NAVIGATION_ANGLE_RAD,
+                        code,
+                    )
                 )
-            )
     return tuple(placed)
 
 

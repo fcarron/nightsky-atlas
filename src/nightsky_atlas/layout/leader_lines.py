@@ -1,4 +1,4 @@
-"""Deterministic geometry for exceptional deep-sky label callouts."""
+"""Deterministic geometry for exceptional source-to-label callouts."""
 
 from __future__ import annotations
 
@@ -53,12 +53,28 @@ def leader_line_for(
     candidate = label.effective_candidate()
     if not config.enabled or label.hidden or candidate is None:
         return None
-    target = next(
+    dso_target = next(
         (item for item in scene.deep_sky_objects if item.dso.id == label.target_id), None
     )
-    if target is None:
+    star_target = next(
+        (
+            obstacle
+            for obstacle in printed_star_obstacles(scene, transform, style)
+            if label.target_id in obstacle.star_ids
+        ),
+        None,
+    )
+    if dso_target is not None:
+        anchor = transform.to_page(dso_target.chart_point)
+        extent = dso_symbol_extent(
+            dso_target.dso, mm_per_deg=transform.mm_per_deg, style=style
+        )
+        source_radius = extent.collision_radius_mm
+    elif star_target is not None:
+        anchor = star_target.page_point
+        source_radius = star_target.collision_radius_mm
+    else:
         return None
-    anchor = transform.to_page(target.chart_point)
     near = clamp_point_to_rect(anchor, candidate.bounds)
     dx = near.x_mm - anchor.x_mm
     dy = near.y_mm - anchor.y_mm
@@ -66,8 +82,7 @@ def leader_line_for(
     if distance == 0.0:
         return None
     ux, uy = dx / distance, dy / distance
-    extent = dso_symbol_extent(target.dso, mm_per_deg=transform.mm_per_deg, style=style)
-    start_offset = extent.collision_radius_mm + config.symbol_gap_mm
+    start_offset = source_radius + config.symbol_gap_mm
     end_offset = distance - config.label_gap_mm
     length = end_offset - start_offset
     if length < config.min_length_mm or length > config.max_length_mm:
@@ -84,6 +99,8 @@ def leader_line_for(
         ):
             return None
     for star in printed_star_obstacles(scene, transform, style):
+        if label.target_id in star.star_ids:
+            continue
         if star.magnitude <= 6.0 and _distance_to_segment(
             star.page_point, start, end
         ) <= star.collision_radius_mm + 0.25:

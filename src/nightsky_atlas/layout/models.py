@@ -96,7 +96,7 @@ class Label:
     manual override and must not be moved by later optimizers (``AGENTS.md``
     section 22).  ``font_size_pt`` and ``font_weight`` carry the per-label
     typography; ``None``/``normal`` fall back to the style default.
-    ``text`` is the selected variant once a candidate has been placed.
+    ``text`` is canonical presentation text and never changes during placement.
     """
 
     id: str
@@ -141,11 +141,10 @@ class Label:
 
     def with_selection(self, candidate_id: str | None) -> Label:
         """Return a copy with a different selected candidate."""
-        selected = self.candidate(candidate_id) if candidate_id is not None else None
         return Label(
             id=self.id,
             target_id=self.target_id,
-            text=selected.display_text if selected and selected.display_text else self.text,
+            text=self.text,
             priority=self.priority,
             mandatory=self.mandatory,
             candidates=self.candidates,
@@ -166,11 +165,10 @@ class Label:
         ``locked`` is preserved when omitted, so optimizer passes never unlock a
         manual override.
         """
-        selected = self.candidate(candidate_id) if candidate_id is not None else None
         return Label(
             id=self.id,
             target_id=self.target_id,
-            text=selected.display_text if selected and selected.display_text else self.text,
+            text=self.text,
             priority=self.priority,
             mandatory=self.mandatory,
             candidates=self.candidates,

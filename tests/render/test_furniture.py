@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -13,7 +12,6 @@ from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_for
 from nightsky_atlas.render.furniture import build_furniture_plan
 from nightsky_atlas.render.overview import locator_rect
-from nightsky_atlas.render.symbols import StarSizeModel, star_reference_magnitudes
 from nightsky_atlas.render.text import TextMeasurer
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -62,6 +60,22 @@ def test_navigation_sits_outside_the_chart_frame_with_short_codes() -> None:
     assert by_direction["S"].target_chart_code == "S054"
     assert by_direction["N"].y_mm < rect.top_mm
     assert by_direction["S"].y_mm > rect.bottom_mm
+
+
+def test_up_to_three_references_share_one_chart_edge() -> None:
+    plan, transform = build_plan(
+        (
+            ("N", "standard-081"),
+            ("N", "standard-082"),
+            ("N", "standard-083"),
+            ("N", "standard-084"),
+        )
+    )
+    north = [text for text in plan.navigation if text.text.startswith("N:")]
+    assert [text.target_chart_code for text in north] == ["S081", "S082", "S083"]
+    assert [text.x_mm for text in north] == sorted(text.x_mm for text in north)
+    assert len({text.x_mm for text in north}) == 3
+    assert all(text.y_mm < transform.chart_rect.top_mm for text in north)
 
 
 def test_east_west_navigation_follows_east_left_orientation() -> None:
@@ -123,64 +137,14 @@ def test_navigation_rectangles_are_label_obstacles() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("edition", "expected_magnitudes"),
-    [
-        ("pocket", (*range(8), 7.5)),
-        ("standard", tuple(range(10))),
-        ("deep", tuple(range(11))),
-    ],
-)
-def test_legend_dots_use_real_star_size_model(
-    edition: str, expected_magnitudes: tuple[float, ...]
-) -> None:
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+def test_normal_chart_pages_have_no_magnitude_legend(edition: str) -> None:
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     transform = make_transform()
     plan = build_furniture_plan(
         transform, transform.chart, style, presentation_for(transform.chart)
     )
-    assert plan.legend is not None
-    model = StarSizeModel.from_style(style.star)
-    assert star_reference_magnitudes(style.star) == expected_magnitudes
-    assert tuple(number.text for number in plan.legend.numbers) == tuple(
-        f"{magnitude:g}" for magnitude in expected_magnitudes
-    )
-    assert [dot.diameter_mm for dot in plan.legend.dots] == pytest.approx(
-        [model.diameter_mm(magnitude) for magnitude in expected_magnitudes]
-    )
-    assert all(
-        number.x_mm == pytest.approx(dot.x_mm)
-        and number.y_mm < dot.y_mm - dot.diameter_mm / 2.0
-        for dot, number in zip(plan.legend.dots, plan.legend.numbers, strict=True)
-    )
-    assert all(
-        right.x_mm - right.diameter_mm / 2.0
-        - (left.x_mm + left.diameter_mm / 2.0)
-        == pytest.approx(style.furniture.magnitude_legend.spacing_mm)
-        for left, right in pairwise(plan.legend.dots)
-    )
-    measurer = TextMeasurer(style.label.font_family, style.furniture.magnitude_legend.font_size_pt)
-    assert all(
-        number.x_mm + measurer.measure_mm(number.text).width_mm / 2.0
-        < right.x_mm - right.diameter_mm / 2.0
-        for number, right in zip(plan.legend.numbers[:-1], plan.legend.dots[1:], strict=True)
-    )
-    assert all(
-        dot.y_mm - dot.diameter_mm / 2.0 > transform.chart_rect.bottom_mm
-        for dot in plan.legend.dots
-    )
-    assert all(
-        number.y_mm + measurer.measure_mm(number.text).height_mm
-        <= PAGE.height_mm - 2.0
-        for number in plan.legend.numbers
-    )
-    assert all(dot.y_mm + dot.diameter_mm / 2.0 <= PAGE.height_mm - 2.0 for dot in plan.legend.dots)
-    assert plan.scale_bar is not None
-    assert (
-        plan.legend.numbers[-1].x_mm
-        + measurer.measure_mm(plan.legend.numbers[-1].text).width_mm
-        < plan.scale_bar.left_mm
-    )
+    assert plan.legend is None
 
 
 def test_scale_bar_length_follows_mm_per_degree() -> None:
@@ -202,8 +166,6 @@ def test_footer_sits_below_the_chart_frame() -> None:
     rect = transform.chart_rect
     assert plan.scale_bar is not None
     assert plan.scale_bar.line_y_mm > rect.bottom_mm
-    assert plan.legend is not None
-    assert plan.legend.dots[0].y_mm > rect.bottom_mm
 
 
 def test_locator_rect_is_a_label_obstacle_when_enabled() -> None:

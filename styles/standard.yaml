@@ -24,7 +24,6 @@ label:
     flamsteed: {enabled: true, max_magnitude: 5.0}
     variables: {enabled: true, max_magnitude: 6.5}
     combined_names: true
-    separate_name_and_designation: true
     proper_names_always_visible: true
     proper_name_candidate_rings: 3
     candidate_ring_gap_mm: 0.75
@@ -34,6 +33,17 @@ label:
   star_clearance:
     foreign: {hard_min_mm: 0.05, hard_radius_mm: 0.75, soft_clear_mm: 0.35, radius_clearance_factor: 1.0, importance_reference_radius_mm: 0.6, maximum_importance: 2.0, weight: 10.0}
     associated: {hard_min_mm: 0.35, soft_clear_mm: 0.45, preferred_min_mm: 0.45, clearance_weight: 8.0, preferred_max_mm: 0.75, distance_weight: 30.0}
+  source_association:
+    preferred_min_gap_mm: 0.35
+    preferred_max_gap_mm: 1.0
+    distance_weight: 12.0
+    corridor_margin_mm: 0.25
+    corridor_weight: 18.0
+    ambiguity_margin_mm: 0.75
+    ambiguity_weight: 20.0
+    foreign_object_clear_mm: 0.8
+    foreign_object_weight: 8.0
+    compact_label_factor: 1.35
   leader_lines:
     enabled: true
     auto_min_ring: 2
@@ -221,7 +231,7 @@ furniture:
     side_inset_mm: 5.0
   # Compact magnitude reference using the real star size model.
   magnitude_legend:
-    enabled: true
+    enabled: false
     font_size_pt: 5.5
     gray: 0.0
     spacing_mm: 3.5
@@ -235,6 +245,7 @@ furniture:
 overview:
   enabled: true
   radius_mm: 76.0
+  code_font_size_pt: 5.25
   show_stars: true
   star_limit_magnitude: 5.0
   star_min_diameter_mm: 0.3

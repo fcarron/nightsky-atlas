@@ -81,6 +81,10 @@ def test_total_is_weighted_sum() -> None:
         "label_foreign_star_clearance": "label_foreign_star_clearance",
         "label_associated_star_clearance": "label_associated_star_clearance",
         "label_association_distance_mm": "label_association_distance",
+        "label_source_distance_mm": "label_source_distance",
+        "label_source_corridor": "label_source_corridor",
+        "label_competing_source_ambiguity": "label_competing_source_ambiguity",
+        "label_foreign_object_proximity": "label_foreign_object_proximity",
     }
     expected = sum(
         value * getattr(weights, weight_for[name]) for name, value in breakdown.components().items()
@@ -150,3 +154,56 @@ def test_associated_star_uses_smaller_clearance_and_far_distance_penalty() -> No
     )
     assert associated.label_associated_star_clearance < foreign.label_foreign_star_clearance
     assert far_associated.label_association_distance_mm > 0.0
+
+
+def test_foreign_star_in_source_corridor_is_penalized() -> None:
+    candidate = make_candidate(CompassPosition.E, 151.0, 99.0)
+    target = StarCircle("owner", frozenset({"owner"}), PagePoint(150.0, 100.0), 0.5)
+    competing = StarCircle("other", frozenset({"other"}), PagePoint(150.6, 100.0), 0.2)
+    clear = score(
+        candidate,
+        stars=(target,),
+        associated_star_ids=frozenset({"owner"}),
+        target_source_id="owner",
+    )
+    blocked = score(
+        candidate,
+        stars=(target, competing),
+        associated_star_ids=frozenset({"owner"}),
+        target_source_id="owner",
+    )
+    assert blocked.label_source_corridor > clear.label_source_corridor
+    assert blocked.label_competing_source_ambiguity > 0.0
+
+
+def test_dso_owner_and_foreign_object_use_source_geometry() -> None:
+    candidate = make_candidate(CompassPosition.E, 151.0, 99.0)
+    owner = SymbolCircle(PagePoint(150.0, 100.0), 0.5, "NGC1")
+    other = SymbolCircle(PagePoint(151.0, 100.0), 0.2, "NGC2")
+    clear = score(candidate, symbols=(owner,), target_source_id="NGC1")
+    ambiguous = score(candidate, symbols=(owner, other), target_source_id="NGC1")
+    assert ambiguous.label_foreign_object_proximity > clear.label_foreign_object_proximity
+    assert ambiguous.label_competing_source_ambiguity > clear.label_competing_source_ambiguity
+
+
+def test_contour_backed_dso_uses_source_facing_contour_edge() -> None:
+    candidate = make_candidate(CompassPosition.W, 160.0, 99.0)
+    circle = SymbolCircle(PagePoint(150.0, 100.0), 4.0, "NGC1")
+    contour = SymbolCircle(
+        PagePoint(150.0, 100.0),
+        4.0,
+        "NGC1",
+        ((PagePoint(159.0, 98.0), PagePoint(159.0, 102.0)),),
+    )
+    circle_cost = score(
+        candidate,
+        target_source_id="NGC1",
+        source_symbols=(circle,),
+    )
+    contour_cost = score(
+        candidate,
+        target_source_id="NGC1",
+        source_symbols=(contour,),
+    )
+    assert circle_cost.label_source_distance_mm > 0.0
+    assert contour_cost.label_source_distance_mm == 0.0

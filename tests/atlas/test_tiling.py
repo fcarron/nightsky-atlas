@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from nightsky_atlas.atlas.tiling import (
     tile_sky,
     with_neighbours,
 )
+from nightsky_atlas.chart.models import ChartDefinition
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ATLAS = REPO_ROOT / "atlas" / "standard.yaml"
@@ -199,9 +201,58 @@ def test_declared_neighbours_share_covered_sky() -> None:
     assert report.is_complete, report.missing_overlaps[:5]
 
 
+def test_multiple_edge_neighbours_are_bounded_and_only_used_across_bands() -> None:
+    charts = with_neighbours(tile_sky("standard", standard_spec()))
+    multiple = 0
+    for chart in charts:
+        counts = Counter(direction for direction, _ in chart.neighbours)
+        assert all(count <= 3 for count in counts.values())
+        assert counts["E"] <= 1
+        assert counts["W"] <= 1
+        multiple += sum(count > 1 for direction, count in counts.items() if direction in {"N", "S"})
+    assert multiple > 0
+
+
+def test_cygnus_chart_gets_two_meaningful_southern_handoffs() -> None:
+    charts = {chart.id: chart for chart in with_neighbours(tile_sky("standard", standard_spec()))}
+    south = [
+        neighbour
+        for direction, neighbour in charts["standard-031"].neighbours
+        if direction == "S"
+    ]
+    assert south == ["standard-045", "standard-044"]
+
+
+def test_wide_edge_can_select_three_ordered_handoffs() -> None:
+    charts = (
+        ChartDefinition("source", 0.0, 0.0, 90.0, 20.0),
+        ChartDefinition("north-west", 330.0, 15.0, 40.0, 20.0),
+        ChartDefinition("north-middle", 0.0, 15.0, 40.0, 20.0),
+        ChartDefinition("north-east", 30.0, 15.0, 40.0, 20.0),
+    )
+    source = next(chart for chart in with_neighbours(charts) if chart.id == "source")
+    assert source.neighbours == (
+        ("N", "north-east"),
+        ("N", "north-middle"),
+        ("N", "north-west"),
+    )
+
+
 def test_legacy_band_mode_still_tiles() -> None:
     spec = TilingSpec(width_deg=27.0, height_deg=18.5, overlap_deg=3.0)
     charts = tile_sky("legacy", spec)
     assert len(charts) > 50
     report = coverage_report(charts, step_deg=5.0)
     assert report.covers_all
+
+
+def test_legacy_band_mode_runs_north_to_south() -> None:
+    spec = TilingSpec(width_deg=13.5, height_deg=9.0, overlap_deg=0.5)
+    charts = tile_sky("legacy", spec)
+    declinations = [chart.center_dec_deg for chart in charts]
+    assert declinations == sorted(declinations, reverse=True)
+    assert declinations[0] > 0.0
+    assert declinations[-1] < 0.0
+    for center in sorted(set(declinations)):
+        ras = [chart.center_ra_deg for chart in charts if chart.center_dec_deg == center]
+        assert ras == sorted(ras)

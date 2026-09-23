@@ -11,7 +11,12 @@ from nightsky_atlas.atlas.config import AtlasConfig, StyleConfig
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
 from nightsky_atlas.chart.models import PageGeometry
 from nightsky_atlas.render.cairo import draw_dso_symbol
-from nightsky_atlas.render.symbols import StarSizeModel, SymbolExtent, dso_symbol_extent
+from nightsky_atlas.render.symbols import (
+    StarSizeModel,
+    SymbolExtent,
+    compact_star_reference_magnitudes,
+    dso_symbol_extent,
+)
 from nightsky_atlas.render.text import draw_text
 from nightsky_atlas.units import mm_to_pt
 
@@ -21,6 +26,7 @@ __all__ = ["LegendSymbol", "draw_field_guide", "legend_symbols"]
 @dataclass(frozen=True, slots=True)
 class LegendSymbol:
     name: str
+    object_type: DsoType
     angular_size_arcmin: float | None
     extent: SymbolExtent
 
@@ -30,7 +36,7 @@ _SAMPLES: tuple[tuple[str, DsoType, float | None, float | None], ...] = (
     ("Globular cluster", DsoType.GLOBULAR_CLUSTER, 12.0, None),
     ("Open cluster", DsoType.OPEN_CLUSTER, 20.0, None),
     ("Planetary nebula", DsoType.PLANETARY_NEBULA, 6.0, None),
-    ("Bright nebula", DsoType.BRIGHT_NEBULA, 24.0, None),
+    ("Bright nebula / SNR", DsoType.BRIGHT_NEBULA, 24.0, None),
     ("Dark nebula", DsoType.DARK_NEBULA, 24.0, None),
     ("Galaxy cluster", DsoType.GALAXY_CLUSTER, 20.0, None),
     ("Other / unknown", DsoType.OTHER, None, None),
@@ -54,6 +60,7 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
         symbols.append(
             LegendSymbol(
                 name,
+                object_type,
                 major_arcmin,
                 dso_symbol_extent(sample, mm_per_deg=mm_per_degree, style=style),
             )
@@ -129,46 +136,81 @@ def _guide_step(
 def _draw_map_lines(
     cr: cairo.Context[cairo.Surface], style: StyleConfig, family: str, left: float
 ) -> None:
-    samples = (
+    samples: list[tuple[str, float, float, tuple[float, ...]]] = []
+    if style.constellation.lines.enabled:
+        samples.extend(
+            (
+                (
+                    "Figure bold",
+                    style.constellation.lines.gray,
+                    style.constellation.lines.bold_width_mm,
+                    (),
+                ),
+                (
+                    "Figure normal",
+                    style.constellation.lines.gray,
+                    style.constellation.lines.normal_width_mm,
+                    (),
+                ),
+                (
+                    "Figure thin",
+                    style.constellation.lines.gray,
+                    style.constellation.lines.thin_width_mm,
+                    (),
+                ),
+            )
+        )
+    if style.constellation.boundaries.enabled:
+        samples.append(
+            (
+                "Boundary",
+                style.constellation.boundaries.gray,
+                style.constellation.boundaries.line_width_mm,
+                (style.constellation.boundaries.dash_mm, style.constellation.boundaries.gap_mm),
+            )
+        )
+    if style.grid.enabled:
+        samples.append(("Grid", style.grid.gray, style.grid.line_width_mm, ()))
+    if style.ecliptic.enabled:
+        samples.append(
+            (
+                "Ecliptic",
+                style.ecliptic.gray,
+                style.ecliptic.line_width_mm,
+                (style.ecliptic.dash_mm, style.ecliptic.gap_mm),
+            )
+        )
+    samples.extend(
         (
-            "Stick figure",
-            style.constellation.lines.gray,
-            style.constellation.lines.line_width_mm,
-            (),
-        ),
-        (
-            "Boundary",
-            style.constellation.boundaries.gray,
-            style.constellation.boundaries.line_width_mm,
-            (style.constellation.boundaries.dash_mm, style.constellation.boundaries.gap_mm),
-        ),
-        ("Grid", style.grid.gray, style.grid.line_width_mm, ()),
-        (
-            "Ecliptic",
-            style.ecliptic.gray,
-            style.ecliptic.line_width_mm,
-            (style.ecliptic.dash_mm, style.ecliptic.gap_mm),
-        ),
-        (
-            "Nebula outline",
-            style.dso.outline_gray,
-            style.dso.outline_line_width_mm,
-            (style.dso.outline_dash_mm, style.dso.outline_dash_mm),
-        ),
+            (
+                "Bright nebula / SNR",
+                style.dso.outline_gray,
+                style.dso.outline_line_width_mm,
+                (),
+            ),
+            (
+                "Dark nebula",
+                style.dso.outline_gray,
+                style.dso.outline_line_width_mm,
+                (style.dso.outline_dash_mm, style.dso.outline_dash_mm),
+            ),
+        )
     )
     _text(cr, "Map lines", left, 184.0, family, 8.5, bold=True)
     for index, (name, gray, width_mm, dash_mm) in enumerate(samples):
-        x = left + 34.0 + index * 46.0
+        column, row = index % 4, index // 4
+        x = left + 34.0 + column * 58.0
+        y = 190.0 + row * 7.0
         cr.save()
         cr.set_source_rgb(gray, gray, gray)
         cr.set_line_width(mm_to_pt(width_mm))
         if dash_mm:
             cr.set_dash([mm_to_pt(value) for value in dash_mm])
-        cr.move_to(mm_to_pt(x), mm_to_pt(190.0))
-        cr.line_to(mm_to_pt(x + 11.0), mm_to_pt(190.0))
+        cr.move_to(mm_to_pt(x), mm_to_pt(y))
+        cr.line_to(mm_to_pt(x + 11.0), mm_to_pt(y))
         cr.stroke()
         cr.restore()
-        _text(cr, name, x + 13.0, 186.0, family, 6.7)
+        _text(cr, name, x + 13.0, y - 4.0, family, 6.7)
 
 
 def draw_field_guide(
@@ -254,7 +296,8 @@ def draw_field_guide(
     _text(cr, "Stars", left, 101.0, family, 9.5, bold=True)
     _text(
         cr,
-        "Brighter → larger · marks shown at print size",
+        f"Print-size symbols · limit {atlas.stellar_limit_magnitude:g} · "
+        "Deneb α = proper name + Bayer",
         left + 17.0,
         102.0,
         family,
@@ -262,30 +305,31 @@ def draw_field_guide(
         gray=0.35,
     )
     star_model = StarSizeModel.from_style(style.star)
-    magnitudes = tuple(dict.fromkeys((0.0, 2.0, 4.0, 6.0, atlas.stellar_limit_magnitude)))
+    magnitudes = compact_star_reference_magnitudes(atlas.stellar_limit_magnitude)
     for index, magnitude in enumerate(magnitudes):
         x = left + 11.0 + index * 30.0
         diameter = star_model.diameter_mm(magnitude)
         _dot(cr, x, 116.0, diameter)
         _text(cr, f"mag {magnitude:g}", x - 8.0, 122.0, family, 6.8)
-        _text(cr, f"{diameter:.2f} mm", x - 8.0, 127.0, family, 6.5, gray=0.38)
+        _text(cr, f"{diameter:.2f} mm", x - 8.0, 127.0, family, 6.5)
 
-    _text(cr, "Double stars", left + 178.0, 101.0, family, 9.5, bold=True)
-    marker_size = star_model.diameter_mm(6.0)
-    marker_length = max(
-        style.double_stars.min_marker_length_mm,
-        style.double_stars.marker_length_factor * marker_size,
-    )
-    cr.set_source_rgb(0.0, 0.0, 0.0)
-    cr.set_line_width(mm_to_pt(style.double_stars.marker_line_width_mm))
-    cr.move_to(mm_to_pt(left + 187.0 - marker_length / 2), mm_to_pt(116.0))
-    cr.line_to(mm_to_pt(left + 187.0 + marker_length / 2), mm_to_pt(116.0))
-    cr.stroke()
-    _dot(cr, left + 187.0, 116.0, marker_size)
-    _dot(cr, left + 228.0, 116.0, marker_size)
-    _dot(cr, left + 230.8, 116.0, star_model.diameter_mm(7.0))
-    _text(cr, "unresolved", left + 176.0, 124.0, family, 6.8)
-    _text(cr, "resolved", left + 217.0, 124.0, family, 6.8)
+    if style.double_stars.enabled:
+        _text(cr, "Double stars", left + 178.0, 101.0, family, 9.5, bold=True)
+        marker_size = star_model.diameter_mm(6.0)
+        marker_length = max(
+            style.double_stars.min_marker_length_mm,
+            style.double_stars.marker_length_factor * marker_size,
+        )
+        cr.set_source_rgb(0.0, 0.0, 0.0)
+        cr.set_line_width(mm_to_pt(style.double_stars.marker_line_width_mm))
+        cr.move_to(mm_to_pt(left + 187.0 - marker_length / 2), mm_to_pt(116.0))
+        cr.line_to(mm_to_pt(left + 187.0 + marker_length / 2), mm_to_pt(116.0))
+        cr.stroke()
+        _dot(cr, left + 187.0, 116.0, marker_size)
+        _dot(cr, left + 228.0, 116.0, marker_size)
+        _dot(cr, left + 230.8, 116.0, star_model.diameter_mm(7.0))
+        _text(cr, "unresolved", left + 176.0, 124.0, family, 6.8)
+        _text(cr, "resolved", left + 217.0, 124.0, family, 6.8)
     _rule(cr, left, right, 132.0)
 
     _text(cr, "Deep-sky objects", left, 135.0, family, 9.5, bold=True)

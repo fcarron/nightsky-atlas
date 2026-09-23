@@ -144,7 +144,7 @@ def test_shipped_style_declares_subdued_furniture() -> None:
     assert furniture.navigation.font_size_pt > config.grid.label_font_size_pt
     assert furniture.navigation.font_size_pt <= furniture.title_font_size_pt
     assert furniture.navigation.gray >= config.grid.label_gray
-    assert furniture.magnitude_legend.enabled
+    assert not furniture.magnitude_legend.enabled
 
 
 def test_magnitude_legend_rejects_manual_magnitudes(tmp_path: Path) -> None:

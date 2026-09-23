@@ -457,7 +457,6 @@ class StarLabelStyle(_StrictModel):
         default_factory=lambda: StarDesignationStyle(max_magnitude=6.5)
     )
     combined_names: bool = False
-    separate_name_and_designation: bool = False
     proper_names_always_visible: bool = False
     proper_name_candidate_rings: int = Field(default=3, ge=1)
     candidate_ring_gap_mm: PositiveFloat = 1.25
@@ -526,6 +525,27 @@ class StarLabelClearanceStyle(_StrictModel):
     associated: AssociatedStarClearanceStyle = Field(default_factory=AssociatedStarClearanceStyle)
 
 
+class SourceAssociationStyle(_StrictModel):
+    """Physical scoring for visually unambiguous source-to-label ownership."""
+
+    preferred_min_gap_mm: NonNegativeFloat = 0.35
+    preferred_max_gap_mm: PositiveFloat = 1.0
+    distance_weight: NonNegativeFloat = 12.0
+    corridor_margin_mm: NonNegativeFloat = 0.25
+    corridor_weight: NonNegativeFloat = 18.0
+    ambiguity_margin_mm: NonNegativeFloat = 0.75
+    ambiguity_weight: NonNegativeFloat = 20.0
+    foreign_object_clear_mm: PositiveFloat = 0.8
+    foreign_object_weight: NonNegativeFloat = 8.0
+    compact_label_factor: PositiveFloat = 1.35
+
+    @model_validator(mode="after")
+    def _preferred_gap_is_ordered(self) -> SourceAssociationStyle:
+        if self.preferred_min_gap_mm > self.preferred_max_gap_mm:
+            raise ValueError("preferred source gap minimum must not exceed maximum")
+        return self
+
+
 class LabelStyle(_StrictModel):
     """Label typography and candidate generation.
 
@@ -542,6 +562,7 @@ class LabelStyle(_StrictModel):
     candidate_rings: int = Field(default=2, ge=1)
     ring_gap_mm: PositiveFloat = 2.5
     star_clearance: StarLabelClearanceStyle = Field(default_factory=StarLabelClearanceStyle)
+    source_association: SourceAssociationStyle = Field(default_factory=SourceAssociationStyle)
     leader_lines: LeaderLineStyle = Field(default_factory=LeaderLineStyle)
     dso_label_magnitude_limit: float | None = None
     dso_labels: DsoLabelStyle = Field(default_factory=DsoLabelStyle)
@@ -892,7 +913,7 @@ class MagnitudeLegendStyle(_StrictModel):
     ``spacing_mm`` is the clear edge-to-edge gap between neighbouring dots.
     """
 
-    enabled: bool = True
+    enabled: bool = False
     font_size_pt: PositiveFloat = 6.0
     gray: float = 0.0
     spacing_mm: PositiveFloat = 3.5
@@ -937,7 +958,7 @@ class OverviewStyle(_StrictModel):
     name_gray: float = 0.3
     footprint_gray: float = 0.45
     footprint_line_width_mm: PositiveFloat = 0.2
-    code_font_size_pt: PositiveFloat = 4.5
+    code_font_size_pt: PositiveFloat = 5.25
     code_gray: float = 0.1
     # Bright-star foreground.  The overview is an index, so only stars down to
     # ``star_limit_magnitude`` are projected; sizes use the same monotonic

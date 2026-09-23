@@ -40,6 +40,10 @@ __all__ = [
 ]
 
 _CONTAIN_EPSILON = 1e-9
+_EDGE_SAMPLE_COUNT = 41
+_MIN_EDGE_COVERAGE_FRACTION = 0.15
+_MIN_UNIQUE_EDGE_COVERAGE_FRACTION = 0.10
+_MAX_NEIGHBOURS_PER_DIRECTION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,6 +324,7 @@ def _tile_rings(atlas_id: str, spec: TilingSpec) -> list[ChartDefinition]:
 
 
 def _band_centers(spec: TilingSpec) -> list[float]:
+    """Declination band centres, ordered north to south (atlas reading order)."""
     half = spec.height_deg / 2.0
     max_center = 90.0 - half
     assert spec.overlap_deg is not None
@@ -331,7 +336,7 @@ def _band_centers(spec: TilingSpec) -> list[float]:
         center += step
     if centers[-1] < max_center - 1e-9:
         centers.append(max_center)
-    return centers
+    return centers[::-1]
 
 
 def _charts_in_band(atlas_id: str, spec: TilingSpec, center_dec: float) -> list[ChartDefinition]:
@@ -534,12 +539,13 @@ def neighbour_overlap_report(
 def with_neighbours(
     charts: tuple[ChartDefinition, ...], tolerance_deg: float = 0.0
 ) -> tuple[ChartDefinition, ...]:
-    """Assign N/S/E/W neighbour references between adjacent charts.
+    """Assign up to three useful N/S references and one E/W reference.
 
     East is increasing right ascension.  Charts are grouped by declination band
-    (centre declination) and connected within a band by RA order and across
-    bands by nearest angular separation.  Single-chart rings (the polar caps)
-    have no east/west neighbour.
+    and connected within a band by RA order.  Across bands, references are
+    selected from charts that cover a meaningful part of the source chart's
+    corresponding projected edge.  Single-chart rings have no east/west
+    neighbour.
     """
     bands = sorted({chart.center_dec_deg for chart in charts})
     band_index = {center: index for index, center in enumerate(bands)}
@@ -562,6 +568,78 @@ def with_neighbours(
             ),
         )
 
+    def edge_neighbours(
+        source: ChartDefinition,
+        candidates: list[ChartDefinition],
+        direction: str,
+    ) -> tuple[ChartDefinition, ...]:
+        projection = StereographicProjection(source.center_ra_deg, source.center_dec_deg)
+        eta = source.height_deg / 2.0 if direction == "N" else -source.height_deg / 2.0
+        samples = tuple(
+            projection.inverse(
+                -source.width_deg / 2.0
+                + source.width_deg * index / (_EDGE_SAMPLE_COUNT - 1),
+                eta,
+            )
+            for index in range(_EDGE_SAMPLE_COUNT)
+        )
+        hits = {
+            candidate.id: frozenset(
+                index
+                for index, (ra_deg, dec_deg) in enumerate(samples)
+                if _contains(
+                    candidate.center_ra_deg,
+                    candidate.center_dec_deg,
+                    ra_deg,
+                    dec_deg,
+                    candidate.width_deg + 2.0 * tolerance_deg,
+                    candidate.height_deg + 2.0 * tolerance_deg,
+                )
+            )
+            for candidate in candidates
+        }
+        minimum = math.ceil(_EDGE_SAMPLE_COUNT * _MIN_EDGE_COVERAGE_FRACTION)
+        qualified = [candidate for candidate in candidates if len(hits[candidate.id]) >= minimum]
+        if not qualified:
+            return (nearest(source, candidates),)
+
+        selected: list[ChartDefinition] = []
+        covered: set[int] = set()
+        minimum_unique = math.ceil(
+            _EDGE_SAMPLE_COUNT * _MIN_UNIQUE_EDGE_COVERAGE_FRACTION
+        )
+        while qualified and len(selected) < _MAX_NEIGHBOURS_PER_DIRECTION:
+            candidate = min(
+                qualified,
+                key=lambda item: (
+                    -len(hits[item.id] - covered),
+                    -len(hits[item.id]),
+                    angular_separation_deg(
+                        source.center_ra_deg,
+                        source.center_dec_deg,
+                        item.center_ra_deg,
+                        item.center_dec_deg,
+                    ),
+                    item.id,
+                ),
+            )
+            gain = len(hits[candidate.id] - covered)
+            if selected and gain < minimum_unique:
+                break
+            selected.append(candidate)
+            covered.update(hits[candidate.id])
+            qualified.remove(candidate)
+
+        return tuple(
+            sorted(
+                selected,
+                key=lambda item: (
+                    -sum(hits[item.id]) / len(hits[item.id]),
+                    item.id,
+                ),
+            )
+        )
+
     result: list[ChartDefinition] = []
     for chart in charts:
         arc = by_band[chart.center_dec_deg]
@@ -572,8 +650,14 @@ def with_neighbours(
             neighbours.append(("W", arc[(position - 1) % len(arc)].id))
         index = band_index[chart.center_dec_deg]
         if index + 1 < len(bands):
-            neighbours.append(("N", nearest(chart, by_band[bands[index + 1]]).id))
+            neighbours.extend(
+                ("N", neighbour.id)
+                for neighbour in edge_neighbours(chart, by_band[bands[index + 1]], "N")
+            )
         if index - 1 >= 0:
-            neighbours.append(("S", nearest(chart, by_band[bands[index - 1]]).id))
+            neighbours.extend(
+                ("S", neighbour.id)
+                for neighbour in edge_neighbours(chart, by_band[bands[index - 1]], "S")
+            )
         result.append(replace(chart, neighbours=tuple(neighbours)))
     return tuple(result)

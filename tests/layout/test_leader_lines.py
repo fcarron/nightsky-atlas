@@ -91,7 +91,7 @@ def test_optimizer_adds_line_only_to_distant_dso_label() -> None:
     assert not near.leader_line
 
 
-def test_optimizer_never_adds_line_for_distant_proper_star_name() -> None:
+def test_optimizer_can_add_line_for_distant_proper_star_name() -> None:
     candidate = LabelCandidate(
         id="label:star:HIP 1:name:E:2",
         position=CompassPosition.E,
@@ -109,8 +109,8 @@ def test_optimizer_never_adds_line_for_distant_proper_star_name() -> None:
         selected_candidate_id=candidate.id,
     )
     optimized = optimize_labels((label,), STAR_SCENE, TRANSFORM, STYLE).labels[0]
-    assert not optimized.leader_line
-    assert not resolve_leader_lines((optimized,), STAR_SCENE, TRANSFORM, STYLE)
+    assert optimized.leader_line
+    assert resolve_leader_lines((optimized,), STAR_SCENE, TRANSFORM, STYLE)
 
 
 def test_near_clean_candidate_is_preferred_over_distant_callout() -> None:

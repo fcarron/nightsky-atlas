@@ -163,7 +163,8 @@ def test_selection_can_be_disabled() -> None:
         }
     )
     selected = select_labels(labels, scene, TRANSFORM, style)
-    assert selected == labels
+    assert [label.id for label in selected] == [label.id for label in labels]
+    assert all(label.mandatory for label in selected)
 
 
 def test_protected_ids_are_always_kept() -> None:
@@ -182,3 +183,30 @@ def test_selection_is_deterministic() -> None:
     first = select_labels(labels, scene, TRANSFORM, STYLE)
     second = select_labels(labels, scene, TRANSFORM, STYLE)
     assert [label.id for label in first] == [label.id for label in second]
+
+
+def test_selected_star_and_dso_labels_become_mandatory() -> None:
+    dso_scene = build_scene(CHART, (), [make_dso("NGC1000", 187.5, 12.0)])
+    dso = select_labels(build_dso_labels(dso_scene, TRANSFORM, STYLE), dso_scene, TRANSFORM, STYLE)
+    star = Star(
+        id="HIP 1",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        magnitude=4.0,
+        provenance=Provenance(catalogue="TEST", source_id="star"),
+        hip_id="HIP 1",
+    )
+    star_scene = build_scene(CHART, (star,))
+    stars = select_labels(
+        build_star_labels(
+            star_scene,
+            TRANSFORM,
+            STYLE,
+            {1: StarName(1, bayer="α", constellation="Vir")},
+        ),
+        star_scene,
+        TRANSFORM,
+        STYLE,
+    )
+    assert dso and stars
+    assert dso[0].mandatory and stars[0].mandatory

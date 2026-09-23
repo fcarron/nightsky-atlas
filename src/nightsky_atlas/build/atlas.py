@@ -114,6 +114,9 @@ class ChartPageResult:
     neighbours: tuple[tuple[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
+        primary_neighbours: dict[str, str] = {}
+        for direction, neighbour in self.neighbours:
+            primary_neighbours.setdefault(direction, neighbour)
         return {
             "chart_id": self.chart_id,
             "star_count": self.star_count,
@@ -127,7 +130,11 @@ class ChartPageResult:
             "cost_before": self.cost_before,
             "cost_after": self.cost_after,
             "layout_hash": self.layout_hash,
-            "neighbours": {direction: neighbour for direction, neighbour in self.neighbours},
+            "neighbours": primary_neighbours,
+            "navigation": [
+                {"direction": direction, "chart_id": neighbour}
+                for direction, neighbour in self.neighbours
+            ],
         }
 
 

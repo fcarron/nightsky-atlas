@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from nightsky_atlas.atlas.config import load_style_config
@@ -100,78 +101,44 @@ def test_optional_label_outside_page_is_hidden() -> None:
     assert result.hidden_count == 1
 
 
-def test_star_variant_prefers_combined_when_clean() -> None:
-    full = LabelCandidate(
-        id="label:star:1:full:N",
-        position=CompassPosition.N,
+def test_optimizer_never_changes_canonical_label_text() -> None:
+    first = LabelCandidate(
+        id="label:star:1:E",
+        position=CompassPosition.E,
         anchor=PagePoint(100.0, 100.0),
-        bounds=PageRect(100.0, 100.0, 22.0, 2.5),
-        display_text="Deneb α Cyg",
-        variant_rank=0,
-    )
-    short = LabelCandidate(
-        id="label:star:1:short:N",
-        position=CompassPosition.N,
-        anchor=PagePoint(100.0, 100.0),
-        bounds=PageRect(100.0, 100.0, 10.0, 2.5),
-        display_text="Deneb",
+        bounds=PageRect(100.0, 100.0, 14.0, 2.5),
+        display_text="obsolete fallback",
         variant_rank=1,
     )
-    label = make_label("label:star:1", (full, short))
+    second = LabelCandidate(
+        id="label:star:1:W",
+        position=CompassPosition.W,
+        anchor=PagePoint(90.0, 100.0),
+        bounds=PageRect(90.0, 100.0, 14.0, 2.5),
+    )
+    label = make_label("label:star:1", (first, second))
+    label = replace(label, text="Deneb α")
     placed = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE).labels[0]
-    assert placed.text == "Deneb α Cyg"
-    assert placed.selected_candidate_id == full.id
-
-
-def test_star_variant_falls_back_to_short_when_combined_collides() -> None:
-    full = LabelCandidate(
-        id="label:star:1:full:N",
-        position=CompassPosition.N,
-        anchor=PagePoint(100.0, 100.0),
-        bounds=PageRect(100.0, 100.0, 22.0, 2.5),
-        display_text="Deneb α Cyg",
-        variant_rank=0,
-    )
-    short = LabelCandidate(
-        id="label:star:1:short:N",
-        position=CompassPosition.N,
-        anchor=PagePoint(100.0, 100.0),
-        bounds=PageRect(100.0, 100.0, 10.0, 2.5),
-        display_text="Deneb",
-        variant_rank=1,
-    )
-    label = make_label("label:star:1", (full, short))
-    furniture = (PageRect(112.0, 100.0, 4.0, 2.5),)
-    placed = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE, furniture=furniture).labels[0]
-    assert placed.text == "Deneb"
-    assert placed.selected_candidate_id == short.id
+    assert placed.text == "Deneb α"
     assert Label.from_dict(placed.to_dict()) == placed
 
 
-def test_star_variant_can_shorten_when_combined_is_visually_poor() -> None:
-    full = LabelCandidate(
-        id="label:star:1:full:N",
-        position=CompassPosition.N,
-        anchor=PagePoint(270.0, 100.0),
-        bounds=PageRect(270.0, 100.0, 14.0, 2.5),
-        display_text="Deneb α Cyg",
-        variant_rank=0,
+def test_optimizer_preserves_canonical_dso_text() -> None:
+    candidate = LabelCandidate(
+        id="label:dso:NGC7000:E",
+        position=CompassPosition.E,
+        anchor=PagePoint(100.0, 100.0),
+        bounds=PageRect(100.0, 100.0, 8.0, 2.5),
+        display_text="NGC 7000",
     )
-    short = LabelCandidate(
-        id="label:star:1:short:N",
-        position=CompassPosition.N,
-        anchor=PagePoint(260.0, 100.0),
-        bounds=PageRect(260.0, 100.0, 10.0, 2.5),
-        display_text="Deneb",
-        variant_rank=1,
+    label = replace(
+        make_label("label:dso:NGC7000", (candidate,)),
+        target_id="NGC7000",
+        text="7000",
     )
-    placed = optimize_labels(
-        (make_label("label:star:1", (full, short)),),
-        EMPTY_SCENE,
-        TRANSFORM,
-        STYLE,
-    ).labels[0]
-    assert placed.text == "Deneb"
+    placed = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE).labels[0]
+    assert placed.text == "7000"
+    assert not placed.hidden
 
 
 def test_mandatory_label_outside_page_is_placed() -> None:

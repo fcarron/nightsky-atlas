@@ -44,11 +44,11 @@ def label_for(hip: int, magnitude: float, names: dict[int, StarName] | None = No
     return labels[0] if labels else None
 
 
-def test_iconic_names_and_separate_systematic_designations() -> None:
+def test_iconic_name_and_systematic_designation_form_one_label() -> None:
     sirius = label_for(32349, -1.46)
     deneb = label_for(102098, 1.25)
-    assert sirius is not None and sirius.text == "Sirius"
-    assert deneb is not None and deneb.text == "Deneb"
+    assert sirius is not None and sirius.text == "Sirius α"
+    assert deneb is not None and deneb.text == "Deneb α"
     assert [
         text for text, _ in NAMES[102098].display_variants(STYLE.label.star_labels, 1.25)[:3]
     ] == [
@@ -56,10 +56,12 @@ def test_iconic_names_and_separate_systematic_designations() -> None:
         "Deneb",
         "α",
     ]
-    assert {label.id.rsplit(":", 1)[-1]: label.text for label in labels_for(102098, 1.25)} == {
-        "name": "Deneb",
-        "designation": "α",
-    }
+    deneb_labels = labels_for(102098, 1.25)
+    assert len(deneb_labels) == 1
+    assert deneb_labels[0].id == "label:star:TYC 102098-1-1"
+    assert deneb_labels[0].text == "Deneb α"
+    assert all(candidate.display_text is None for candidate in deneb_labels[0].candidates)
+    assert all(candidate.variant_rank == 0 for candidate in deneb_labels[0].candidates)
     assert NAMES[102098].full_bayer_designation == "α Cyg"
     assert NAMES[102098].full_flamsteed_designation == "50 Cyg"
 
@@ -192,7 +194,7 @@ def test_tier_filter_and_no_catalogue_ids() -> None:
         assert not label.text.startswith(("HIP", "HD", "TYC"))
 
 
-def test_standard_name_and_bayer_are_independent_labels() -> None:
+def test_standard_name_and_bayer_are_one_logical_label() -> None:
     name = StarName(
         994,
         name="Less familiar",
@@ -202,11 +204,9 @@ def test_standard_name_and_bayer_are_independent_labels() -> None:
         constellation="And",
     )
     labels = labels_for(994, 2.5, {994: name})
-    assert {label.text for label in labels} == {"Less familiar", "β"}
-    assert {label.semantic_key for label in labels} == {
-        "star:name:Less familiar",
-        "star:bayer:β And",
-    }
+    assert len(labels) == 1
+    assert labels[0].text == "Less familiar β"
+    assert labels[0].semantic_key == "star:name:Less familiar"
 
 
 def test_combined_variant_can_be_disabled_by_edition_policy() -> None:
@@ -222,7 +222,7 @@ def test_malformed_designations_do_not_render() -> None:
     assert label_for(993, 4.0, {993: name}) is None
 
 
-def test_same_hip_crossmatch_produces_one_label_per_presentation_component() -> None:
+def test_same_hip_crossmatch_produces_one_logical_label() -> None:
     stars = [
         Star(
             id=f"TYC 1-{index}-1",
@@ -235,7 +235,7 @@ def test_same_hip_crossmatch_produces_one_label_per_presentation_component() -> 
         for index in (1, 2)
     ]
     labels = build_star_labels(build_scene(CHART, stars), TRANSFORM, STYLE, NAMES)
-    assert len(labels) == 2
-    assert {label.text for label in labels} == {"Sirius", "α"}
+    assert len(labels) == 1
+    assert labels[0].text == "Sirius α"
     assert {label.target_id for label in labels} == {"TYC 1-1-1"}
     assert build_star_labels(build_scene(CHART, stars), TRANSFORM, STYLE, NAMES) == labels
