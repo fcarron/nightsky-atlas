@@ -45,6 +45,8 @@ class LabelCandidate:
     ring: int = 0
     display_text: str | None = None
     variant_rank: int = 0
+    glyph_bounds: tuple[PageRect, ...] = ()
+    whitespace_bounds: tuple[PageRect, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable mapping of this candidate."""
@@ -59,6 +61,8 @@ class LabelCandidate:
                 "width_mm": self.bounds.width_mm,
                 "height_mm": self.bounds.height_mm,
             },
+            "glyph_bounds": [_rect_to_dict(rect) for rect in self.glyph_bounds],
+            "whitespace_bounds": [_rect_to_dict(rect) for rect in self.whitespace_bounds],
         }
         if self.display_text is not None:
             data["display_text"] = self.display_text
@@ -83,7 +87,29 @@ class LabelCandidate:
             ring=int(data.get("ring", 0)),
             display_text=data.get("display_text"),
             variant_rank=int(data.get("variant_rank", 0)),
+            glyph_bounds=tuple(_rect_from_dict(item) for item in data.get("glyph_bounds", ())),
+            whitespace_bounds=tuple(
+                _rect_from_dict(item) for item in data.get("whitespace_bounds", ())
+            ),
         )
+
+
+def _rect_to_dict(rect: PageRect) -> dict[str, float]:
+    return {
+        "left_mm": rect.left_mm,
+        "top_mm": rect.top_mm,
+        "width_mm": rect.width_mm,
+        "height_mm": rect.height_mm,
+    }
+
+
+def _rect_from_dict(data: dict[str, Any]) -> PageRect:
+    return PageRect(
+        left_mm=float(data["left_mm"]),
+        top_mm=float(data["top_mm"]),
+        width_mm=float(data["width_mm"]),
+        height_mm=float(data["height_mm"]),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +137,7 @@ class Label:
     font_size_pt: float | None = None
     font_weight: str = "normal"
     leader_line: bool = False
+    leader_line_reason: str | None = None
     semantic_key: str | None = None
 
     def candidate(self, candidate_id: str) -> LabelCandidate | None:
@@ -154,6 +181,11 @@ class Label:
             font_size_pt=self.font_size_pt,
             font_weight=self.font_weight,
             leader_line=self.leader_line and candidate_id == self.selected_candidate_id,
+            leader_line_reason=(
+                self.leader_line_reason
+                if self.leader_line and candidate_id == self.selected_candidate_id
+                else None
+            ),
             semantic_key=self.semantic_key,
         )
 
@@ -180,6 +212,13 @@ class Label:
             leader_line=(
                 self.leader_line and not hidden and candidate_id == self.selected_candidate_id
             ),
+            leader_line_reason=(
+                self.leader_line_reason
+                if self.leader_line
+                and not hidden
+                and candidate_id == self.selected_candidate_id
+                else None
+            ),
             semantic_key=self.semantic_key,
         )
 
@@ -196,6 +235,7 @@ class Label:
             "font_size_pt": self.font_size_pt,
             "font_weight": self.font_weight,
             "leader_line": self.leader_line,
+            "leader_line_reason": self.leader_line_reason,
             "selected_candidate_id": self.selected_candidate_id,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
@@ -221,5 +261,6 @@ class Label:
             ),
             font_weight=str(data.get("font_weight", "normal")),
             leader_line=bool(data.get("leader_line", False)),
+            leader_line_reason=data.get("leader_line_reason"),
             semantic_key=data.get("semantic_key"),
         )

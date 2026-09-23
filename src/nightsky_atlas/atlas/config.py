@@ -470,6 +470,8 @@ class LeaderLineStyle(_StrictModel):
 
     enabled: bool = True
     auto_min_ring: int = Field(default=2, ge=1)
+    star_ambiguity_threshold: PositiveFloat = 4.0
+    dso_ambiguity_threshold: PositiveFloat = 2.5
     min_length_mm: PositiveFloat = 2.5
     max_length_mm: PositiveFloat = 12.0
     symbol_gap_mm: PositiveFloat = 0.25
@@ -535,8 +537,13 @@ class SourceAssociationStyle(_StrictModel):
     corridor_weight: NonNegativeFloat = 18.0
     ambiguity_margin_mm: NonNegativeFloat = 0.75
     ambiguity_weight: NonNegativeFloat = 20.0
+    competing_owner_weight: NonNegativeFloat = 26.0
     foreign_object_clear_mm: PositiveFloat = 0.8
     foreign_object_weight: NonNegativeFloat = 8.0
+    glyph_clear_mm: PositiveFloat = 0.75
+    glyph_inline_factor: PositiveFloat = 5.0
+    whitespace_factor: PositiveFloat = 1.5
+    glyph_weight: NonNegativeFloat = 120.0
     compact_label_factor: PositiveFloat = 1.35
 
     @model_validator(mode="after")

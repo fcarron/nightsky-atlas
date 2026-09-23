@@ -9,6 +9,7 @@ points to decreasing page x.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.geometry import circle_rect_edge_distance_mm
@@ -46,6 +47,9 @@ CANDIDATE_PREFERENCE: tuple[CompassPosition, ...] = (
 )
 
 
+CandidateEdgeDistance = Callable[[PageRect, tuple[PageRect, ...]], float]
+
+
 def compass_candidates(
     *,
     label_id: str,
@@ -54,6 +58,7 @@ def compass_candidates(
     exclusion_radius_mm: float,
     padding_mm: float = 0.6,
     exact_edge_gap_mm: float | None = None,
+    exact_edge_distance: CandidateEdgeDistance | None = None,
     ring_count: int = 1,
     ring_gap_mm: float = 2.5,
 ) -> tuple[LabelCandidate, ...]:
@@ -90,9 +95,17 @@ def compass_candidates(
                 height_mm=metrics.height_mm,
             )
             if exact_edge_gap_mm is not None:
+                target_edge_gap_mm = exact_edge_gap_mm + ring * ring_gap_mm
                 for _ in range(3):
-                    gap = circle_rect_edge_distance_mm(anchor, exclusion_radius_mm, bounds)
-                    adjustment = gap - exact_edge_gap_mm
+                    glyph_bounds = _translated_rects(
+                        metrics.ink_rects_mm, bounds.left_mm, bounds.top_mm
+                    )
+                    gap = (
+                        exact_edge_distance(bounds, glyph_bounds)
+                        if exact_edge_distance is not None
+                        else circle_rect_edge_distance_mm(anchor, exclusion_radius_mm, bounds)
+                    )
+                    adjustment = gap - target_edge_gap_mm
                     if abs(adjustment) < 0.001:
                         break
                     radial_x = bounds.center.x_mm - anchor.x_mm
@@ -118,6 +131,26 @@ def compass_candidates(
                     anchor=PagePoint(x_mm=bounds.left_mm, y_mm=bounds.top_mm),
                     bounds=bounds,
                     ring=ring,
+                    glyph_bounds=_translated_rects(
+                        metrics.ink_rects_mm, bounds.left_mm, bounds.top_mm
+                    ),
+                    whitespace_bounds=_translated_rects(
+                        metrics.whitespace_rects_mm, bounds.left_mm, bounds.top_mm
+                    ),
                 )
             )
     return tuple(candidates)
+
+
+def _translated_rects(
+    rects: tuple[PageRect, ...], left_mm: float, top_mm: float
+) -> tuple[PageRect, ...]:
+    return tuple(
+        PageRect(
+            left_mm=left_mm + rect.left_mm,
+            top_mm=top_mm + rect.top_mm,
+            width_mm=rect.width_mm,
+            height_mm=rect.height_mm,
+        )
+        for rect in rects
+    )

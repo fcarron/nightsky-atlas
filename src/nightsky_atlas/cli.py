@@ -903,6 +903,7 @@ def _write_layout_json(
             "hidden_count": result.hidden_count,
             "component_totals_before": result.component_totals_before,
             "component_totals_after": result.component_totals_after,
+            "label_diagnostics": result.label_diagnostics,
         }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")

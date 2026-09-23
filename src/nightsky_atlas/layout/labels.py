@@ -20,6 +20,7 @@ from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.layout.candidates import compass_candidates
 from nightsky_atlas.layout.dso_labels import format_dso_label
 from nightsky_atlas.layout.models import Label
+from nightsky_atlas.layout.scoring import star_rect_edge_distance_mm
 from nightsky_atlas.render.double_stars import printed_star_obstacles
 from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
 from nightsky_atlas.render.text import TextMeasurer
@@ -254,6 +255,15 @@ def build_star_labels(
                 obstacle.collision_radius_mm
                 if obstacle is not None
                 else model.radius_mm(star.magnitude)
+            ),
+            exact_edge_gap_mm=style.label.star_clearance.associated.preferred_min_mm,
+            exact_edge_distance=(
+                lambda bounds, glyph_bounds, source=obstacle: min(
+                    star_rect_edge_distance_mm(source, rect)
+                    for rect in (glyph_bounds or (bounds,))
+                )
+                if source is not None
+                else 0.0
             ),
             ring_count=(
                 policy.proper_name_candidate_rings

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nightsky_atlas.chart.page import PagePoint
+from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.candidates import compass_candidates
 from nightsky_atlas.layout.geometry import circle_rect_edge_distance_mm
 from nightsky_atlas.layout.models import CompassPosition
@@ -74,3 +74,71 @@ def test_exact_edge_gap_refines_diagonal_candidates() -> None:
         assert circle_rect_edge_distance_mm(ANCHOR, 2.0, candidate.bounds) == pytest.approx(
             0.5, abs=0.01
         )
+
+
+def test_exact_edge_gap_preserves_additional_candidate_rings() -> None:
+    candidates = compass_candidates(
+        label_id="label:star:X",
+        metrics=METRICS,
+        anchor=ANCHOR,
+        exclusion_radius_mm=2.0,
+        exact_edge_gap_mm=0.45,
+        ring_count=2,
+        ring_gap_mm=1.25,
+    )
+    for candidate in candidates:
+        assert circle_rect_edge_distance_mm(
+            ANCHOR, 2.0, candidate.bounds
+        ) == pytest.approx(0.45 + candidate.ring * 1.25, abs=0.01)
+
+
+def test_candidate_translates_glyph_geometry_to_page_coordinates() -> None:
+    metrics = TextMetrics(
+        width_mm=4.0,
+        height_mm=2.0,
+        ink_rects_mm=(PageRect(0.5, 0.25, 1.0, 1.0),),
+        whitespace_rects_mm=(PageRect(1.5, 0.0, 0.5, 2.0),),
+    )
+    candidate = compass_candidates(
+        label_id="label:star:X",
+        metrics=metrics,
+        anchor=ANCHOR,
+        exclusion_radius_mm=2.0,
+    )[0]
+    assert candidate.glyph_bounds[0].left_mm == pytest.approx(
+        candidate.bounds.left_mm + 0.5
+    )
+    assert candidate.whitespace_bounds[0].top_mm == pytest.approx(candidate.bounds.top_mm)
+
+
+def test_exact_edge_callback_can_use_visible_glyph_not_logical_line_box() -> None:
+    """Short glyphs should not inherit unused Pango descent as star clearance."""
+    metrics = TextMetrics(
+        width_mm=2.0,
+        height_mm=3.0,
+        # A τ-like short glyph with 0.75 mm unused descent in its line box.
+        ink_rects_mm=(PageRect(0.3, 0.5, 1.4, 1.75),),
+    )
+
+    def glyph_circle_gap(bounds: PageRect, glyphs: tuple[PageRect, ...]) -> float:
+        return min(
+            circle_rect_edge_distance_mm(ANCHOR, 1.0, rect)
+            for rect in (glyphs or (bounds,))
+        )
+
+    candidate = next(
+        item
+        for item in compass_candidates(
+            label_id="label:star:tau",
+            metrics=metrics,
+            anchor=ANCHOR,
+            exclusion_radius_mm=1.0,
+            exact_edge_gap_mm=0.45,
+            exact_edge_distance=glyph_circle_gap,
+        )
+        if item.position == CompassPosition.N
+    )
+    assert glyph_circle_gap(candidate.bounds, candidate.glyph_bounds) == pytest.approx(
+        0.45, abs=0.01
+    )
+    assert circle_rect_edge_distance_mm(ANCHOR, 1.0, candidate.bounds) < 0.0

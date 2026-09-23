@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PagePoint, PageTransform
+from nightsky_atlas.layout.association import dso_source_geometries, source_facing_point
 from nightsky_atlas.layout.geometry import (
     clamp_point_to_rect,
     expand_rect,
@@ -14,7 +15,8 @@ from nightsky_atlas.layout.geometry import (
     segments_intersect,
 )
 from nightsky_atlas.layout.models import Label
-from nightsky_atlas.render.double_stars import printed_star_obstacles
+from nightsky_atlas.layout.scoring import star_rect_edge_distance_mm, star_source_facing_point
+from nightsky_atlas.render.double_stars import printed_star_obstacles, related_member_star_ids
 from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
@@ -54,25 +56,31 @@ def leader_line_for(
     if not config.enabled or label.hidden or candidate is None:
         return None
     dso_target = next(
-        (item for item in scene.deep_sky_objects if item.dso.id == label.target_id), None
-    )
-    star_target = next(
         (
-            obstacle
-            for obstacle in printed_star_obstacles(scene, transform, style)
-            if label.target_id in obstacle.star_ids
+            source
+            for source in dso_source_geometries(scene, transform, style)
+            if source.id == label.target_id
         ),
         None,
     )
+    star_obstacles = printed_star_obstacles(scene, transform, style)
+    star_targets = tuple(
+        obstacle
+        for obstacle in star_obstacles
+        if label.target_id in obstacle.star_ids or label.target_id in obstacle.system_ids
+    )
+    star_target = min(
+        star_targets,
+        key=lambda obstacle: star_rect_edge_distance_mm(obstacle, candidate.bounds),
+        default=None,
+    )
     if dso_target is not None:
-        anchor = transform.to_page(dso_target.chart_point)
-        extent = dso_symbol_extent(
-            dso_target.dso, mm_per_deg=transform.mm_per_deg, style=style
-        )
-        source_radius = extent.collision_radius_mm
+        source_point = source_facing_point(dso_target, candidate.bounds)
+        anchor = source_point
+        source_offset = config.symbol_gap_mm
     elif star_target is not None:
-        anchor = star_target.page_point
-        source_radius = star_target.collision_radius_mm
+        anchor = star_source_facing_point(star_target, candidate.bounds)
+        source_offset = config.symbol_gap_mm
     else:
         return None
     near = clamp_point_to_rect(anchor, candidate.bounds)
@@ -82,7 +90,7 @@ def leader_line_for(
     if distance == 0.0:
         return None
     ux, uy = dx / distance, dy / distance
-    start_offset = source_radius + config.symbol_gap_mm
+    start_offset = source_offset
     end_offset = distance - config.label_gap_mm
     length = end_offset - start_offset
     if length < config.min_length_mm or length > config.max_length_mm:
@@ -98,8 +106,9 @@ def leader_line_for(
             start, end, expand_rect(other_candidate.bounds, 0.25)
         ):
             return None
-    for star in printed_star_obstacles(scene, transform, style):
-        if label.target_id in star.star_ids:
+    related_star_ids = related_member_star_ids(label.target_id, star_obstacles)
+    for star in star_obstacles:
+        if related_star_ids & star.star_ids:
             continue
         if star.magnitude <= 6.0 and _distance_to_segment(
             star.page_point, start, end

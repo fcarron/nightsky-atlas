@@ -15,6 +15,13 @@ def test_measure_is_positive() -> None:
     assert metrics.height_mm > 0.0
 
 
+def test_measure_exposes_shaped_glyph_and_whitespace_geometry() -> None:
+    metrics = TextMeasurer("DejaVu Sans", 7.0).measure_mm("Deneb α")
+    assert len(metrics.ink_rects_mm) == 6
+    assert len(metrics.whitespace_rects_mm) == 1
+    assert all(rect.width_mm > 0.0 and rect.height_mm > 0.0 for rect in metrics.ink_rects_mm)
+
+
 def test_longer_text_is_wider() -> None:
     measurer = TextMeasurer("DejaVu Sans", 6.0)
     assert measurer.measure_mm("NGC4486").width_mm > measurer.measure_mm("M87").width_mm

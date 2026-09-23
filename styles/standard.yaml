@@ -41,18 +41,25 @@ label:
     corridor_weight: 18.0
     ambiguity_margin_mm: 0.75
     ambiguity_weight: 20.0
+    competing_owner_weight: 26.0
     foreign_object_clear_mm: 0.8
     foreign_object_weight: 8.0
+    glyph_clear_mm: 0.75
+    glyph_inline_factor: 5.0
+    whitespace_factor: 1.5
+    glyph_weight: 120.0
     compact_label_factor: 1.35
   leader_lines:
     enabled: true
     auto_min_ring: 2
+    star_ambiguity_threshold: 4.0
+    dso_ambiguity_threshold: 2.5
     min_length_mm: 2.5
     max_length_mm: 12.0
     symbol_gap_mm: 0.25
     label_gap_mm: 0.4
-    width_mm: 0.12
-    gray: 0.4
+    width_mm: 0.08
+    gray: 0.55
   # Faint selected objects are drawn but not labelled (Messier, common names,
   # bright DSOs and observing-list members are exempt).
   dso_label_magnitude_limit: 12.5

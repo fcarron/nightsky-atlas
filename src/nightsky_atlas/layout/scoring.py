@@ -14,6 +14,13 @@ from nightsky_atlas.atlas.config import (
     StarLabelClearanceStyle,
 )
 from nightsky_atlas.chart.page import PagePoint, PageRect
+from nightsky_atlas.layout.association import (
+    SourceGeometry,
+    source_contains_point,
+    source_edge_distance,
+    source_extent_edge_distance,
+    source_facing_point,
+)
 from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
@@ -31,8 +38,12 @@ __all__ = [
     "CostWeights",
     "StarCircle",
     "SymbolCircle",
+    "candidate_star_edge_distance_mm",
     "foreign_star_hard_min_mm",
     "score_candidate",
+    "star_rect_edge_distance_mm",
+    "star_source_bounds",
+    "star_source_facing_point",
 ]
 
 
@@ -51,8 +62,11 @@ class CostWeights:
     label_associated_star_clearance: float = 8.0
     label_association_distance: float = 0.5
     label_source_distance: float = 12.0
+    label_source_facing_edge_distance: float = 0.0
     label_source_corridor: float = 18.0
     label_competing_source_ambiguity: float = 20.0
+    label_competing_owner: float = 26.0
+    label_glyph_proximity: float = 24.0
     label_foreign_object_proximity: float = 8.0
 
 
@@ -74,6 +88,97 @@ class StarCircle:
     star_ids: frozenset[str]
     center: PagePoint
     radius_mm: float
+    system_ids: frozenset[str] = frozenset()
+    marker_length_mm: float = 0.0
+    marker_line_width_mm: float = 0.0
+
+
+def _star_radius_mm(star: StarCircle) -> float:
+    radius = getattr(star, "radius_mm", None)
+    return radius if radius is not None else star.collision_radius_mm
+
+
+def star_source_bounds(star: StarCircle) -> PageRect:
+    """Return the conservative bounds of one actual printed star mark."""
+    half_width = max(
+        _star_radius_mm(star),
+        star.marker_length_mm / 2.0 + star.marker_line_width_mm / 2.0,
+    )
+    half_height = max(_star_radius_mm(star), star.marker_line_width_mm / 2.0)
+    return PageRect(
+        star.center.x_mm - half_width,
+        star.center.y_mm - half_height,
+        2.0 * half_width,
+        2.0 * half_height,
+    )
+
+
+def _marker_rect_edge_distance_mm(star: StarCircle, rect: PageRect) -> float:
+    """Return the edge gap from a collapsed-double marker stroke to ``rect``."""
+    if star.marker_length_mm <= 0.0:
+        return float("inf")
+    half_length = star.marker_length_mm / 2.0
+    left = star.center.x_mm - half_length
+    right = star.center.x_mm + half_length
+    dx = max(left - rect.right_mm, rect.left_mm - right, 0.0)
+    dy = max(star.center.y_mm - rect.bottom_mm, rect.top_mm - star.center.y_mm, 0.0)
+    return (dx * dx + dy * dy) ** 0.5 - star.marker_line_width_mm / 2.0
+
+
+def star_rect_edge_distance_mm(star: StarCircle, rect: PageRect) -> float:
+    """Return the gap from the actual star/double-star mark to ``rect``.
+
+    Collapsed doubles are the union of their combined-magnitude disk and the
+    short horizontal marker.  All other stars remain simple rendered disks.
+    """
+    return min(
+        circle_rect_edge_distance_mm(star.center, _star_radius_mm(star), rect),
+        _marker_rect_edge_distance_mm(star, rect),
+    )
+
+
+def candidate_star_edge_distance_mm(
+    star: StarCircle, candidate: LabelCandidate, *, visible_text: bool = False
+) -> float:
+    """Return a star-to-label gap using painted ink for stellar labels.
+
+    Pango logical line boxes contain ascent/descent space with no painted ink.
+    Measuring a star-label gap to that space makes short labels visibly farther
+    away than their configured physical clearance.
+    """
+    rects = (
+        candidate.glyph_bounds
+        if visible_text and candidate.glyph_bounds
+        else (candidate.bounds,)
+    )
+    return min(star_rect_edge_distance_mm(star, rect) for rect in rects)
+
+
+def star_source_facing_point(star: StarCircle, rect: PageRect) -> PagePoint:
+    """Return the nearest visible point of a star/double-star mark to ``rect``."""
+    circle_distance = circle_rect_edge_distance_mm(star.center, _star_radius_mm(star), rect)
+    marker_distance = _marker_rect_edge_distance_mm(star, rect)
+    if marker_distance >= circle_distance:
+        return _circle_facing_point(star.center, _star_radius_mm(star), rect)
+    near = clamp_point_to_rect(star.center, rect)
+    marker_x = min(
+        max(near.x_mm, star.center.x_mm - star.marker_length_mm / 2.0),
+        star.center.x_mm + star.marker_length_mm / 2.0,
+    )
+    dx = near.x_mm - marker_x
+    dy = near.y_mm - star.center.y_mm
+    length = (dx * dx + dy * dy) ** 0.5
+    if length <= 0.0:
+        return PagePoint(marker_x, star.center.y_mm)
+    offset = star.marker_line_width_mm / 2.0
+    return PagePoint(marker_x + dx / length * offset, star.center.y_mm + dy / length * offset)
+
+
+@dataclass(frozen=True, slots=True)
+class _ClosestForeignStar:
+    id: str
+    radius_mm: float
+    distance_mm: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,9 +196,16 @@ class CostBreakdown:
     label_associated_star_clearance: float = 0.0
     label_association_distance_mm: float = 0.0
     label_source_distance_mm: float = 0.0
+    label_source_facing_edge_distance_mm: float = 0.0
     label_source_corridor: float = 0.0
     label_competing_source_ambiguity: float = 0.0
+    label_competing_owner: float = 0.0
+    label_glyph_proximity: float = 0.0
     label_foreign_object_proximity: float = 0.0
+    competing_owner_id: str | None = None
+    closest_foreign_star_id: str | None = None
+    closest_foreign_star_radius_mm: float | None = None
+    closest_foreign_star_distance_mm: float | None = None
 
     def total(self, weights: CostWeights) -> float:
         """Return the weighted total cost."""
@@ -109,9 +221,13 @@ class CostBreakdown:
             + self.label_associated_star_clearance * weights.label_associated_star_clearance
             + self.label_association_distance_mm * weights.label_association_distance
             + self.label_source_distance_mm * weights.label_source_distance
+            + self.label_source_facing_edge_distance_mm
+            * weights.label_source_facing_edge_distance
             + self.label_source_corridor * weights.label_source_corridor
             + self.label_competing_source_ambiguity
             * weights.label_competing_source_ambiguity
+            + self.label_competing_owner * weights.label_competing_owner
+            + self.label_glyph_proximity * weights.label_glyph_proximity
             + self.label_foreign_object_proximity * weights.label_foreign_object_proximity
         )
 
@@ -129,8 +245,13 @@ class CostBreakdown:
             "label_associated_star_clearance": self.label_associated_star_clearance,
             "label_association_distance_mm": self.label_association_distance_mm,
             "label_source_distance_mm": self.label_source_distance_mm,
+            "label_source_facing_edge_distance_mm": (
+                self.label_source_facing_edge_distance_mm
+            ),
             "label_source_corridor": self.label_source_corridor,
             "label_competing_source_ambiguity": self.label_competing_source_ambiguity,
+            "label_competing_owner": self.label_competing_owner,
+            "label_glyph_proximity": self.label_glyph_proximity,
             "label_foreign_object_proximity": self.label_foreign_object_proximity,
         }
 
@@ -156,10 +277,11 @@ def score_candidate(
     symbols: tuple[SymbolCircle, ...],
     stars: tuple[StarCircle, ...] = (),
     associated_star_ids: frozenset[str] = frozenset(),
+    related_star_ids: frozenset[str] | None = None,
     star_clearance: StarLabelClearanceStyle | None = None,
     target_source_id: str | None = None,
     source_association: SourceAssociationStyle | None = None,
-    source_symbols: tuple[SymbolCircle, ...] | None = None,
+    source_symbols: tuple[SourceGeometry, ...] | None = None,
     association_scale: float = 1.0,
     printable: PageRect,
     crowding_radius_mm: float,
@@ -195,11 +317,15 @@ def score_candidate(
         )
     )
     clearance = star_clearance or StarLabelClearanceStyle()
+    related_ids = associated_star_ids if related_star_ids is None else related_star_ids
     foreign_penalty = 0.0
     associated_penalty = 0.0
     association_distance = 0.0
+    visible_star_text = bool(associated_star_ids)
     for star in stars:
-        distance = circle_rect_edge_distance_mm(star.center, star.radius_mm, bounds)
+        distance = candidate_star_edge_distance_mm(
+            star, candidate, visible_text=visible_star_text
+        )
         if associated_star_ids & star.star_ids:
             associated_penalty += _clearance_penalty(
                 distance,
@@ -207,29 +333,50 @@ def score_candidate(
                 clearance.associated.soft_clear_mm,
             )
             association_distance += max(0.0, distance - clearance.associated.preferred_max_mm)
-        else:
+        elif not related_ids & star.star_ids:
             foreign_penalty += _foreign_star_proximity_penalty(
                 distance, star.radius_mm, clearance.foreign
             )
     if target_source_id is None:
+        glyph_proximity = 0.0
+        closest_foreign = None
         source_distance = 0.0
+        source_facing_distance = 0.0
         source_corridor = 0.0
         competing_ambiguity = 0.0
+        competing_owner = 0.0
         foreign_object_proximity = 0.0
+        competing_owner_id = None
     else:
         association = source_association or SourceAssociationStyle()
+        association_sources = () if source_symbols is None else source_symbols
+        owner_sources = tuple(
+            source for source in association_sources if source.id == target_source_id
+        )
+        glyph_proximity, closest_foreign = _glyph_proximity_cost(
+            candidate,
+            stars,
+            associated_star_ids,
+            related_ids,
+            owner_sources,
+            association,
+        )
         (
             source_distance,
+            source_facing_distance,
             source_corridor,
             competing_ambiguity,
+            competing_owner,
             foreign_object_proximity,
+            competing_owner_id,
         ) = _source_association_costs(
-            bounds,
+            candidate,
             target_anchor,
             target_source_id,
             stars,
-            symbols if source_symbols is None else source_symbols,
+            association_sources,
             associated_star_ids,
+            related_ids,
             association,
         )
 
@@ -244,77 +391,210 @@ def score_candidate(
         label_foreign_star_clearance=foreign_penalty,
         label_associated_star_clearance=associated_penalty,
         label_association_distance_mm=association_distance,
-        label_source_distance_mm=source_distance,
+        label_source_distance_mm=source_distance * association_scale,
+        label_source_facing_edge_distance_mm=source_facing_distance,
         label_source_corridor=source_corridor * association_scale,
         label_competing_source_ambiguity=competing_ambiguity * association_scale,
+        label_competing_owner=competing_owner * association_scale,
+        label_glyph_proximity=glyph_proximity * association_scale,
         label_foreign_object_proximity=foreign_object_proximity,
+        competing_owner_id=competing_owner_id,
+        closest_foreign_star_id=(closest_foreign.id if closest_foreign else None),
+        closest_foreign_star_radius_mm=(
+            closest_foreign.radius_mm if closest_foreign else None
+        ),
+        closest_foreign_star_distance_mm=(
+            closest_foreign.distance_mm if closest_foreign else None
+        ),
     )
 
 
 def _source_association_costs(
-    bounds: PageRect,
+    candidate: LabelCandidate,
     target_anchor: PagePoint,
     target_source_id: str | None,
     stars: tuple[StarCircle, ...],
-    symbols: tuple[SymbolCircle, ...],
+    symbols: tuple[SourceGeometry, ...],
     associated_star_ids: frozenset[str],
+    related_star_ids: frozenset[str],
     config: SourceAssociationStyle,
-) -> tuple[float, float, float, float]:
+) -> tuple[float, float, float, float, float, float, str | None]:
     """Score the visual corridor and ownership of a source-to-label pairing."""
+    bounds = candidate.bounds
     own_stars = tuple(star for star in stars if associated_star_ids & star.star_ids)
     own_symbols = tuple(symbol for symbol in symbols if symbol.id == target_source_id)
-    owner_gaps = [
-        circle_rect_edge_distance_mm(source.center, source.radius_mm, bounds)
+    owner_options = [
+        (
+            candidate_star_edge_distance_mm(source, candidate, visible_text=True),
+            star_source_facing_point(
+                source,
+                min(
+                    candidate.glyph_bounds or (bounds,),
+                    key=lambda rect: star_rect_edge_distance_mm(source, rect),
+                ),
+            ),
+        )
         for source in own_stars
-    ] + [_source_rect_edge_distance(source, bounds) for source in own_symbols]
-    owner_gap = min(owner_gaps, default=_point_rect_distance(target_anchor, bounds))
+    ] + [
+        (source_edge_distance(source, bounds), source_facing_point(source, bounds))
+        for source in own_symbols
+    ]
+    owner_gap, corridor_start = min(
+        owner_options,
+        key=lambda item: item[0],
+        default=(_point_rect_distance(target_anchor, bounds), target_anchor),
+    )
     source_distance = max(
         0.0,
         config.preferred_min_gap_mm - owner_gap,
         owner_gap - config.preferred_max_gap_mm,
     )
-    if own_symbols:
-        owner = min(own_symbols, key=lambda source: _source_rect_edge_distance(source, bounds))
-        corridor_start = _source_facing_point(owner, bounds)
-    else:
-        corridor_start = target_anchor
     corridor_end = clamp_point_to_rect(corridor_start, bounds)
-    own_extent = max((source.radius_mm for source in own_symbols), default=0.0)
     corridor = 0.0
     ambiguity = 0.0
+    competing_owner = 0.0
+    competing_owner_id: str | None = None
+    strongest_competitor = 0.0
     foreign_object_proximity = 0.0
     ambiguity_limit = max(0.0, owner_gap) + config.ambiguity_margin_mm
 
     for star in stars:
-        if associated_star_ids & star.star_ids:
+        if related_star_ids & star.star_ids:
             continue
-        if own_symbols and _point_distance(star.center, target_anchor) <= own_extent:
+        if any(
+            source.ignore_interior_stars and source_contains_point(source, star.center)
+            for source in own_symbols
+        ):
             continue
-        importance = min(2.0, max(0.15, star.radius_mm / 0.6))
+        importance = _star_importance(star.radius_mm)
         if _point_segment_distance(star.center, corridor_start, corridor_end) < (
             star.radius_mm + config.corridor_margin_mm
         ):
             corridor += importance
-        gap = circle_rect_edge_distance_mm(star.center, star.radius_mm, bounds)
+        gap = star_rect_edge_distance_mm(star, bounds)
         if gap < ambiguity_limit:
             ambiguity += importance * (ambiguity_limit - gap) / max(
                 config.ambiguity_margin_mm, 1e-9
             )
+        if gap < owner_gap:
+            strength = importance * (owner_gap - gap + config.ambiguity_margin_mm) / max(
+                config.ambiguity_margin_mm, 1e-9
+            )
+            competing_owner += strength
+            if strength > strongest_competitor:
+                strongest_competitor = strength
+                competing_owner_id = star.id
 
     for symbol in symbols:
         if symbol.id == target_source_id:
             continue
         if _point_segment_distance(symbol.center, corridor_start, corridor_end) < (
-            symbol.radius_mm + config.corridor_margin_mm
+            symbol.collision_radius_mm + config.corridor_margin_mm
         ):
             corridor += 1.0
-        gap = _source_rect_edge_distance(symbol, bounds)
+        gap = source_extent_edge_distance(symbol, bounds)
         if gap < ambiguity_limit:
             ambiguity += (ambiguity_limit - gap) / max(config.ambiguity_margin_mm, 1e-9)
+        if gap < owner_gap:
+            strength = (owner_gap - gap + config.ambiguity_margin_mm) / max(
+                config.ambiguity_margin_mm, 1e-9
+            )
+            competing_owner += strength
+            if strength > strongest_competitor:
+                strongest_competitor = strength
+                competing_owner_id = symbol.id
         if gap < config.foreign_object_clear_mm:
             fraction = (config.foreign_object_clear_mm - gap) / config.foreign_object_clear_mm
             foreign_object_proximity += fraction * fraction
-    return source_distance, corridor, ambiguity, foreign_object_proximity
+    return (
+        source_distance,
+        max(0.0, owner_gap),
+        corridor,
+        ambiguity,
+        competing_owner,
+        foreign_object_proximity,
+        competing_owner_id,
+    )
+
+
+def _glyph_proximity_cost(
+    candidate: LabelCandidate,
+    stars: tuple[StarCircle, ...],
+    associated_star_ids: frozenset[str],
+    related_star_ids: frozenset[str],
+    owner_sources: tuple[SourceGeometry, ...],
+    config: SourceAssociationStyle,
+) -> tuple[float, _ClosestForeignStar | None]:
+    if not candidate.glyph_bounds and not candidate.whitespace_bounds:
+        return 0.0, None
+    glyph_left = min(
+        (rect.left_mm for rect in candidate.glyph_bounds),
+        default=candidate.bounds.left_mm,
+    )
+    glyph_right = max(
+        (rect.right_mm for rect in candidate.glyph_bounds), default=candidate.bounds.right_mm
+    )
+    glyph_top = min(
+        (rect.top_mm for rect in candidate.glyph_bounds),
+        default=candidate.bounds.top_mm,
+    )
+    glyph_bottom = max(
+        (rect.bottom_mm for rect in candidate.glyph_bounds), default=candidate.bounds.bottom_mm
+    )
+    total = 0.0
+    closest: _ClosestForeignStar | None = None
+    for star in stars:
+        if related_star_ids & star.star_ids:
+            continue
+        if any(
+            source.ignore_interior_stars and source_contains_point(source, star.center)
+            for source in owner_sources
+        ):
+            continue
+        glyph_distance = min(
+            (
+                star_rect_edge_distance_mm(star, rect)
+                for rect in candidate.glyph_bounds
+            ),
+            default=float("inf"),
+        )
+        whitespace_distance = min(
+            (
+                star_rect_edge_distance_mm(star, rect)
+                for rect in candidate.whitespace_bounds
+            ),
+            default=float("inf"),
+        )
+        nearest = min(glyph_distance, whitespace_distance)
+        if closest is None or nearest < closest.distance_mm:
+            closest = _ClosestForeignStar(star.id, star.radius_mm, nearest)
+        if nearest >= config.glyph_clear_mm:
+            continue
+        fraction = (config.glyph_clear_mm - nearest) / config.glyph_clear_mm
+        factor = config.whitespace_factor if whitespace_distance <= glyph_distance else 1.0
+        if glyph_top <= star.center.y_mm <= glyph_bottom and (
+            star.center.x_mm < glyph_left or star.center.x_mm > glyph_right
+        ):
+            factor *= config.glyph_inline_factor
+        total += _star_importance(star.radius_mm) * factor * fraction * fraction
+    return total, closest
+
+
+def _star_importance(radius_mm: float) -> float:
+    return min(2.0, max(0.15, radius_mm / 0.6))
+
+
+def _circle_facing_point(center: PagePoint, radius_mm: float, rect: PageRect) -> PagePoint:
+    near = clamp_point_to_rect(center, rect)
+    dx = near.x_mm - center.x_mm
+    dy = near.y_mm - center.y_mm
+    length = (dx * dx + dy * dy) ** 0.5
+    if length <= 0.0:
+        return center
+    return PagePoint(
+        center.x_mm + dx / length * radius_mm,
+        center.y_mm + dy / length * radius_mm,
+    )
 
 
 def _point_distance(first: PagePoint, second: PagePoint) -> float:
@@ -323,55 +603,6 @@ def _point_distance(first: PagePoint, second: PagePoint) -> float:
 
 def _point_rect_distance(point: PagePoint, rect: PageRect) -> float:
     return _point_distance(point, clamp_point_to_rect(point, rect))
-
-
-def _source_rect_edge_distance(source: SymbolCircle, rect: PageRect) -> float:
-    if not source.outline_paths:
-        return circle_rect_edge_distance_mm(source.center, source.radius_mm, rect)
-    return min(
-        _segment_rect_distance(start, end, rect)
-        for path in source.outline_paths
-        for start, end in zip(path, path[1:], strict=False)
-    )
-
-
-def _source_facing_point(source: SymbolCircle, rect: PageRect) -> PagePoint:
-    if not source.outline_paths:
-        near = clamp_point_to_rect(source.center, rect)
-        dx = near.x_mm - source.center.x_mm
-        dy = near.y_mm - source.center.y_mm
-        length = (dx * dx + dy * dy) ** 0.5
-        if length <= 0.0:
-            return source.center
-        return PagePoint(
-            source.center.x_mm + dx / length * source.radius_mm,
-            source.center.y_mm + dy / length * source.radius_mm,
-        )
-    target = rect.center
-    return min(
-        (
-            _closest_point_on_segment(target, start, end)
-            for path in source.outline_paths
-            for start, end in zip(path, path[1:], strict=False)
-        ),
-        key=lambda point: _point_distance(point, target),
-    )
-
-
-def _segment_rect_distance(start: PagePoint, end: PagePoint, rect: PageRect) -> float:
-    if segment_intersects_rect(start, end, rect):
-        return 0.0
-    corners = (
-        PagePoint(rect.left_mm, rect.top_mm),
-        PagePoint(rect.right_mm, rect.top_mm),
-        PagePoint(rect.right_mm, rect.bottom_mm),
-        PagePoint(rect.left_mm, rect.bottom_mm),
-    )
-    return min(
-        _point_rect_distance(start, rect),
-        _point_rect_distance(end, rect),
-        *(_point_segment_distance(corner, start, end) for corner in corners),
-    )
 
 
 def _closest_point_on_segment(point: PagePoint, start: PagePoint, end: PagePoint) -> PagePoint:

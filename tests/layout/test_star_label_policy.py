@@ -9,7 +9,9 @@ from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.catalog.star_names import StarName, load_star_names
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.layout.geometry import circle_rect_edge_distance_mm
 from nightsky_atlas.layout.labels import build_star_labels
+from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -89,6 +91,22 @@ def test_bayer_flamsteed_and_tycho_suppression() -> None:
         label_for(998, 4.5, {998: StarName(998, flamsteed="61", constellation="Cyg")}).text == "61"
     )
     assert label_for(997, 4.0, {997: StarName(997, name="Obscure")}) is None
+
+
+def test_star_label_candidates_start_at_configured_own_star_gap() -> None:
+    magnitude = 3.5
+    label = label_for(999, magnitude, {999: StarName(999, bayer="β", constellation="And")})
+    assert label is not None
+    radius_mm = StarSizeModel.from_style(STYLE.star).radius_mm(magnitude)
+    for candidate in label.candidates:
+        if candidate.ring == 0:
+            assert min(
+                circle_rect_edge_distance_mm(TRANSFORM.center_page, radius_mm, glyph)
+                for glyph in candidate.glyph_bounds
+            ) == pytest.approx(
+                STYLE.label.star_clearance.associated.preferred_min_mm,
+                abs=0.01,
+            )
 
 
 def test_obscure_name_does_not_suppress_bayer() -> None:

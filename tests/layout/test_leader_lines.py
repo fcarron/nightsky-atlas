@@ -54,11 +54,12 @@ def test_segment_crossing_ignores_disjoint_collinear_segments() -> None:
 
 
 def make_label(*, ring: int = 2) -> Label:
+    left_mm = 160.0 if ring >= 2 else 151.5
     candidate = LabelCandidate(
         id="label:dso:NGC4486:E:2",
         position=CompassPosition.E,
-        anchor=PagePoint(160.0, 104.0),
-        bounds=PageRect(160.0, 104.0, 8.0, 2.5),
+        anchor=PagePoint(left_mm, 104.0),
+        bounds=PageRect(left_mm, 104.0, 8.0, 2.5),
         ring=ring,
     )
     return Label(
@@ -89,6 +90,19 @@ def test_optimizer_adds_line_only_to_distant_dso_label() -> None:
     assert validate_layout((far,), SCENE, TRANSFORM, STYLE).is_valid
     near = optimize_labels((make_label(ring=0),), SCENE, TRANSFORM, STYLE).labels[0]
     assert not near.leader_line
+
+
+def test_ambiguous_ring_zero_placement_can_use_leader_line() -> None:
+    label = make_label(ring=0)
+    candidate = replace(
+        label.candidates[0],
+        anchor=PagePoint(160.0, 104.0),
+        bounds=PageRect(160.0, 104.0, 8.0, 2.5),
+    )
+    ambiguous = replace(label, candidates=(candidate,), selected_candidate_id=candidate.id)
+    result = optimize_labels((ambiguous,), SCENE, TRANSFORM, STYLE).labels[0]
+    assert result.leader_line
+    assert result.leader_line_reason == "association_ambiguity"
 
 
 def test_optimizer_can_add_line_for_distant_proper_star_name() -> None:
@@ -150,7 +164,7 @@ def test_crossing_another_label_rejects_leader_line() -> None:
 
 
 def test_ai_enable_and_replay_state(tmp_path: Path) -> None:
-    label = make_label(ring=1)
+    label = make_label(ring=2)
     review = ReviewResult.model_validate(
         {
             "page_score": 5.0,

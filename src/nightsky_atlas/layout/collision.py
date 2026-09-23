@@ -15,13 +15,18 @@ from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
-    circle_rect_edge_distance_mm,
     rects_overlap,
 )
 from nightsky_atlas.layout.leader_lines import resolve_leader_lines
 from nightsky_atlas.layout.models import Label, LabelCandidate
-from nightsky_atlas.layout.scoring import foreign_star_hard_min_mm
-from nightsky_atlas.render.double_stars import printed_star_obstacles
+from nightsky_atlas.layout.scoring import (
+    candidate_star_edge_distance_mm,
+    foreign_star_hard_min_mm,
+)
+from nightsky_atlas.render.double_stars import (
+    printed_star_obstacles,
+    related_member_star_ids,
+)
 from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
@@ -213,15 +218,17 @@ def find_hard_violations(
 
     star_obstacles = printed_star_obstacles(scene, transform, style)
     for label, candidate in placed:
+        related_star_ids = related_member_star_ids(label.target_id, star_obstacles)
         for star in star_obstacles:
-            associated = label.target_id in star.star_ids
             hard_min = (
                 style.label.star_clearance.associated.hard_min_mm
-                if associated
-                else foreign_star_hard_min_mm(star.collision_radius_mm, style.label.star_clearance)
+                if related_star_ids & star.star_ids
+                else foreign_star_hard_min_mm(star.radius_mm, style.label.star_clearance)
             )
-            clearance = circle_rect_edge_distance_mm(
-                star.page_point, star.collision_radius_mm, candidate.bounds
+            clearance = candidate_star_edge_distance_mm(
+                star,
+                candidate,
+                visible_text=label.id.startswith("label:star:"),
             )
             if clearance < hard_min:
                 issues.append(

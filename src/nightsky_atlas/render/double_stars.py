@@ -15,7 +15,9 @@ cartographic symbol only and does not represent the real position angle.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Protocol
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PagePoint, PageTransform
@@ -26,8 +28,15 @@ __all__ = [
     "DoubleStarMark",
     "PrintedStarObstacle",
     "printed_star_obstacles",
+    "related_member_star_ids",
     "resolve_double_stars",
+    "source_member_star_ids",
 ]
+
+
+class _SystemLinkedStar(Protocol):
+    star_ids: frozenset[str]
+    system_ids: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +54,7 @@ class DoubleStarMark:
     suppress_star_ids: frozenset[str]
     marker_length_mm: float
     marker_line_width_mm: float
+    system_ids: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +64,24 @@ class PrintedStarObstacle:
     page_point: PagePoint
     magnitude: float
     collision_radius_mm: float
+    disk_radius_mm: float | None = None
+    system_ids: frozenset[str] = frozenset()
+    marker_length_mm: float = 0.0
+    marker_line_width_mm: float = 0.0
+
+    @property
+    def center(self) -> PagePoint:
+        """Alias used by shared rendered-star geometry."""
+        return self.page_point
+
+    @property
+    def radius_mm(self) -> float:
+        """Radius of the painted stellar disk, excluding a double-star marker."""
+        return (
+            self.disk_radius_mm
+            if self.disk_radius_mm is not None
+            else self.collision_radius_mm
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +91,42 @@ class _CollapsedRecord:
     system_id: str
     member_star_ids: frozenset[str]
     combined_magnitude: float | None
+
+
+def source_member_star_ids(
+    target_id: str, obstacles: Iterable[_SystemLinkedStar]
+) -> frozenset[str]:
+    """Return the printed members owned by one component or system target."""
+    entries = tuple(obstacles)
+    direct = tuple(entry for entry in entries if target_id in entry.star_ids)
+    if direct:
+        return frozenset(star_id for entry in direct for star_id in entry.star_ids)
+    return frozenset(
+        star_id
+        for entry in entries
+        if target_id in entry.system_ids
+        for star_id in entry.star_ids
+    )
+
+
+def related_member_star_ids(
+    target_id: str, obstacles: Iterable[_SystemLinkedStar]
+) -> frozenset[str]:
+    """Return semantic companions that must not behave as foreign stars."""
+    entries = tuple(obstacles)
+    direct = tuple(entry for entry in entries if target_id in entry.star_ids)
+    system_ids = (
+        frozenset((target_id,))
+        if any(target_id in entry.system_ids for entry in entries)
+        else frozenset(system_id for entry in direct for system_id in entry.system_ids)
+    )
+    related = frozenset(
+        star_id
+        for entry in entries
+        if system_ids & entry.system_ids
+        for star_id in entry.star_ids
+    )
+    return related or source_member_star_ids(target_id, entries)
 
 
 def _page_distance_mm(a: PagePoint, b: PagePoint) -> float:
@@ -214,6 +278,7 @@ def resolve_double_stars(
         marks.append(
             DoubleStarMark(
                 system_id=entries[0].system_id,
+                system_ids=frozenset(entry.system_id for entry in entries),
                 page_point=page_by_star[anchor_id],
                 magnitude=magnitude,
                 suppress_star_ids=suppress,
@@ -234,13 +299,22 @@ def printed_star_obstacles(
     size_model = StarSizeModel.from_style(style.star)
     marks = resolve_double_stars(scene, transform, style)
     suppressed = frozenset(star_id for mark in marks for star_id in mark.suppress_star_ids)
+    systems_by_star: dict[str, set[str]] = {}
+    for scene_system in scene.star_systems:
+        system = scene_system.system
+        if not system.is_safe_match:
+            continue
+        for star_id in system.linked_star_ids():
+            systems_by_star.setdefault(star_id, set()).add(system.id)
     obstacles = [
         PrintedStarObstacle(
             id=entry.star.id,
             star_ids=frozenset((entry.star.id,)),
+            system_ids=frozenset(systems_by_star.get(entry.star.id, ())),
             page_point=transform.to_page(entry.chart_point),
             magnitude=entry.star.magnitude,
             collision_radius_mm=size_model.radius_mm(entry.star.magnitude),
+            disk_radius_mm=size_model.radius_mm(entry.star.magnitude),
         )
         for entry in scene.stars
         if entry.star.id not in suppressed
@@ -249,12 +323,16 @@ def printed_star_obstacles(
         PrintedStarObstacle(
             id=mark.system_id,
             star_ids=mark.suppress_star_ids,
+            system_ids=mark.system_ids,
             page_point=mark.page_point,
             magnitude=mark.magnitude,
             collision_radius_mm=max(
                 size_model.radius_mm(mark.magnitude),
                 (mark.marker_length_mm + mark.marker_line_width_mm) / 2.0,
             ),
+            disk_radius_mm=size_model.radius_mm(mark.magnitude),
+            marker_length_mm=mark.marker_length_mm,
+            marker_line_width_mm=mark.marker_line_width_mm,
         )
         for mark in marks
     )

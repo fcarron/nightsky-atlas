@@ -18,6 +18,7 @@ gi.require_version("PangoCairo", "1.0")
 
 from gi.repository import Pango, PangoCairo  # noqa: E402
 
+from nightsky_atlas.chart.page import PageRect  # noqa: E402
 from nightsky_atlas.units import pt_to_mm  # noqa: E402
 
 __all__ = [
@@ -58,6 +59,8 @@ class TextMetrics:
 
     width_mm: float
     height_mm: float
+    ink_rects_mm: tuple[PageRect, ...] = ()
+    whitespace_rects_mm: tuple[PageRect, ...] = ()
 
 
 def make_layout(
@@ -233,7 +236,30 @@ class TextMeasurer:
     def measure_mm(self, text: str) -> TextMetrics:
         """Return the logical text extent in millimetres."""
         width_pt, height_pt = self.measure_pt(text)
-        return TextMetrics(width_mm=pt_to_mm(width_pt), height_mm=pt_to_mm(height_pt))
+        byte_to_character: dict[int, str] = {}
+        byte_offset = 0
+        for character in text:
+            byte_to_character[byte_offset] = character
+            byte_offset += len(character.encode("utf-8"))
+        ink_rects: list[PageRect] = []
+        whitespace_rects: list[PageRect] = []
+        iterator = self._layout.get_iter()
+        while True:
+            character = byte_to_character.get(iterator.get_index(), "")
+            if character.isspace():
+                whitespace_rects.append(_pango_rect_mm(iterator.get_char_extents()))
+            else:
+                ink, _logical = iterator.get_cluster_extents()
+                if ink.width > 0 and ink.height > 0:
+                    ink_rects.append(_pango_rect_mm(ink))
+            if not iterator.next_char():
+                break
+        return TextMetrics(
+            width_mm=pt_to_mm(width_pt),
+            height_mm=pt_to_mm(height_pt),
+            ink_rects_mm=tuple(ink_rects),
+            whitespace_rects_mm=tuple(whitespace_rects),
+        )
 
     def measure_markup_mm(self, markup: str) -> TextMetrics:
         """Return the extent of a Pango markup string in millimetres.
@@ -245,3 +271,13 @@ class TextMeasurer:
         self._layout.set_markup(markup, -1)
         width, height = self._layout.get_pixel_size()
         return TextMetrics(width_mm=pt_to_mm(width), height_mm=pt_to_mm(height))
+
+
+def _pango_rect_mm(rect: Pango.Rectangle) -> PageRect:
+    scale = float(Pango.SCALE)
+    return PageRect(
+        left_mm=pt_to_mm(rect.x / scale),
+        top_mm=pt_to_mm(rect.y / scale),
+        width_mm=pt_to_mm(rect.width / scale),
+        height_mm=pt_to_mm(rect.height / scale),
+    )

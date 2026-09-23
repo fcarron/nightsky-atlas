@@ -11,9 +11,14 @@ from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.collision import IssueType, find_hard_violations
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
-from nightsky_atlas.layout.optimizer import _star_circles, _target_anchors
+from nightsky_atlas.layout.optimizer import _star_circles, _target_anchors, optimize_labels
 from nightsky_atlas.projection.base import ChartPoint
-from nightsky_atlas.render.double_stars import printed_star_obstacles, resolve_double_stars
+from nightsky_atlas.render.double_stars import (
+    printed_star_obstacles,
+    related_member_star_ids,
+    resolve_double_stars,
+    source_member_star_ids,
+)
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.models import ChartScene, SceneStar, SceneStarSystem
 
@@ -105,7 +110,8 @@ def test_collapsed_pair_uses_printed_extent_in_optimizer_and_hard_gate() -> None
     assert obstacle.collision_radius_mm > original_radius
     circles = _star_circles(scene, TRANSFORM, STYLE)
     assert len(circles) == 1
-    assert circles[0].radius_mm == obstacle.collision_radius_mm
+    assert circles[0].radius_mm == obstacle.disk_radius_mm
+    assert circles[0].radius_mm < obstacle.collision_radius_mm
     assert _target_anchors((), scene, TRANSFORM, STYLE)["B"] == obstacle.page_point
 
     x = obstacle.page_point.x_mm + (original_radius + obstacle.collision_radius_mm) / 2.0
@@ -125,6 +131,73 @@ def test_collapsed_pair_uses_printed_extent_in_optimizer_and_hard_gate() -> None
 def test_wide_pair_is_left_separate() -> None:
     scene = make_scene(component_eta_deg=0.5)
     assert resolve_double_stars(scene, TRANSFORM, STYLE) == ()
+
+
+def test_resolved_pair_keeps_shared_system_identity_for_layout() -> None:
+    scene = make_scene(component_eta_deg=0.5)
+    obstacles = printed_star_obstacles(scene, TRANSFORM, STYLE)
+    assert {obstacle.id for obstacle in obstacles} == {"A", "B"}
+    assert all(obstacle.system_ids == {"system:wds:CLOSE"} for obstacle in obstacles)
+    assert source_member_star_ids("system:wds:CLOSE", obstacles) == {"A", "B"}
+    assert related_member_star_ids("A", obstacles) == {"A", "B"}
+
+
+def test_double_star_label_diagnostics_distinguish_resolved_and_unresolved_sources() -> None:
+    resolved_scene = make_scene(component_eta_deg=0.5)
+    resolved_primary = next(
+        obstacle
+        for obstacle in printed_star_obstacles(resolved_scene, TRANSFORM, STYLE)
+        if obstacle.id == "A"
+    )
+    resolved_candidate = LabelCandidate(
+        id="label:star:A:W",
+        position=CompassPosition.W,
+        anchor=resolved_primary.page_point,
+        bounds=PageRect(
+            resolved_primary.page_point.x_mm + 2.0,
+            resolved_primary.page_point.y_mm - 1.0,
+            2.0,
+            2.0,
+        ),
+    )
+    resolved_label = Label(
+        id="label:star:A",
+        target_id="A",
+        text="A",
+        priority=50,
+        mandatory=True,
+        candidates=(resolved_candidate,),
+    )
+    resolved = optimize_labels((resolved_label,), resolved_scene, TRANSFORM, STYLE)
+    resolved_diagnostic = resolved.label_diagnostics[resolved_label.id]
+    assert resolved_diagnostic["star_source_type"] == "resolved_double_component"
+    assert resolved_diagnostic["same_system_components_excluded"] is True
+
+    unresolved_scene = make_scene(component_eta_deg=0.01)
+    unresolved_primary = printed_star_obstacles(unresolved_scene, TRANSFORM, STYLE)[0]
+    unresolved_candidate = LabelCandidate(
+        id="label:star:A:N",
+        position=CompassPosition.N,
+        anchor=unresolved_primary.page_point,
+        bounds=PageRect(
+            unresolved_primary.page_point.x_mm + 2.0,
+            unresolved_primary.page_point.y_mm - 1.0,
+            2.0,
+            2.0,
+        ),
+    )
+    unresolved_label = Label(
+        id="label:star:A",
+        target_id="A",
+        text="A",
+        priority=50,
+        mandatory=True,
+        candidates=(unresolved_candidate,),
+    )
+    unresolved = optimize_labels((unresolved_label,), unresolved_scene, TRANSFORM, STYLE)
+    unresolved_diagnostic = unresolved.label_diagnostics[unresolved_label.id]
+    assert unresolved_diagnostic["star_source_type"] == "unresolved_double"
+    assert unresolved_diagnostic["source_envelope_component_count"] == 2.0
 
 
 def test_unsafe_match_never_marks() -> None:

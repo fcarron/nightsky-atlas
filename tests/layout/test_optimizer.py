@@ -10,7 +10,7 @@ from nightsky_atlas.catalog.models import Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
-from nightsky_atlas.layout.optimizer import optimize_labels
+from nightsky_atlas.layout.optimizer import _association_scale, optimize_labels
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
 
@@ -199,6 +199,33 @@ def test_component_totals_are_exposed() -> None:
     result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
     assert "anchor_distance_mm" in result.component_totals_after
     assert "preference_rank" in result.component_totals_after
+
+
+def test_per_label_ownership_diagnostics_are_exposed() -> None:
+    label = make_label(
+        "label:dso:X",
+        (make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0),),
+    )
+    result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
+    diagnostic = result.label_diagnostics[label.id]
+    assert "source_facing_edge_distance_mm" in diagnostic
+    assert "glyph_proximity_cost" in diagnostic
+    assert diagnostic["leader_line_used"] is False
+
+
+def test_only_compact_star_labels_get_stronger_distance_scale() -> None:
+    short_star = replace(
+        make_label(
+            "label:star:short",
+            (make_candidate("label:star:short", CompassPosition.N, 100.0, 100.0),),
+        ),
+        text="47",
+    )
+    named_star = replace(short_star, id="label:star:named", text="Deneb α")
+    short_dso = replace(short_star, id="label:dso:short", text="57")
+    assert _association_scale(short_star, STYLE) > 1.0
+    assert _association_scale(named_star, STYLE) == 1.0
+    assert _association_scale(short_dso, STYLE) == 1.0
 
 
 def test_optimizer_prefers_candidate_with_cleaner_foreign_star_clearance() -> None:
