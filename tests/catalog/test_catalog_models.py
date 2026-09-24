@@ -107,3 +107,30 @@ def test_surface_brightness_requires_magnitude_and_axes(
 def test_dso_serialization_round_trip() -> None:
     dso = make_dso()
     assert DeepSkyObject.from_dict(dso.to_dict()) == dso
+
+
+def test_dso_openngc_photometry_round_trip() -> None:
+    dso = make_dso(
+        b_magnitude=11.5,
+        v_magnitude=10.8,
+        mean_surface_brightness_mag_arcsec2=22.4,
+        hubble_type="Sbc",
+        sources="Type:1|RA:1",
+    )
+    restored = DeepSkyObject.from_dict(dso.to_dict())
+    assert restored == dso
+    assert restored.hubble_type == "Sbc"
+    assert restored.mean_surface_brightness_mag_arcsec2 == pytest.approx(22.4)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"b_magnitude": float("inf")},
+        {"v_magnitude": float("nan")},
+        {"mean_surface_brightness_mag_arcsec2": float("inf")},
+    ],
+)
+def test_non_finite_photometry_rejected(overrides: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        make_dso(**overrides)

@@ -141,8 +141,25 @@ Hipparcos supplement below adds the bright stars it omits.
 | Processed | `data/processed/dso/openngc.json` (13,372 objects) |
 | Manifest | `data/processed/dso/openngc.manifest.json` |
 | License | **CC-BY-SA-4.0** |
-| Transformations | sexagesimal RA/Dec to degrees; V-Mag preferred, B-Mag fallback |
+| Transformations | sexagesimal RA/Dec to degrees; V-Mag preferred, B-Mag fallback; `B-Mag`, `V-Mag`, `SurfBr`, `Hubble` and `Sources` retained for the galaxy visibility model |
 | Import | `nightsky data fetch-openngc` then `nightsky data import-openngc` |
+
+### Galaxy visibility model (derived, not a catalogue)
+
+Galaxy contour weight is derived from the retained OpenNGC photometry and
+morphology by a Crumey-based contrast-threshold model; it is **presentation
+metadata**, not an astronomical fact, and never mutates the normalized
+catalogue.  It is computed once per galaxy and cached.  Full description and
+reference conditions: `docs/GALAXY_VISIBILITY.md`.
+
+| Field | Value |
+| --- | --- |
+| Reference | A. Crumey, *Human Contrast Threshold and Astronomical Visibility*, MNRAS 442, 2600-2619 (2014), https://doi.org/10.1093/mnras/stu992 |
+| Implementation | `nightsky_atlas/catalog/galaxy_visibility.py`; `scipy` (incomplete gamma, root finding) and `numpy` |
+| Inputs used | `Type`, `Name`, `M`, `MajAx`, `MinAx`, `SurfBr`, `B-Mag`, `V-Mag`, `Hubble`, `PosAng`, `Sources` |
+| Output | contour class `bold`/`normal`/`fine`/`dotted`/`unclassified` per galaxy, for 100/200/400 mm |
+| Scope | `Type == "G"` only; `GPair`/`GTrpl`/`GGroup`/`GCl` are not scored as one galaxy |
+| Attribution printed | `Data, credits and licence` page of every atlas |
 
 ### Visual double/multiple stars (overlay)
 

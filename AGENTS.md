@@ -17,6 +17,7 @@
 | `docs/DEVELOPMENT_PLAN.md` | Milestones M0–M20, acceptance criteria, human checkpoints |
 | `docs/STATE.md` | Current progress, frozen geometry, artifacts, open issues |
 | `docs/DATA_SOURCES.md` | Catalogue strategy, storage, licensing, provenance |
+| `docs/GALAXY_VISIBILITY.md` | Crumey-based galaxy visibility model, heuristics, contour classes |
 | `docs/CARTOGRAPHY.md` | Standard page/field/tiling design and coverage |
 | `docs/AI_REVIEW.md` | Review rendering, AI architecture, loop, cost, benchmark |
 | `docs/PERFORMANCE.md` | Catalogue-query benchmarks and storage decisions |

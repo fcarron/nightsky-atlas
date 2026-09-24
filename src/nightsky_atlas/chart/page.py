@@ -14,6 +14,7 @@ default user space.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
@@ -66,16 +67,29 @@ class PageTransform:
 
     chart: ChartDefinition
     page: PageGeometry
+    scale_mm_per_degree: float | None = None
 
     def __post_init__(self) -> None:
         if self.chart.rotation_deg != 0.0:
             raise NotImplementedError(
                 "rotated charts are not implemented yet; rotation_deg must be 0"
             )
+        if self.scale_mm_per_degree is not None:
+            if not math.isfinite(self.scale_mm_per_degree) or self.scale_mm_per_degree <= 0.0:
+                raise ValueError("scale_mm_per_degree must be finite and positive")
+            if (
+                self.chart.width_deg * self.scale_mm_per_degree
+                > self.page.printable_width_mm + _DEFAULT_TOLERANCE_MM
+                or self.chart.height_deg * self.scale_mm_per_degree
+                > self.page.printable_height_mm + _DEFAULT_TOLERANCE_MM
+            ):
+                raise ValueError("configured scale makes the chart field exceed the printable page")
 
     @property
     def mm_per_deg(self) -> float:
-        """Uniform scale that fits the chart field inside the printable area."""
+        """Configured design scale, or the largest scale that fits the page."""
+        if self.scale_mm_per_degree is not None:
+            return self.scale_mm_per_degree
         return min(
             self.page.printable_width_mm / self.chart.width_deg,
             self.page.printable_height_mm / self.chart.height_deg,

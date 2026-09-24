@@ -6,6 +6,9 @@
 
 id: standard
 
+# Normative print scale; the page frame is centered around this exact map field.
+mm_per_degree: 10.0
+
 # Visible edition identity.  Internal ids stay long (standard-068); the printed
 # atlas shows the edition name and short chart code (Standard, S068).
 edition:

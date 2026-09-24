@@ -2,6 +2,7 @@
 extends: standard.yaml
 id: pocket
 edition: {name: Pocket, code: P}
+mm_per_degree: null
 stellar_limit_magnitude: 7.5
 tiling:
   width_deg: 54.0

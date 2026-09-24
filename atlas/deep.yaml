@@ -2,6 +2,7 @@
 extends: standard.yaml
 id: deep
 edition: {name: Deep, code: D}
+mm_per_degree: null
 stellar_limit_magnitude: 10.0
 # Ring tiling as Standard, at half the field: ring spacing 8 deg (Standard 16)
 # and 22 rings from -84 to +84, staggered right ascension and stereographic

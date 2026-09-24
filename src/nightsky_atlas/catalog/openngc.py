@@ -137,6 +137,12 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
         magnitude = _parse_float(row.get("B-Mag"))
         magnitude_band = "B" if magnitude is not None else None
 
+    b_magnitude = _parse_float(row.get("B-Mag"))
+    v_magnitude = _parse_float(row.get("V-Mag"))
+    mean_surface_brightness = _parse_float(row.get("SurfBr"))
+    hubble_type = (row.get("Hubble") or "").strip() or None
+    sources = (row.get("Sources") or "").strip() or None
+
     major = _parse_float(row.get("MajAx"))
     minor = _parse_float(row.get("MinAx"))
     position_angle = _parse_float(row.get("PosAng"))
@@ -156,6 +162,11 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
         provenance=Provenance(catalogue=CATALOGUE, source_id=name, version=None),
         magnitude=magnitude,
         magnitude_band=magnitude_band,
+        b_magnitude=b_magnitude,
+        v_magnitude=v_magnitude,
+        mean_surface_brightness_mag_arcsec2=mean_surface_brightness,
+        hubble_type=hubble_type,
+        sources=sources,
         major_axis_arcmin=major,
         minor_axis_arcmin=minor,
         position_angle_deg=position_angle,

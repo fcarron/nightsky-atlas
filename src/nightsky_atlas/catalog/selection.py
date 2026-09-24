@@ -21,7 +21,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from nightsky_atlas.catalog.models import DeepSkyObject
+from nightsky_atlas.catalog.galaxy_visibility import (
+    GalaxyContourClass,
+    estimate_galaxy_visibility,
+)
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType
 from nightsky_atlas.catalog.observing_lists import dso_memberships
 from nightsky_atlas.catalog.priority import (
     base_label_priority,
@@ -89,6 +93,7 @@ class DsoMetadata:
     forced: bool = False
     visible: bool = True
     visibility_reasons: tuple[str, ...] = ()
+    galaxy_contour_class: GalaxyContourClass | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable mapping of this metadata."""
@@ -103,6 +108,11 @@ class DsoMetadata:
             "forced": self.forced,
             "visible": self.visible,
             "visibility_reasons": list(self.visibility_reasons),
+            "galaxy_contour_class": (
+                self.galaxy_contour_class.value
+                if self.galaxy_contour_class is not None
+                else None
+            ),
         }
 
 
@@ -142,6 +152,12 @@ def select_dso(
     bonus = _membership_bonus(memberships, effective_policy)
     assessment = evaluate_visibility(dso, effective_policy.visibility)
 
+    galaxy_contour_class = (
+        estimate_galaxy_visibility(dso).contour_class
+        if dso.object_type == DsoType.GALAXY
+        else None
+    )
+
     if forced:
         render_priority = effective_policy.forced_render_priority
         label_priority = dso_label_priority(
@@ -167,4 +183,5 @@ def select_dso(
         forced=forced,
         visible=assessment.visible,
         visibility_reasons=assessment.reasons,
+        galaxy_contour_class=galaxy_contour_class,
     )

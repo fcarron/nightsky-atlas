@@ -372,7 +372,11 @@ def build_chart_context(
             observing_index=build_membership_index(observing_lists),
             selection_policy=selection_policy,
         )
-    transform = PageTransform(chart=definition, page=page)
+    transform = PageTransform(
+        chart=definition,
+        page=page,
+        scale_mm_per_degree=atlas.mm_per_degree,
+    )
     return ChartContext(
         atlas=atlas,
         style=style,

@@ -28,6 +28,7 @@ from pydantic import (
     model_validator,
 )
 
+from nightsky_atlas.catalog.galaxy_visibility import GalaxyContourClass
 from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.catalog.visibility import VisibilityLimits
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
@@ -47,6 +48,8 @@ __all__ = [
     "DsoStyle",
     "EditionConfig",
     "FurnitureStyle",
+    "GalaxyContourSet",
+    "GalaxyContourStyle",
     "GridStyle",
     "EclipticStyle",
     "LabelSelectionStyle",
@@ -315,8 +318,25 @@ class AtlasConfig(_StrictModel):
     edition: EditionConfig | None = None
     charts: list[ChartConfig] = Field(default_factory=list)
     tiling: TilingConfig | None = None
+    mm_per_degree: PositiveFloat | None = None
     stellar_limit_magnitude: PositiveFloat | None = None
     visibility: VisibilityConfig = Field(default_factory=VisibilityConfig)
+
+    @model_validator(mode="after")
+    def _configured_scale_fits_page(self) -> AtlasConfig:
+        if self.mm_per_degree is None:
+            return self
+        page = self.page.to_geometry()
+        fields = [(chart.width_deg, chart.height_deg) for chart in self.charts]
+        if self.tiling is not None:
+            fields.append((self.tiling.width_deg, self.tiling.height_deg))
+        for width_deg, height_deg in fields:
+            if (
+                width_deg * self.mm_per_degree > page.printable_width_mm + 1e-9
+                or height_deg * self.mm_per_degree > page.printable_height_mm + 1e-9
+            ):
+                raise ValueError("mm_per_degree makes a chart field exceed the printable page")
+        return self
 
     def resolved_edition(self) -> EditionConfig:
         """Return the visible edition identity, falling back to the registry."""
@@ -621,6 +641,57 @@ def _extent(
     )
 
 
+class GalaxyContourStyle(_StrictModel):
+    """Stroke of a galaxy contour for one visibility class, in millimetres.
+
+    ``dash_mm`` of ``0`` draws a solid contour; a positive value draws a short
+    dash pattern and ``gap_mm`` defaults to ``dash_mm``.  These are print
+    defaults for the Crumey-based galaxy classification: ``dotted`` uses a short
+    dash rather than isolated dots so small galaxy symbols stay visible in the
+    PDF.  ``unclassified`` galaxies keep the neutral deep-sky fallback stroke.
+    """
+
+    line_width_mm: PositiveFloat
+    dash_mm: NonNegativeFloat = 0.0
+    gap_mm: PositiveFloat | None = None
+
+    @model_validator(mode="after")
+    def _gap_requires_dash(self) -> GalaxyContourStyle:
+        if self.gap_mm is not None and self.dash_mm <= 0.0:
+            raise ValueError("gap_mm requires a positive dash_mm")
+        return self
+
+
+class GalaxyContourSet(_StrictModel):
+    """Per-class galaxy contour strokes for the Crumey visibility classes."""
+
+    bold: GalaxyContourStyle = Field(
+        default_factory=lambda: GalaxyContourStyle(line_width_mm=0.176)
+    )
+    normal: GalaxyContourStyle = Field(
+        default_factory=lambda: GalaxyContourStyle(line_width_mm=0.106)
+    )
+    fine: GalaxyContourStyle = Field(
+        default_factory=lambda: GalaxyContourStyle(line_width_mm=0.071)
+    )
+    dotted: GalaxyContourStyle = Field(
+        default_factory=lambda: GalaxyContourStyle(
+            line_width_mm=0.088, dash_mm=0.4, gap_mm=0.35
+        )
+    )
+
+    def for_class(self, contour_class: GalaxyContourClass | None) -> GalaxyContourStyle | None:
+        """Return the stroke for a contour class, or ``None`` for the fallback."""
+        if contour_class is None or contour_class == GalaxyContourClass.UNCLASSIFIED:
+            return None
+        return {
+            GalaxyContourClass.BOLD: self.bold,
+            GalaxyContourClass.NORMAL: self.normal,
+            GalaxyContourClass.FINE: self.fine,
+            GalaxyContourClass.DOTTED: self.dotted,
+        }[contour_class]
+
+
 class DsoStyle(_StrictModel):
     """Deep-sky symbol appearance, in millimetres.
 
@@ -685,6 +756,7 @@ class DsoStyle(_StrictModel):
     other: DsoExtentStyle = Field(
         default_factory=lambda: _extent(fallback_diameter_mm=1.4, min_diameter_mm=1.0)
     )
+    galaxy_contours: GalaxyContourSet = Field(default_factory=GalaxyContourSet)
 
     @field_validator("bold_line_width_mm")
     @classmethod

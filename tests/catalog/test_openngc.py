@@ -30,6 +30,9 @@ def base_row(**overrides: str) -> dict[str, str]:
         "PosAng": "35",
         "B-Mag": "4.29",
         "V-Mag": "3.44",
+        "SurfBr": "22.5",
+        "Hubble": "Sb",
+        "Sources": "Type:1|RA:1|Dec:1",
         "M": "031",
         "Identifiers": "2MASX J00424433+4116074, UGC 00454",
         "Common names": "Andromeda Galaxy",
@@ -47,6 +50,11 @@ def test_parse_galaxy_row() -> None:
     assert obj.dec_deg == pytest.approx(41.2690556, abs=1e-6)
     assert obj.magnitude == pytest.approx(3.44)
     assert obj.magnitude_band == "V"
+    assert obj.b_magnitude == pytest.approx(4.29)
+    assert obj.v_magnitude == pytest.approx(3.44)
+    assert obj.mean_surface_brightness_mag_arcsec2 == pytest.approx(22.5)
+    assert obj.hubble_type == "Sb"
+    assert obj.sources == "Type:1|RA:1|Dec:1"
     assert obj.major_axis_arcmin == pytest.approx(177.83)
     assert obj.minor_axis_arcmin == pytest.approx(69.66)
     assert obj.position_angle_deg == pytest.approx(35.0)
@@ -64,10 +72,25 @@ def test_magnitude_falls_back_to_b_band() -> None:
 
 
 def test_missing_optional_fields_are_none() -> None:
-    blank = {"V-Mag": "", "B-Mag": "", "MajAx": "", "MinAx": "", "PosAng": "", "Common names": ""}
+    blank = {
+        "V-Mag": "",
+        "B-Mag": "",
+        "SurfBr": "",
+        "Hubble": "",
+        "Sources": "",
+        "MajAx": "",
+        "MinAx": "",
+        "PosAng": "",
+        "Common names": "",
+    }
     obj = parse_openngc_row(base_row(**blank))
     assert obj is not None
     assert obj.magnitude is None
+    assert obj.b_magnitude is None
+    assert obj.v_magnitude is None
+    assert obj.mean_surface_brightness_mag_arcsec2 is None
+    assert obj.hubble_type is None
+    assert obj.sources is None
     assert obj.major_axis_arcmin is None
     assert obj.minor_axis_arcmin is None
     assert obj.position_angle_deg is None

@@ -15,9 +15,11 @@ import pytest
 
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.constellations import ConstellationSegment
+from nightsky_atlas.catalog.galaxy_visibility import GalaxyContourClass
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.sample import load_sample_stars
+from nightsky_atlas.catalog.selection import DsoMetadata
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.layout.models import Label
@@ -25,6 +27,7 @@ from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.cairo import (
     _bold_symbol_ids,
     _draw_outlines,
+    _dso_contour,
     _dso_line_width_mm,
     _dso_overlaps_bright_star,
     _foreground_close_stars,
@@ -39,7 +42,7 @@ from nightsky_atlas.render.cairo import (
 from nightsky_atlas.render.double_stars import DoubleStarMark
 from nightsky_atlas.render.symbols import DsoShape, StarSizeModel, dso_symbol_extent
 from nightsky_atlas.scene.builder import build_scene, build_star_scene
-from nightsky_atlas.scene.models import ChartScene, SceneStar
+from nightsky_atlas.scene.models import ChartScene, SceneDso, SceneStar
 from nightsky_atlas.units import mm_to_pt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -495,3 +498,68 @@ def test_star_and_double_star_marker_get_one_deterministic_halo() -> None:
     expected = (transform.to_page(ChartPoint(0.0, 0.0)), size_model.radius_mm(6.0))
     assert foreground_stars == (expected,)
     assert foreground_marks == ()
+
+
+def _scene_dso(
+    contour_class: GalaxyContourClass | None,
+    *,
+    object_type: DsoType = DsoType.GALAXY,
+) -> SceneDso:
+    dso = DeepSkyObject(
+        id="NGC0001",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=object_type,
+        provenance=Provenance("TEST", "NGC0001"),
+        major_axis_arcmin=2.0,
+        minor_axis_arcmin=1.0,
+    )
+    metadata = DsoMetadata(dso_id=dso.id, galaxy_contour_class=contour_class)
+    return SceneDso(dso=dso, chart_point=ChartPoint(0.0, 0.0), metadata=metadata)
+
+
+def test_galaxy_contour_uses_visibility_class() -> None:
+    width, dash = _dso_contour(
+        _scene_dso(GalaxyContourClass.FINE), STYLE, frozenset()
+    )
+    assert width == pytest.approx(STYLE.dso.galaxy_contours.fine.line_width_mm)
+    assert dash is None
+
+    dotted = STYLE.dso.galaxy_contours.dotted
+    width, dash = _dso_contour(
+        _scene_dso(GalaxyContourClass.DOTTED), STYLE, frozenset()
+    )
+    assert width == pytest.approx(dotted.line_width_mm)
+    assert dash == (dotted.dash_mm, dotted.gap_mm)
+
+
+def test_unclassified_and_non_galaxy_fall_back_to_label_weight() -> None:
+    width, dash = _dso_contour(
+        _scene_dso(GalaxyContourClass.UNCLASSIFIED), STYLE, frozenset({"NGC0001"})
+    )
+    assert width == pytest.approx(STYLE.dso.bold_line_width_mm)
+    assert dash is None
+
+    width, _ = _dso_contour(
+        _scene_dso(None, object_type=DsoType.OPEN_CLUSTER),
+        STYLE,
+        frozenset({"NGC0001"}),
+    )
+    assert width == pytest.approx(STYLE.dso.bold_line_width_mm)
+
+
+def test_galaxy_without_metadata_keeps_neutral_width() -> None:
+    dso = DeepSkyObject(
+        id="NGC0002",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance("TEST", "NGC0002"),
+        major_axis_arcmin=2.0,
+        minor_axis_arcmin=1.0,
+    )
+    width, dash = _dso_contour(
+        SceneDso(dso=dso, chart_point=ChartPoint(0.0, 0.0)), STYLE, frozenset()
+    )
+    assert width == pytest.approx(STYLE.dso.line_width_mm)
+    assert dash is None

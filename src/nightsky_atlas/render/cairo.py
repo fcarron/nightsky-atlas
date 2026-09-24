@@ -18,6 +18,7 @@ from pathlib import Path
 import cairo
 
 from nightsky_atlas.atlas.config import StyleConfig
+from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.chart.presentation import (
@@ -52,6 +53,7 @@ from nightsky_atlas.units import mm_to_pt
 __all__ = [
     "DebugOptions",
     "draw_dso_symbol",
+    "draw_star_disk",
     "draw_chart_page",
     "render_chart",
     "render_magnitude_scale",
@@ -396,9 +398,12 @@ def _draw_stars(
         if scene_star.star.id in suppressed:
             continue
         point = transform.to_page(scene_star.chart_point)
-        radius = mm_to_pt(size_model.radius_mm(scene_star.star.magnitude))
-        cr.arc(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm), radius, 0.0, 2.0 * math.pi)
-        cr.fill()
+        draw_star_disk(
+            cr,
+            point.x_mm,
+            point.y_mm,
+            size_model.diameter_mm(scene_star.star.magnitude),
+        )
 
     for mark in marks:
         _draw_double_star_mark(cr, mark, size_model)
@@ -566,6 +571,25 @@ def _draw_stars_over_dso_symbols(
     cr.restore()
 
 
+def draw_star_disk(
+    cr: cairo.Context[cairo.Surface],
+    x_mm: float,
+    y_mm: float,
+    diameter_mm: float,
+) -> None:
+    """Draw the circular stellar disk used by charts and the Field Guide."""
+    cr.set_source_rgb(0.0, 0.0, 0.0)
+    cr.new_path()
+    cr.arc(
+        mm_to_pt(x_mm),
+        mm_to_pt(y_mm),
+        mm_to_pt(diameter_mm / 2.0),
+        0.0,
+        2.0 * math.pi,
+    )
+    cr.fill()
+
+
 def _foreground_double_star_marks(
     marks: tuple[DoubleStarMark, ...], size_model: StarSizeModel
 ) -> tuple[DoubleStarMark, ...]:
@@ -639,6 +663,7 @@ def _draw_double_star_mark(
     knockout_mm: float = 0.0,
 ) -> None:
     """Draw one collapsed double star: symbol plus a short horizontal marker."""
+    cr.new_path()
     x = mm_to_pt(mark.page_point.x_mm)
     y = mm_to_pt(mark.page_point.y_mm)
     radius = mm_to_pt(size_model.radius_mm(mark.magnitude))
@@ -653,9 +678,11 @@ def _draw_double_star_mark(
         cr.line_to(x + half_length + knockout_pt, y)
         cr.stroke()
     cr.set_source_rgb(0.0, 0.0, 0.0)
+    cr.new_path()
     cr.arc(x, y, radius, 0.0, 2.0 * math.pi)
     cr.fill()
     cr.set_line_width(mm_to_pt(mark.marker_line_width_mm))
+    cr.new_path()
     cr.move_to(x - half_length, y)
     cr.line_to(x + half_length, y)
     cr.stroke()
@@ -669,6 +696,32 @@ def _bold_symbol_ids(labels: Iterable[Label]) -> frozenset[str]:
 def _dso_line_width_mm(style: StyleConfig, *, bold: bool) -> float:
     """Return the deep-sky symbol stroke width for a bold or ordinary object."""
     return style.dso.bold_line_width_mm if bold else style.dso.line_width_mm
+
+
+def _dso_contour(
+    scene_dso: SceneDso,
+    style: StyleConfig,
+    bold_symbol_ids: frozenset[str],
+) -> tuple[float, tuple[float, float] | None]:
+    """Return the stroke width and optional dash pattern for one DSO symbol.
+
+    Galaxies use the Crumey visibility contour class when it is present in the
+    layout metadata: the class sets the stroke weight independently of the label
+    hierarchy, so a galaxy may have a bold label but a fine contour.  Every
+    other object keeps the existing bold-label stroke rule.
+    """
+    dso = scene_dso.dso
+    metadata = scene_dso.metadata
+    if dso.object_type == DsoType.GALAXY and metadata is not None:
+        contour = style.dso.galaxy_contours.for_class(metadata.galaxy_contour_class)
+        if contour is not None:
+            dash = (
+                (contour.dash_mm, contour.gap_mm or contour.dash_mm)
+                if contour.dash_mm > 0.0
+                else None
+            )
+            return contour.line_width_mm, dash
+    return _dso_line_width_mm(style, bold=dso.id in bold_symbol_ids), None
 
 
 def _draw_dsos(
@@ -693,8 +746,12 @@ def _draw_dsos(
         if not scene_dso.symbol_visible:
             continue
         dso = scene_dso.dso
-        bold = dso.id in bold_symbol_ids
-        cr.set_line_width(mm_to_pt(_dso_line_width_mm(style, bold=bold)))
+        width_mm, dash = _dso_contour(scene_dso, style, bold_symbol_ids)
+        cr.set_line_width(mm_to_pt(width_mm))
+        if dash is not None:
+            cr.set_dash([mm_to_pt(dash[0]), mm_to_pt(dash[1])], 0.0)
+        else:
+            cr.set_dash([], 0.0)
         point = transform.to_page(scene_dso.chart_point)
         extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
         if _dso_overlaps_bright_star(scene_dso, scene, transform, size_model, extent, style):

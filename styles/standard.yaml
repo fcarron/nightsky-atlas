@@ -147,6 +147,17 @@ dso:
   other:
     fallback_diameter_mm: 1.4
     min_diameter_mm: 1.0
+  # Galaxy contour stroke by Crumey visibility class (see
+  # docs/GALAXY_VISIBILITY.md).  The class sets the contour weight
+  # independently of the label hierarchy: a galaxy may carry a bold Herschel
+  # 400 label and still print a fine contour.  `dotted` uses a short dash
+  # rather than isolated dots so small symbols stay visible in the PDF;
+  # `unclassified` keeps the neutral `line_width_mm` fallback above.
+  galaxy_contours:
+    bold: {line_width_mm: 0.176}
+    normal: {line_width_mm: 0.106}
+    fine: {line_width_mm: 0.071}
+    dotted: {line_width_mm: 0.088, dash_mm: 0.4, gap_mm: 0.35}
 
 # Visual double/multiple stars (WDS overlay).  A pair is drawn as one symbol
 # plus a short horizontal marker only when its components cannot be separated on

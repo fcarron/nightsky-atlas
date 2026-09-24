@@ -122,6 +122,11 @@ class DeepSkyObject:
     provenance: Provenance
     magnitude: float | None = None
     magnitude_band: str | None = None
+    b_magnitude: float | None = None
+    v_magnitude: float | None = None
+    mean_surface_brightness_mag_arcsec2: float | None = None
+    hubble_type: str | None = None
+    sources: str | None = None
     major_axis_arcmin: float | None = None
     minor_axis_arcmin: float | None = None
     position_angle_deg: float | None = None
@@ -142,6 +147,14 @@ class DeepSkyObject:
         if not -90.0 <= self.dec_deg <= 90.0:
             raise ValueError(f"dec_deg must be within [-90, 90], got {self.dec_deg!r}")
         for name in ("major_axis_arcmin", "minor_axis_arcmin", "position_angle_deg"):
+            value = getattr(self, name)
+            if value is not None and not math.isfinite(value):
+                raise ValueError(f"{name} must be finite when present")
+        for name in (
+            "b_magnitude",
+            "v_magnitude",
+            "mean_surface_brightness_mag_arcsec2",
+        ):
             value = getattr(self, name)
             if value is not None and not math.isfinite(value):
                 raise ValueError(f"{name} must be finite when present")

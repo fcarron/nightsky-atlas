@@ -238,7 +238,11 @@ def _draw_front_matter_pages(
     """Write the compact field guide and provenance page."""
     page = atlas.page.to_geometry()
     family = style.label.font_family
-    mm_per_degree = PageTransform(scale_chart, page).mm_per_deg
+    mm_per_degree = PageTransform(
+        scale_chart,
+        page,
+        scale_mm_per_degree=atlas.mm_per_degree,
+    ).mm_per_deg
     draw_field_guide(cr, atlas, style, chart_count, mm_per_degree)
     surface.show_page()
 
@@ -275,6 +279,19 @@ def _draw_front_matter_pages(
         credits.append(f"Star names: {geometry_inputs['star_names']}.")
     if geometry_catalogues["outlines"]:
         credits.append(f"Nebula outlines: {', '.join(geometry_catalogues['outlines'])}.")
+    credits.append("GALAXY VISIBILITY MODEL")
+    credits.append(
+        "Galaxy contour weight after A. Crumey, MNRAS 442, 2600 (2014) "
+        "(contrast threshold for extended objects)."
+    )
+    credits.append(
+        "Reference conditions: sky 21.5 mag/arcsec^2, transmission 0.75, eye pupil 7 mm; "
+        "100/200/400 mm apertures."
+    )
+    credits.append(
+        "The contour class is an atlas aid for integrated light, not a guarantee of a "
+        "visual detection."
+    )
     credits.extend(
         (
             "PROJECT",
@@ -283,7 +300,12 @@ def _draw_front_matter_pages(
         )
     )
     for index, line in enumerate(credits):
-        is_heading = line in {"CATALOGUES USED", "CONSTELLATIONS AND NAMES", "PROJECT"}
+        is_heading = line in {
+            "CATALOGUES USED",
+            "CONSTELLATIONS AND NAMES",
+            "GALAXY VISIBILITY MODEL",
+            "PROJECT",
+        }
         draw_text(
             cr,
             line,
