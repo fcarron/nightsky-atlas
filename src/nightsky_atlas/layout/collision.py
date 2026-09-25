@@ -24,6 +24,10 @@ from nightsky_atlas.layout.scoring import (
     candidate_star_edge_distance_mm,
     foreign_star_hard_min_mm,
 )
+from nightsky_atlas.layout.text_geometry import (
+    candidate_ink_bounds,
+    label_collision_bounds,
+)
 from nightsky_atlas.render.double_stars import (
     printed_star_obstacles,
     related_member_star_ids,
@@ -207,7 +211,17 @@ def find_hard_violations(
 
     for index, (label_a, candidate_a) in enumerate(placed):
         for label_b, candidate_b in placed[index + 1 :]:
-            if rects_overlap(candidate_a.bounds, candidate_b.bounds):
+            first_bounds = label_collision_bounds(
+                label_a,
+                candidate_a,
+                ink_clearance_mm=style.label.dso_placement.label_label_ink_clearance_mm,
+            )
+            second_bounds = label_collision_bounds(
+                label_b,
+                candidate_b,
+                ink_clearance_mm=style.label.dso_placement.label_label_ink_clearance_mm,
+            )
+            if rects_overlap(first_bounds, second_bounds):
                 issues.append(
                     _issue(
                         IssueType.LABEL_LABEL,
@@ -229,7 +243,7 @@ def find_hard_violations(
             clearance = candidate_star_edge_distance_mm(
                 star,
                 candidate,
-                visible_text=label.id.startswith("label:star:"),
+                visible_text=label.id.startswith(("label:star:", "label:dso:")),
             )
             if clearance < hard_min:
                 issues.append(
@@ -240,12 +254,17 @@ def find_hard_violations(
                     )
                 )
 
+        visible_bounds = (
+            candidate_ink_bounds(candidate)
+            if label.id.startswith("label:dso:")
+            else candidate.bounds
+        )
         for source in dso_sources:
             if not circle_intersects_rect(
-                source.center, source.collision_radius_mm, candidate.bounds
+                source.center, source.collision_radius_mm, visible_bounds
             ):
                 continue
-            if source_edge_distance(source, candidate.bounds) <= 0.0:
+            if source_edge_distance(source, visible_bounds) <= 0.0:
                 issues.append(
                     _issue(
                         IssueType.LABEL_DSO,

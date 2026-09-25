@@ -15,6 +15,7 @@ from nightsky_atlas.catalog.selection import SelectionPolicy
 from nightsky_atlas.catalog.star_names import StarName
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.layout.association import dso_source_geometries, source_edge_distance
 from nightsky_atlas.layout.labels import (
     build_constellation_labels,
     build_dso_labels,
@@ -24,6 +25,7 @@ from nightsky_atlas.layout.labels import (
     label_priority,
 )
 from nightsky_atlas.layout.selection import select_labels
+from nightsky_atlas.layout.text_geometry import candidate_ink_bounds
 from nightsky_atlas.scene.builder import build_scene
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -120,6 +122,17 @@ def test_build_dso_labels() -> None:
     assert ordinary.font_weight == "normal"
     assert ordinary.font_size_pt == pytest.approx(STYLE.label.dso_labels.normal_size_pt)
     assert ordinary.selected_candidate_id == ordinary.candidates[0].id
+
+
+def test_dso_candidate_edge_gap_is_measured_from_visible_glyph_ink() -> None:
+    dso = make_dso("NGC4565")
+    scene = build_scene(CHART, (), (dso,))
+    transform = PageTransform(chart=CHART, page=PAGE)
+    label = build_dso_labels(scene, transform, STYLE)[0]
+    source = dso_source_geometries(scene, transform, STYLE)[0]
+
+    visible_bounds = candidate_ink_bounds(label.candidates[0])
+    assert source_edge_distance(source, visible_bounds) == pytest.approx(0.35, abs=0.001)
 
 
 def make_star(star_id: str, magnitude: float, *, hip_id: str | None) -> Star:

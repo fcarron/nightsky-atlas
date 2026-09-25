@@ -16,6 +16,7 @@ from nightsky_atlas.layout.geometry import (
 )
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.scoring import star_rect_edge_distance_mm, star_source_facing_point
+from nightsky_atlas.layout.text_geometry import candidate_ink_bounds
 from nightsky_atlas.render.double_stars import printed_star_obstacles, related_member_star_ids
 from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
@@ -74,8 +75,13 @@ def leader_line_for(
         key=lambda obstacle: star_rect_edge_distance_mm(obstacle, candidate.bounds),
         default=None,
     )
+    label_bounds = (
+        candidate_ink_bounds(candidate)
+        if label.id.startswith("label:dso:")
+        else candidate.bounds
+    )
     if dso_target is not None:
-        source_point = source_facing_point(dso_target, candidate.bounds)
+        source_point = source_facing_point(dso_target, label_bounds)
         anchor = source_point
         source_offset = config.symbol_gap_mm
     elif star_target is not None:
@@ -83,7 +89,7 @@ def leader_line_for(
         source_offset = config.symbol_gap_mm
     else:
         return None
-    near = clamp_point_to_rect(anchor, candidate.bounds)
+    near = clamp_point_to_rect(anchor, label_bounds)
     dx = near.x_mm - anchor.x_mm
     dy = near.y_mm - anchor.y_mm
     distance = math.hypot(dx, dy)

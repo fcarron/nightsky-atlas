@@ -43,6 +43,10 @@ from nightsky_atlas.layout.scoring import (
     star_source_bounds,
 )
 from nightsky_atlas.layout.spatial import RectIndex
+from nightsky_atlas.layout.text_geometry import (
+    candidate_ink_bounds,
+    label_collision_bounds,
+)
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.double_stars import (
     printed_star_obstacles,
@@ -163,6 +167,28 @@ def _symbol_bounds(symbol: SymbolCircle) -> PageRect:
         width_mm=2.0 * symbol.radius_mm,
         height_mm=2.0 * symbol.radius_mm,
     )
+
+
+def _collision_bounds(
+    label: Label, candidate: LabelCandidate, style: StyleConfig
+) -> PageRect:
+    return label_collision_bounds(
+        label,
+        candidate,
+        ink_clearance_mm=style.label.dso_placement.label_label_ink_clearance_mm,
+    )
+
+
+def _labels_overlap(
+    first: Label,
+    first_candidate: LabelCandidate,
+    second: Label,
+    second_candidate: LabelCandidate,
+    style: StyleConfig,
+) -> bool:
+    first_bounds = _collision_bounds(first, first_candidate, style)
+    second_bounds = _collision_bounds(second, second_candidate, style)
+    return rects_overlap(first_bounds, second_bounds)
 
 
 def _build_symbol_index(symbols: tuple[SymbolCircle, ...]) -> RectIndex[SymbolCircle]:
@@ -349,6 +375,7 @@ def _is_valid(
     source_geometries: tuple[SourceGeometry, ...] | None = None,
 ) -> bool:
     bounds = candidate.bounds
+    collision_bounds = _collision_bounds(label, candidate, style)
     if (
         bounds.left_mm < printable.left_mm
         or bounds.top_mm < printable.top_mm
@@ -356,25 +383,31 @@ def _is_valid(
         or bounds.bottom_mm > printable.bottom_mm
     ):
         return False
-    if any(rects_overlap(bounds, other) for other in placed_bounds):
+    if any(rects_overlap(collision_bounds, other) for other in placed_bounds):
         return False
     if any(rects_overlap(bounds, obstacle) for obstacle in furniture):
         return False
     nearby_source_ids = {symbol.id for symbol in symbols}
+    source_bounds = (
+        candidate_ink_bounds(candidate) if label.id.startswith("label:dso:") else bounds
+    )
     if source_geometries is None:
         if any(
-            circle_intersects_rect(symbol.center, symbol.radius_mm, bounds)
+            circle_intersects_rect(symbol.center, symbol.radius_mm, source_bounds)
             for symbol in symbols
         ):
             return False
-    elif any(
-        source.id in nearby_source_ids and source_edge_distance(source, bounds) <= 0.0
-        for source in source_geometries
-    ):
-        return False
+    else:
+        source_conflict = any(
+            source.id in nearby_source_ids
+            and source_edge_distance(source, source_bounds) <= 0.0
+            for source in source_geometries
+        )
+        if source_conflict:
+            return False
     if label.id.startswith("label:dso:") and source_geometries is not None:
         _, _, _, wrong_owner = _ownership_result(
-            label, bounds, source_geometries, style
+            label, candidate_ink_bounds(candidate), source_geometries, style
         )
         if wrong_owner:
             return False
@@ -384,7 +417,9 @@ def _is_valid(
             related & star.star_ids
         ) else foreign_star_hard_min_mm(star.radius_mm, style.label.star_clearance)
         if candidate_star_edge_distance_mm(
-            star, candidate, visible_text=label.id.startswith("label:star:")
+            star,
+            candidate,
+            visible_text=label.id.startswith(("label:star:", "label:dso:")),
         ) < hard_min:
             return False
     return True
@@ -409,7 +444,9 @@ def _association_source_id(label: Label) -> str | None:
     return None
 
 
-def _dso_conflict_components(labels: tuple[Label, ...]) -> tuple[tuple[str, ...], ...]:
+def _dso_conflict_components(
+    labels: tuple[Label, ...], style: StyleConfig
+) -> tuple[tuple[str, ...], ...]:
     """Connect DSO labels whose legal candidate regions can compete for space."""
     dso_labels = tuple(sorted(
         (label for label in labels if label.id.startswith("label:dso:")),
@@ -420,14 +457,15 @@ def _dso_conflict_components(labels: tuple[Label, ...]) -> tuple[tuple[str, ...]
     sequence = 0
     for label in dso_labels:
         for candidate in label.candidates:
-            for other_id, other_bounds in index.query(candidate.bounds):
-                if other_id != label.id and rects_overlap(candidate.bounds, other_bounds):
+            bounds = _collision_bounds(label, candidate, style)
+            for other_id, other_bounds in index.query(bounds):
+                if other_id != label.id and rects_overlap(bounds, other_bounds):
                     adjacency[label.id].add(other_id)
                     adjacency[other_id].add(label.id)
             index.set(
                 f"candidate:{sequence}",
-                candidate.bounds,
-                (label.id, candidate.bounds),
+                bounds,
+                (label.id, bounds),
             )
             sequence += 1
     components: list[tuple[str, ...]] = []
@@ -469,7 +507,11 @@ def _joint_component_search(
         key=lambda label: (-label.priority, label.id),
     ))
     fixed_bounds = tuple(
-        labels_by_id[label_id].candidate(candidate_id).bounds
+        _collision_bounds(
+            labels_by_id[label_id],
+            labels_by_id[label_id].candidate(candidate_id),
+            style,
+        )
         for label_id, candidate_id in placements.items()
         if label_id not in component_set
         and candidate_id is not None
@@ -483,7 +525,11 @@ def _joint_component_search(
         expanded: list[tuple[int, float, tuple[str, ...]]] = []
         for hard_count, total_cost, assignment in beam:
             assigned_bounds = tuple(
-                labels_by_id[previous.id].candidate(candidate_id).bounds
+                _collision_bounds(
+                    previous,
+                    previous.candidate(candidate_id),
+                    style,
+                )
                 for previous, candidate_id in zip(ordered, assignment, strict=False)
             )
             occupied = fixed_bounds + assigned_bounds
@@ -569,7 +615,7 @@ def _joint_dso_optimize(
     bounded fallback and does not alter the selected label set.
     """
     labels_by_id = {label.id: label for label in labels}
-    components = _dso_conflict_components(labels)
+    components = _dso_conflict_components(labels, style)
     stats: dict[str, Any] = {
         "component_count": len(components),
         "component_sizes": [len(component) for component in components],
@@ -627,7 +673,8 @@ def _joint_dso_optimize(
             label = labels_by_id[label_id]
             candidate = label.candidate(candidate_id)
             if candidate is not None:
-                placed_index.set(label_id, candidate.bounds, candidate.bounds)
+                bounds = _collision_bounds(label, candidate, style)
+                placed_index.set(label_id, bounds, bounds)
     return placements, stats
 
 
@@ -668,13 +715,18 @@ def _repair_dso_hard_conflicts(
         )
 
     def source_conflicts(label: Label, candidate: LabelCandidate) -> bool:
-        nearby_ids = {symbol.id for symbol in symbols_index.query(candidate.bounds)}
+        source_bounds = (
+            candidate_ink_bounds(candidate)
+            if label.id.startswith("label:dso:")
+            else candidate.bounds
+        )
+        nearby_ids = {symbol.id for symbol in symbols_index.query(source_bounds)}
         return any(
             source.id in nearby_ids
             and circle_intersects_rect(
-                source.center, source.collision_radius_mm, candidate.bounds
+                source.center, source.collision_radius_mm, source_bounds
             )
-            and source_edge_distance(source, candidate.bounds) <= 0.0
+            and source_edge_distance(source, source_bounds) <= 0.0
             for source in sources
         )
 
@@ -727,7 +779,7 @@ def _repair_dso_hard_conflicts(
             for second, second_candidate in placed[index + 1 :]
             if first_candidate is not None
             and second_candidate is not None
-            and rects_overlap(first_candidate.bounds, second_candidate.bounds)
+            and _labels_overlap(first, first_candidate, second, second_candidate, style)
         }
         page_issues = sum(
             1
@@ -744,14 +796,19 @@ def _repair_dso_hard_conflicts(
         for label, candidate in placed:
             if candidate is None:
                 continue
-            nearby_ids = {symbol.id for symbol in symbols_index.query(candidate.bounds)}
+            visible_bounds = (
+                candidate_ink_bounds(candidate)
+                if label.id.startswith("label:dso:")
+                else candidate.bounds
+            )
+            nearby_ids = {symbol.id for symbol in symbols_index.query(visible_bounds)}
             for source in sources:
                 if (
                     source.id in nearby_ids
                     and circle_intersects_rect(
-                        source.center, source.collision_radius_mm, candidate.bounds
+                        source.center, source.collision_radius_mm, visible_bounds
                     )
-                    and source_edge_distance(source, candidate.bounds) <= 0.0
+                    and source_edge_distance(source, visible_bounds) <= 0.0
                 ):
                     dso_pairs.add((label.id, source.id))
         return len(label_pairs) + len(dso_pairs) + page_issues
@@ -778,7 +835,7 @@ def _repair_dso_hard_conflicts(
                 if (
                     second_candidate is not None
                     and second.id.startswith("label:dso:")
-                    and rects_overlap(first_candidate.bounds, second_candidate.bounds)
+                    and _labels_overlap(first, first_candidate, second, second_candidate, style)
                 ):
                     seeds.add(tuple(sorted((first.id, second.id))))
         return sorted(seeds)
@@ -811,8 +868,12 @@ def _repair_dso_hard_conflicts(
                         other.id
                         for other in outside
                         if other.effective_candidate() is not None
-                        and rects_overlap(
-                            candidate.bounds, other.effective_candidate().bounds
+                        and _labels_overlap(
+                            label,
+                            candidate,
+                            other,
+                            other.effective_candidate(),
+                            style,
                         )
                         and not other.locked
                     ))
@@ -860,7 +921,7 @@ def _repair_dso_hard_conflicts(
         )
         if not source_conflicts(label, current) and not current_outside:
             continue
-        index = _build_placed_index(current_labels())
+        index = _build_placed_index(current_labels(), style)
         choices = legal_candidates(label, index)
         if choices:
             placements[label.id] = choices[0][1]
@@ -882,8 +943,8 @@ def _repair_dso_hard_conflicts(
                 if not (first.id.startswith("label:dso:") and second.id.startswith("label:dso:")):
                     continue
                 second_candidate = second.effective_candidate()
-                if second_candidate is not None and rects_overlap(
-                    first_candidate.bounds, second_candidate.bounds
+                if second_candidate is not None and _labels_overlap(
+                    first, first_candidate, second, second_candidate, style
                 ):
                     overlaps.append((first.id, second.id))
         for first_id, second_id in overlaps:
@@ -896,7 +957,7 @@ def _repair_dso_hard_conflicts(
             if (
                 first_current is None
                 or second_current is None
-                or not rects_overlap(first_current.bounds, second_current.bounds)
+                or not _labels_overlap(first, first_current, second, second_current, style)
             ):
                 continue
             if first.locked or second.locked:
@@ -907,13 +968,16 @@ def _repair_dso_hard_conflicts(
                     continue
                 candidate = other.effective_candidate()
                 if candidate is not None:
-                    fixed_index.set(other.id, candidate.bounds, candidate.bounds)
+                    bounds = _collision_bounds(other, candidate, style)
+                    fixed_index.set(other.id, bounds, bounds)
             first_choices = legal_candidates(first, fixed_index)
             second_choices = legal_candidates(second, fixed_index)
             best: tuple[float, str, str] | None = None
             for first_cost, first_candidate_id, first_candidate in first_choices:
                 for second_cost, second_candidate_id, second_candidate in second_choices:
-                    if rects_overlap(first_candidate.bounds, second_candidate.bounds):
+                    if _labels_overlap(
+                        first, first_candidate, second, second_candidate, style
+                    ):
                         continue
                     key = (first_cost + second_cost, first_candidate_id, second_candidate_id)
                     if best is None or key < best:
@@ -953,7 +1017,9 @@ def _repair_dso_hard_conflicts(
                     continue
                 conflict_count += sum(
                     second_candidate is not None
-                    and rects_overlap(first_candidate.bounds, second_candidate.bounds)
+                    and _labels_overlap(
+                        first, first_candidate, second, second_candidate, style
+                    )
                     for second in candidate_labels[index + 1 :]
                     if (second_candidate := second.effective_candidate()) is not None
                 )
@@ -1028,22 +1094,23 @@ def _repair_dso_hard_conflicts(
             or first_candidate.bounds.bottom_mm > printable.bottom_mm
         ):
             unresolved_page.append(first.id)
-        nearby_ids = {symbol.id for symbol in symbols_index.query(first_candidate.bounds)}
+        visible_bounds = candidate_ink_bounds(first_candidate)
+        nearby_ids = {symbol.id for symbol in symbols_index.query(visible_bounds)}
         for source in sources:
             if (
                 source.id in nearby_ids
                 and circle_intersects_rect(
-                    source.center, source.collision_radius_mm, first_candidate.bounds
+                    source.center, source.collision_radius_mm, visible_bounds
                 )
-                and source_edge_distance(source, first_candidate.bounds) <= 0.0
+                and source_edge_distance(source, visible_bounds) <= 0.0
             ):
                 unresolved_dso.append([first.id, source.id])
         for second in final_labels[index + 1 :]:
             if not second.id.startswith("label:dso:"):
                 continue
             second_candidate = second.effective_candidate()
-            if second_candidate is not None and rects_overlap(
-                first_candidate.bounds, second_candidate.bounds
+            if second_candidate is not None and _labels_overlap(
+                first, first_candidate, second, second_candidate, style
             ):
                 unresolved.append([first.id, second.id])
     stats["unresolved_label_pairs"] = unresolved
@@ -1113,7 +1180,8 @@ def optimize_labels(
         candidate = label.candidate(candidate_id) if candidate_id is not None else None
         if candidate is not None:
             placements[label.id] = candidate.id
-            placed_index.set(label.id, candidate.bounds, candidate.bounds)
+            bounds = _collision_bounds(label, candidate, style)
+            placed_index.set(label.id, bounds, bounds)
         else:
             placements[label.id] = None
 
@@ -1177,7 +1245,8 @@ def optimize_labels(
             placements[label.id] = None
             continue
         placements[label.id] = best[1].id
-        placed_index.set(label.id, best[1].bounds, best[1].bounds)
+        bounds = _collision_bounds(label, best[1], style)
+        placed_index.set(label.id, bounds, bounds)
 
     placements = _local_repair(
         ordered,
@@ -1344,7 +1413,7 @@ def optimize_labels(
     )
     optimized = tuple(auto_labels)
     placed_count = sum(1 for value in placements.values() if value is not None)
-    final_placed_index = _build_placed_index(optimized)
+    final_placed_index = _build_placed_index(optimized, style)
     label_diagnostics = _label_diagnostics(
         optimized,
         anchors,
@@ -1426,12 +1495,15 @@ def _candidate_breakdown(
     )
 
 
-def _build_placed_index(labels: tuple[Label, ...]) -> RectIndex[PageRect]:
+def _build_placed_index(
+    labels: tuple[Label, ...], style: StyleConfig
+) -> RectIndex[PageRect]:
     index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
     for label in labels:
         candidate = None if label.hidden else label.effective_candidate()
         if candidate is not None:
-            index.set(label.id, candidate.bounds, candidate.bounds)
+            bounds = _collision_bounds(label, candidate, style)
+            index.set(label.id, bounds, bounds)
     return index
 
 
@@ -1469,7 +1541,7 @@ def _consider_dso_leader_fallbacks(
     if not config.enabled:
         return labels
     output = list(labels)
-    placed_index = _build_placed_index(labels)
+    placed_index = _build_placed_index(labels, style)
     for position, label in enumerate(output):
         current = None if label.hidden else label.effective_candidate()
         if (
@@ -1517,7 +1589,8 @@ def _consider_dso_leader_fallbacks(
             or current_breakdown.label_source_corridor > 0.0
         )
         if not needs_association_help:
-            placed_index.set(label.id, current.bounds, current.bounds)
+            bounds = _collision_bounds(label, current, style)
+            placed_index.set(label.id, bounds, bounds)
             continue
 
         current_cost = current_breakdown.total(weights)
@@ -1592,7 +1665,13 @@ def _consider_dso_leader_fallbacks(
             )
             if leader_cost >= current_cost - 0.25:
                 continue
-            key = (leader_cost, _route_length(route), candidate.id, line_label, candidate.bounds)
+            key = (
+                leader_cost,
+                _route_length(route),
+                candidate.id,
+                line_label,
+                _collision_bounds(label, candidate, style),
+            )
             if best is None or key[:3] < best[:3]:
                 best = key
 
@@ -1600,7 +1679,8 @@ def _consider_dso_leader_fallbacks(
             _, _, _, output[position], selected_bounds = best
             placed_index.set(label.id, selected_bounds, selected_bounds)
         else:
-            placed_index.set(label.id, current.bounds, current.bounds)
+            bounds = _collision_bounds(label, current, style)
+            placed_index.set(label.id, bounds, bounds)
     result = tuple(output)
     enabled = sum(label.leader_line for label in result)
     if len(resolve_leader_lines(result, scene, transform, style)) != enabled:
@@ -1843,6 +1923,7 @@ def _candidate_rejection_reason(
     source_geometries: tuple[SourceGeometry, ...],
 ) -> str | None:
     bounds = candidate.bounds
+    collision_bounds = _collision_bounds(label, candidate, style)
     if (
         bounds.left_mm < printable.left_mm
         or bounds.top_mm < printable.top_mm
@@ -1853,20 +1934,29 @@ def _candidate_rejection_reason(
     if any(rects_overlap(bounds, obstacle) for obstacle in furniture):
         return "page_furniture_overlap"
     if any(
-        rects_overlap(bounds, other)
-        for other in placed_index.query(bounds, exclude=label.id)
+        rects_overlap(collision_bounds, other)
+        for other in placed_index.query(
+            collision_bounds,
+            margin_mm=style.label.dso_placement.label_label_ink_clearance_mm or 0.0,
+            exclude=label.id,
+        )
     ):
         return "label_label_overlap"
-    nearby_symbols = tuple(symbols_index.query(bounds))
+    visible_bounds = (
+        candidate_ink_bounds(candidate)
+        if label.id.startswith("label:dso:")
+        else bounds
+    )
+    nearby_symbols = tuple(symbols_index.query(visible_bounds))
     nearby_source_ids = {symbol.id for symbol in nearby_symbols}
     if any(
-        source.id in nearby_source_ids and source_edge_distance(source, bounds) <= 0.0
+        source.id in nearby_source_ids and source_edge_distance(source, visible_bounds) <= 0.0
         for source in source_geometries
     ):
         return "dso_symbol_overlap"
     if label.id.startswith("label:dso:"):
         _, _, _, wrong_owner = _ownership_result(
-            label, bounds, source_geometries, style
+            label, visible_bounds, source_geometries, style
         )
         if wrong_owner:
             return "foreign_source_closer_than_owner"
@@ -1878,7 +1968,9 @@ def _candidate_rejection_reason(
             else foreign_star_hard_min_mm(star.radius_mm, style.label.star_clearance)
         )
         if candidate_star_edge_distance_mm(
-            star, candidate, visible_text=label.id.startswith("label:star:")
+            star,
+            candidate,
+            visible_text=label.id.startswith(("label:star:", "label:dso:")),
         ) < hard_min:
             return "star_clearance"
     return None
@@ -1956,11 +2048,12 @@ def _label_diagnostics(
         diagnostic.update(_star_source_diagnostics(label, nearby_stars))
         if label.id.startswith("label:dso:"):
             source = sources_by_id.get(label.target_id)
+            visible_bounds = candidate_ink_bounds(candidate)
             owner_gap, ownership_margin, nearest_source, wrong_owner = _ownership_result(
-                label, candidate.bounds, sources, style, all_sources=True
+                label, visible_bounds, sources, style, all_sources=True
             )
             nearest_competitor = (
-                source_edge_distance(nearest_source, candidate.bounds), nearest_source.id
+                source_edge_distance(nearest_source, visible_bounds), nearest_source.id
             ) if nearest_source is not None else (None, None)
             owner_overlaps_nearest = bool(
                 source is not None
@@ -1978,9 +2071,9 @@ def _label_diagnostics(
                 for other, other_candidate in placed
                 if other.id != label.id
                 and other_candidate is not None
-                and rects_overlap(candidate.bounds, other_candidate.bounds)
+                and _labels_overlap(label, candidate, other, other_candidate, style)
             )
-            nearby_symbol_ids = {symbol.id for symbol in symbols_index.query(candidate.bounds)}
+            nearby_symbol_ids = {symbol.id for symbol in symbols_index.query(visible_bounds)}
             weighted_association = (
                 breakdown.label_source_distance_mm * weights.label_source_distance
                 + breakdown.label_source_corridor * weights.label_source_corridor
@@ -2012,8 +2105,8 @@ def _label_diagnostics(
                 "candidate_direction": candidate.position.value,
                 "source_label_center_distance_mm": (
                     math.hypot(
-                        source.center.x_mm - candidate.bounds.center.x_mm,
-                        source.center.y_mm - candidate.bounds.center.y_mm,
+                        source.center.x_mm - visible_bounds.center.x_mm,
+                        source.center.y_mm - visible_bounds.center.y_mm,
                     )
                     if source is not None
                     else None
@@ -2055,7 +2148,7 @@ def _label_diagnostics(
                     other_source.id
                     for other_source in sources
                     if other_source.id in nearby_symbol_ids
-                    and source_edge_distance(other_source, candidate.bounds) <= 0.0
+                    and source_edge_distance(other_source, visible_bounds) <= 0.0
                 ],
                 "leader_line_used": leader is not None,
                 "leader_line_length_mm": line_length,
@@ -2127,7 +2220,7 @@ def _label_diagnostics(
                 if overlapping_labels or diagnostic["label_dso_conflicts"]:
                     plausible = sorted(
                         (
-                            source_edge_distance(source, alternative.bounds)
+                            source_edge_distance(source, candidate_ink_bounds(alternative))
                             if source is not None
                             else float("inf"),
                             alternative.id,
@@ -2140,7 +2233,7 @@ def _label_diagnostics(
                     for _, _, alternative in plausible:
                         if checked >= 16:
                             break
-                        if source_edge_distance(source, alternative.bounds) > (
+                        if source_edge_distance(source, candidate_ink_bounds(alternative)) > (
                             style.label.leader_lines.dso_preferred_gap_mm
                         ):
                             continue
@@ -2336,7 +2429,8 @@ def _local_repair(
                 placements[label.id] = best_id
                 new_candidate = label.candidate(best_id)
                 if new_candidate is not None:
-                    placed_index.set(label.id, new_candidate.bounds, new_candidate.bounds)
+                    bounds = _collision_bounds(label, new_candidate, style)
+                    placed_index.set(label.id, bounds, bounds)
                 changed = True
         if not changed:
             break
@@ -2363,7 +2457,8 @@ def _evaluate(
         placed_label = label_by_id[label_id]
         placed_candidate = placed_label.candidate(candidate_id)
         if placed_candidate is not None:
-            placed_index.set(label_id, placed_candidate.bounds, placed_candidate.bounds)
+            bounds = _collision_bounds(placed_label, placed_candidate, style)
+            placed_index.set(label_id, bounds, bounds)
     stars_index = _build_star_index(stars)
     total = 0.0
     totals: dict[str, float] = {}

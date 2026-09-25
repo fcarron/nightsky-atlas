@@ -62,6 +62,17 @@ class TextMetrics:
     ink_rects_mm: tuple[PageRect, ...] = ()
     whitespace_rects_mm: tuple[PageRect, ...] = ()
 
+    @property
+    def ink_bounds_mm(self) -> PageRect | None:
+        """Return the union of actual Pango glyph ink extents, if any."""
+        if not self.ink_rects_mm:
+            return None
+        left = min(rect.left_mm for rect in self.ink_rects_mm)
+        top = min(rect.top_mm for rect in self.ink_rects_mm)
+        right = max(rect.right_mm for rect in self.ink_rects_mm)
+        bottom = max(rect.bottom_mm for rect in self.ink_rects_mm)
+        return PageRect(left, top, right - left, bottom - top)
+
 
 def make_layout(
     cr: cairo.Context[cairo.Surface],

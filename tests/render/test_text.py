@@ -20,6 +20,18 @@ def test_measure_exposes_shaped_glyph_and_whitespace_geometry() -> None:
     assert len(metrics.ink_rects_mm) == 6
     assert len(metrics.whitespace_rects_mm) == 1
     assert all(rect.width_mm > 0.0 and rect.height_mm > 0.0 for rect in metrics.ink_rects_mm)
+    assert metrics.ink_bounds_mm is not None
+    assert metrics.ink_bounds_mm.width_mm <= metrics.width_mm
+    assert metrics.ink_bounds_mm.height_mm <= metrics.height_mm
+
+
+def test_short_numeric_label_ink_is_measured_tighter_than_logical_box() -> None:
+    metrics = TextMeasurer("DejaVu Sans", 6.5).measure_mm("4387")
+    ink = metrics.ink_bounds_mm
+
+    assert ink is not None
+    assert ink.width_mm == pytest.approx(metrics.width_mm)
+    assert ink.height_mm < metrics.height_mm
 
 
 def test_longer_text_is_wider() -> None:

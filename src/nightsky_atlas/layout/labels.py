@@ -16,7 +16,7 @@ from nightsky_atlas.catalog.priority import (
     star_label_priority,
 )
 from nightsky_atlas.catalog.star_names import StarName, hip_number
-from nightsky_atlas.chart.page import PagePoint, PageTransform
+from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.association import (
     dso_source_geometries,
     source_edge_distance,
@@ -136,13 +136,15 @@ def build_dso_labels(
         exact_edge_distance = None
         approximate_edge_distance = None
         if source is not None:
-            def edge_distance(bounds, _glyphs, geometry=source):
-                return source_edge_distance(geometry, bounds)
+            def edge_distance(bounds, glyphs, geometry=source):
+                visible_bounds = _ink_envelope(glyphs, bounds)
+                return source_edge_distance(geometry, visible_bounds)
 
             exact_edge_distance = edge_distance
             if not source.outline_paths:
-                def approximate_distance(bounds, _glyphs, geometry=source):
-                    return source_extent_edge_distance(geometry, bounds)
+                def approximate_distance(bounds, glyphs, geometry=source):
+                    visible_bounds = _ink_envelope(glyphs, bounds)
+                    return source_extent_edge_distance(geometry, visible_bounds)
 
                 approximate_edge_distance = approximate_distance
         candidates = compass_candidates(
@@ -179,6 +181,16 @@ def build_dso_labels(
             )
         )
     return tuple(labels)
+
+
+def _ink_envelope(glyphs: tuple[PageRect, ...], fallback: PageRect) -> PageRect:
+    if not glyphs:
+        return fallback
+    left = min(rect.left_mm for rect in glyphs)
+    top = min(rect.top_mm for rect in glyphs)
+    right = max(rect.right_mm for rect in glyphs)
+    bottom = max(rect.bottom_mm for rect in glyphs)
+    return PageRect(left, top, right - left, bottom - top)
 
 
 def _star_label_priority(star: Star, star_name: StarName, kind: str) -> tuple[int, bool]:

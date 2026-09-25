@@ -66,6 +66,42 @@ def make_label(label_id: str, left_mm: float, top_mm: float) -> Label:
     )
 
 
+def make_dso_glyph_label(label_id: str, top_mm: float) -> Label:
+    bounds = PageRect(left_mm=40.0, top_mm=top_mm, width_mm=8.0, height_mm=3.175)
+    candidate = LabelCandidate(
+        id=f"{label_id}:N",
+        position=CompassPosition.N,
+        anchor=PagePoint(bounds.left_mm, bounds.top_mm),
+        bounds=bounds,
+        glyph_bounds=(PageRect(40.0, top_mm + 0.706, 5.644, 2.117),),
+    )
+    return Label(
+        id=label_id,
+        target_id=label_id.removeprefix("label:dso:"),
+        text="4387",
+        priority=50,
+        mandatory=True,
+        candidates=(candidate,),
+    )
+
+
+def make_star_label_with_bounds(label_id: str, bounds: PageRect) -> Label:
+    candidate = LabelCandidate(
+        id=f"{label_id}:N",
+        position=CompassPosition.N,
+        anchor=PagePoint(bounds.left_mm, bounds.top_mm),
+        bounds=bounds,
+    )
+    return Label(
+        id=label_id,
+        target_id="s1",
+        text="Star",
+        priority=50,
+        mandatory=True,
+        candidates=(candidate,),
+    )
+
+
 def scene_with_center_objects():
     return build_scene(CHART, [make_star()], [make_dso()])
 
@@ -201,6 +237,68 @@ def test_duplicate_label_id_is_reported() -> None:
     second = make_label("label:a", 60.0, 60.0)
     issues = find_hard_violations((first, second), scene, TRANSFORM, STYLE)
     assert IssueType.DUPLICATE_LABEL_ID in {issue.issue_type for issue in issues}
+
+
+def test_dso_label_collisions_use_configured_ink_clearance() -> None:
+    scene = build_scene(CHART, [], [])
+    first = make_dso_glyph_label("label:dso:NGC4387", 40.0)
+    second = make_dso_glyph_label("label:dso:NGC4438", 42.3)
+
+    legacy_placement = STYLE.label.dso_placement.model_copy(
+        update={"label_label_ink_clearance_mm": None}
+    )
+    legacy_label_style = STYLE.label.model_copy(update={"dso_placement": legacy_placement})
+    legacy_style = STYLE.model_copy(update={"label": legacy_label_style})
+    legacy_issues = find_hard_violations((first, second), scene, TRANSFORM, legacy_style)
+    assert IssueType.LABEL_LABEL in {issue.issue_type for issue in legacy_issues}
+
+    for clearance_mm in (0.10, 0.15):
+        placement = STYLE.label.dso_placement.model_copy(
+            update={"label_label_ink_clearance_mm": clearance_mm}
+        )
+        label_style = STYLE.label.model_copy(update={"dso_placement": placement})
+        style = STYLE.model_copy(update={"label": label_style})
+        issues = find_hard_violations((first, second), scene, TRANSFORM, style)
+        assert IssueType.LABEL_LABEL not in {issue.issue_type for issue in issues}
+
+    placement = STYLE.label.dso_placement.model_copy(
+        update={"label_label_ink_clearance_mm": 0.20}
+    )
+    label_style = STYLE.label.model_copy(update={"dso_placement": placement})
+    style = STYLE.model_copy(update={"label": label_style})
+    issues = find_hard_violations((first, second), scene, TRANSFORM, style)
+    assert IssueType.LABEL_LABEL in {issue.issue_type for issue in issues}
+
+
+def test_dso_label_page_clipping_still_uses_logical_bounds() -> None:
+    scene = build_scene(CHART, [], [])
+    label = make_dso_glyph_label("label:dso:NGC4387", PAGE.margin_mm - 0.2)
+    placement = STYLE.label.dso_placement.model_copy(
+        update={"label_label_ink_clearance_mm": 0.15}
+    )
+    label_style = STYLE.label.model_copy(update={"dso_placement": placement})
+    style = STYLE.model_copy(update={"label": label_style})
+
+    issues = find_hard_violations((label,), scene, TRANSFORM, style)
+
+    assert IssueType.LABEL_PAGE in {issue.issue_type for issue in issues}
+
+
+def test_dso_ink_collision_geometry_interacts_with_star_logical_geometry() -> None:
+    scene = build_scene(CHART, [], [])
+    dso_label = make_dso_glyph_label("label:dso:NGC4387", 40.0)
+    star_label = make_star_label_with_bounds(
+        "label:star:test", PageRect(40.0, 37.9, 8.0, 2.5)
+    )
+    placement = STYLE.label.dso_placement.model_copy(
+        update={"label_label_ink_clearance_mm": 0.15}
+    )
+    label_style = STYLE.label.model_copy(update={"dso_placement": placement})
+    style = STYLE.model_copy(update={"label": label_style})
+
+    issues = find_hard_violations((dso_label, star_label), scene, TRANSFORM, style)
+
+    assert IssueType.LABEL_LABEL not in {issue.issue_type for issue in issues}
 
 
 def test_unknown_target_is_reported() -> None:

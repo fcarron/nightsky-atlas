@@ -666,6 +666,7 @@ class DsoLabelPlacementStyle(_StrictModel):
     ownership_margin_hard_limit_mm: float = Field(default=0.0, le=0.0)
     ownership_margin_weight: NonNegativeFloat = 48.0
     compact_label_factor: PositiveFloat = 1.35
+    label_label_ink_clearance_mm: NonNegativeFloat | None = 0.20
     joint_max_component_labels: int = Field(default=8, ge=2)
     joint_beam_width: int = Field(default=24, ge=1)
     joint_node_budget: int = Field(default=24000, ge=1)

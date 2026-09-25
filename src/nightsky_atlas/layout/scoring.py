@@ -33,6 +33,7 @@ from nightsky_atlas.layout.geometry import (
     segment_intersects_rect,
 )
 from nightsky_atlas.layout.models import LabelCandidate
+from nightsky_atlas.layout.text_geometry import candidate_ink_bounds, dso_collision_bounds
 
 __all__ = [
     "CostBreakdown",
@@ -303,6 +304,12 @@ def score_candidate(
 ) -> CostBreakdown:
     """Measure all cost components for one candidate."""
     bounds = candidate.bounds
+    visible_bounds = candidate_ink_bounds(candidate) if is_dso_label else bounds
+    collision_bounds = (
+        dso_collision_bounds(candidate, dso_placement.label_label_ink_clearance_mm)
+        if is_dso_label and dso_placement is not None
+        else bounds
+    )
     source_by_id = (
         {source.id: source for source in source_symbols}
         if source_symbols is not None
@@ -311,17 +318,17 @@ def score_candidate(
     center = bounds.center
 
     label_overlap = sum(
-        rect_overlap_area_mm2(bounds, other)
+        rect_overlap_area_mm2(collision_bounds, other)
         for other in placed_bounds
-        if rects_overlap(bounds, other)
+        if rects_overlap(collision_bounds, other)
     )
     symbol_overlap = sum(
-        rect_overlap_area_mm2(bounds, _symbol_rect(symbol))
+        rect_overlap_area_mm2(visible_bounds, _symbol_rect(symbol))
         for symbol in symbols
-        if circle_intersects_rect(symbol.center, symbol.radius_mm, bounds)
+        if circle_intersects_rect(symbol.center, symbol.radius_mm, visible_bounds)
         and (
             symbol.id not in source_by_id
-            or source_edge_distance(source_by_id[symbol.id], bounds) <= 0.0
+            or source_edge_distance(source_by_id[symbol.id], visible_bounds) <= 0.0
         )
     )
     anchor_distance = (
@@ -332,7 +339,9 @@ def score_candidate(
     )
     line_overlap = float(
         sum(
-            segment_intersects_rect(start, end, expand_rect(bounds, line_safety_margin_mm))
+            segment_intersects_rect(
+                start, end, expand_rect(visible_bounds, line_safety_margin_mm)
+            )
             for start, end in constellation_lines
         )
     )
@@ -341,7 +350,7 @@ def score_candidate(
     foreign_penalty = 0.0
     associated_penalty = 0.0
     association_distance = 0.0
-    visible_star_text = bool(associated_star_ids)
+    visible_star_text = is_dso_label or bool(associated_star_ids)
     for star in stars:
         distance = candidate_star_edge_distance_mm(
             star, candidate, visible_text=visible_star_text
@@ -469,7 +478,7 @@ def _source_association_costs(
     bool,
 ]:
     """Score the visual corridor and ownership of a source-to-label pairing."""
-    bounds = candidate.bounds
+    bounds = candidate_ink_bounds(candidate) if dso_placement is not None else candidate.bounds
     own_stars = tuple(star for star in stars if associated_star_ids & star.star_ids)
     own_symbols = tuple(symbol for symbol in symbols if symbol.id == target_source_id)
     owner_options = [

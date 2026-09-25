@@ -63,6 +63,7 @@ label:
     ownership_margin_hard_limit_mm: 0.0
     ownership_margin_weight: 48.0
     compact_label_factor: 1.35
+    label_label_ink_clearance_mm: 0.2
     joint_max_component_labels: 8
     joint_beam_width: 24
     joint_node_budget: 24000
