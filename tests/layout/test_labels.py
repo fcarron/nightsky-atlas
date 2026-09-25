@@ -102,7 +102,16 @@ def test_build_dso_labels() -> None:
     assert messier.font_size_pt == pytest.approx(
         STYLE.label.dso_labels.normal_size_pt * STYLE.label.dso_labels.messier.size_factor
     )
-    assert len(messier.candidates) == 8 * STYLE.label.candidate_rings
+    placement = STYLE.label.dso_placement
+    near_count = sum(
+        gap < placement.outer_candidate_start_gap_mm
+        for gap in placement.candidate_edge_gaps_mm
+    )
+    outer_count = len(placement.candidate_edge_gaps_mm) - near_count
+    assert len(messier.candidates) == (
+        placement.candidate_directions * near_count
+        + placement.outer_candidate_directions * outer_count
+    )
     assert messier.candidates[0].id == "label:dso:NGC4486:N"
     assert messier.selected_candidate_id == messier.candidates[0].id
     ordinary = by_id["label:dso:NGC9999"]

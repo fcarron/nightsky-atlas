@@ -49,11 +49,34 @@ label:
     whitespace_factor: 1.5
     glyph_weight: 120.0
     compact_label_factor: 1.35
+  dso_placement:
+    candidate_edge_gaps_mm: [0.35, 0.55, 0.8, 1.1, 1.5, 2.0, 3.0, 4.5, 6.0]
+    candidate_directions: 16
+    outer_candidate_directions: 8
+    outer_candidate_start_gap_mm: 3.0
+    preferred_max_gap_mm: 0.8
+    long_gap_knee_mm: 1.2
+    long_gap_curve_factor: 2.5
+    direct_gap_expensive_mm: 1.8
+    direct_gap_extra_weight: 8.0
+    ownership_margin_preferred_mm: 0.75
+    ownership_margin_hard_limit_mm: 0.0
+    ownership_margin_weight: 48.0
+    compact_label_factor: 1.35
+    joint_max_component_labels: 8
+    joint_beam_width: 24
+    joint_node_budget: 24000
+    hard_repair_neighborhood_labels: 6
+    hard_repair_search_limit: 45
   leader_lines:
     enabled: true
     auto_min_ring: 2
     star_ambiguity_threshold: 4.0
     dso_ambiguity_threshold: 2.5
+    dso_min_length_mm: 0.75
+    dso_preferred_gap_mm: 2.5
+    dso_length_weight: 4.0
+    dso_association_residual_factor: 0.10
     min_length_mm: 2.5
     max_length_mm: 12.0
     symbol_gap_mm: 0.25

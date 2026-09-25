@@ -86,6 +86,28 @@ def test_label_overlapping_star_and_dso() -> None:
     assert IssueType.LABEL_DSO in types
 
 
+def test_elongated_galaxy_label_uses_ellipse_not_bounding_circle() -> None:
+    galaxy = replace(
+        make_dso(),
+        major_axis_arcmin=40.0,
+        minor_axis_arcmin=4.0,
+        position_angle_deg=0.0,
+    )
+    scene = build_scene(CHART, (), (galaxy,))
+    candidate = LabelCandidate(
+        id="label:dso:NGC1:E",
+        position=CompassPosition.E,
+        anchor=PagePoint(CENTER.x_mm + 1.5, CENTER.y_mm - 1.0),
+        bounds=PageRect(CENTER.x_mm + 1.5, CENTER.y_mm - 1.0, 2.0, 2.0),
+    )
+    label = replace(
+        make_label("label:dso:NGC1", candidate.bounds.left_mm, candidate.bounds.top_mm),
+        candidates=(candidate,),
+    )
+    issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    assert IssueType.LABEL_DSO not in {issue.issue_type for issue in issues}
+
+
 def test_nearby_rendered_faint_star_is_not_a_hard_blocker() -> None:
     scene = build_scene(CHART, [make_star(magnitude=11.0)], [])
     label = make_label("label:a", CENTER.x_mm - 4.0, CENTER.y_mm - 1.0)

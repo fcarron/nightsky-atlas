@@ -6,11 +6,22 @@ from dataclasses import replace
 from pathlib import Path
 
 from nightsky_atlas.atlas.config import load_style_config
-from nightsky_atlas.catalog.models import Provenance, Star
+from nightsky_atlas.catalog.models import DsoType, Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
+from nightsky_atlas.layout.association import SourceGeometry
+from nightsky_atlas.layout.geometry import rects_overlap
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
-from nightsky_atlas.layout.optimizer import _association_scale, optimize_labels
+from nightsky_atlas.layout.optimizer import (
+    _association_scale,
+    _build_star_index,
+    _build_symbol_index,
+    _dso_placement_metrics,
+    _is_valid,
+    _repair_dso_hard_conflicts,
+    optimize_labels,
+)
+from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
 
@@ -141,6 +152,39 @@ def test_optimizer_preserves_canonical_dso_text() -> None:
     assert not placed.hidden
 
 
+def test_valid_leader_resolves_ownership_ambiguity_but_keeps_raw_diagnostic() -> None:
+    candidate = make_candidate(
+        "label:dso:NGC1", CompassPosition.E, 100.0, 100.0
+    )
+    label = replace(
+        make_label("label:dso:NGC1", (candidate,)),
+        target_id="NGC1",
+        leader_line=True,
+    )
+    metrics = _dso_placement_metrics(
+        (label,),
+        {
+            label.id: {
+                "label_id": label.id,
+                "source_facing_edge_distance_mm": 1.0,
+                "ownership_margin_mm": -0.2,
+                "competing_source_ambiguity_cost": 1.0,
+                "competing_owner_cost": 0.0,
+                "leader_line_used": True,
+                "leader_line_length_mm": 1.0,
+            }
+        },
+        {},
+        1.0,
+        weak_margin_mm=0.75,
+    )
+
+    assert metrics["raw_ownership_ambiguity_count"] == 1
+    assert metrics["ownership_ambiguity_count"] == 0
+    assert metrics["negative_ownership_margin_count"] == 1
+    assert metrics["weak_ownership_margin_count"] == 1
+
+
 def test_mandatory_label_outside_page_is_placed() -> None:
     label = make_label(
         "label:out",
@@ -150,6 +194,46 @@ def test_mandatory_label_outside_page_is_placed() -> None:
     result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
     assert result.labels[0].hidden is False
     assert result.placed_count == 1
+
+
+def test_optional_selected_dso_label_is_not_suppressed_by_placement() -> None:
+    label = replace(
+        make_label(
+            "label:dso:NGC1",
+            (make_candidate("label:dso:NGC1", CompassPosition.N, -50.0, -50.0),),
+            mandatory=False,
+        ),
+        target_id="NGC1",
+    )
+    result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
+    assert result.labels[0].hidden is False
+    assert result.placed_count == 1
+
+
+def test_galaxy_label_validity_uses_ellipse_not_bounding_circle() -> None:
+    center = PagePoint(150.0, 100.0)
+    source = SourceGeometry(
+        id="NGC1",
+        source_type=DsoType.GALAXY,
+        center=center,
+        radius_x_mm=5.0,
+        radius_y_mm=1.0,
+    )
+    label = make_label(
+        "label:dso:NGC1",
+        (make_candidate("label:dso:NGC1", CompassPosition.N, 146.0, 96.0),),
+    )
+    candidate = label.candidates[0]
+    assert _is_valid(
+        label,
+        candidate,
+        (),
+        PageRect(12.0, 12.0, 273.0, 186.0),
+        (SymbolCircle(center, 5.0, "NGC1"),),
+        (),
+        STYLE,
+        source_geometries=(source,),
+    )
 
 
 def test_optimizer_resolves_overlap_and_lowers_cost() -> None:
@@ -173,6 +257,39 @@ def test_optimizer_resolves_overlap_and_lowers_cost() -> None:
     bounds_a = by_id["label:a"].selected_candidate().bounds
     bounds_b = by_id["label:b"].selected_candidate().bounds
     assert not (bounds_a.left_mm < bounds_b.right_mm and bounds_b.left_mm < bounds_a.right_mm)
+
+
+def test_dso_conflict_component_is_optimized_jointly_without_culling() -> None:
+    first = replace(
+        make_label(
+            "label:dso:A",
+            (
+                make_candidate("label:dso:A", CompassPosition.N, 100.0, 100.0),
+                make_candidate("label:dso:A", CompassPosition.E, 120.0, 100.0),
+            ),
+        ),
+        target_id="A",
+    )
+    second = replace(
+        make_label(
+            "label:dso:B",
+            (
+                make_candidate("label:dso:B", CompassPosition.N, 100.0, 100.0),
+                make_candidate("label:dso:B", CompassPosition.W, 130.0, 100.0),
+            ),
+        ),
+        target_id="B",
+    )
+    result = optimize_labels((first, second), EMPTY_SCENE, TRANSFORM, STYLE)
+    assert result.placed_count == 2
+    assert result.metrics["local_conflict_components"]["joint_components_searched"] == 1
+    selected = [label.effective_candidate().bounds for label in result.labels]
+    assert not (
+        selected[0].left_mm < selected[1].right_mm
+        and selected[1].left_mm < selected[0].right_mm
+        and selected[0].top_mm < selected[1].bottom_mm
+        and selected[1].top_mm < selected[0].bottom_mm
+    )
 
 
 def test_optimization_is_deterministic() -> None:
@@ -206,11 +323,52 @@ def test_per_label_ownership_diagnostics_are_exposed() -> None:
         "label:dso:X",
         (make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0),),
     )
-    result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
+    result = optimize_labels(
+        (label,), EMPTY_SCENE, TRANSFORM, STYLE, detailed_diagnostics=True
+    )
     diagnostic = result.label_diagnostics[label.id]
     assert "source_facing_edge_distance_mm" in diagnostic
     assert "glyph_proximity_cost" in diagnostic
+    assert "candidate_total_cost" in diagnostic
+    assert "nearest_competing_dso_id" in diagnostic
+    assert "best_alternatives" in diagnostic
     assert diagnostic["leader_line_used"] is False
+    assert result.metrics["dso_label_count"] == 1
+    assert "optimizer_runtime_s" in result.metrics
+
+
+def test_pair_conflict_repair_reassigns_labels_jointly() -> None:
+    first_current = make_candidate("label:dso:NGC1", CompassPosition.E, 100.0, 100.0)
+    first_alt = make_candidate("label:dso:NGC1", CompassPosition.N, 100.0, 90.0)
+    second_current = make_candidate("label:dso:NGC2", CompassPosition.W, 102.0, 100.0)
+    second_alt = make_candidate("label:dso:NGC2", CompassPosition.E, 110.0, 100.0)
+    first = replace(
+        make_label("label:dso:NGC1", (first_current, first_alt)), target_id="NGC1"
+    )
+    second = replace(
+        make_label("label:dso:NGC2", (second_current, second_alt)), target_id="NGC2"
+    )
+    labels = (first, second)
+    placements, stats = _repair_dso_hard_conflicts(
+        labels,
+        {first.id: first_current.id, second.id: second_current.id},
+        {"NGC1": PagePoint(104.0, 101.25), "NGC2": PagePoint(113.0, 101.25)},
+        PageRect(12.0, 12.0, 273.0, 186.0),
+        _build_symbol_index(()),
+        (),
+        _build_star_index(()),
+        (),
+        STYLE,
+        CostWeights(),
+        (),
+        (),
+    )
+    assert placements[second.id] == second_alt.id
+    assert stats["pair_conflict_moves"] == 1
+    assert not rects_overlap(
+        first.candidate(placements[first.id]).bounds,
+        second.candidate(placements[second.id]).bounds,
+    )
 
 
 def test_only_compact_star_labels_get_stronger_distance_scale() -> None:
@@ -225,7 +383,7 @@ def test_only_compact_star_labels_get_stronger_distance_scale() -> None:
     short_dso = replace(short_star, id="label:dso:short", text="57")
     assert _association_scale(short_star, STYLE) > 1.0
     assert _association_scale(named_star, STYLE) == 1.0
-    assert _association_scale(short_dso, STYLE) == 1.0
+    assert _association_scale(short_dso, STYLE) == STYLE.label.dso_placement.compact_label_factor
 
 
 def test_optimizer_prefers_candidate_with_cleaner_foreign_star_clearance() -> None:

@@ -83,16 +83,15 @@ def test_leader_line_stops_at_symbol_and_before_text() -> None:
     assert line.end.x_mm < label.effective_candidate().bounds.left_mm
 
 
-def test_optimizer_adds_line_only_to_distant_dso_label() -> None:
+def test_optimizer_does_not_add_an_excessively_long_dso_leader() -> None:
     far = optimize_labels((make_label(),), SCENE, TRANSFORM, STYLE).labels[0]
-    assert far.leader_line
-    assert resolve_leader_lines((far,), SCENE, TRANSFORM, STYLE)
+    assert not far.leader_line
     assert validate_layout((far,), SCENE, TRANSFORM, STYLE).is_valid
     near = optimize_labels((make_label(ring=0),), SCENE, TRANSFORM, STYLE).labels[0]
     assert not near.leader_line
 
 
-def test_ambiguous_ring_zero_placement_can_use_leader_line() -> None:
+def test_moderate_direct_gap_does_not_get_a_leader_without_competition() -> None:
     label = make_label(ring=0)
     candidate = replace(
         label.candidates[0],
@@ -101,8 +100,7 @@ def test_ambiguous_ring_zero_placement_can_use_leader_line() -> None:
     )
     ambiguous = replace(label, candidates=(candidate,), selected_candidate_id=candidate.id)
     result = optimize_labels((ambiguous,), SCENE, TRANSFORM, STYLE).labels[0]
-    assert result.leader_line
-    assert result.leader_line_reason == "association_ambiguity"
+    assert not result.leader_line
 
 
 def test_optimizer_can_add_line_for_distant_proper_star_name() -> None:
@@ -140,6 +138,40 @@ def test_near_clean_candidate_is_preferred_over_distant_callout() -> None:
     result = optimize_labels((label,), SCENE, TRANSFORM, STYLE).labels[0]
     assert result.selected_candidate_id == near.id
     assert not result.leader_line
+
+
+def test_short_leader_beats_wrong_owner_direct_candidate_and_far_direct() -> None:
+    owner = replace(DSO, major_axis_arcmin=0.5, minor_axis_arcmin=0.5)
+    competitor = replace(
+        DSO,
+        id="NGC4487",
+        ra_deg=186.60,
+        major_axis_arcmin=0.5,
+        minor_axis_arcmin=0.5,
+    )
+    scene = build_scene(CHART, [], [owner, competitor])
+    near = LabelCandidate(
+        id="label:dso:NGC4486:E",
+        position=CompassPosition.E,
+        anchor=PagePoint(151.0, 105.0),
+        bounds=PageRect(151.0, 103.75, 8.0, 2.5),
+        ring=0,
+    )
+    far = LabelCandidate(
+        id="label:dso:NGC4486:N:4",
+        position=CompassPosition.N,
+        anchor=PagePoint(148.5, 92.0),
+        bounds=PageRect(144.5, 90.75, 8.0, 2.5),
+        ring=4,
+    )
+    label = replace(make_label(), candidates=(near, far), selected_candidate_id=None)
+    result = optimize_labels((label,), scene, TRANSFORM, STYLE).labels[0]
+    assert result.leader_line
+    assert result.selected_candidate_id == near.id
+    route = resolve_leader_lines((result,), scene, TRANSFORM, STYLE)[0]
+    length = ((route.end.x_mm - route.start.x_mm) ** 2
+              + (route.end.y_mm - route.start.y_mm) ** 2) ** 0.5
+    assert 0.75 <= length <= 3.0
 
 
 def test_crossing_another_label_rejects_leader_line() -> None:

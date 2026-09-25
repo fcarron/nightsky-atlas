@@ -27,6 +27,14 @@ class CompassPosition(StrEnum):
     SW = "SW"
     W = "W"
     NW = "NW"
+    NNE = "NNE"
+    ENE = "ENE"
+    ESE = "ESE"
+    SSE = "SSE"
+    SSW = "SSW"
+    WSW = "WSW"
+    WNW = "WNW"
+    NNW = "NNW"
 
 
 @dataclass(frozen=True, slots=True)

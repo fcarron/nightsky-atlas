@@ -93,7 +93,8 @@ def leader_line_for(
     start_offset = source_offset
     end_offset = distance - config.label_gap_mm
     length = end_offset - start_offset
-    if length < config.min_length_mm or length > config.max_length_mm:
+    minimum_length = config.dso_min_length_mm if dso_target is not None else config.min_length_mm
+    if length < minimum_length or length > config.max_length_mm:
         return None
     start = PagePoint(anchor.x_mm + ux * start_offset, anchor.y_mm + uy * start_offset)
     end = PagePoint(anchor.x_mm + ux * end_offset, anchor.y_mm + uy * end_offset)

@@ -13,6 +13,7 @@ from enum import StrEnum
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageRect, PageTransform
+from nightsky_atlas.layout.association import dso_source_geometries, source_edge_distance
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
     rects_overlap,
@@ -27,7 +28,6 @@ from nightsky_atlas.render.double_stars import (
     printed_star_obstacles,
     related_member_star_ids,
 )
-from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
 __all__ = [
@@ -217,6 +217,7 @@ def find_hard_violations(
                 )
 
     star_obstacles = printed_star_obstacles(scene, transform, style)
+    dso_sources = dso_source_geometries(scene, transform, style)
     for label, candidate in placed:
         related_star_ids = related_member_star_ids(label.target_id, star_obstacles)
         for star in star_obstacles:
@@ -239,22 +240,17 @@ def find_hard_violations(
                     )
                 )
 
-        for scene_dso in scene.deep_sky_objects:
-            if not scene_dso.symbol_visible:
-                continue
-            dso = scene_dso.dso
-            extent = dso_symbol_extent(
-                dso, mm_per_deg=transform.mm_per_deg, style=style
-            )
-            dso_point = transform.to_page(scene_dso.chart_point)
-            if circle_intersects_rect(
-                dso_point, extent.collision_radius_mm, candidate.bounds
+        for source in dso_sources:
+            if not circle_intersects_rect(
+                source.center, source.collision_radius_mm, candidate.bounds
             ):
+                continue
+            if source_edge_distance(source, candidate.bounds) <= 0.0:
                 issues.append(
                     _issue(
                         IssueType.LABEL_DSO,
-                        (label.id, dso.id),
-                        f"{label.id} overlaps deep-sky object {dso.id}",
+                        (label.id, source.id),
+                        f"{label.id} overlaps deep-sky object {source.id}",
                     )
                 )
 

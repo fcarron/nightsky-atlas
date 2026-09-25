@@ -43,13 +43,17 @@ _COMPACT_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^M(?:ESSIER)?0*(\d+)$"), r"M\1"),
     (re.compile(r"^SHARPLESS(?:2-?)?0*(\d+)$"), r"Sh2-\1"),
     (re.compile(r"^SH2-?0*(\d+)$"), r"Sh2-\1"),
-    (re.compile(r"^(?:CR|CL|COLLINDER)0*(\d+)$"), r"Cr\1"),
+    (re.compile(r"^LDN0*(\d+)([A-Z]?)$"), r"LDN \1\2"),
+    (re.compile(r"^LBN0*(\d+)([A-Z]?)$"), r"LBN \1\2"),
+    (re.compile(r"^VDB0*(\d+)([A-Z]?)$"), r"vdB \1\2"),
+    (re.compile(r"^(?:CR|CL|COLLINDER)0*(\d+)$"), r"Cr \1"),
     (re.compile(r"^(?:BARNARD|B)0*(\d+)$"), r"B\1"),
-    (re.compile(r"^(?:MELOTTE|MEL)0*(\d+)$"), r"Mel\1"),
-    (re.compile(r"^STOCK0*(\d+)$"), r"Stock\1"),
-    (re.compile(r"^ABELL0*(\d+)$"), r"Abell\1"),
-    (re.compile(r"^(?:HICKSON(?:COMPACTGROUP)?|HCG)0*(\d+)$"), r"HCG\1"),
-    (re.compile(r"^ARP0*(\d+)$"), r"Arp\1"),
+    (re.compile(r"^(?:MELOTTE|MEL)0*(\d+)$"), r"Mel \1"),
+    (re.compile(r"^STOCK0*(\d+)$"), r"Stock \1"),
+    (re.compile(r"^ABELLPN0*(\d+)$"), r"Abell \1"),
+    (re.compile(r"^ABELL0*(\d+)$"), r"Abell \1"),
+    (re.compile(r"^(?:HICKSON(?:COMPACTGROUP)?|HCG)0*(\d+)$"), r"HCG \1"),
+    (re.compile(r"^ARP0*(\d+)$"), r"Arp \1"),
     (re.compile(r"^C0*(\d+)$"), r"C\1"),
 )
 
@@ -108,9 +112,7 @@ def primary_designation(dso: DeepSkyObject) -> str:
     return format_catalog_designation(dso.id) or dso.id
 
 
-def label_tier(
-    dso: DeepSkyObject, memberships: frozenset[str] = frozenset()
-) -> DsoLabelTier:
+def label_tier(dso: DeepSkyObject, memberships: frozenset[str] = frozenset()) -> DsoLabelTier:
     """Return the visual tier for an object; Messier always wins."""
     if messier_id(dso) is not None:
         return DsoLabelTier.MESSIER

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from nightsky_atlas.atlas.config import DsoLabelPlacementStyle, SourceAssociationStyle
 from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.association import SourceGeometry
@@ -96,11 +97,70 @@ def test_total_is_weighted_sum() -> None:
         "label_competing_owner": "label_competing_owner",
         "label_glyph_proximity": "label_glyph_proximity",
         "label_foreign_object_proximity": "label_foreign_object_proximity",
+        "label_ownership_margin_cost": "label_ownership_margin",
     }
     expected = sum(
         value * getattr(weights, weight_for[name]) for name, value in breakdown.components().items()
     )
     assert breakdown.total(weights) == pytest.approx(expected)
+
+
+def _galaxy_source(source_id: str, x: float, y: float, radius: float) -> SourceGeometry:
+    return SourceGeometry(
+        id=source_id,
+        source_type=DsoType.GALAXY,
+        center=PagePoint(x, y),
+        radius_x_mm=radius,
+        radius_y_mm=radius,
+    )
+
+
+def test_ownership_margin_can_outweigh_a_slightly_closer_candidate() -> None:
+    owner = _galaxy_source("NGC-owner", 100.0, 100.0, 1.0)
+    foreign = _galaxy_source("NGC-foreign", 109.0, 100.0, 1.0)
+    close = make_candidate(CompassPosition.E, 102.0, 99.0)
+    clear = make_candidate(CompassPosition.N, 98.0, 96.0)
+    close_score = score(
+        close,
+        target_anchor=owner.center,
+        target_source_id=owner.id,
+        source_symbols=(owner, foreign),
+        source_association=SourceAssociationStyle(),
+        dso_placement=DsoLabelPlacementStyle(),
+        is_dso_label=True,
+    )
+    clear_score = score(
+        clear,
+        target_anchor=owner.center,
+        target_source_id=owner.id,
+        source_symbols=(owner, foreign),
+        source_association=SourceAssociationStyle(),
+        dso_placement=DsoLabelPlacementStyle(),
+        is_dso_label=True,
+    )
+    assert close_score.ownership_margin_mm < clear_score.ownership_margin_mm
+    assert close_score.label_ownership_margin_cost > clear_score.label_ownership_margin_cost
+    assert clear_score.total(CostWeights()) < close_score.total(CostWeights())
+
+
+def test_overlapping_galaxies_use_the_documented_ownership_exception() -> None:
+    owner = _galaxy_source("NGC-owner", 100.0, 100.0, 2.0)
+    interacting = _galaxy_source("NGC-interacting", 102.0, 100.0, 2.0)
+    candidate = make_candidate(CompassPosition.E, 105.0, 99.0)
+    breakdown = score(
+        candidate,
+        target_source_id=owner.id,
+        source_symbols=(owner, interacting),
+        source_association=SourceAssociationStyle(),
+        dso_placement=DsoLabelPlacementStyle(),
+        is_dso_label=True,
+    )
+    assert breakdown.ownership_margin_mm < 0.0
+    assert not breakdown.foreign_source_closer_than_owner
+    assert breakdown.label_ownership_margin_cost < (
+        max(0.0, DsoLabelPlacementStyle().ownership_margin_preferred_mm
+            - breakdown.ownership_margin_mm) ** 2
+    )
 
 
 def _star_at_clearance(
@@ -284,6 +344,38 @@ def test_dso_owner_and_foreign_object_use_source_geometry() -> None:
     )
     assert ambiguous.label_foreign_object_proximity > clear.label_foreign_object_proximity
     assert ambiguous.label_competing_source_ambiguity > clear.label_competing_source_ambiguity
+
+
+def test_dso_long_source_distance_has_nonlinear_penalty() -> None:
+    owner = source("NGC1", 150.0, 100.0, 0.5)
+    placement = DsoLabelPlacementStyle()
+    near = LabelCandidate(
+        id="label:dso:NGC1:N:near",
+        position=CompassPosition.N,
+        anchor=PagePoint(146.0, 96.7),
+        bounds=PageRect(146.0, 96.7, 8.0, 2.5),
+    )
+    long = LabelCandidate(
+        id="label:dso:NGC1:N:long",
+        position=CompassPosition.N,
+        anchor=PagePoint(146.0, 94.0),
+        bounds=PageRect(146.0, 94.0, 8.0, 2.5),
+    )
+    near_cost = score(
+        near,
+        target_source_id="NGC1",
+        source_symbols=(owner,),
+        dso_placement=placement,
+        is_dso_label=True,
+    ).label_source_distance_mm
+    long_cost = score(
+        long,
+        target_source_id="NGC1",
+        source_symbols=(owner,),
+        dso_placement=placement,
+        is_dso_label=True,
+    ).label_source_distance_mm
+    assert long_cost > near_cost * 3.0
 
 
 def test_contour_backed_dso_uses_source_facing_contour_edge() -> None:

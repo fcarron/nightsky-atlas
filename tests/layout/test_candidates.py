@@ -27,7 +27,16 @@ def make_candidates():
 def test_generates_all_eight_positions() -> None:
     candidates = make_candidates()
     assert len(candidates) == 8
-    assert {candidate.position for candidate in candidates} == set(CompassPosition)
+    assert {candidate.position for candidate in candidates} == {
+        CompassPosition.N,
+        CompassPosition.NE,
+        CompassPosition.E,
+        CompassPosition.SE,
+        CompassPosition.S,
+        CompassPosition.SW,
+        CompassPosition.W,
+        CompassPosition.NW,
+    }
 
 
 def test_candidate_ids_are_stable() -> None:
@@ -109,6 +118,32 @@ def test_candidate_translates_glyph_geometry_to_page_coordinates() -> None:
         candidate.bounds.left_mm + 0.5
     )
     assert candidate.whitespace_bounds[0].top_mm == pytest.approx(candidate.bounds.top_mm)
+
+
+def test_dense_candidate_sampling_uses_all_requested_gaps_and_directions() -> None:
+    from nightsky_atlas.layout.candidates import CANDIDATE_DIRECTIONS_16
+
+    gaps = (0.35, 0.55, 0.8)
+    candidates = compass_candidates(
+        label_id="label:dso:NGC1",
+        metrics=METRICS,
+        anchor=ANCHOR,
+        exclusion_radius_mm=2.0,
+        exact_edge_gap_mm=gaps[0],
+        exact_edge_gaps_mm=gaps,
+        positions=CANDIDATE_DIRECTIONS_16,
+    )
+    assert len(candidates) == len(gaps) * 16
+    for ring, gap in enumerate(gaps):
+        assert {item.position for item in candidates if item.ring == ring} == set(
+            CANDIDATE_DIRECTIONS_16
+        )
+        assert all(
+            circle_rect_edge_distance_mm(ANCHOR, 2.0, item.bounds)
+            == pytest.approx(gap, abs=0.01)
+            for item in candidates
+            if item.ring == ring
+        )
 
 
 def test_exact_edge_callback_can_use_visible_glyph_not_logical_line_box() -> None:

@@ -43,6 +43,7 @@ __all__ = [
     "ConstellationStyle",
     "DoubleStarStyle",
     "DsoExtentStyle",
+    "DsoLabelPlacementStyle",
     "DsoLabelStyle",
     "DsoLabelTierStyle",
     "DsoStyle",
@@ -492,6 +493,10 @@ class LeaderLineStyle(_StrictModel):
     auto_min_ring: int = Field(default=2, ge=1)
     star_ambiguity_threshold: PositiveFloat = 4.0
     dso_ambiguity_threshold: PositiveFloat = 2.5
+    dso_min_length_mm: PositiveFloat = 0.75
+    dso_preferred_gap_mm: PositiveFloat = 2.5
+    dso_length_weight: NonNegativeFloat = 4.0
+    dso_association_residual_factor: float = Field(default=0.10, ge=0.0, le=1.0)
     min_length_mm: PositiveFloat = 2.5
     max_length_mm: PositiveFloat = 12.0
     symbol_gap_mm: PositiveFloat = 0.25
@@ -573,6 +578,58 @@ class SourceAssociationStyle(_StrictModel):
         return self
 
 
+class DsoLabelPlacementStyle(_StrictModel):
+    """Dense-field DSO candidate sampling and bounded local search policy."""
+
+    candidate_edge_gaps_mm: tuple[PositiveFloat, ...] = (
+        0.35,
+        0.55,
+        0.80,
+        1.10,
+        1.50,
+        2.00,
+        3.00,
+        4.50,
+        6.00,
+    )
+    candidate_directions: Literal[8, 16] = 16
+    outer_candidate_directions: Literal[8, 16] = 8
+    outer_candidate_start_gap_mm: PositiveFloat = 3.00
+    preferred_max_gap_mm: PositiveFloat = 0.80
+    long_gap_knee_mm: PositiveFloat = 1.20
+    long_gap_curve_factor: NonNegativeFloat = 2.50
+    direct_gap_expensive_mm: PositiveFloat = 1.8
+    direct_gap_extra_weight: NonNegativeFloat = 8.0
+    ownership_margin_preferred_mm: PositiveFloat = 0.75
+    ownership_margin_hard_limit_mm: float = Field(default=0.0, le=0.0)
+    ownership_margin_weight: NonNegativeFloat = 48.0
+    compact_label_factor: PositiveFloat = 1.35
+    joint_max_component_labels: int = Field(default=8, ge=2)
+    joint_beam_width: int = Field(default=24, ge=1)
+    joint_node_budget: int = Field(default=24000, ge=1)
+    hard_repair_neighborhood_labels: int = Field(default=6, ge=2, le=8)
+    hard_repair_search_limit: int = Field(default=45, ge=1)
+
+    @field_validator("candidate_edge_gaps_mm")
+    @classmethod
+    def _candidate_gaps_are_ascending(
+        cls, value: tuple[float, ...]
+    ) -> tuple[float, ...]:
+        if not value or any(
+            right <= left for left, right in zip(value, value[1:], strict=False)
+        ):
+            raise ValueError("candidate_edge_gaps_mm must be strictly ascending")
+        return value
+
+    @model_validator(mode="after")
+    def _outer_candidate_start_is_present(self) -> DsoLabelPlacementStyle:
+        if self.outer_candidate_start_gap_mm not in self.candidate_edge_gaps_mm:
+            raise ValueError(
+                "outer_candidate_start_gap_mm must occur in candidate_edge_gaps_mm"
+            )
+        return self
+
+
 class LabelStyle(_StrictModel):
     """Label typography and candidate generation.
 
@@ -590,6 +647,7 @@ class LabelStyle(_StrictModel):
     ring_gap_mm: PositiveFloat = 2.5
     star_clearance: StarLabelClearanceStyle = Field(default_factory=StarLabelClearanceStyle)
     source_association: SourceAssociationStyle = Field(default_factory=SourceAssociationStyle)
+    dso_placement: DsoLabelPlacementStyle = Field(default_factory=DsoLabelPlacementStyle)
     leader_lines: LeaderLineStyle = Field(default_factory=LeaderLineStyle)
     dso_label_magnitude_limit: float | None = None
     dso_labels: DsoLabelStyle = Field(default_factory=DsoLabelStyle)

@@ -17,9 +17,11 @@ from nightsky_atlas.layout.models import CompassPosition, LabelCandidate
 from nightsky_atlas.render.text import TextMetrics
 
 __all__ = [
+    "CANDIDATE_DIRECTIONS_16",
     "CANDIDATE_PREFERENCE",
     "COMPASS_VECTORS",
     "compass_candidates",
+    "direction_preference_rank",
 ]
 
 _SQRT_HALF = math.sqrt(0.5)
@@ -33,6 +35,14 @@ COMPASS_VECTORS: dict[CompassPosition, tuple[float, float]] = {
     CompassPosition.SW: (_SQRT_HALF, _SQRT_HALF),
     CompassPosition.W: (1.0, 0.0),
     CompassPosition.NW: (_SQRT_HALF, -_SQRT_HALF),
+    CompassPosition.NNE: (-math.sin(math.pi / 8.0), -math.cos(math.pi / 8.0)),
+    CompassPosition.ENE: (-math.cos(math.pi / 8.0), -math.sin(math.pi / 8.0)),
+    CompassPosition.ESE: (-math.cos(math.pi / 8.0), math.sin(math.pi / 8.0)),
+    CompassPosition.SSE: (-math.sin(math.pi / 8.0), math.cos(math.pi / 8.0)),
+    CompassPosition.SSW: (math.sin(math.pi / 8.0), math.cos(math.pi / 8.0)),
+    CompassPosition.WSW: (math.cos(math.pi / 8.0), math.sin(math.pi / 8.0)),
+    CompassPosition.WNW: (math.cos(math.pi / 8.0), -math.sin(math.pi / 8.0)),
+    CompassPosition.NNW: (math.sin(math.pi / 8.0), -math.cos(math.pi / 8.0)),
 }
 
 CANDIDATE_PREFERENCE: tuple[CompassPosition, ...] = (
@@ -45,6 +55,41 @@ CANDIDATE_PREFERENCE: tuple[CompassPosition, ...] = (
     CompassPosition.W,
     CompassPosition.NW,
 )
+
+CANDIDATE_DIRECTIONS_16: tuple[CompassPosition, ...] = (
+    CompassPosition.N,
+    CompassPosition.NNE,
+    CompassPosition.NE,
+    CompassPosition.ENE,
+    CompassPosition.E,
+    CompassPosition.ESE,
+    CompassPosition.SE,
+    CompassPosition.SSE,
+    CompassPosition.S,
+    CompassPosition.SSW,
+    CompassPosition.SW,
+    CompassPosition.WSW,
+    CompassPosition.W,
+    CompassPosition.WNW,
+    CompassPosition.NW,
+    CompassPosition.NNW,
+)
+
+
+def direction_preference_rank(position: CompassPosition) -> float:
+    """Return a stable atlas direction preference rank for 8/16-way candidates."""
+    if position in CANDIDATE_PREFERENCE:
+        return float(CANDIDATE_PREFERENCE.index(position))
+    # Intermediate directions inherit the preference rank of the following
+    # compass direction, with a small penalty so the traditional eight remain
+    # the first choice when geometry is otherwise equal.
+    clockwise = CANDIDATE_DIRECTIONS_16
+    index = clockwise.index(position)
+    following = clockwise[(index + 1) % len(clockwise)]
+    while following not in CANDIDATE_PREFERENCE:
+        index = (index + 1) % len(clockwise)
+        following = clockwise[(index + 1) % len(clockwise)]
+    return CANDIDATE_PREFERENCE.index(following) + 0.25
 
 
 CandidateEdgeDistance = Callable[[PageRect, tuple[PageRect, ...]], float]
@@ -59,6 +104,10 @@ def compass_candidates(
     padding_mm: float = 0.6,
     exact_edge_gap_mm: float | None = None,
     exact_edge_distance: CandidateEdgeDistance | None = None,
+    approximate_edge_distance: CandidateEdgeDistance | None = None,
+    exact_edge_gaps_mm: tuple[float, ...] | None = None,
+    positions: tuple[CompassPosition, ...] | None = None,
+    positions_by_ring: tuple[tuple[CompassPosition, ...], ...] | None = None,
     ring_count: int = 1,
     ring_gap_mm: float = 2.5,
 ) -> tuple[LabelCandidate, ...]:
@@ -73,10 +122,25 @@ def compass_candidates(
     """
     if ring_count < 1:
         raise ValueError("ring_count must be at least 1")
+    if exact_edge_gaps_mm is not None and not exact_edge_gaps_mm:
+        raise ValueError("exact_edge_gaps_mm must not be empty")
+    if exact_edge_gaps_mm is not None and ring_count != 1:
+        raise ValueError("exact_edge_gaps_mm cannot be combined with multiple rings")
+    if positions_by_ring is not None and exact_edge_gaps_mm is None:
+        raise ValueError("positions_by_ring requires exact_edge_gaps_mm")
 
     candidates: list[LabelCandidate] = []
-    for ring in range(ring_count):
-        for position in CANDIDATE_PREFERENCE:
+    candidate_positions = positions or CANDIDATE_PREFERENCE
+    gap_count = len(exact_edge_gaps_mm) if exact_edge_gaps_mm is not None else ring_count
+    if positions_by_ring is not None and len(positions_by_ring) != gap_count:
+        raise ValueError("positions_by_ring must match the number of exact edge gaps")
+    for ring in range(gap_count):
+        ring_positions = (
+            positions_by_ring[ring]
+            if positions_by_ring is not None
+            else candidate_positions
+        )
+        for position in ring_positions:
             dx, dy = COMPASS_VECTORS[position]
             half_extent = (
                 abs(dx) * metrics.width_mm / 2.0 + abs(dy) * metrics.height_mm / 2.0
@@ -95,14 +159,23 @@ def compass_candidates(
                 height_mm=metrics.height_mm,
             )
             if exact_edge_gap_mm is not None:
-                target_edge_gap_mm = exact_edge_gap_mm + ring * ring_gap_mm
+                target_edge_gap_mm = (
+                    exact_edge_gaps_mm[ring]
+                    if exact_edge_gaps_mm is not None
+                    else exact_edge_gap_mm + ring * ring_gap_mm
+                )
                 for _ in range(3):
                     glyph_bounds = _translated_rects(
                         metrics.ink_rects_mm, bounds.left_mm, bounds.top_mm
                     )
+                    distance_fn = (
+                        approximate_edge_distance
+                        if approximate_edge_distance is not None and _ < 1
+                        else exact_edge_distance
+                    )
                     gap = (
-                        exact_edge_distance(bounds, glyph_bounds)
-                        if exact_edge_distance is not None
+                        distance_fn(bounds, glyph_bounds)
+                        if distance_fn is not None
                         else circle_rect_edge_distance_mm(anchor, exclusion_radius_mm, bounds)
                     )
                     adjustment = gap - target_edge_gap_mm

@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import (
+    DsoLabelPlacementStyle,
     ForeignStarClearanceStyle,
     SourceAssociationStyle,
     StarLabelClearanceStyle,
@@ -18,10 +19,10 @@ from nightsky_atlas.layout.association import (
     SourceGeometry,
     source_contains_point,
     source_edge_distance,
-    source_extent_edge_distance,
     source_facing_point,
+    source_geometries_overlap,
 )
-from nightsky_atlas.layout.candidates import CANDIDATE_PREFERENCE
+from nightsky_atlas.layout.candidates import direction_preference_rank
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
     circle_rect_edge_distance_mm,
@@ -68,6 +69,7 @@ class CostWeights:
     label_competing_owner: float = 26.0
     label_glyph_proximity: float = 24.0
     label_foreign_object_proximity: float = 8.0
+    label_ownership_margin: float = 48.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +204,11 @@ class CostBreakdown:
     label_competing_owner: float = 0.0
     label_glyph_proximity: float = 0.0
     label_foreign_object_proximity: float = 0.0
+    label_ownership_margin_cost: float = 0.0
+    ownership_margin_mm: float | None = None
+    nearest_foreign_source_gap_mm: float | None = None
+    nearest_foreign_source_id: str | None = None
+    foreign_source_closer_than_owner: bool = False
     competing_owner_id: str | None = None
     closest_foreign_star_id: str | None = None
     closest_foreign_star_radius_mm: float | None = None
@@ -229,6 +236,7 @@ class CostBreakdown:
             + self.label_competing_owner * weights.label_competing_owner
             + self.label_glyph_proximity * weights.label_glyph_proximity
             + self.label_foreign_object_proximity * weights.label_foreign_object_proximity
+            + self.label_ownership_margin_cost * weights.label_ownership_margin
         )
 
     def components(self) -> dict[str, float]:
@@ -253,6 +261,7 @@ class CostBreakdown:
             "label_competing_owner": self.label_competing_owner,
             "label_glyph_proximity": self.label_glyph_proximity,
             "label_foreign_object_proximity": self.label_foreign_object_proximity,
+            "label_ownership_margin_cost": self.label_ownership_margin_cost,
         }
 
 
@@ -281,6 +290,8 @@ def score_candidate(
     star_clearance: StarLabelClearanceStyle | None = None,
     target_source_id: str | None = None,
     source_association: SourceAssociationStyle | None = None,
+    dso_placement: DsoLabelPlacementStyle | None = None,
+    is_dso_label: bool = False,
     source_symbols: tuple[SourceGeometry, ...] | None = None,
     association_scale: float = 1.0,
     printable: PageRect,
@@ -292,6 +303,11 @@ def score_candidate(
 ) -> CostBreakdown:
     """Measure all cost components for one candidate."""
     bounds = candidate.bounds
+    source_by_id = (
+        {source.id: source for source in source_symbols}
+        if source_symbols is not None
+        else {}
+    )
     center = bounds.center
 
     label_overlap = sum(
@@ -303,6 +319,10 @@ def score_candidate(
         rect_overlap_area_mm2(bounds, _symbol_rect(symbol))
         for symbol in symbols
         if circle_intersects_rect(symbol.center, symbol.radius_mm, bounds)
+        and (
+            symbol.id not in source_by_id
+            or source_edge_distance(source_by_id[symbol.id], bounds) <= 0.0
+        )
     )
     anchor_distance = (
         (center.x_mm - target_anchor.x_mm) ** 2 + (center.y_mm - target_anchor.y_mm) ** 2
@@ -346,6 +366,11 @@ def score_candidate(
         competing_ambiguity = 0.0
         competing_owner = 0.0
         foreign_object_proximity = 0.0
+        ownership_margin_cost = 0.0
+        ownership_margin = None
+        nearest_foreign_source_gap = None
+        nearest_foreign_source_id = None
+        foreign_source_closer = False
         competing_owner_id = None
     else:
         association = source_association or SourceAssociationStyle()
@@ -369,6 +394,11 @@ def score_candidate(
             competing_owner,
             foreign_object_proximity,
             competing_owner_id,
+            ownership_margin,
+            ownership_margin_cost,
+            nearest_foreign_source_gap,
+            nearest_foreign_source_id,
+            foreign_source_closer,
         ) = _source_association_costs(
             candidate,
             target_anchor,
@@ -378,14 +408,14 @@ def score_candidate(
             associated_star_ids,
             related_ids,
             association,
+            dso_placement if is_dso_label else None,
         )
-
     return CostBreakdown(
         label_label_overlap_mm2=label_overlap,
         label_symbol_overlap_mm2=symbol_overlap,
         anchor_distance_mm=anchor_distance,
         edge_proximity_mm=_edge_proximity_mm(bounds, printable, edge_margin_mm),
-        preference_rank=float(CANDIDATE_PREFERENCE.index(candidate.position)),
+        preference_rank=direction_preference_rank(candidate.position),
         crowding=crowding,
         constellation_line_overlap=line_overlap,
         label_foreign_star_clearance=foreign_penalty,
@@ -398,6 +428,11 @@ def score_candidate(
         label_competing_owner=competing_owner * association_scale,
         label_glyph_proximity=glyph_proximity * association_scale,
         label_foreign_object_proximity=foreign_object_proximity,
+        label_ownership_margin_cost=ownership_margin_cost,
+        ownership_margin_mm=ownership_margin,
+        nearest_foreign_source_gap_mm=nearest_foreign_source_gap,
+        nearest_foreign_source_id=nearest_foreign_source_id,
+        foreign_source_closer_than_owner=foreign_source_closer,
         competing_owner_id=competing_owner_id,
         closest_foreign_star_id=(closest_foreign.id if closest_foreign else None),
         closest_foreign_star_radius_mm=(
@@ -418,7 +453,21 @@ def _source_association_costs(
     associated_star_ids: frozenset[str],
     related_star_ids: frozenset[str],
     config: SourceAssociationStyle,
-) -> tuple[float, float, float, float, float, float, str | None]:
+    dso_placement: DsoLabelPlacementStyle | None = None,
+) -> tuple[
+    float,
+    float,
+    float,
+    float,
+    float,
+    float,
+    str | None,
+    float | None,
+    float,
+    float | None,
+    str | None,
+    bool,
+]:
     """Score the visual corridor and ownership of a source-to-label pairing."""
     bounds = candidate.bounds
     own_stars = tuple(star for star in stars if associated_star_ids & star.star_ids)
@@ -444,11 +493,22 @@ def _source_association_costs(
         key=lambda item: item[0],
         default=(_point_rect_distance(target_anchor, bounds), target_anchor),
     )
+    preferred_max_gap = (
+        dso_placement.preferred_max_gap_mm
+        if dso_placement is not None
+        else config.preferred_max_gap_mm
+    )
     source_distance = max(
         0.0,
         config.preferred_min_gap_mm - owner_gap,
-        owner_gap - config.preferred_max_gap_mm,
+        owner_gap - preferred_max_gap,
     )
+    if dso_placement is not None and owner_gap > dso_placement.long_gap_knee_mm:
+        excess = owner_gap - dso_placement.long_gap_knee_mm
+        source_distance += dso_placement.long_gap_curve_factor * excess * excess
+    if dso_placement is not None and owner_gap > dso_placement.direct_gap_expensive_mm:
+        excess = owner_gap - dso_placement.direct_gap_expensive_mm
+        source_distance += dso_placement.direct_gap_extra_weight * excess * excess
     corridor_end = clamp_point_to_rect(corridor_start, bounds)
     corridor = 0.0
     ambiguity = 0.0
@@ -457,6 +517,8 @@ def _source_association_costs(
     strongest_competitor = 0.0
     foreign_object_proximity = 0.0
     ambiguity_limit = max(0.0, owner_gap) + config.ambiguity_margin_mm
+    nearest_foreign_source_gap: float | None = None
+    nearest_foreign_source_id: str | None = None
 
     for star in stars:
         if related_star_ids & star.star_ids:
@@ -492,7 +554,14 @@ def _source_association_costs(
             symbol.collision_radius_mm + config.corridor_margin_mm
         ):
             corridor += 1.0
-        gap = source_extent_edge_distance(symbol, bounds)
+        gap = source_edge_distance(symbol, bounds)
+        if (
+            nearest_foreign_source_gap is None
+            or gap < nearest_foreign_source_gap
+            or (gap == nearest_foreign_source_gap and symbol.id < str(nearest_foreign_source_id))
+        ):
+            nearest_foreign_source_gap = gap
+            nearest_foreign_source_id = symbol.id
         if gap < ambiguity_limit:
             ambiguity += (ambiguity_limit - gap) / max(config.ambiguity_margin_mm, 1e-9)
         if gap < owner_gap:
@@ -506,6 +575,26 @@ def _source_association_costs(
         if gap < config.foreign_object_clear_mm:
             fraction = (config.foreign_object_clear_mm - gap) / config.foreign_object_clear_mm
             foreign_object_proximity += fraction * fraction
+    ownership_margin: float | None = None
+    ownership_margin_cost = 0.0
+    foreign_source_closer = False
+    if dso_placement is not None and nearest_foreign_source_gap is not None:
+        ownership_margin = nearest_foreign_source_gap - owner_gap
+        closest_foreign_source = next(
+            (source for source in symbols if source.id == nearest_foreign_source_id), None
+        )
+        overlapping_pair = bool(
+            closest_foreign_source is not None
+            and own_symbols
+            and source_geometries_overlap(own_symbols[0], closest_foreign_source)
+        )
+        foreign_source_closer = ownership_margin < 0.0 and not overlapping_pair
+        margin_deficit = max(
+            0.0,
+            dso_placement.ownership_margin_preferred_mm - ownership_margin,
+        )
+        ownership_margin_cost = margin_deficit**2 * (0.15 if overlapping_pair else 1.0)
+
     return (
         source_distance,
         max(0.0, owner_gap),
@@ -514,6 +603,11 @@ def _source_association_costs(
         competing_owner,
         foreign_object_proximity,
         competing_owner_id,
+        ownership_margin,
+        ownership_margin_cost,
+        nearest_foreign_source_gap,
+        nearest_foreign_source_id,
+        foreign_source_closer,
     )
 
 

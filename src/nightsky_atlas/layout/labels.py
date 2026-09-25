@@ -17,7 +17,16 @@ from nightsky_atlas.catalog.priority import (
 )
 from nightsky_atlas.catalog.star_names import StarName, hip_number
 from nightsky_atlas.chart.page import PagePoint, PageTransform
-from nightsky_atlas.layout.candidates import compass_candidates
+from nightsky_atlas.layout.association import (
+    dso_source_geometries,
+    source_edge_distance,
+    source_extent_edge_distance,
+)
+from nightsky_atlas.layout.candidates import (
+    CANDIDATE_DIRECTIONS_16,
+    CANDIDATE_PREFERENCE,
+    compass_candidates,
+)
 from nightsky_atlas.layout.dso_labels import format_dso_label
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.scoring import star_rect_edge_distance_mm
@@ -77,6 +86,26 @@ def build_dso_labels(
 
     limit = style.label.dso_label_magnitude_limit
     labels: list[Label] = []
+    placement_style = style.label.dso_placement
+    positions = (
+        CANDIDATE_DIRECTIONS_16
+        if placement_style.candidate_directions == 16
+        else CANDIDATE_PREFERENCE
+    )
+    outer_positions = (
+        CANDIDATE_DIRECTIONS_16
+        if placement_style.outer_candidate_directions == 16
+        else CANDIDATE_PREFERENCE
+    )
+    positions_by_gap = tuple(
+        positions
+        if gap < placement_style.outer_candidate_start_gap_mm
+        else outer_positions
+        for gap in placement_style.candidate_edge_gaps_mm
+    )
+    sources = {
+        source.id: source for source in dso_source_geometries(scene, transform, style)
+    }
     for scene_dso in scene.deep_sky_objects:
         dso = scene_dso.dso
         always_label = dso.object_type in style.label.selection.always_label_object_types
@@ -103,12 +132,37 @@ def build_dso_labels(
         label_id = f"label:dso:{dso.id}"
         metrics = measurer_for(size_pt, formatted.weight).measure_mm(formatted.text)
         anchor = transform.to_page(scene_dso.chart_point)
+        source = sources.get(dso.id)
+        exact_edge_distance = None
+        approximate_edge_distance = None
+        if source is not None:
+            def edge_distance(bounds, _glyphs, geometry=source):
+                return source_edge_distance(geometry, bounds)
+
+            exact_edge_distance = edge_distance
+            if not source.outline_paths:
+                def approximate_distance(bounds, _glyphs, geometry=source):
+                    return source_extent_edge_distance(geometry, bounds)
+
+                approximate_edge_distance = approximate_distance
         candidates = compass_candidates(
             label_id=label_id,
             metrics=metrics,
             anchor=anchor,
             exclusion_radius_mm=_exclusion_radius_mm(dso, transform, style),
-            ring_count=style.label.candidate_rings,
+            exact_edge_gap_mm=(
+                placement_style.candidate_edge_gaps_mm[0]
+                if source is not None
+                else None
+            ),
+            exact_edge_distance=exact_edge_distance,
+            approximate_edge_distance=approximate_edge_distance,
+            exact_edge_gaps_mm=(
+                placement_style.candidate_edge_gaps_mm if source is not None else None
+            ),
+            positions=positions,
+            positions_by_ring=positions_by_gap if source is not None else None,
+            ring_count=1 if source is not None else style.label.candidate_rings,
             ring_gap_mm=style.label.ring_gap_mm,
         )
         labels.append(
