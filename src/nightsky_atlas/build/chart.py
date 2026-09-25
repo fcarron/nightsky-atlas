@@ -291,6 +291,7 @@ def build_chart_context(
     double_star_companion_tolerance_arcsec: float = DEFAULT_COMPANION_TOLERANCE_ARCSEC,
     double_star_ambiguous_radius_arcsec: float = DEFAULT_AMBIGUOUS_RADIUS_ARCSEC,
     magnitude_limit: float | None = None,
+    scale_mm_per_degree: float | None = None,
     progress: Progress | None = None,
     inputs: ChartInputs | None = None,
 ) -> ChartContext:
@@ -375,7 +376,9 @@ def build_chart_context(
     transform = PageTransform(
         chart=definition,
         page=page,
-        scale_mm_per_degree=atlas.mm_per_degree,
+        scale_mm_per_degree=(
+            scale_mm_per_degree if scale_mm_per_degree is not None else atlas.mm_per_degree
+        ),
     )
     return ChartContext(
         atlas=atlas,

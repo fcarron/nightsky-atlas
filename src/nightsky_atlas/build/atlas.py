@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import math
 import os
 import subprocess
 import tempfile
@@ -23,6 +24,7 @@ from nightsky_atlas.atlas.config import (
     AtlasConfig,
     StyleConfig,
     load_atlas_config,
+    load_style_config,
 )
 from nightsky_atlas.atlas.directory import build_chart_directory
 from nightsky_atlas.atlas.index import build_atlas_index
@@ -65,6 +67,7 @@ from nightsky_atlas.catalog.store import QueryBox, StarStore
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import (
+    ChartPresentation,
     presentation_from_edition,
 )
 from nightsky_atlas.layout.labels import build_labels
@@ -79,6 +82,7 @@ from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.atlas_index import draw_atlas_index_pages
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
 from nightsky_atlas.render.chart_directory import draw_chart_directory_pages
+from nightsky_atlas.render.detail_markers import build_detail_marker
 from nightsky_atlas.render.front_matter import draw_field_guide
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.overview import LocatorInset, draw_overview_page
@@ -93,6 +97,19 @@ __all__ = [
     "build_atlas",
     "chart_definitions",
 ]
+
+
+def _style_with_star_profile(base_style: StyleConfig, star_profile: StyleConfig) -> StyleConfig:
+    """Use one edition's star appearance while preserving the base DSO style."""
+    return base_style.model_copy(
+        update={
+            "star": star_profile.star,
+            "double_stars": star_profile.double_stars,
+            "label": base_style.label.model_copy(
+                update={"star_labels": star_profile.label.star_labels}
+            ),
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -387,6 +404,47 @@ def _build_atlas_impl(
         charts = charts[:limit]
     if not charts:
         raise ValueError("no charts selected")
+    missing_detail_parents = {
+        detail.parent_chart_id for detail in atlas.detail_charts
+    } - {chart.id for chart in all_charts}
+    if missing_detail_parents:
+        raise ValueError(
+            "detail charts reference unknown parent chart(s): "
+            + ", ".join(sorted(missing_detail_parents))
+        )
+    main_codes = {
+        presentation_from_edition(chart, edition).chart_code for chart in all_charts
+    }
+    duplicate_detail_codes = main_codes & {detail.code for detail in atlas.detail_charts}
+    if duplicate_detail_codes:
+        raise ValueError(
+            "detail chart codes collide with atlas chart codes: "
+            + ", ".join(sorted(duplicate_detail_codes))
+        )
+    detail_charts = tuple(
+        detail
+        for detail in atlas.detail_charts
+        if detail.parent_chart_id in {chart.id for chart in charts}
+    )
+    detail_star_profiles: dict[str, tuple[float, StyleConfig]] = {}
+    for profile_name in sorted({detail.star_profile for detail in detail_charts}):
+        profile_atlas_path = Path(atlas_path).with_name(f"{profile_name}.yaml")
+        profile_style_path = Path(style_path).with_name(f"{profile_name}.yaml")
+        profile_atlas = load_atlas_config(profile_atlas_path)
+        profile_style = load_style_config(profile_style_path)
+        if not math.isclose(
+            profile_atlas.stellar_limit_magnitude,
+            profile_style.star.faint_magnitude,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            raise ValueError(
+                f"{profile_name} atlas stellar limit does not match its star-style faint limit"
+            )
+        detail_star_profiles[profile_name] = (
+            profile_atlas.stellar_limit_magnitude,
+            _style_with_star_profile(style, profile_style),
+        )
     if publication:
         if not optimize:
             raise ValueError("publication requires deterministic layout optimization")
@@ -433,6 +491,13 @@ def _build_atlas_impl(
         "observing_config": str(observing_config_path or OBSERVING_CONFIG_PATH),
         "overrides": overrides_path,
     }
+    for profile_name in detail_star_profiles:
+        input_paths[f"detail_star_profile_{profile_name}_atlas"] = Path(atlas_path).with_name(
+            f"{profile_name}.yaml"
+        )
+        input_paths[f"detail_star_profile_{profile_name}_style"] = Path(style_path).with_name(
+            f"{profile_name}.yaml"
+        )
     input_fingerprints = collect_build_inputs(input_paths)
     geometry_catalogues = {
         "constellation_lines": sorted(
@@ -479,7 +544,9 @@ def _build_atlas_impl(
     chart_codes = {
         chart.id: presentation_from_edition(chart, edition).chart_code for chart in charts
     }
-    pdf_navigation = PdfNavigation(frozenset(chart_codes.values()))
+    pdf_navigation = PdfNavigation(
+        frozenset((*chart_codes.values(), *(detail.code for detail in detail_charts)))
+    )
     outline_root = pdf_navigation.add_outline(
         surface,
         cairo.PDF_OUTLINE_ROOT,
@@ -580,6 +647,11 @@ def _build_atlas_impl(
             progress=progress,
             inputs=inputs,
         )
+        detail_markers = tuple(
+            build_detail_marker(detail, definition, chart_context.transform)
+            for detail in detail_charts
+            if detail.parent_chart_id == definition.id
+        )
         context_s = time.perf_counter() - stage_start
         stage_start = time.perf_counter()
         labels = build_labels(
@@ -673,6 +745,7 @@ def _build_atlas_impl(
             labels=labels,
             presentation=presentation,
             locator=locator,
+            detail_markers=detail_markers,
             pdf_path=page_dir / "chart.pdf",
             png_path=page_dir / "preview.png" if render_png else None,
             png_dpi=png_dpi,
@@ -688,6 +761,7 @@ def _build_atlas_impl(
             presentation=presentation,
             locator=locator,
             pdf_navigation=pdf_navigation,
+            detail_markers=detail_markers,
         )
         pdf_navigation.mark_chart_page(surface, context, presentation.chart_code)
         pdf_navigation.add_outline(
@@ -741,6 +815,139 @@ def _build_atlas_impl(
         chart_stars=index_stars,
         star_names=star_names,
     )
+    detail_outline = None
+    if detail_charts:
+        detail_outline = pdf_navigation.add_outline(
+            surface,
+            outline_root,
+            "Close-up maps",
+            detail_charts[0].code,
+        )
+
+    for detail_index, detail in enumerate(detail_charts, start=1):
+        detail_start = time.perf_counter()
+        definition = detail.to_definition(atlas_id=atlas.id)
+        stellar_limit_magnitude, detail_style = detail_star_profiles[detail.star_profile]
+        progress.detail(
+            f"[{detail_index}/{len(detail_charts)}] {detail.id}: detail chart start"
+        )
+        chart_context = build_chart_context(
+            atlas_path=atlas_path,
+            style_path=style_path,
+            definition=definition,
+            star_store=star_store,
+            stars_csv=stars_csv,
+            double_stars_path=double_stars_path,
+            star_systems=star_systems,
+            magnitude_limit=stellar_limit_magnitude,
+            scale_mm_per_degree=detail.mm_per_degree,
+            progress=progress,
+            inputs=inputs,
+        )
+        labels = build_labels(
+            chart_context.scene, chart_context.transform, detail_style, star_names
+        )
+        labels = select_labels(
+            labels,
+            chart_context.scene,
+            chart_context.transform,
+            detail_style,
+        )
+        chart_overrides = library.for_chart(definition.id) if library is not None else None
+        if chart_overrides is not None:
+            labels = apply_overrides(labels, chart_overrides)
+            applied_chart_ids.add(definition.id)
+        presentation = ChartPresentation(
+            edition_name=(
+                f"Detail · {detail.name} · stars to mag "
+                f"{stellar_limit_magnitude:g}"
+            ),
+            edition_code="SD",
+            chart_index=None,
+            internal_chart_id=detail.code,
+        )
+        furniture = furniture_obstacles(
+            chart_context.transform,
+            definition,
+            detail_style,
+            presentation,
+        )
+        if optimize:
+            optimized = optimize_labels(
+                labels,
+                chart_context.scene,
+                chart_context.transform,
+                detail_style,
+                furniture=furniture,
+            )
+            labels = optimized.labels
+            cost_before = optimized.cost_before
+            cost_after = optimized.cost_after
+        else:
+            cost_before = layout_cost(
+                labels, chart_context.scene, chart_context.transform, detail_style
+            )[0]
+            cost_after = cost_before
+        validation = validate_layout(
+            labels,
+            chart_context.scene,
+            chart_context.transform,
+            detail_style,
+            furniture=furniture,
+        )
+        page_dir = outroot / "charts" / definition.id
+        render_chart(
+            chart_context.scene,
+            chart_context.transform,
+            detail_style,
+            labels=labels,
+            presentation=presentation,
+            pdf_path=page_dir / "chart.pdf",
+            png_path=page_dir / "preview.png" if render_png else None,
+            png_dpi=png_dpi,
+        )
+        draw_chart_page(
+            context,
+            chart_context.scene,
+            chart_context.transform,
+            detail_style,
+            labels=labels,
+            presentation=presentation,
+            pdf_navigation=pdf_navigation,
+        )
+        pdf_navigation.mark_chart_page(surface, context, detail.code)
+        if detail_outline is not None:
+            pdf_navigation.add_outline(
+                surface,
+                detail_outline,
+                f"{detail.name} · {detail.code}",
+                detail.code,
+            )
+        surface.show_page()
+        placed = sum(1 for label in labels if not label.hidden and label.candidates)
+        results.append(
+            ChartPageResult(
+                chart_id=definition.id,
+                star_count=chart_context.scene.star_count,
+                dso_count=chart_context.scene.dso_count,
+                star_system_count=chart_context.scene.star_system_count,
+                label_count=len(labels),
+                placed_count=placed,
+                hidden_count=len(labels) - placed,
+                overrides_applied=len(chart_overrides) if chart_overrides is not None else 0,
+                hard_issues=len(validation.issues),
+                cost_before=cost_before,
+                cost_after=cost_after,
+                layout_hash=layout_hash(labels),
+                neighbours=definition.neighbours,
+            )
+        )
+        progress.info(
+            f"detail {detail.code} ({detail.name}): {chart_context.scene.star_count} stars, "
+            f"{chart_context.scene.dso_count} DSOs, {placed}/{len(labels)} labels, "
+            f"{len(validation.issues)} hard issues ({time.perf_counter() - detail_start:.2f}s)"
+        )
+
     with progress.step("append atlas index", detail=True):
         index_pages = draw_atlas_index_pages(
             context,
@@ -794,6 +1001,26 @@ def _build_atlas_impl(
             "forced": forced_lists,
         },
         "chart_count": len(results),
+        "main_chart_count": len(charts),
+        "detail_chart_count": len(detail_charts),
+        "main_chart_ids": [chart.id for chart in charts],
+        "detail_chart_ids": [detail.id for detail in detail_charts],
+        "detail_charts": [
+            {
+                "id": detail.id,
+                "code": detail.code,
+                "name": detail.name,
+                "parent_chart_id": detail.parent_chart_id,
+                "center_ra_deg": detail.center_ra_deg,
+                "center_dec_deg": detail.center_dec_deg,
+                "width_deg": detail.width_deg,
+                "height_deg": detail.height_deg,
+                "mm_per_degree": detail.mm_per_degree,
+                "star_profile": detail.star_profile,
+                "stellar_limit_magnitude": detail_star_profiles[detail.star_profile][0],
+            }
+            for detail in detail_charts
+        ],
         "render_png": render_png,
         "front_matter_page_count": front_matter_pages,
         "chart_directory": {

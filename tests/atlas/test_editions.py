@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pytest
 
 from nightsky_atlas.atlas.config import load_atlas_config, load_style_config
 from nightsky_atlas.atlas.tiling import TilingSpec, chart_definitions, coverage_report
+from nightsky_atlas.build.atlas import _style_with_star_profile
+from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
+from nightsky_atlas.render.detail_markers import build_detail_marker
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -62,6 +66,68 @@ def test_deep_tiling_mirrors_standard_ring_design() -> None:
     )
     spec = TilingSpec.from_config(deep.tiling)
     assert spec.is_ring_mode
+
+
+def test_standard_detail_maps_are_supplemental_and_doubled_scale() -> None:
+    standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
+    deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
+    details = standard.detail_charts
+    assert len(chart_definitions(standard)) == 116
+    assert {detail.code for detail in details} == {
+        "SD053",
+        "SD084",
+        "SD031",
+        "SD063",
+        "SD013",
+        "SD035",
+    }
+    assert {detail.name for detail in details} >= {
+        "Virgo Cluster",
+        "Sagittarius clusters · M22 / M28",
+        "Cygnus nebula field",
+        "Orion Nebula · M42",
+        "Perseus Double Cluster",
+        "Pleiades · M45",
+    }
+    assert all(detail.mm_per_degree == 20.0 for detail in details)
+    assert all(detail.star_profile == "deep" for detail in details)
+    assert deep.stellar_limit_magnitude == 10.0
+
+
+def test_detail_deep_star_profile_preserves_standard_dso_styling() -> None:
+    standard_style = load_style_config(ROOT / "styles" / "standard.yaml")
+    deep_style = load_style_config(ROOT / "styles" / "deep.yaml")
+    detail_style = _style_with_star_profile(standard_style, deep_style)
+    assert detail_style.star == deep_style.star
+    assert detail_style.double_stars == deep_style.double_stars
+    assert detail_style.label.star_labels == deep_style.label.star_labels
+    assert detail_style.dso == standard_style.dso
+    assert detail_style.label.dso_labels == standard_style.label.dso_labels
+
+
+def test_standard_detail_markers_project_into_their_parent_charts() -> None:
+    standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
+    charts = {chart.id: chart for chart in chart_definitions(standard)}
+    for detail in standard.detail_charts:
+        parent = charts[detail.parent_chart_id]
+        transform = PageTransform(
+            chart=parent,
+            page=standard.page.to_geometry(),
+            scale_mm_per_degree=standard.mm_per_degree,
+        )
+        marker = build_detail_marker(detail, parent, transform)
+        assert marker.chart_code == detail.code
+        assert marker.label == detail.name
+        assert len(marker.boundary) == 48
+        assert all(
+            math.isfinite(point.x_mm) and math.isfinite(point.y_mm)
+            for point in marker.boundary
+        )
+        frame = transform.chart_rect
+        xs = [point.x_mm for point in marker.boundary]
+        ys = [point.y_mm for point in marker.boundary]
+        assert max(xs) >= frame.left_mm and min(xs) <= frame.right_mm
+        assert max(ys) >= frame.top_mm and min(ys) <= frame.bottom_mm
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))

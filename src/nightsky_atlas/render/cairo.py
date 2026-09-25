@@ -30,6 +30,7 @@ from nightsky_atlas.layout.geometry import expand_rect
 from nightsky_atlas.layout.leader_lines import resolve_leader_lines
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
+from nightsky_atlas.render.detail_markers import DetailMapMarker, draw_detail_markers
 from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
 from nightsky_atlas.render.ecliptic import build_ecliptic
 from nightsky_atlas.render.furniture import build_furniture_plan, draw_furniture
@@ -84,6 +85,7 @@ def render_chart(
     debug: DebugOptions | None = None,
     presentation: ChartPresentation | None = None,
     locator: LocatorInset | None = None,
+    detail_markers: tuple[DetailMapMarker, ...] = (),
     pdf_path: str | Path | None = None,
     png_path: str | Path | None = None,
     png_dpi: float = _DEFAULT_PNG_DPI,
@@ -105,6 +107,7 @@ def render_chart(
             debug=debug,
             presentation=presentation,
             locator=locator,
+            detail_markers=detail_markers,
         )
 
     _render_outputs(
@@ -127,6 +130,7 @@ def draw_chart_page(
     presentation: ChartPresentation | None = None,
     locator: LocatorInset | None = None,
     pdf_navigation: PdfNavigation | None = None,
+    detail_markers: tuple[DetailMapMarker, ...] = (),
 ) -> None:
     """Draw one chart page into an existing context, in point units.
 
@@ -160,6 +164,7 @@ def draw_chart_page(
     if debug is not None:
         _draw_debug(cr, transform, scene, label_list, style, debug)
     draw_furniture(cr, plan, style, pdf_navigation)
+    draw_detail_markers(cr, detail_markers, transform, style, pdf_navigation)
 
 
 def render_magnitude_scale(

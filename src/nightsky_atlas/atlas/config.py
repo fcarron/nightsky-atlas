@@ -13,6 +13,7 @@ milestone; atlas tiling is not implemented yet.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Literal
 
@@ -46,6 +47,7 @@ __all__ = [
     "DsoLabelPlacementStyle",
     "DsoLabelStyle",
     "DsoLabelTierStyle",
+    "DetailChartConfig",
     "DsoStyle",
     "EditionConfig",
     "FurnitureStyle",
@@ -131,6 +133,52 @@ class ChartConfig(_StrictModel):
             rotation_deg=self.rotation_deg,
             atlas_id=atlas_id,
             neighbours=tuple(self.neighbours.items()),
+        )
+
+
+class DetailChartConfig(_StrictModel):
+    """A supplementary zoom chart with its own scale and edition star profile."""
+
+    id: str
+    code: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+    name: str
+    parent_chart_id: str
+    center_ra_deg: float
+    center_dec_deg: float
+    width_deg: PositiveFloat
+    height_deg: PositiveFloat
+    mm_per_degree: PositiveFloat
+    star_profile: Literal["pocket", "standard", "deep"] = "deep"
+
+    @field_validator("id", "name", "parent_chart_id")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("detail-chart id, name and parent chart must not be blank")
+        return value
+
+    @field_validator("center_ra_deg", "center_dec_deg")
+    @classmethod
+    def _finite_coordinates(cls, value: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("detail-chart coordinates must be finite")
+        return value
+
+    @field_validator("center_dec_deg")
+    @classmethod
+    def _declination_range(cls, value: float) -> float:
+        if not -90.0 <= value <= 90.0:
+            raise ValueError("detail-chart declination must lie in [-90, 90]")
+        return value
+
+    def to_definition(self, *, atlas_id: str) -> ChartDefinition:
+        return ChartDefinition(
+            id=self.id,
+            center_ra_deg=self.center_ra_deg,
+            center_dec_deg=self.center_dec_deg,
+            width_deg=self.width_deg,
+            height_deg=self.height_deg,
+            atlas_id=atlas_id,
         )
 
 
@@ -318,6 +366,7 @@ class AtlasConfig(_StrictModel):
     page: PageConfig
     edition: EditionConfig | None = None
     charts: list[ChartConfig] = Field(default_factory=list)
+    detail_charts: tuple[DetailChartConfig, ...] = ()
     tiling: TilingConfig | None = None
     mm_per_degree: PositiveFloat | None = None
     stellar_limit_magnitude: PositiveFloat | None = None
@@ -325,18 +374,31 @@ class AtlasConfig(_StrictModel):
 
     @model_validator(mode="after")
     def _configured_scale_fits_page(self) -> AtlasConfig:
-        if self.mm_per_degree is None:
-            return self
         page = self.page.to_geometry()
-        fields = [(chart.width_deg, chart.height_deg) for chart in self.charts]
-        if self.tiling is not None:
-            fields.append((self.tiling.width_deg, self.tiling.height_deg))
-        for width_deg, height_deg in fields:
+        if self.mm_per_degree is not None:
+            fields = [(chart.width_deg, chart.height_deg) for chart in self.charts]
+            if self.tiling is not None:
+                fields.append((self.tiling.width_deg, self.tiling.height_deg))
+            for width_deg, height_deg in fields:
+                if (
+                    width_deg * self.mm_per_degree > page.printable_width_mm + 1e-9
+                    or height_deg * self.mm_per_degree > page.printable_height_mm + 1e-9
+                ):
+                    raise ValueError("mm_per_degree makes a chart field exceed the printable page")
+        detail_ids = [detail.id for detail in self.detail_charts]
+        detail_codes = [detail.code for detail in self.detail_charts]
+        if len(detail_ids) != len(set(detail_ids)):
+            raise ValueError("detail chart IDs must be unique")
+        if len(detail_codes) != len(set(detail_codes)):
+            raise ValueError("detail chart PDF codes must be unique")
+        for detail in self.detail_charts:
             if (
-                width_deg * self.mm_per_degree > page.printable_width_mm + 1e-9
-                or height_deg * self.mm_per_degree > page.printable_height_mm + 1e-9
+                detail.width_deg * detail.mm_per_degree > page.printable_width_mm + 1e-9
+                or detail.height_deg * detail.mm_per_degree > page.printable_height_mm + 1e-9
             ):
-                raise ValueError("mm_per_degree makes a chart field exceed the printable page")
+                raise ValueError(
+                    f"detail chart {detail.id!r} scale makes its field exceed the printable page"
+                )
         return self
 
     def resolved_edition(self) -> EditionConfig:

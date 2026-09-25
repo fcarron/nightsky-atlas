@@ -165,6 +165,12 @@ def validate_atlas_output(outroot: str | Path, *, publication: bool = False) -> 
         issues.append("atlas manifest contains duplicate chart IDs")
     if manifest.get("chart_count") != len(pages):
         issues.append("atlas manifest chart count does not match page list")
+    main_chart_ids = manifest.get("main_chart_ids", chart_ids)
+    detail_chart_ids = manifest.get("detail_chart_ids", [])
+    if not isinstance(main_chart_ids, list) or not isinstance(detail_chart_ids, list):
+        issues.append("atlas manifest has invalid main/detail chart ID lists")
+    elif [*main_chart_ids, *detail_chart_ids] != chart_ids:
+        issues.append("atlas page list does not match its main/detail chart ID lists")
     hard_counts = [page.get("hard_issues") for page in pages]
     if not all(isinstance(count, int) and count >= 0 for count in hard_counts):
         issues.append("atlas manifest contains invalid hard-issue counts")
@@ -247,7 +253,9 @@ def validate_atlas_output(outroot: str | Path, *, publication: bool = False) -> 
         if isinstance(atlas_config, str) and Path(atlas_config).is_file():
             atlas = load_atlas_config(atlas_config)
             charts = chart_definitions(atlas)
-            if chart_ids != [chart.id for chart in charts]:
+            expected_main_ids = [chart.id for chart in charts]
+            expected_detail_ids = [detail.id for detail in atlas.detail_charts]
+            if main_chart_ids != expected_main_ids or detail_chart_ids != expected_detail_ids:
                 issues.append("atlas chart set differs from the current definition")
             if atlas.tiling is None:
                 issues.append("atlas has no full-sky tiling")
