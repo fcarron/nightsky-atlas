@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import nightsky_atlas.layout.optimizer as optimizer_module
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.models import DsoType, Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
@@ -16,6 +17,7 @@ from nightsky_atlas.layout.optimizer import (
     _association_scale,
     _build_star_index,
     _build_symbol_index,
+    _CandidateScoreCache,
     _dso_placement_metrics,
     _is_valid,
     _repair_dso_hard_conflicts,
@@ -62,6 +64,38 @@ def make_label(
         mandatory=mandatory,
         candidates=candidates,
     )
+
+
+def test_candidate_cache_reuses_static_score_for_changed_neighbors(monkeypatch) -> None:
+    candidate = make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0)
+    label = make_label("label:dso:X", (candidate,))
+    calls = 0
+    original = optimizer_module.score_candidate
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(optimizer_module, "score_candidate", counted)
+    cache = _CandidateScoreCache(
+        {"X": PagePoint(98.0, 101.0)},
+        PageRect(12.0, 12.0, 273.0, 186.0),
+        _build_symbol_index(()),
+        (),
+        _build_star_index(()),
+        (),
+        STYLE,
+        CostWeights(),
+        (),
+    )
+    clear_cost = cache.cost(label, candidate, ())
+    occupied_cost = cache.cost(
+        label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),)
+    )
+
+    assert calls == 1
+    assert occupied_cost > clear_cost
 
 
 def test_greedy_avoids_overlap_between_mandatory_labels() -> None:

@@ -6,7 +6,7 @@ candidate was chosen (``AGENTS.md`` section 15.2).  No opaque single score.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from nightsky_atlas.atlas.config import (
     DsoLabelPlacementStyle,
@@ -42,6 +42,7 @@ __all__ = [
     "SymbolCircle",
     "candidate_star_edge_distance_mm",
     "foreign_star_hard_min_mm",
+    "rescore_candidate_interactions",
     "score_candidate",
     "star_rect_edge_distance_mm",
     "star_source_bounds",
@@ -279,6 +280,51 @@ def _edge_proximity_mm(bounds: PageRect, printable: PageRect, margin_mm: float) 
     return penalty
 
 
+def _placed_label_interactions(
+    candidate: LabelCandidate,
+    placed_bounds: tuple[PageRect, ...],
+    *,
+    crowding_radius_mm: float,
+    dso_placement: DsoLabelPlacementStyle | None,
+    is_dso_label: bool,
+) -> tuple[float, float]:
+    collision_bounds = (
+        dso_collision_bounds(candidate, dso_placement.label_label_ink_clearance_mm)
+        if is_dso_label and dso_placement is not None
+        else candidate.bounds
+    )
+    center = candidate.bounds.center
+    overlap = sum(
+        rect_overlap_area_mm2(collision_bounds, other)
+        for other in placed_bounds
+        if rects_overlap(collision_bounds, other)
+    )
+    crowding = float(
+        sum(1 for other in placed_bounds if _rect_distance(center, other) <= crowding_radius_mm)
+    )
+    return overlap, crowding
+
+
+def rescore_candidate_interactions(
+    static: CostBreakdown,
+    candidate: LabelCandidate,
+    placed_bounds: tuple[PageRect, ...],
+    *,
+    crowding_radius_mm: float,
+    dso_placement: DsoLabelPlacementStyle | None,
+    is_dso_label: bool,
+) -> CostBreakdown:
+    """Update only the two cost terms that depend on placed labels."""
+    overlap, crowding = _placed_label_interactions(
+        candidate,
+        placed_bounds,
+        crowding_radius_mm=crowding_radius_mm,
+        dso_placement=dso_placement,
+        is_dso_label=is_dso_label,
+    )
+    return replace(static, label_label_overlap_mm2=overlap, crowding=crowding)
+
+
 def score_candidate(
     candidate: LabelCandidate,
     *,
@@ -305,11 +351,6 @@ def score_candidate(
     """Measure all cost components for one candidate."""
     bounds = candidate.bounds
     visible_bounds = candidate_ink_bounds(candidate) if is_dso_label else bounds
-    collision_bounds = (
-        dso_collision_bounds(candidate, dso_placement.label_label_ink_clearance_mm)
-        if is_dso_label and dso_placement is not None
-        else bounds
-    )
     source_by_id = (
         {source.id: source for source in source_symbols}
         if source_symbols is not None
@@ -317,10 +358,12 @@ def score_candidate(
     )
     center = bounds.center
 
-    label_overlap = sum(
-        rect_overlap_area_mm2(collision_bounds, other)
-        for other in placed_bounds
-        if rects_overlap(collision_bounds, other)
+    label_overlap, crowding = _placed_label_interactions(
+        candidate,
+        placed_bounds,
+        crowding_radius_mm=crowding_radius_mm,
+        dso_placement=dso_placement,
+        is_dso_label=is_dso_label,
     )
     symbol_overlap = sum(
         rect_overlap_area_mm2(visible_bounds, _symbol_rect(symbol))
@@ -334,9 +377,6 @@ def score_candidate(
     anchor_distance = (
         (center.x_mm - target_anchor.x_mm) ** 2 + (center.y_mm - target_anchor.y_mm) ** 2
     ) ** 0.5
-    crowding = float(
-        sum(1 for other in placed_bounds if _rect_distance(center, other) <= crowding_radius_mm)
-    )
     line_overlap = float(
         sum(
             segment_intersects_rect(

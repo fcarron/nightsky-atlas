@@ -13,6 +13,7 @@ from nightsky_atlas.layout.scoring import (
     CostWeights,
     StarCircle,
     SymbolCircle,
+    rescore_candidate_interactions,
     score_candidate,
     star_rect_edge_distance_mm,
 )
@@ -113,6 +114,37 @@ def _galaxy_source(source_id: str, x: float, y: float, radius: float) -> SourceG
         radius_x_mm=radius,
         radius_y_mm=radius,
     )
+
+
+def test_cached_static_score_matches_full_score_with_different_placed_labels() -> None:
+    candidate = make_candidate(CompassPosition.E, 102.0, 99.0)
+    owner = _galaxy_source("NGC-owner", 100.0, 100.0, 1.0)
+    foreign = _galaxy_source("NGC-foreign", 112.0, 100.0, 0.5)
+    placement = DsoLabelPlacementStyle()
+    common = {
+        "target_anchor": owner.center,
+        "target_source_id": owner.id,
+        "source_symbols": (owner, foreign),
+        "source_association": SourceAssociationStyle(),
+        "dso_placement": placement,
+        "is_dso_label": True,
+    }
+    static = score(candidate, **common)
+    for placed in (
+        (PageRect(109.0, 99.0, 8.0, 2.5),),
+        (PageRect(103.0, 99.0, 8.0, 2.5), PageRect(115.0, 104.0, 8.0, 2.5)),
+    ):
+        full = score(candidate, placed_bounds=placed, **common)
+        cached = rescore_candidate_interactions(
+            static,
+            candidate,
+            placed,
+            crowding_radius_mm=6.0,
+            dso_placement=placement,
+            is_dso_label=True,
+        )
+        assert cached == full
+        assert cached.total(CostWeights()) == full.total(CostWeights())
 
 
 def test_ownership_margin_can_outweigh_a_slightly_closer_candidate() -> None:
