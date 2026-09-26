@@ -12,7 +12,11 @@ from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, St
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.geometry import segments_intersect
-from nightsky_atlas.layout.leader_lines import leader_line_for, resolve_leader_lines
+from nightsky_atlas.layout.leader_lines import (
+    leader_line_for,
+    prepare_leader_routing_context,
+    resolve_leader_lines,
+)
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import layout_hash, optimize_labels
 from nightsky_atlas.layout.validation import validate_layout
@@ -81,6 +85,18 @@ def test_leader_line_stops_at_symbol_and_before_text() -> None:
     assert line.end.x_mm == 159.6
     assert line.start.y_mm == line.end.y_mm
     assert line.end.x_mm < label.effective_candidate().bounds.left_mm
+
+
+def test_prepared_leader_geometry_matches_uncached_routes() -> None:
+    label = make_label()
+    context = prepare_leader_routing_context(SCENE, TRANSFORM, STYLE)
+    assert leader_line_for(
+        label, (label,), SCENE, TRANSFORM, STYLE, context=context
+    ) == leader_line_for(label, (label,), SCENE, TRANSFORM, STYLE)
+    enabled = replace(label, leader_line=True)
+    assert resolve_leader_lines(
+        (enabled,), SCENE, TRANSFORM, STYLE, context=context
+    ) == resolve_leader_lines((enabled,), SCENE, TRANSFORM, STYLE)
 
 
 def test_optimizer_does_not_add_an_excessively_long_dso_leader() -> None:

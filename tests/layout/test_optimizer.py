@@ -98,6 +98,36 @@ def test_candidate_cache_reuses_static_score_for_changed_neighbors(monkeypatch) 
     assert occupied_cost > clear_cost
 
 
+def test_candidate_cache_reuses_static_validity_for_changed_neighbors(monkeypatch) -> None:
+    candidate = make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0)
+    label = make_label("label:dso:X", (candidate,))
+    calls = 0
+    original = optimizer_module._is_valid
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(optimizer_module, "_is_valid", counted)
+    cache = _CandidateScoreCache(
+        {"X": PagePoint(98.0, 101.0)},
+        PageRect(12.0, 12.0, 273.0, 186.0),
+        _build_symbol_index(()),
+        (),
+        _build_star_index(()),
+        (),
+        STYLE,
+        CostWeights(),
+        (),
+    )
+
+    assert cache.valid(label, candidate, ())
+    assert not cache.valid(label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),))
+    assert cache.valid(label, candidate, ())
+    assert calls == 1
+
+
 def test_greedy_avoids_overlap_between_mandatory_labels() -> None:
     first = make_label(
         "label:a",
@@ -120,6 +150,23 @@ def test_greedy_avoids_overlap_between_mandatory_labels() -> None:
     bounds_a = by_id["label:a"].selected_candidate().bounds
     bounds_b = by_id["label:b"].selected_candidate().bounds
     assert not (bounds_a.left_mm < bounds_b.right_mm and bounds_b.left_mm < bounds_a.right_mm)
+
+
+def test_local_repair_diagnostics_are_deterministic() -> None:
+    label = make_label(
+        "label:dso:X",
+        (
+            make_candidate("label:dso:X", CompassPosition.N, 100.0, 100.0),
+            make_candidate("label:dso:X", CompassPosition.S, 100.0, 110.0),
+        ),
+    )
+    first = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
+    second = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
+    passes = first.metrics["local_repair"]["passes"]
+
+    assert first.metrics["local_repair"] == second.metrics["local_repair"]
+    assert len(passes) >= 1
+    assert passes[0]["evaluated_labels"] == 1
 
 
 def test_optimizer_avoids_furniture() -> None:

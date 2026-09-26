@@ -7,7 +7,11 @@ from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PagePoint, PageTransform
-from nightsky_atlas.layout.association import dso_source_geometries, source_facing_point
+from nightsky_atlas.layout.association import (
+    SourceGeometry,
+    dso_source_geometries,
+    source_facing_point,
+)
 from nightsky_atlas.layout.geometry import (
     clamp_point_to_rect,
     expand_rect,
@@ -17,11 +21,21 @@ from nightsky_atlas.layout.geometry import (
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.scoring import star_rect_edge_distance_mm, star_source_facing_point
 from nightsky_atlas.layout.text_geometry import candidate_ink_bounds
-from nightsky_atlas.render.double_stars import printed_star_obstacles, related_member_star_ids
+from nightsky_atlas.render.double_stars import (
+    PrintedStarObstacle,
+    printed_star_obstacles,
+    related_member_star_ids,
+)
 from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
-__all__ = ["LeaderLine", "leader_line_for", "resolve_leader_lines"]
+__all__ = [
+    "LeaderLine",
+    "LeaderRoutingContext",
+    "leader_line_for",
+    "prepare_leader_routing_context",
+    "resolve_leader_lines",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +43,36 @@ class LeaderLine:
     label_id: str
     start: PagePoint
     end: PagePoint
+
+
+@dataclass(frozen=True, slots=True)
+class LeaderRoutingContext:
+    dso_sources: tuple[SourceGeometry, ...]
+    star_obstacles: tuple[PrintedStarObstacle, ...]
+    dso_obstacles: tuple[tuple[str, PagePoint, float], ...]
+
+
+def prepare_leader_routing_context(
+    scene: ChartScene,
+    transform: PageTransform,
+    style: StyleConfig,
+) -> LeaderRoutingContext:
+    return LeaderRoutingContext(
+        dso_sources=dso_source_geometries(scene, transform, style),
+        star_obstacles=printed_star_obstacles(scene, transform, style),
+        dso_obstacles=tuple(
+            (
+                other.dso.id,
+                transform.to_page(other.chart_point),
+                dso_symbol_extent(
+                    other.dso,
+                    mm_per_deg=transform.mm_per_deg,
+                    style=style,
+                ).collision_radius_mm,
+            )
+            for other in scene.deep_sky_objects
+        ),
+    )
 
 
 def _distance_to_segment(point: PagePoint, start: PagePoint, end: PagePoint) -> float:
@@ -50,21 +94,25 @@ def leader_line_for(
     scene: ChartScene,
     transform: PageTransform,
     style: StyleConfig,
+    *,
+    context: LeaderRoutingContext | None = None,
 ) -> LeaderLine | None:
     """Return a legal symbol-to-label segment, or ``None`` if routing is unsafe."""
     config = style.label.leader_lines
     candidate = label.effective_candidate()
     if not config.enabled or label.hidden or candidate is None:
         return None
+    if context is None:
+        context = prepare_leader_routing_context(scene, transform, style)
     dso_target = next(
         (
             source
-            for source in dso_source_geometries(scene, transform, style)
+            for source in context.dso_sources
             if source.id == label.target_id
         ),
         None,
     )
-    star_obstacles = printed_star_obstacles(scene, transform, style)
+    star_obstacles = context.star_obstacles
     star_targets = tuple(
         obstacle
         for obstacle in star_obstacles
@@ -121,12 +169,10 @@ def leader_line_for(
             star.page_point, start, end
         ) <= star.collision_radius_mm + 0.25:
             return None
-    for other in scene.deep_sky_objects:
-        if other.dso.id == label.target_id:
+    for other_id, point, radius in context.dso_obstacles:
+        if other_id == label.target_id:
             continue
-        point = transform.to_page(other.chart_point)
-        other_extent = dso_symbol_extent(other.dso, mm_per_deg=transform.mm_per_deg, style=style)
-        if _distance_to_segment(point, start, end) <= other_extent.collision_radius_mm + 0.25:
+        if _distance_to_segment(point, start, end) <= radius + 0.25:
             return None
     return LeaderLine(label.id, start, end)
 
@@ -136,13 +182,17 @@ def resolve_leader_lines(
     scene: ChartScene,
     transform: PageTransform,
     style: StyleConfig,
+    *,
+    context: LeaderRoutingContext | None = None,
 ) -> tuple[LeaderLine, ...]:
     """Resolve only lines explicitly enabled in the serializable layout."""
     accepted: list[LeaderLine] = []
+    if context is None and any(label.leader_line for label in labels):
+        context = prepare_leader_routing_context(scene, transform, style)
     for label in sorted(labels, key=lambda item: item.id):
         if not label.leader_line:
             continue
-        line = leader_line_for(label, labels, scene, transform, style)
+        line = leader_line_for(label, labels, scene, transform, style, context=context)
         if line is None or any(
             segments_intersect(line.start, line.end, other.start, other.end)
             for other in accepted

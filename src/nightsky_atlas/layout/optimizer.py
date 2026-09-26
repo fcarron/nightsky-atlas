@@ -23,6 +23,7 @@ from nightsky_atlas.layout.association import (
     dso_source_geometries,
     source_edge_distance,
     source_geometries_overlap,
+    source_intersects_rect,
 )
 from nightsky_atlas.layout.candidates import direction_preference_rank
 from nightsky_atlas.layout.geometry import (
@@ -30,7 +31,11 @@ from nightsky_atlas.layout.geometry import (
     rects_overlap,
 )
 from nightsky_atlas.layout.labels import constellation_label_anchors
-from nightsky_atlas.layout.leader_lines import leader_line_for, resolve_leader_lines
+from nightsky_atlas.layout.leader_lines import (
+    leader_line_for,
+    prepare_leader_routing_context,
+    resolve_leader_lines,
+)
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.scoring import (
     CostBreakdown,
@@ -96,17 +101,72 @@ class _CandidateScoreCache:
         style: StyleConfig,
         weights: CostWeights,
         constellation_lines: tuple[tuple[PagePoint, PagePoint], ...],
+        furniture: tuple[PageRect, ...] = (),
     ) -> None:
         self.anchors = anchors
         self.printable = printable
         self.symbols_index = symbols_index
         self.sources = sources
+        self.source_by_id = {source.id: source for source in sources}
         self.stars_index = stars_index
         self.stars = stars
         self.style = style
         self.weights = weights
         self.constellation_lines = constellation_lines
+        self.furniture = furniture
         self._static: dict[tuple[str, str], CostBreakdown] = {}
+        self._geometry: dict[
+            tuple[str, str], tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]
+        ] = {}
+        self._validity: dict[tuple[str, str], tuple[bool, PageRect]] = {}
+
+    def geometry(
+        self,
+        label: Label,
+        candidate: LabelCandidate,
+    ) -> tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]:
+        key = (label.id, candidate.id)
+        geometry = self._geometry.get(key)
+        if geometry is None:
+            geometry = (
+                tuple(self.symbols_index.query(candidate.bounds)),
+                _nearby_stars(
+                    label, candidate.bounds, self.stars_index, self.stars, self.style
+                ),
+            )
+            self._geometry[key] = geometry
+        return geometry
+
+    def valid(
+        self,
+        label: Label,
+        candidate: LabelCandidate,
+        placed_bounds: tuple[PageRect, ...],
+    ) -> bool:
+        key = (label.id, candidate.id)
+        validity = self._validity.get(key)
+        if validity is None:
+            symbols, stars = self.geometry(label, candidate)
+            validity = (
+                _is_valid(
+                    label,
+                    candidate,
+                    (),
+                    self.printable,
+                    symbols,
+                    stars,
+                    self.style,
+                    self.furniture,
+                    self.sources,
+                    self.source_by_id,
+                ),
+                _collision_bounds(label, candidate, self.style),
+            )
+            self._validity[key] = validity
+        static_valid, collision_bounds = validity
+        return static_valid and not any(
+            rects_overlap(collision_bounds, other) for other in placed_bounds
+        )
 
     def cost(
         self,
@@ -137,18 +197,11 @@ class _CandidateScoreCache:
         key = (label.id, candidate.id)
         static = self._static.get(key)
         if static is None:
-            symbols = (
-                tuple(self.symbols_index.query(candidate.bounds))
-                if nearby_symbols is None
-                else nearby_symbols
-            )
-            stars = (
-                _nearby_stars(
-                    label, candidate.bounds, self.stars_index, self.stars, self.style
-                )
-                if nearby_stars is None
-                else nearby_stars
-            )
+            if nearby_symbols is None or nearby_stars is None:
+                symbols, stars = self.geometry(label, candidate)
+            else:
+                symbols, stars = nearby_symbols, nearby_stars
+                self._geometry.setdefault(key, (symbols, stars))
             static = score_candidate(
                 candidate,
                 target_anchor=_anchor_for(label, self.anchors, candidate),
@@ -471,6 +524,7 @@ def _is_valid(
     style: StyleConfig,
     furniture: tuple[PageRect, ...] = (),
     source_geometries: tuple[SourceGeometry, ...] | None = None,
+    source_by_id: dict[str, SourceGeometry] | None = None,
 ) -> bool:
     bounds = candidate.bounds
     collision_bounds = _collision_bounds(label, candidate, style)
@@ -485,7 +539,6 @@ def _is_valid(
         return False
     if any(rects_overlap(bounds, obstacle) for obstacle in furniture):
         return False
-    nearby_source_ids = {symbol.id for symbol in symbols}
     source_bounds = (
         candidate_ink_bounds(candidate) if label.id.startswith("label:dso:") else bounds
     )
@@ -496,10 +549,12 @@ def _is_valid(
         ):
             return False
     else:
+        if source_by_id is None:
+            source_by_id = {source.id: source for source in source_geometries}
         source_conflict = any(
-            source.id in nearby_source_ids
-            and source_edge_distance(source, source_bounds) <= 0.0
-            for source in source_geometries
+            source_intersects_rect(source_by_id[symbol.id], source_bounds)
+            for symbol in symbols
+            if symbol.id in source_by_id
         )
         if source_conflict:
             return False
@@ -617,6 +672,9 @@ def _joint_component_search(
         and label_id in labels_by_id
         and labels_by_id[label_id].candidate(candidate_id) is not None
     )
+    fixed_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
+    for index, bounds in enumerate(fixed_bounds):
+        fixed_index.set(str(index), bounds, bounds)
     beam: list[tuple[int, float, tuple[str, ...]]] = [(0, 0.0, ())]
     visited = 0
     config = style.label.dso_placement
@@ -631,33 +689,16 @@ def _joint_component_search(
                 )
                 for previous, candidate_id in zip(ordered, assignment, strict=False)
             )
-            occupied = fixed_bounds + assigned_bounds
             for candidate in label.candidates:
                 visited += 1
                 if visited > config.joint_node_budget:
                     return None, visited
-                nearby_symbols = tuple(symbols_index.query(candidate.bounds))
-                nearby_stars = _nearby_stars(
-                    label, candidate.bounds, stars_index, stars, style
+                occupied = (
+                    *fixed_index.query(candidate.bounds, margin_mm=_CROWDING_RADIUS_MM),
+                    *assigned_bounds,
                 )
-                valid = _is_valid(
-                    label,
-                    candidate,
-                    occupied,
-                    printable,
-                    nearby_symbols,
-                    nearby_stars,
-                    style,
-                    furniture,
-                    sources,
-                )
-                cost = cost_cache.cost(
-                    label,
-                    candidate,
-                    occupied,
-                    nearby_symbols=nearby_symbols,
-                    nearby_stars=nearby_stars,
-                )
+                valid = cost_cache.valid(label, candidate, occupied)
+                cost = cost_cache.cost(label, candidate, occupied)
                 penalty = 0.0 if valid else 1_000_000.0
                 expanded.append((
                     hard_count + (0 if valid else 1),
@@ -793,6 +834,7 @@ def _repair_dso_hard_conflicts(
             style,
             weights,
             constellation_lines,
+            furniture,
         )
     stats: dict[str, Any] = {
         "single_conflict_moves": 0,
@@ -805,6 +847,25 @@ def _repair_dso_hard_conflicts(
         "neighborhood_search_limit_reached": False,
         "neighborhood_sizes": [],
     }
+    empty_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
+    static_rejections: dict[tuple[str, str], str | None] = {}
+
+    def static_rejection(label: Label, candidate: LabelCandidate) -> str | None:
+        key = (label.id, candidate.id)
+        if key not in static_rejections:
+            static_rejections[key] = _candidate_rejection_reason(
+                label,
+                candidate,
+                empty_index,
+                symbols_index,
+                stars_index,
+                stars,
+                printable,
+                style,
+                furniture=furniture,
+                source_geometries=sources,
+            )
+        return static_rejections[key]
 
     def current_labels() -> tuple[Label, ...]:
         return tuple(
@@ -837,18 +898,17 @@ def _repair_dso_hard_conflicts(
         placed_index.discard(label.id)
         choices = []
         for candidate in label.candidates:
-            if _candidate_rejection_reason(
-                label,
-                candidate,
-                placed_index,
-                symbols_index,
-                stars_index,
-                stars,
-                printable,
-                style,
-                furniture=furniture,
-                source_geometries=sources,
-            ) is not None:
+            if static_rejection(label, candidate) is not None:
+                continue
+            collision_bounds = _collision_bounds(label, candidate, style)
+            if any(
+                rects_overlap(collision_bounds, other)
+                for other in placed_index.query(
+                    collision_bounds,
+                    margin_mm=style.label.dso_placement.label_label_ink_clearance_mm or 0.0,
+                    exclude=label.id,
+                )
+            ):
                 continue
             nearby_bounds = tuple(
                 placed_index.query(
@@ -941,27 +1001,26 @@ def _repair_dso_hard_conflicts(
         while len(neighborhood) < limit:
             current = current_labels()
             outside = tuple(label for label in current if label.id not in neighborhood)
+            outside_index: RectIndex[Label] = RectIndex(_GRID_CELL_MM)
+            for other in outside:
+                other_candidate = other.effective_candidate()
+                if other_candidate is not None and not other.locked:
+                    outside_index.set(
+                        other.id,
+                        _collision_bounds(other, other_candidate, style),
+                        other,
+                    )
             options: list[tuple[int, str, str, tuple[str, ...]]] = []
-            empty_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
             for label_id in sorted(neighborhood):
                 label = labels_by_id[label_id]
                 for candidate in label.candidates:
-                    if _candidate_rejection_reason(
-                        label,
-                        candidate,
-                        empty_index,
-                        symbols_index,
-                        stars_index,
-                        stars,
-                        printable,
-                        style,
-                        furniture=furniture,
-                        source_geometries=sources,
-                    ) is not None:
+                    if static_rejection(label, candidate) is not None:
                         continue
                     blockers = tuple(sorted(
                         other.id
-                        for other in outside
+                        for other in outside_index.query(
+                            _collision_bounds(label, candidate, style)
+                        )
                         if other.effective_candidate() is not None
                         and _labels_overlap(
                             label,
@@ -970,7 +1029,6 @@ def _repair_dso_hard_conflicts(
                             other.effective_candidate(),
                             style,
                         )
-                        and not other.locked
                     ))
                     options.append((len(blockers), label_id, candidate.id, blockers))
             if not options:
@@ -1276,6 +1334,7 @@ def optimize_labels(
         style,
         weights,
         constellation_lines,
+        furniture_rects,
     )
 
     placements: dict[str, str | None] = {}
@@ -1343,6 +1402,7 @@ def optimize_labels(
         bounds = _collision_bounds(label, best[1], style)
         placed_index.set(label.id, bounds, bounds)
 
+    local_repair_stats: dict[str, Any] = {}
     placements = _local_repair(
         ordered,
         placements,
@@ -1359,6 +1419,7 @@ def optimize_labels(
         furniture_rects,
         constellation_lines,
         cost_cache,
+        local_repair_stats,
     )
     placements, component_stats = _joint_dso_optimize(
         ordered,
@@ -1539,6 +1600,7 @@ def optimize_labels(
         elapsed_s,
         weak_margin_mm=style.label.dso_placement.ownership_margin_preferred_mm,
     )
+    dso_metrics["local_repair"] = local_repair_stats
     return OptimizationResult(
         labels=optimized,
         cost_before=cost_before,
@@ -1643,6 +1705,7 @@ def _consider_dso_leader_fallbacks(
     config = style.label.leader_lines
     if not config.enabled:
         return labels
+    routing_context = prepare_leader_routing_context(scene, transform, style)
     output = list(labels)
     placed_index = _build_placed_index(labels, style)
     for position, label in enumerate(output):
@@ -1745,7 +1808,14 @@ def _consider_dso_leader_fallbacks(
             )
             proposed = list(output)
             proposed[position] = line_label
-            route = leader_line_for(line_label, tuple(proposed), scene, transform, style)
+            route = leader_line_for(
+                line_label,
+                tuple(proposed),
+                scene,
+                transform,
+                style,
+                context=routing_context,
+            )
             if route is None:
                 continue
             breakdown = _candidate_breakdown(
@@ -1789,12 +1859,13 @@ def _consider_dso_leader_fallbacks(
             placed_index.set(label.id, bounds, bounds)
     result = tuple(output)
     enabled = sum(label.leader_line for label in result)
-    if len(resolve_leader_lines(result, scene, transform, style)) != enabled:
+    resolved = resolve_leader_lines(
+        result, scene, transform, style, context=routing_context
+    )
+    if len(resolved) != enabled:
         # A later line can intersect an earlier one; preserve only the
         # deterministic valid set instead of serializing a broken callout.
-        accepted_ids = {
-            line.label_id for line in resolve_leader_lines(result, scene, transform, style)
-        }
+        accepted_ids = {line.label_id for line in resolved}
         result = tuple(
             label
             if not label.leader_line or label.id in accepted_ids
@@ -2431,6 +2502,7 @@ def _local_repair(
     furniture: tuple[PageRect, ...] = (),
     constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
     cost_cache: _CandidateScoreCache | None = None,
+    repair_stats: dict[str, Any] | None = None,
 ) -> dict[str, str | None]:
     if cost_cache is None:
         cost_cache = _CandidateScoreCache(
@@ -2443,9 +2515,13 @@ def _local_repair(
             style,
             weights,
             constellation_lines,
+            furniture,
         )
+    pass_stats: list[dict[str, Any]] = []
     for _ in range(_MAX_REPAIR_PASSES):
         changed = False
+        evaluated = 0
+        moves: list[dict[str, Any]] = []
         for label in ordered:
             if label.locked:
                 continue
@@ -2455,33 +2531,19 @@ def _local_repair(
             current = label.candidate(current_id)
             if current is None:
                 continue
+            evaluated += 1
             best_id = current_id
             nearby_bounds = tuple(
                 placed_index.query(current.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
             )
-            nearby_symbols = tuple(symbols_index.query(current.bounds))
-            nearby_stars = _nearby_stars(label, current.bounds, stars_index, stars, style)
-            current_valid = _is_valid(
-                label,
-                current,
-                nearby_bounds,
-                printable,
-                nearby_symbols,
-                nearby_stars,
-                style,
-                furniture,
-                sources,
-            )
-            best_cost = cost_cache.cost(
-                label,
-                current,
-                nearby_bounds,
-                nearby_symbols=nearby_symbols,
-                nearby_stars=nearby_stars,
-            )
+            current_valid = cost_cache.valid(label, current, nearby_bounds)
+            best_cost = cost_cache.cost(label, current, nearby_bounds)
+            initial_cost = best_cost
             best_key = (0 if current_valid else 1, best_cost)
             for candidate in label.candidates:
                 if candidate.id == current_id:
+                    continue
+                if best_key[0] == 0 and not cost_cache.valid(label, candidate, ()):
                     continue
                 cand_bounds = tuple(
                     placed_index.query(
@@ -2490,28 +2552,10 @@ def _local_repair(
                         exclude=label.id,
                     )
                 )
-                cand_symbols = tuple(symbols_index.query(candidate.bounds))
-                cand_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
-                candidate_valid = _is_valid(
-                    label,
-                    candidate,
-                    cand_bounds,
-                    printable,
-                    cand_symbols,
-                    cand_stars,
-                    style,
-                    furniture,
-                    sources,
-                )
+                candidate_valid = cost_cache.valid(label, candidate, cand_bounds)
                 if not candidate_valid and best_key[0] == 0:
                     continue
-                cost = cost_cache.cost(
-                    label,
-                    candidate,
-                    cand_bounds,
-                    nearby_symbols=cand_symbols,
-                    nearby_stars=cand_stars,
-                )
+                cost = cost_cache.cost(label, candidate, cand_bounds)
                 candidate_key = (0 if candidate_valid else 1, cost)
                 if candidate_key < (best_key[0], best_key[1] - 1e-9):
                     best_cost = cost
@@ -2521,11 +2565,34 @@ def _local_repair(
                 placements[label.id] = best_id
                 new_candidate = label.candidate(best_id)
                 if new_candidate is not None:
+                    if repair_stats is not None:
+                        old_center = current.bounds.center
+                        new_center = new_candidate.bounds.center
+                        moves.append({
+                            "label_id": label.id,
+                            "from": current_id,
+                            "to": best_id,
+                            "was_valid": current_valid,
+                            "is_valid": best_key[0] == 0,
+                            "cost_gain": (
+                                initial_cost - best_cost
+                                if current_valid == (best_key[0] == 0)
+                                else None
+                            ),
+                            "movement_mm": math.hypot(
+                                new_center.x_mm - old_center.x_mm,
+                                new_center.y_mm - old_center.y_mm,
+                            ),
+                        })
                     bounds = _collision_bounds(label, new_candidate, style)
                     placed_index.set(label.id, bounds, bounds)
                 changed = True
+        if repair_stats is not None:
+            pass_stats.append({"evaluated_labels": evaluated, "moves": moves})
         if not changed:
             break
+    if repair_stats is not None:
+        repair_stats["passes"] = pass_stats
     return placements
 
 

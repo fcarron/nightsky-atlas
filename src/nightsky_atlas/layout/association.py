@@ -25,6 +25,7 @@ __all__ = [
     "source_extent_edge_distance",
     "source_facing_point",
     "source_geometries_overlap",
+    "source_intersects_rect",
 ]
 
 
@@ -95,6 +96,61 @@ def source_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
     if source.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:
         return _axis_aligned_rect_edge_distance(source, rect)
     return _ellipse_rect_edge_distance(source, rect)
+
+
+def source_intersects_rect(source: SourceGeometry, rect: PageRect) -> bool:
+    if source.outline_paths:
+        return any(
+            segment_intersects_rect(start, end, rect)
+            for path in source.outline_paths
+            for start, end in zip(path, path[1:], strict=False)
+        )
+    if source.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:
+        return _rectangles_overlap(_source_rect(source), rect)
+    if (
+        source.center.x_mm + source.collision_radius_mm < rect.left_mm
+        or source.center.x_mm - source.collision_radius_mm > rect.right_mm
+        or source.center.y_mm + source.collision_radius_mm < rect.top_mm
+        or source.center.y_mm - source.collision_radius_mm > rect.bottom_mm
+    ):
+        return False
+    cos_angle = math.cos(source.rotation_rad)
+    sin_angle = math.sin(source.rotation_rad)
+
+    def local(point: PagePoint) -> tuple[float, float]:
+        dx = point.x_mm - source.center.x_mm
+        dy = point.y_mm - source.center.y_mm
+        return (
+            (dx * cos_angle + dy * sin_angle) / source.radius_x_mm,
+            (-dx * sin_angle + dy * cos_angle) / source.radius_y_mm,
+        )
+
+    corners = (
+        PagePoint(rect.left_mm, rect.top_mm),
+        PagePoint(rect.right_mm, rect.top_mm),
+        PagePoint(rect.right_mm, rect.bottom_mm),
+        PagePoint(rect.left_mm, rect.bottom_mm),
+    )
+    if (
+        rect.left_mm <= source.center.x_mm <= rect.right_mm
+        and rect.top_mm <= source.center.y_mm <= rect.bottom_mm
+    ):
+        return True
+    if any(sum(value * value for value in local(corner)) <= 1.0 for corner in corners):
+        return True
+    for start, end in zip(corners, (*corners[1:], corners[0]), strict=False):
+        x1, y1 = local(start)
+        x2, y2 = local(end)
+        dx, dy = x2 - x1, y2 - y1
+        length_sq = dx * dx + dy * dy
+        fraction = (
+            0.0
+            if length_sq == 0.0
+            else max(0.0, min(1.0, -(x1 * dx + y1 * dy) / length_sq))
+        )
+        if (x1 + fraction * dx) ** 2 + (y1 + fraction * dy) ** 2 <= 1.0:
+            return True
+    return False
 
 
 def source_extent_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
@@ -175,42 +231,10 @@ def _ellipse_rect_edge_distance(source: SourceGeometry, rect: PageRect) -> float
     refinement gives a stable sub-0.01 mm distance without adding a geometry
     dependency.
     """
+    if source_intersects_rect(source, rect):
+        return 0.0
     cos_angle = math.cos(source.rotation_rad)
     sin_angle = math.sin(source.rotation_rad)
-
-    def local(point: PagePoint) -> tuple[float, float]:
-        dx = point.x_mm - source.center.x_mm
-        dy = point.y_mm - source.center.y_mm
-        return (
-            (dx * cos_angle + dy * sin_angle) / source.radius_x_mm,
-            (-dx * sin_angle + dy * cos_angle) / source.radius_y_mm,
-        )
-
-    corners = (
-        PagePoint(rect.left_mm, rect.top_mm),
-        PagePoint(rect.right_mm, rect.top_mm),
-        PagePoint(rect.right_mm, rect.bottom_mm),
-        PagePoint(rect.left_mm, rect.bottom_mm),
-    )
-    if (
-        rect.left_mm <= source.center.x_mm <= rect.right_mm
-        and rect.top_mm <= source.center.y_mm <= rect.bottom_mm
-    ):
-        return 0.0
-    if any(sum(value * value for value in local(corner)) <= 1.0 for corner in corners):
-        return 0.0
-    for start, end in zip(corners, (*corners[1:], corners[0]), strict=False):
-        x1, y1 = local(start)
-        x2, y2 = local(end)
-        dx, dy = x2 - x1, y2 - y1
-        length_sq = dx * dx + dy * dy
-        fraction = (
-            0.0
-            if length_sq == 0.0
-            else max(0.0, min(1.0, -(x1 * dx + y1 * dy) / length_sq))
-        )
-        if (x1 + fraction * dx) ** 2 + (y1 + fraction * dy) ** 2 <= 1.0:
-            return 0.0
 
     def distance(angle: float) -> float:
         x = source.radius_x_mm * math.cos(angle)
