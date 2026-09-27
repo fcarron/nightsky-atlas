@@ -264,7 +264,7 @@ def extent_for(dso: DeepSkyObject, *, mm_per_deg: float = 10.0):
 @pytest.mark.parametrize(
     ("arcmin", "expected_mm"),
     [
-        (5.0, 1.4),
+        (5.0, 5.0 / 3.0),
         (10.0, 1.6667),
         (20.0, 3.3333),
         (36.0, 6.0),
@@ -324,12 +324,13 @@ def test_planetary_nebula_uses_angular_diameter_and_includes_outer_spokes() -> N
 
 
 def test_galaxy_extent_matches_true_scale() -> None:
-    extent = extent_for(make_galaxy(major_axis_arcmin=2.0, minor_axis_arcmin=1.0), mm_per_deg=60.0)
+    galaxy = make_galaxy(major_axis_arcmin=24.0, minor_axis_arcmin=10.0)
+    extent = extent_for(galaxy, mm_per_deg=60.0)
     assert extent.uses_angular_size is True
     assert extent.shape == DsoShape.CIRCLE
     assert extent.is_elliptical is True
-    assert extent.width_mm == pytest.approx(2.4)
-    assert extent.height_mm == pytest.approx(1.2)
+    assert extent.width_mm == pytest.approx(24.0)
+    assert extent.height_mm == pytest.approx(10.0)
     assert extent.rotation_rad == pytest.approx(-pi / 2.0)
 
 
@@ -344,20 +345,8 @@ def test_galaxy_minimum_axis_is_preserved() -> None:
     extent = extent_for(
         make_galaxy(major_axis_arcmin=0.01, minor_axis_arcmin=0.005), mm_per_deg=60.0
     )
-    assert extent.height_mm == pytest.approx(STYLE.dso.galaxy.min_minor_axis_mm)
-    assert extent.width_mm == pytest.approx(STYLE.dso.galaxy.min_minor_axis_mm * 2.0)
-
-
-def test_galaxy_minimum_minor_axis_preserves_ratio() -> None:
-    geometry = galaxy_ellipse(
-        make_galaxy(major_axis_arcmin=0.01, minor_axis_arcmin=0.005),
-        mm_per_deg=60.0,
-        min_axis_mm=0.7,
-        min_minor_axis_mm=1.2,
-    )
-    assert geometry is not None
-    assert geometry.minor_mm == pytest.approx(1.2)
-    assert geometry.major_mm == pytest.approx(2.4)
+    assert extent.width_mm == pytest.approx(10.0)
+    assert extent.height_mm == pytest.approx(5.0)
 
 
 @pytest.mark.parametrize(
@@ -398,11 +387,18 @@ def test_chart_dominating_galaxy_still_has_a_conservative_physical_cap() -> None
 
 
 @pytest.mark.parametrize(
-    ("edition", "globular_mm", "open_cluster_mm", "diffuse_mm", "galaxy_minor_mm"),
     (
-        ("pocket", 1.2, 1.6, 1.8, 1.0),
-        ("standard", 1.4, 1.8, 2.0, 1.2),
-        ("deep", 1.1, 1.4, 1.6, 1.0),
+        "edition",
+        "globular_mm",
+        "open_cluster_mm",
+        "diffuse_mm",
+        "galaxy_min_arcmin",
+        "dso_min_arcmin",
+    ),
+    (
+        ("pocket", 1.2, 1.6, 1.8, 20.0, 20.0),
+        ("standard", 1.4, 1.8, 2.0, 10.0, 10.0),
+        ("deep", 1.1, 1.4, 1.6, 5.0, 5.0),
     ),
 )
 def test_edition_dso_print_minima(
@@ -410,7 +406,8 @@ def test_edition_dso_print_minima(
     globular_mm: float,
     open_cluster_mm: float,
     diffuse_mm: float,
-    galaxy_minor_mm: float,
+    galaxy_min_arcmin: float,
+    dso_min_arcmin: float,
 ) -> None:
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     assert style.dso.globular_cluster.min_diameter_mm == pytest.approx(globular_mm)
@@ -418,7 +415,85 @@ def test_edition_dso_print_minima(
     assert style.dso.open_cluster.min_diameter_mm == pytest.approx(open_cluster_mm)
     assert style.dso.bright_nebula.min_diameter_mm == pytest.approx(diffuse_mm)
     assert style.dso.galaxy_cluster.min_diameter_mm == pytest.approx(diffuse_mm)
-    assert style.dso.galaxy.min_minor_axis_mm == pytest.approx(galaxy_minor_mm)
+    assert style.dso.galaxy.min_angular_major_axis_arcmin == pytest.approx(galaxy_min_arcmin)
+    for object_type in (
+        DsoType.GLOBULAR_CLUSTER,
+        DsoType.OPEN_CLUSTER,
+        DsoType.PLANETARY_NEBULA,
+        DsoType.BRIGHT_NEBULA,
+        DsoType.DARK_NEBULA,
+        DsoType.GALAXY_CLUSTER,
+    ):
+        assert style.dso.extent_style(object_type).min_angular_size_arcmin == pytest.approx(
+            dso_min_arcmin
+        )
+
+
+@pytest.mark.parametrize(
+    ("edition", "mm_per_deg", "minimum_arcmin"),
+    (("pocket", 5.0, 20.0), ("standard", 10.0, 10.0), ("deep", 20.0, 5.0)),
+)
+def test_edition_galaxy_floor_is_angular_and_preserves_axis_ratio(
+    edition: str, mm_per_deg: float, minimum_arcmin: float
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    extent = dso_symbol_extent(
+        make_galaxy(major_axis_arcmin=2.0, minor_axis_arcmin=1.0),
+        mm_per_deg=mm_per_deg,
+        style=style,
+    )
+    expected_major_mm = minimum_arcmin / 60.0 * mm_per_deg
+    assert extent.width_mm == pytest.approx(expected_major_mm)
+    assert extent.height_mm == pytest.approx(expected_major_mm / 2.0)
+
+
+@pytest.mark.parametrize(
+    ("edition", "mm_per_deg"), (("pocket", 5.0), ("standard", 10.0), ("deep", 20.0))
+)
+def test_galaxy_larger_than_edition_floor_stays_to_scale(edition: str, mm_per_deg: float) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    extent = dso_symbol_extent(
+        make_galaxy(major_axis_arcmin=40.0, minor_axis_arcmin=30.0),
+        mm_per_deg=mm_per_deg,
+        style=style,
+    )
+    assert extent.width_mm == pytest.approx(40.0 / 60.0 * mm_per_deg)
+    assert extent.height_mm == pytest.approx(30.0 / 60.0 * mm_per_deg)
+
+
+@pytest.mark.parametrize(
+    ("edition", "mm_per_deg", "minimum_arcmin"),
+    (("pocket", 5.0, 20.0), ("standard", 10.0, 10.0), ("deep", 20.0, 5.0)),
+)
+@pytest.mark.parametrize(
+    "object_type",
+    (
+        DsoType.GLOBULAR_CLUSTER,
+        DsoType.OPEN_CLUSTER,
+        DsoType.PLANETARY_NEBULA,
+        DsoType.BRIGHT_NEBULA,
+        DsoType.DARK_NEBULA,
+        DsoType.GALAXY_CLUSTER,
+    ),
+)
+def test_other_size_aware_dso_classes_use_edition_angular_floor(
+    edition: str, mm_per_deg: float, minimum_arcmin: float, object_type: DsoType
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    extent = dso_symbol_extent(
+        make_dso(object_type, major_axis_arcmin=2.0),
+        mm_per_deg=mm_per_deg,
+        style=style,
+    )
+    extent_style = style.dso.extent_style(object_type)
+    diameter_mm = max(
+        minimum_arcmin / 60.0 * mm_per_deg,
+        extent_style.min_diameter_mm,
+    )
+    if object_type == DsoType.PLANETARY_NEBULA:
+        diameter_mm *= SPOKED_CIRCLE_OUTER_FACTOR
+    assert extent.width_mm == pytest.approx(diameter_mm)
+    assert extent.height_mm == pytest.approx(diameter_mm)
 
 
 def test_true_dso_angular_extent_wins_over_edition_minimum() -> None:

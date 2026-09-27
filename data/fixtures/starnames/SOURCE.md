@@ -20,6 +20,15 @@ its header identifies the IAU as producer and requests citation of the IAU page.
 It is not vendored. Variable-star and Flamsteed preferences in `curated.yaml`
 were selected manually from the d3-celestial fields below.
 
+The `variable_markers` entries in `curated.yaml` are a deliberately small
+NightSky selection of conspicuous visual variables (Mira, Algol, Betelgeuse,
+bright Cepheids and selected long-period variables). They are keyed by HIP and
+cross-checked against the AAVSO International Variable Star Index (VSX); the
+atlas does not redistribute VSX records or claim completeness. The marker is
+only a finding aid, not an observing sequence or a current-magnitude claim.
+Reference: <https://www.aavso.org/search-and-download-data/> (VSX description
+and AAVSO data-use guidance; checked 2026-09-26).
+
 - **Source:** d3-celestial (Olaf Frohn), `data/starnames.json`, `master`,
   fetched 2026-09-16.
 - **License:** **BSD-3-Clause** (see `LICENSE` in this directory).

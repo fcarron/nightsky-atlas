@@ -29,9 +29,14 @@ from nightsky_atlas.chart.presentation import (
 from nightsky_atlas.layout.geometry import expand_rect
 from nightsky_atlas.layout.leader_lines import resolve_leader_lines
 from nightsky_atlas.layout.models import Label
+from nightsky_atlas.layout.text_geometry import candidate_ink_bounds
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.detail_markers import DetailMapMarker, draw_detail_markers
-from nightsky_atlas.render.double_stars import DoubleStarMark, resolve_double_stars
+from nightsky_atlas.render.double_stars import (
+    DoubleStarMark,
+    printed_star_obstacles,
+    resolve_double_stars,
+)
 from nightsky_atlas.render.ecliptic import build_ecliptic
 from nightsky_atlas.render.furniture import build_furniture_plan, draw_furniture
 from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
@@ -48,6 +53,10 @@ from nightsky_atlas.render.symbols import (
     star_reference_magnitudes,
 )
 from nightsky_atlas.render.text import draw_centered_text, draw_text
+from nightsky_atlas.render.variable_stars import (
+    draw_variable_star_ring,
+    resolve_variable_star_marks,
+)
 from nightsky_atlas.scene.models import ChartScene, SceneDso, SceneOutline, SceneSegment
 from nightsky_atlas.units import mm_to_pt
 
@@ -86,6 +95,7 @@ def render_chart(
     presentation: ChartPresentation | None = None,
     locator: LocatorInset | None = None,
     detail_markers: tuple[DetailMapMarker, ...] = (),
+    variable_star_hips: frozenset[int] = frozenset(),
     pdf_path: str | Path | None = None,
     png_path: str | Path | None = None,
     png_dpi: float = _DEFAULT_PNG_DPI,
@@ -108,6 +118,7 @@ def render_chart(
             presentation=presentation,
             locator=locator,
             detail_markers=detail_markers,
+            variable_star_hips=variable_star_hips,
         )
 
     _render_outputs(
@@ -131,6 +142,7 @@ def draw_chart_page(
     locator: LocatorInset | None = None,
     pdf_navigation: PdfNavigation | None = None,
     detail_markers: tuple[DetailMapMarker, ...] = (),
+    variable_star_hips: frozenset[int] = frozenset(),
 ) -> None:
     """Draw one chart page into an existing context, in point units.
 
@@ -148,6 +160,13 @@ def draw_chart_page(
     plan = build_furniture_plan(transform, scene.definition, style, presentation)
     _draw_background(cr, transform.page)
     grid_lines = _draw_grid(cr, transform, scene.definition, style)
+    draw_detail_markers(
+        cr,
+        detail_markers,
+        transform,
+        style,
+        draw_labels=False,
+    )
     _draw_ecliptic(cr, transform, scene.definition, style)
     _draw_constellations(cr, transform, scene, style, label_list)
     _draw_labels(cr, constellation_labels, style)
@@ -157,6 +176,9 @@ def draw_chart_page(
     _draw_stars(cr, transform, scene, size_model, style)
     _draw_dsos(cr, transform, scene, size_model, style, bold_symbol_ids)
     _draw_stars_over_dso_symbols(cr, transform, scene, size_model, style)
+    _draw_variable_star_marks(
+        cr, scene, transform, size_model, style, variable_star_hips
+    )
     _draw_grid_labels(cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles)
     _draw_labels(cr, foreground_labels, style)
     if locator is not None:
@@ -164,7 +186,60 @@ def draw_chart_page(
     if debug is not None:
         _draw_debug(cr, transform, scene, label_list, style, debug)
     draw_furniture(cr, plan, style, pdf_navigation)
-    draw_detail_markers(cr, detail_markers, transform, style, pdf_navigation)
+    if detail_markers:
+        draw_detail_markers(
+            cr,
+            detail_markers,
+            transform,
+            style,
+            pdf_navigation,
+            draw_frames=False,
+            occupied_bounds=_detail_marker_obstacles(
+                scene, transform, style, label_list
+            ),
+        )
+
+
+def _detail_marker_obstacles(
+    scene: ChartScene,
+    transform: PageTransform,
+    style: StyleConfig,
+    labels: tuple[Label, ...],
+) -> tuple[PageRect, ...]:
+    bounds = [
+        candidate_ink_bounds(candidate)
+        for label in labels
+        if (candidate := label.effective_candidate()) is not None
+    ]
+    for star in printed_star_obstacles(scene, transform, style):
+        radius = star.collision_radius_mm
+        bounds.append(
+            PageRect(
+                star.page_point.x_mm - radius,
+                star.page_point.y_mm - radius,
+                2.0 * radius,
+                2.0 * radius,
+            )
+        )
+    for item in scene.deep_sky_objects:
+        if not item.symbol_visible:
+            continue
+        extent = dso_symbol_extent(
+            item.dso,
+            mm_per_deg=transform.mm_per_deg,
+            style=style,
+        )
+        radius = extent.collision_radius_mm
+        center = transform.to_page(item.chart_point)
+        bounds.append(
+            PageRect(
+                center.x_mm - radius,
+                center.y_mm - radius,
+                2.0 * radius,
+                2.0 * radius,
+            )
+        )
+    return tuple(bounds)
 
 
 def render_magnitude_scale(
@@ -378,12 +453,7 @@ def _draw_stars(
     size_model: StarSizeModel,
     style: StyleConfig,
 ) -> None:
-    """Draw stars, collapsing unseparable double/multiple systems to one marker.
-
-    The close/separate decision is made in
-    :func:`~nightsky_atlas.render.double_stars.resolve_double_stars` from the
-    printed separation, not here; the renderer only draws what it is told.
-    """
+    """Draw base-catalogue stars and selected WDS overlay markers."""
     marks = resolve_double_stars(scene, transform, style)
     suppressed: set[str] = set()
     for mark in marks:
@@ -436,6 +506,41 @@ def _draw_stars(
         _draw_star_with_halo(cr, point, radius_mm, style.star.close_overlap_halo_mm)
     for point, radius_mm in foreground_stars:
         _draw_star_with_halo(cr, point, radius_mm, style.star.close_overlap_halo_mm)
+    cr.restore()
+
+
+def _draw_variable_star_marks(
+    cr: cairo.Context[cairo.Surface],
+    scene: ChartScene,
+    transform: PageTransform,
+    size_model: StarSizeModel,
+    style: StyleConfig,
+    variable_star_hips: frozenset[int],
+) -> None:
+    marks = resolve_variable_star_marks(
+        scene,
+        transform,
+        size_model,
+        variable_star_hips,
+        style,
+    )
+    rect = transform.chart_rect
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
+    for mark in marks:
+        draw_variable_star_ring(
+            cr,
+            mark.page_point.x_mm,
+            mark.page_point.y_mm,
+            mark.stellar_diameter_mm,
+            style,
+        )
     cr.restore()
 
 
@@ -1182,10 +1287,18 @@ def _draw_grid(
         mm_to_pt(rect.height_mm),
     )
     cr.clip()
-    gray = min(max(style.grid.gray, 0.0), 1.0)
-    cr.set_source_rgb(gray, gray, gray)
-    cr.set_line_width(mm_to_pt(style.grid.line_width_mm))
     for line in lines:
+        polar_ra = line.kind == "ra" and line.polar
+        gray = style.grid.gray
+        line_width_mm = style.grid.line_width_mm
+        if polar_ra:
+            if style.grid.polar_ra_gray is not None:
+                gray = style.grid.polar_ra_gray
+            if style.grid.polar_ra_line_width_mm is not None:
+                line_width_mm = style.grid.polar_ra_line_width_mm
+        gray = min(max(gray, 0.0), 1.0)
+        cr.set_source_rgb(gray, gray, gray)
+        cr.set_line_width(mm_to_pt(line_width_mm))
         for index, point in enumerate(line.points):
             if index == 0:
                 cr.move_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))

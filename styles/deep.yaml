@@ -16,13 +16,20 @@ double_stars:
   min_marker_length_mm: 0.7
   marker_line_width_mm: 0.12
 dso:
-  galaxy: {min_diameter_mm: 0.7, min_minor_axis_mm: 1.0}
-  globular_cluster: {min_diameter_mm: 1.1}
-  planetary_nebula: {min_diameter_mm: 1.1}
-  open_cluster: {min_diameter_mm: 1.4}
-  bright_nebula: {min_diameter_mm: 1.6}
-  dark_nebula: {min_diameter_mm: 1.6}
-  galaxy_cluster: {min_diameter_mm: 1.6}
+  galaxy: {min_angular_major_axis_arcmin: 5.0}
+  globular_cluster: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.1}
+  open_cluster: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.4}
+  planetary_nebula: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.1}
+  bright_nebula: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.6}
+  dark_nebula: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.6}
+  galaxy_cluster: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.6}
+grid:
+  ra_step_deg: 3.75
+  dec_step_deg: 2.0
+  polar_ra_step_deg: 3.75
+  label_ra_step_deg: 7.5
+  label_dec_step_deg: 4.0
+  label_polar_ra_step_deg: 30.0
 label:
   star_labels:
     bayer: {enabled: true, max_magnitude: 6.5}

@@ -80,7 +80,9 @@ __all__ = [
 
 OPENNGC_OUTLINE_DIR = Path("data/processed/outlines")
 
-DEFAULT_DSO_PATH = Path("data/processed/dso/openngc.json")
+OPENNGC_DSO_PATH = Path("data/processed/dso/openngc.json")
+COMBINED_DSO_PATH = Path("data/processed/dso/catalogue.json")
+DEFAULT_DSO_PATH = COMBINED_DSO_PATH
 DEFAULT_DOUBLE_STAR_PATH = Path("data/processed/double_stars/wds.json")
 
 
@@ -131,12 +133,17 @@ def load_chart_stars(
 
 def load_dsos(dsos_path: str | Path | None = None) -> list[DeepSkyObject]:
     """Load deep-sky objects from a processed catalogue, or none."""
-    path = Path(dsos_path) if dsos_path is not None else DEFAULT_DSO_PATH
+    path = Path(dsos_path) if dsos_path is not None else default_dso_path()
     if not path.exists():
         if dsos_path is not None:
             raise FileNotFoundError(f"deep-sky catalogue not found: {path}")
         return []
     return load_dso_catalog(path)
+
+
+def default_dso_path() -> Path:
+    """Prefer the merged catalogue when imported, retaining OpenNGC fallback."""
+    return COMBINED_DSO_PATH if COMBINED_DSO_PATH.exists() else OPENNGC_DSO_PATH
 
 
 def load_star_systems(systems_path: str | Path | bool | None = None) -> list[StarSystem]:
@@ -196,9 +203,7 @@ def load_chart_inputs(
             ConstellationCatalogue()
             if constellations_dir is False
             else load_constellations(
-                constellations_dir
-                if constellations_dir is not None
-                else CONSTELLATION_FIXTURE_DIR
+                constellations_dir if constellations_dir is not None else CONSTELLATION_FIXTURE_DIR
             )
         )
         if outlines_dir is False:
@@ -336,9 +341,9 @@ def build_chart_context(
     dso_box = field_query_box(definition, padding_deg=2.0)
     outlined_dso_ids = {outline.dso_id for outline in inputs.outlines}
     dsos = tuple(
-        dso for dso in inputs.dsos
-        if dso.id in outlined_dso_ids
-        or _coordinates_in_box(dso.ra_deg, dso.dec_deg, dso_box)
+        dso
+        for dso in inputs.dsos
+        if dso.id in outlined_dso_ids or _coordinates_in_box(dso.ra_deg, dso.dec_deg, dso_box)
     )
     # Deep-sky selection is governed entirely by the edition's per-type
     # visibility rules; there is no global magnitude cut in the atlas config.

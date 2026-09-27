@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any
 
-__all__ = ["DeepSkyObject", "DsoType", "Provenance", "Star"]
+__all__ = ["CatalogSourceRecord", "DeepSkyObject", "DsoType", "Provenance", "Star"]
 
 
 class DsoType(StrEnum):
@@ -58,6 +58,46 @@ class Provenance:
     def from_dict(cls, data: dict[str, Any]) -> Provenance:
         """Reconstruct provenance from a mapping produced by :meth:`to_dict`."""
         return cls(**data)
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogSourceRecord:
+    """One catalogue designation and its retained source metadata."""
+
+    catalogue_id: str
+    designation: str
+    source_url: str
+    reference: str
+    retrieved: str
+    coordinate_frame: str
+    source_ra: str | None = None
+    source_dec: str | None = None
+    raw_fields: tuple[tuple[str, str], ...] = ()
+    crossmatch_decision: str = "new"
+    matched_object_id: str | None = None
+    match_distance_arcmin: float | None = None
+    match_confidence: str = "high"
+    match_reason: str = "no_candidate"
+
+    def __post_init__(self) -> None:
+        for name in ("catalogue_id", "designation", "source_url", "reference", "coordinate_frame"):
+            if not getattr(self, name).strip():
+                raise ValueError(f"{name} must not be blank")
+        if self.match_distance_arcmin is not None and (
+            not math.isfinite(self.match_distance_arcmin) or self.match_distance_arcmin < 0.0
+        ):
+            raise ValueError("match_distance_arcmin must be finite and non-negative")
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["raw_fields"] = [list(item) for item in self.raw_fields]
+        return payload
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> CatalogSourceRecord:
+        payload = dict(data)
+        payload["raw_fields"] = tuple(tuple(item) for item in payload.get("raw_fields", ()))
+        return cls(**payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +173,10 @@ class DeepSkyObject:
     common_name: str | None = None
     constellation: str | None = None
     cross_ids: tuple[str, ...] = ()
+    semantic_subtype: str | None = None
+    member_designations: tuple[str, ...] = ()
+    member_count: int | None = None
+    catalogue_records: tuple[CatalogSourceRecord, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -158,6 +202,8 @@ class DeepSkyObject:
             value = getattr(self, name)
             if value is not None and not math.isfinite(value):
                 raise ValueError(f"{name} must be finite when present")
+        if self.member_count is not None and self.member_count < 0:
+            raise ValueError("member_count must be non-negative when present")
         if self.major_axis_arcmin is not None and self.major_axis_arcmin <= 0.0:
             raise ValueError("major_axis_arcmin must be positive when present")
         if self.minor_axis_arcmin is not None and self.minor_axis_arcmin <= 0.0:
@@ -186,9 +232,7 @@ class DeepSkyObject:
             or self.minor_axis_arcmin is None
         ):
             return None
-        area_arcmin2 = (
-            math.pi / 4.0 * self.major_axis_arcmin * self.minor_axis_arcmin
-        )
+        area_arcmin2 = math.pi / 4.0 * self.major_axis_arcmin * self.minor_axis_arcmin
         if area_arcmin2 <= 0.0:
             return None
         area_arcsec2 = area_arcmin2 * 60.0**2
@@ -201,4 +245,8 @@ class DeepSkyObject:
         payload["provenance"] = Provenance.from_dict(payload["provenance"])
         payload["object_type"] = DsoType(payload["object_type"])
         payload["cross_ids"] = tuple(payload.get("cross_ids") or ())
+        payload["member_designations"] = tuple(payload.get("member_designations") or ())
+        payload["catalogue_records"] = tuple(
+            CatalogSourceRecord.from_dict(item) for item in payload.get("catalogue_records", ())
+        )
         return cls(**payload)

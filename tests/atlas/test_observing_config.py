@@ -29,6 +29,7 @@ def test_load_shipped_config_and_resolve_standard() -> None:
     assert policy.forced_lists == frozenset({"herschel400"})
     assert dict(policy.list_weights)["messier"] == 60
     assert dict(policy.list_weights)["herschel400"] == 50
+    assert policy.included_catalogues == frozenset({"OpenNGC"})
 
 
 def test_deep_inherits_standard() -> None:
@@ -38,6 +39,50 @@ def test_deep_inherits_standard() -> None:
     weights = dict(policy.list_weights)
     assert weights["messier"] == 60
     assert weights["hickson"] == 20
+    assert policy.included_catalogues == frozenset(
+        {
+            "OpenNGC",
+            "VII/20",
+            "VII/7A",
+            "VII/9",
+            "VII/21",
+            "VII/220A",
+            "VII/92A:Collinder",
+            "VII/92A:Melotte",
+            "VII/92A:Stock",
+            "IV/24:AbellPN",
+            "VII/202:Palomar",
+            "VII/202:Terzan",
+            "VII/213",
+        }
+    )
+    assert policy.forced_catalogues == frozenset()
+    assert dict(policy.catalogue_minimum_extent_arcmin) == {
+        "VII/20": 15.0,
+        "VII/7A": 15.0,
+        "VII/9": 15.0,
+        "VII/21": 90.0,
+        "VII/220A": 15.0,
+    }
+    rules = dict(policy.type_rules)
+    assert rules["galaxy"].visibility_class_rules[-1].minimum_score_400 == -1.0
+    assert rules["dark_nebula"].visibility_catalogues == ("OpenNGC",)
+
+
+def test_reference_policy_inherits_deep_catalogue_expansion() -> None:
+    config = load_observing_lists_config(SHIPPED)
+    policy = resolve_edition(config, "reference")
+    assert "VII/220A" in policy.included_catalogues
+    assert "VII/220A" in policy.included_catalogues
+    assert dict(policy.catalogue_minimum_extent_arcmin)["VII/220A"] == 0
+    assert policy.include_uncertain_catalogue_matches is True
+    assert "VII/74A" in policy.included_catalogues
+    assert dict(policy.type_rules)["galaxy"].visibility_classes == (
+        "bold",
+        "normal",
+        "fine",
+        "dotted",
+    )
 
 
 def test_unknown_edition_selects_nothing() -> None:
@@ -60,9 +105,7 @@ def test_unknown_key_fails(tmp_path: Path) -> None:
 
 
 def test_negative_weight_fails(tmp_path: Path) -> None:
-    path = write_config(
-        tmp_path, "editions:\n  standard:\n    list_weights:\n      messier: -1\n"
-    )
+    path = write_config(tmp_path, "editions:\n  standard:\n    list_weights:\n      messier: -1\n")
     with pytest.raises(ConfigError):
         load_observing_lists_config(path)
 

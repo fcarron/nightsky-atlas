@@ -398,7 +398,32 @@ def test_shipped_style_declares_double_star_marker() -> None:
     assert config.double_stars.marker_length_factor == pytest.approx(1.8)
     assert config.double_stars.min_marker_length_mm == pytest.approx(0.8)
     assert config.double_stars.marker_line_width_mm == pytest.approx(0.15)
-    assert config.double_stars.companion_magnitude_limit == pytest.approx(9.0)
+    assert config.variable_stars.enabled is True
+    assert config.variable_stars.ring_gap_mm == pytest.approx(0.18)
+    assert config.variable_stars.line_width_mm == pytest.approx(0.10)
+
+
+@pytest.mark.parametrize(
+    ("edition", "expected"),
+    [
+        ("pocket", ((30.0, 10.5), (200.0, 8.5))),
+        ("standard", ((30.0, 11.5), (120.0, 10.0), (200.0, 9.0))),
+        ("deep", ((30.0, 13.0), (120.0, 11.5), (300.0, 10.0))),
+    ],
+)
+def test_double_star_profile_limits_are_configured(edition: str, expected: tuple) -> None:
+    config = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    actual = tuple(
+        (limit.max_sep_arcsec, limit.max_secondary_mag)
+        for limit in config.double_stars.limits
+    )
+    assert actual == expected
+
+
+def test_deep_double_star_marker_is_finer_than_pocket() -> None:
+    pocket = load_style_config(REPO_ROOT / "styles" / "pocket.yaml").double_stars
+    deep = load_style_config(REPO_ROOT / "styles" / "deep.yaml").double_stars
+    assert deep.marker_line_width_mm < pocket.marker_line_width_mm
 
 
 def test_double_star_style_defaults_when_omitted(tmp_path: Path) -> None:
@@ -418,7 +443,15 @@ def test_double_star_style_rejects_unknown_key(tmp_path: Path) -> None:
 
 def test_double_star_min_separation_must_be_positive(tmp_path: Path) -> None:
     data = valid_style_dict()
-    data["double_stars"] = {"min_component_separation_mm": 0.0}
+    data["double_stars"] = {"unresolved_clearance_mm": -0.1}
+    path = write_yaml(tmp_path / "style.yaml", data)
+    with pytest.raises(ConfigError):
+        load_style_config(path)
+
+
+def test_variable_star_marker_style_rejects_unknown_keys(tmp_path: Path) -> None:
+    data = valid_style_dict()
+    data["variable_stars"] = {"enabled": True, "ring_gap_mm": 0.2, "color": "red"}
     path = write_yaml(tmp_path / "style.yaml", data)
     with pytest.raises(ConfigError):
         load_style_config(path)

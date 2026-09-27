@@ -157,6 +157,14 @@ def test_near_clean_candidate_is_preferred_over_distant_callout() -> None:
 
 
 def test_short_leader_beats_wrong_owner_direct_candidate_and_far_direct() -> None:
+    # Keep this optimizer behavior fixture independent of the edition-specific
+    # galaxy minimum-size calibration tested by the symbol-rendering suite.
+    legacy_galaxy_extent = STYLE.dso.galaxy.model_copy(
+        update={"min_angular_major_axis_arcmin": None, "min_diameter_mm": 1.2}
+    )
+    placement_style = STYLE.model_copy(
+        update={"dso": STYLE.dso.model_copy(update={"galaxy": legacy_galaxy_extent})}
+    )
     owner = replace(DSO, major_axis_arcmin=0.5, minor_axis_arcmin=0.5)
     competitor = replace(
         DSO,
@@ -181,10 +189,10 @@ def test_short_leader_beats_wrong_owner_direct_candidate_and_far_direct() -> Non
         ring=4,
     )
     label = replace(make_label(), candidates=(near, far), selected_candidate_id=None)
-    result = optimize_labels((label,), scene, TRANSFORM, STYLE).labels[0]
+    result = optimize_labels((label,), scene, TRANSFORM, placement_style).labels[0]
     assert result.leader_line
     assert result.selected_candidate_id == near.id
-    route = resolve_leader_lines((result,), scene, TRANSFORM, STYLE)[0]
+    route = resolve_leader_lines((result,), scene, TRANSFORM, placement_style)[0]
     length = ((route.end.x_mm - route.start.x_mm) ** 2
               + (route.end.y_mm - route.start.y_mm) ** 2) ** 0.5
     assert 0.75 <= length <= 3.0

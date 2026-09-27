@@ -1,5 +1,6 @@
 # NightSky Atlas observer-oriented selection; canonical spelling and HIP IDs: IAU-CSN 2022-04-04.
 # Selection/tiering is original NightSky editorial work, not copied from an atlas.
+# Variable-marker subset is a conservative editorial selection informed by AAVSO VSX.
 source: iau-csn-2022-04-04
 proper_names:
   core:
@@ -212,6 +213,23 @@ variables:
   - {hip: 92862, designation: R Lyr}
   - {hip: 87072, designation: X Sgr}
   - {hip: 62223, designation: Y CVn}
+variable_markers:
+  - {hip: 10826, designation: Mira}
+  - {hip: 14576, designation: Algol}
+  - {hip: 27989, designation: Betelgeuse}
+  - {hip: 110991, designation: delta Cep}
+  - {hip: 97804, designation: eta Aql}
+  - {hip: 97629, designation: chi Cyg}
+  - {hip: 77442, designation: R CrB}
+  - {hip: 92862, designation: R Lyr}
+  - {hip: 87072, designation: X Sgr}
+  - {hip: 62223, designation: Y CVn}
+  - {hip: 65835, designation: R Hya}
+  - {hip: 92202, designation: R Sct}
+  - {hip: 102276, designation: X Cyg}
+  - {hip: 102949, designation: T Vul}
+  - {hip: 106642, designation: W Cyg}
+  - {hip: 88567, designation: W Sgr}
 preferred_designations:
   - {hip: 19849, kind: flamsteed}
   - {hip: 104214, kind: flamsteed}

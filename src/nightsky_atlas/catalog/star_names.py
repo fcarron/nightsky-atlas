@@ -44,6 +44,7 @@ class StarName:
     curated_name: str | None = None
     proper_name_tier: str | None = None
     curated_variable: str | None = None
+    variable_marker: bool = False
     preferred_designation: str | None = None
 
     @property
@@ -196,6 +197,7 @@ def _merge_curation(names: dict[int, StarName], path: Path) -> None:
         "source",
         "proper_names",
         "variables",
+        "variable_markers",
         "preferred_designations",
     }:
         raise ValueError(f"invalid curated star-label root: {path}")
@@ -219,6 +221,17 @@ def _merge_curation(names: dict[int, StarName], path: Path) -> None:
         if hip not in names or not re.fullmatch(r"[A-Z]{1,2} [A-Za-z]{3}", designation):
             raise ValueError(f"invalid curated variable: {entry}")
         names[hip] = replace(names[hip], curated_variable=designation)
+    seen_variable_markers: set[int] = set()
+    for entry in data["variable_markers"]:
+        hip = int(entry["hip"])
+        designation = str(entry["designation"]).strip()
+        if hip in seen_variable_markers:
+            raise ValueError(f"duplicate curated variable marker HIP: {hip}")
+        if not designation:
+            raise ValueError(f"invalid curated variable marker: {entry}")
+        seen_variable_markers.add(hip)
+        names.setdefault(hip, StarName(hip_number=hip))
+        names[hip] = replace(names[hip], variable_marker=True)
     for entry in data["preferred_designations"]:
         hip, kind = int(entry["hip"]), str(entry["kind"])
         if hip not in names or kind not in {"bayer", "flamsteed", "variable"}:

@@ -4,6 +4,7 @@ id: pocket
 edition: {name: Pocket, code: P}
 mm_per_degree: null
 stellar_limit_magnitude: 7.5
+detail_charts: []
 tiling:
   width_deg: 54.0
   height_deg: 36.0

@@ -69,6 +69,7 @@ __all__ = [
     "StyleConfig",
     "TilingConfig",
     "VisibilityConfig",
+    "VariableStarStyle",
     "load_atlas_config",
     "load_style_config",
 ]
@@ -727,16 +728,17 @@ class DsoExtentStyle(_StrictModel):
     catalogue carries a usable angular size it is scaled by the chart's
     ``mm_per_deg``; otherwise ``fallback_diameter_mm`` is used.  Every symbol is
     floored at ``min_diameter_mm`` for printability and, when set, capped at
-    ``max_diameter_mm``.  For galaxies the diameters act on the major axis and
-    the minor axis follows proportionally, preserving the catalogue position
-    angle.
+    ``max_diameter_mm``. For galaxies ``min_angular_major_axis_arcmin`` is a
+    cartographic angular floor; the minor axis retains the catalogue axis
+    ratio rather than inflating the whole ellipse to meet a minor-axis floor.
     """
 
     use_angular_size: bool = False
     fallback_diameter_mm: PositiveFloat
     min_diameter_mm: PositiveFloat
     max_diameter_mm: PositiveFloat | None = None
-    min_minor_axis_mm: PositiveFloat | None = None
+    min_angular_major_axis_arcmin: PositiveFloat | None = None
+    min_angular_size_arcmin: PositiveFloat | None = None
 
     @model_validator(mode="after")
     def _limits_are_consistent(self) -> DsoExtentStyle:
@@ -752,15 +754,17 @@ def _extent(
     fallback_diameter_mm: float,
     min_diameter_mm: float,
     max_diameter_mm: float | None = None,
+    min_angular_major_axis_arcmin: float | None = None,
+    min_angular_size_arcmin: float | None = None,
     use_angular_size: bool = False,
-    min_minor_axis_mm: float | None = None,
 ) -> DsoExtentStyle:
     return DsoExtentStyle(
         use_angular_size=use_angular_size,
         fallback_diameter_mm=fallback_diameter_mm,
         min_diameter_mm=min_diameter_mm,
         max_diameter_mm=max_diameter_mm,
-        min_minor_axis_mm=min_minor_axis_mm,
+        min_angular_major_axis_arcmin=min_angular_major_axis_arcmin,
+        min_angular_size_arcmin=min_angular_size_arcmin,
     )
 
 
@@ -845,6 +849,7 @@ class DsoStyle(_StrictModel):
             fallback_diameter_mm=1.4,
             min_diameter_mm=0.7,
             max_diameter_mm=12.0,
+            min_angular_major_axis_arcmin=10.0,
             use_angular_size=True,
         )
     )
@@ -853,6 +858,7 @@ class DsoStyle(_StrictModel):
             fallback_diameter_mm=1.5,
             min_diameter_mm=1.2,
             max_diameter_mm=20.0,
+            min_angular_size_arcmin=10.0,
             use_angular_size=True,
         )
     )
@@ -861,20 +867,37 @@ class DsoStyle(_StrictModel):
             fallback_diameter_mm=2.0,
             min_diameter_mm=1.4,
             max_diameter_mm=30.0,
+            min_angular_size_arcmin=10.0,
             use_angular_size=True,
         )
     )
     planetary_nebula: DsoExtentStyle = Field(
-        default_factory=lambda: _extent(fallback_diameter_mm=1.4, min_diameter_mm=1.0)
+        default_factory=lambda: _extent(
+            fallback_diameter_mm=1.4,
+            min_diameter_mm=1.0,
+            min_angular_size_arcmin=10.0,
+        )
     )
     bright_nebula: DsoExtentStyle = Field(
-        default_factory=lambda: _extent(fallback_diameter_mm=1.6, min_diameter_mm=1.2)
+        default_factory=lambda: _extent(
+            fallback_diameter_mm=1.6,
+            min_diameter_mm=1.2,
+            min_angular_size_arcmin=10.0,
+        )
     )
     dark_nebula: DsoExtentStyle = Field(
-        default_factory=lambda: _extent(fallback_diameter_mm=1.6, min_diameter_mm=1.2)
+        default_factory=lambda: _extent(
+            fallback_diameter_mm=1.6,
+            min_diameter_mm=1.2,
+            min_angular_size_arcmin=10.0,
+        )
     )
     galaxy_cluster: DsoExtentStyle = Field(
-        default_factory=lambda: _extent(fallback_diameter_mm=1.6, min_diameter_mm=1.2)
+        default_factory=lambda: _extent(
+            fallback_diameter_mm=1.6,
+            min_diameter_mm=1.2,
+            min_angular_size_arcmin=10.0,
+        )
     )
     other: DsoExtentStyle = Field(
         default_factory=lambda: _extent(fallback_diameter_mm=1.4, min_diameter_mm=1.0)
@@ -942,7 +965,32 @@ class DoubleStarStyle(_StrictModel):
     marker_length_factor: PositiveFloat = 1.8
     min_marker_length_mm: PositiveFloat = 0.8
     marker_line_width_mm: PositiveFloat = 0.15
-    companion_magnitude_limit: float = 9.0
+
+    @model_validator(mode="after")
+    def _validate_limits(self) -> DoubleStarStyle:
+        separations = [float(limit.max_sep_arcsec) for limit in self.limits]
+        if not separations or any(
+            right <= left for left, right in zip(separations, separations[1:], strict=False)
+        ):
+            raise ValueError("double-star limits must have strictly ascending separation bounds")
+        delta_separations = [float(limit.max_sep_arcsec) for limit in self.delta_mag_limits]
+        if any(
+            right <= left
+            for left, right in zip(delta_separations, delta_separations[1:], strict=False)
+        ):
+            raise ValueError("double-star delta-mag separation bounds must ascend")
+        if self.marginal_clearance_mm <= self.unresolved_clearance_mm:
+            raise ValueError("marginal_clearance_mm must exceed unresolved_clearance_mm")
+        return self
+
+
+class VariableStarStyle(_StrictModel):
+    """Printed marker for the atlas's curated, strongly variable stars."""
+
+    enabled: bool = True
+    ring_gap_mm: NonNegativeFloat = 0.22
+    line_width_mm: PositiveFloat = 0.12
+    gray: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class GridStyle(_StrictModel):
@@ -979,6 +1027,8 @@ class GridStyle(_StrictModel):
     polar_ra_step_deg: PositiveFloat = 10.0
     line_width_mm: PositiveFloat = 0.1
     gray: float = 0.8
+    polar_ra_line_width_mm: PositiveFloat | None = None
+    polar_ra_gray: float | None = None
     labels_enabled: bool = True
     label_placement: Literal["inside", "outside"] = "inside"
     label_font_size_pt: PositiveFloat = 5.0
@@ -1211,6 +1261,7 @@ class StyleConfig(_StrictModel):
     label: LabelStyle
     dso: DsoStyle = Field(default_factory=DsoStyle)
     double_stars: DoubleStarStyle = Field(default_factory=DoubleStarStyle)
+    variable_stars: VariableStarStyle = Field(default_factory=VariableStarStyle)
     grid: GridStyle = Field(default_factory=GridStyle)
     ecliptic: EclipticStyle = Field(default_factory=EclipticStyle)
     constellation: ConstellationStyle = Field(default_factory=ConstellationStyle)

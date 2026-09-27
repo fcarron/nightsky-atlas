@@ -38,9 +38,9 @@ from nightsky_atlas.atlas.tiling import (
 )
 from nightsky_atlas.build.chart import (
     DEFAULT_DOUBLE_STAR_PATH,
-    DEFAULT_DSO_PATH,
     OPENNGC_OUTLINE_DIR,
     build_chart_context,
+    default_dso_path,
     load_chart_inputs,
     load_star_systems,
 )
@@ -453,7 +453,7 @@ def _build_atlas_impl(
     selected_sources = collect_data_sources(
         star_store=star_store,
         stars_csv=stars_csv,
-        dsos_path=dsos_path if dsos_path is not None else DEFAULT_DSO_PATH,
+        dsos_path=dsos_path if dsos_path is not None else default_dso_path(),
         double_stars_path=(
             DEFAULT_DOUBLE_STAR_PATH if double_stars_path is None else double_stars_path
         ),
@@ -530,6 +530,9 @@ def _build_atlas_impl(
             else load_star_names(
                 star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
             )
+        )
+        variable_star_hips = frozenset(
+            hip for hip, entry in star_names.items() if entry.variable_marker
         )
         star_systems = load_star_systems(double_stars_path)
 
@@ -746,6 +749,7 @@ def _build_atlas_impl(
             presentation=presentation,
             locator=locator,
             detail_markers=detail_markers,
+            variable_star_hips=variable_star_hips,
             pdf_path=page_dir / "chart.pdf",
             png_path=page_dir / "preview.png" if render_png else None,
             png_dpi=png_dpi,
@@ -762,6 +766,7 @@ def _build_atlas_impl(
             locator=locator,
             pdf_navigation=pdf_navigation,
             detail_markers=detail_markers,
+            variable_star_hips=variable_star_hips,
         )
         pdf_navigation.mark_chart_page(surface, context, presentation.chart_code)
         pdf_navigation.add_outline(
@@ -902,6 +907,7 @@ def _build_atlas_impl(
             detail_style,
             labels=labels,
             presentation=presentation,
+            variable_star_hips=variable_star_hips,
             pdf_path=page_dir / "chart.pdf",
             png_path=page_dir / "preview.png" if render_png else None,
             png_dpi=png_dpi,
@@ -913,6 +919,7 @@ def _build_atlas_impl(
             detail_style,
             labels=labels,
             presentation=presentation,
+            variable_star_hips=variable_star_hips,
             pdf_navigation=pdf_navigation,
         )
         pdf_navigation.mark_chart_page(surface, context, detail.code)
@@ -965,14 +972,17 @@ def _build_atlas_impl(
     if publication:
         if collect_build_inputs(input_paths) != input_fingerprints:
             raise ValueError("publication inputs changed during the build")
-        if collect_data_sources(
-            star_store=star_store,
-            stars_csv=stars_csv,
-            dsos_path=dsos_path if dsos_path is not None else DEFAULT_DSO_PATH,
-            double_stars_path=(
-                DEFAULT_DOUBLE_STAR_PATH if double_stars_path is None else double_stars_path
-            ),
-        ) != selected_sources:
+        if (
+            collect_data_sources(
+                star_store=star_store,
+                stars_csv=stars_csv,
+                dsos_path=dsos_path if dsos_path is not None else default_dso_path(),
+                double_stars_path=(
+                    DEFAULT_DOUBLE_STAR_PATH if double_stars_path is None else double_stars_path
+                ),
+            )
+            != selected_sources
+        ):
             raise ValueError("publication catalogues changed during the build")
 
     unused_chart_ids = (
@@ -1143,15 +1153,29 @@ def build_atlas(
     progress: Progress | None = None,
 ) -> AtlasBuildResult:
     options = dict(
-        atlas_path=atlas_path, style_path=style_path, outdir=outdir,
-        star_store=star_store, stars_csv=stars_csv, dsos_path=dsos_path,
-        constellations_dir=constellations_dir, outlines_dir=outlines_dir,
-        star_names_dir=star_names_dir, observing_lists_dir=observing_lists_dir,
-        observing_config_path=observing_config_path, double_stars_path=double_stars_path,
-        overrides_path=overrides_path, chart_ids=chart_ids, limit=limit,
-        optimize=optimize, render_png=render_png, png_dpi=png_dpi,
-        write_front_matter=write_front_matter, write_overviews=write_overviews,
-        write_draft_report=write_draft_report, publication=publication, progress=progress,
+        atlas_path=atlas_path,
+        style_path=style_path,
+        outdir=outdir,
+        star_store=star_store,
+        stars_csv=stars_csv,
+        dsos_path=dsos_path,
+        constellations_dir=constellations_dir,
+        outlines_dir=outlines_dir,
+        star_names_dir=star_names_dir,
+        observing_lists_dir=observing_lists_dir,
+        observing_config_path=observing_config_path,
+        double_stars_path=double_stars_path,
+        overrides_path=overrides_path,
+        chart_ids=chart_ids,
+        limit=limit,
+        optimize=optimize,
+        render_png=render_png,
+        png_dpi=png_dpi,
+        write_front_matter=write_front_matter,
+        write_overviews=write_overviews,
+        write_draft_report=write_draft_report,
+        publication=publication,
+        progress=progress,
     )
     if not publication:
         return _build_atlas_impl(**options)

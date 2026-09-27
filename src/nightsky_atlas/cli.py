@@ -38,7 +38,7 @@ from nightsky_atlas.build.chart import build_chart_context
 from nightsky_atlas.build.preflight import validate_atlas_output
 from nightsky_atlas.build.progress import Progress
 from nightsky_atlas.catalog.constellations import load_constellations
-from nightsky_atlas.catalog.dso_store import write_dso_catalog
+from nightsky_atlas.catalog.dso_store import load_dso_catalog, write_dso_catalog
 from nightsky_atlas.catalog.hipparcos import (
     CATALOGUE as HIPPARCOS_CATALOGUE,
 )
@@ -52,6 +52,7 @@ from nightsky_atlas.catalog.hipparcos import (
 from nightsky_atlas.catalog.hipparcos import (
     raw_path as hipparcos_raw_path,
 )
+from nightsky_atlas.catalog.inventory import build_catalogue_inventory
 from nightsky_atlas.catalog.manifest import file_sha256, write_manifest
 from nightsky_atlas.catalog.merge import merge_stars
 from nightsky_atlas.catalog.openngc import (
@@ -62,6 +63,13 @@ from nightsky_atlas.catalog.openngc import (
     iter_openngc_objects,
 )
 from nightsky_atlas.catalog.sample import StarCatalogueError
+from nightsky_atlas.catalog.selection_analysis import (
+    build_selection_report,
+    explain_selection,
+    find_object,
+    summarize_selection_report,
+    write_selection_csv,
+)
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
 )
@@ -90,6 +98,13 @@ from nightsky_atlas.catalog.tycho import (
     download_tycho2,
     iter_tycho2_stars,
     raw_part_paths,
+)
+from nightsky_atlas.catalog.vizier_dso import (
+    VIZIER_ACKNOWLEDGEMENT,
+    VIZIER_CATALOGUES,
+    download_vizier_catalogues,
+    import_vizier_catalogues,
+    iter_vizier_objects,
 )
 from nightsky_atlas.catalog.wds import (
     CATALOGUE as WDS_CATALOGUE,
@@ -139,6 +154,9 @@ _DEFAULT_HIP_RAW = Path("data/raw/hipparcos")
 _DEFAULT_OPENNGC_RAW = Path("data/raw/openngc")
 _DEFAULT_DSO_OUT = Path("data/processed/dso/openngc.json")
 _DEFAULT_DSO_MANIFEST = Path("data/processed/dso/openngc.manifest.json")
+_DEFAULT_VIZIER_RAW = Path("data/raw/vizier_dso")
+_DEFAULT_COMBINED_DSO_OUT = Path("data/processed/dso/catalogue.json")
+_DEFAULT_COMBINED_DSO_MANIFEST = Path("data/processed/dso/catalogue.manifest.json")
 _DEFAULT_WDS_RAW = Path("data/raw/wds")
 _DEFAULT_WDS_OUT = Path("data/processed/double_stars/wds.json")
 _DEFAULT_WDS_MANIFEST = Path("data/processed/double_stars/wds.manifest.json")
@@ -222,7 +240,10 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         "--dsos",
         type=Path,
         default=None,
-        help="processed deep-sky catalogue JSON (default: processed OpenNGC if present)",
+        help=(
+            "processed deep-sky catalogue JSON (default: merged catalogue if present, "
+            "otherwise OpenNGC)"
+        ),
     )
     parser.add_argument(
         "--constellations",
@@ -373,6 +394,11 @@ def _add_chart_commands(subparsers: argparse._SubParsersAction) -> None:
         help="write the serialized layout document to chart.json",
     )
     render.add_argument(
+        "--placement-diagnostics",
+        action="store_true",
+        help="include detailed DSO alternative-candidate diagnostics in chart.json",
+    )
+    render.add_argument(
         "--debug",
         default="",
         help=(
@@ -511,6 +537,82 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     dso_import.add_argument("--manifest", type=Path, default=_DEFAULT_DSO_MANIFEST)
     dso_import.set_defaults(handler=_command_import_openngc)
 
+    vizier_fetch = data_subparsers.add_parser(
+        "fetch-vizier-dsos",
+        help="download selected VizieR DSO catalogue tables for offline import",
+    )
+    vizier_fetch.add_argument("--dest", type=Path, default=_DEFAULT_VIZIER_RAW)
+    vizier_fetch.add_argument(
+        "--catalogues",
+        nargs="+",
+        choices=[item.catalogue_id for item in VIZIER_CATALOGUES],
+        help="catalogue IDs to fetch (default: all configured catalogues)",
+    )
+    vizier_fetch.set_defaults(handler=_command_fetch_vizier_dsos)
+
+    vizier_import = data_subparsers.add_parser(
+        "import-vizier-dsos",
+        help="merge cached VizieR catalogues into the canonical DSO catalogue",
+    )
+    vizier_import.add_argument("--raw", type=Path, default=_DEFAULT_VIZIER_RAW)
+    vizier_import.add_argument("--openngc", type=Path, default=_DEFAULT_DSO_OUT)
+    vizier_import.add_argument("--out", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    vizier_import.add_argument("--manifest", type=Path, default=_DEFAULT_COMBINED_DSO_MANIFEST)
+    vizier_import.add_argument(
+        "--report", type=Path, default=Path("data/processed/dso/vizier-crossmatch.json")
+    )
+    vizier_import.set_defaults(handler=_command_import_vizier_dsos)
+
+    dso_info = data_subparsers.add_parser(
+        "dso-info",
+        aliases=["catalog-object"],
+        help="inspect a canonical DSO, aliases and source decisions",
+    )
+    dso_info.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    dso_info.add_argument("designation", help="canonical designation or known alias")
+    dso_info.set_defaults(handler=_command_dso_info)
+
+    catalogue_report = data_subparsers.add_parser(
+        "catalogue-report", help="report normalized physical-object and edition catalogue counts"
+    )
+    catalogue_report.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    catalogue_report.add_argument("--manifest", type=Path, default=_DEFAULT_COMBINED_DSO_MANIFEST)
+    catalogue_report.add_argument("--openngc", type=Path, default=_DEFAULT_DSO_OUT)
+    catalogue_report.add_argument("--openngc-manifest", type=Path, default=_DEFAULT_DSO_MANIFEST)
+    catalogue_report.add_argument("--openngc-raw", type=Path, default=_DEFAULT_OPENNGC_RAW)
+    catalogue_report.add_argument("--vizier-raw", type=Path, default=_DEFAULT_VIZIER_RAW)
+    catalogue_report.add_argument(
+        "--crossmatch-report", type=Path, default=Path("data/processed/dso/vizier-crossmatch.json")
+    )
+    catalogue_report.add_argument(
+        "--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG
+    )
+    catalogue_report.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
+    catalogue_report.add_argument(
+        "--out", type=Path, default=Path("data/processed/dso/catalogue-inventory.json")
+    )
+    catalogue_report.set_defaults(handler=_command_catalogue_report)
+
+    selection_report = data_subparsers.add_parser(
+        "selection-report", help="audit current DSO selection by edition, type and source"
+    )
+    selection_report.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    selection_report.add_argument("--manifest", type=Path, default=_DEFAULT_COMBINED_DSO_MANIFEST)
+    selection_report.add_argument("--openngc", type=Path, default=_DEFAULT_DSO_OUT)
+    selection_report.add_argument("--openngc-manifest", type=Path, default=_DEFAULT_DSO_MANIFEST)
+    selection_report.add_argument("--openngc-raw", type=Path, default=_DEFAULT_OPENNGC_RAW)
+    selection_report.add_argument("--vizier-raw", type=Path, default=_DEFAULT_VIZIER_RAW)
+    selection_report.add_argument(
+        "--crossmatch-report", type=Path, default=Path("data/processed/dso/vizier-crossmatch.json")
+    )
+    selection_report.add_argument(
+        "--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG
+    )
+    selection_report.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
+    selection_report.add_argument("--json", type=Path, default=None, help="write full JSON report")
+    selection_report.add_argument("--csv", type=Path, default=None, help="write per-object CSV")
+    selection_report.set_defaults(handler=_command_selection_report)
+
     wds_fetch = data_subparsers.add_parser(
         "fetch-wds",
         help="download the raw Washington Double Star Catalog (network access)",
@@ -552,6 +654,26 @@ def _add_benchmark_commands(subparsers: argparse._SubParsersAction) -> None:
 def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     atlas = subparsers.add_parser("atlas", help="tile and validate complete atlases")
     atlas_subparsers = atlas.add_subparsers(dest="atlas_command")
+    atlas_object = atlas_subparsers.add_parser(
+        "catalog-object", help="inspect a canonical DSO, aliases and source decisions"
+    )
+    atlas_object.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    atlas_object.add_argument("--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG)
+    atlas_object.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
+    atlas_object.add_argument(
+        "--edition", choices=("standard", "deep", "reference"), default="deep"
+    )
+    atlas_object.add_argument("designation", help="canonical designation or known alias")
+    atlas_object.set_defaults(handler=_command_dso_info)
+
+    why_object = atlas_subparsers.add_parser(
+        "why-object", help="explain current Standard, Deep and Reference selection for an object"
+    )
+    why_object.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    why_object.add_argument("--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG)
+    why_object.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
+    why_object.add_argument("designation", help="canonical designation or known alias")
+    why_object.set_defaults(handler=_command_why_object)
 
     tile = atlas_subparsers.add_parser("tile", help="generate chart definitions")
     _add_edition_argument(tile)
@@ -767,10 +889,14 @@ def _locator_inset(
 
 def _command_chart_render(args: argparse.Namespace) -> int:
     atlas, style, definition, _page, scene, transform = _chart_context(args)
+    star_names = _star_names(args)
+    variable_star_hips = frozenset(
+        hip for hip, entry in star_names.items() if entry.variable_marker
+    )
 
     has_labels = bool(args.labels or args.optimize or args.overrides)
     if has_labels:
-        labels = build_labels(scene, transform, style, _star_names(args))
+        labels = build_labels(scene, transform, style, star_names)
         labels = _select_labels(args, definition, labels, scene, transform, style)
         labels = _apply_chart_overrides(args, definition, labels)
     else:
@@ -779,7 +905,14 @@ def _command_chart_render(args: argparse.Namespace) -> int:
     furniture = furniture_obstacles(transform, definition, style, presentation)
     result: OptimizationResult | None = None
     if args.optimize:
-        result = optimize_labels(labels, scene, transform, style, furniture=furniture)
+        result = optimize_labels(
+            labels,
+            scene,
+            transform,
+            style,
+            furniture=furniture,
+            detailed_diagnostics=args.placement_diagnostics,
+        )
         labels = result.labels
         print(
             f"optimized: cost {result.cost_before:.1f} -> {result.cost_after:.1f}, "
@@ -795,6 +928,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
         debug=_parse_debug(args.debug),
         presentation=presentation,
         locator=_locator_inset(args, atlas, style, definition),
+        variable_star_hips=variable_star_hips,
         pdf_path=outdir / "chart.pdf",
         png_path=outdir / "preview.png",
         png_dpi=args.png_dpi,
@@ -904,6 +1038,7 @@ def _write_layout_json(
             "component_totals_before": result.component_totals_before,
             "component_totals_after": result.component_totals_after,
             "label_diagnostics": result.label_diagnostics,
+            "metrics": result.metrics,
         }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -1159,6 +1294,300 @@ def _command_import_openngc(args: argparse.Namespace) -> int:
     write_manifest(args.manifest, manifest)
     print(f"imported {count} deep-sky objects -> {args.out}")
     print(f"manifest -> {args.manifest}")
+    return 0
+
+
+def _command_fetch_vizier_dsos(args: argparse.Namespace) -> int:
+    paths = download_vizier_catalogues(args.dest, catalogue_ids=args.catalogues)
+    print(f"downloaded {len(paths)} VizieR catalogue tables -> {args.dest}")
+    print(f"source manifest -> {args.dest / 'manifest.json'}")
+    return 0
+
+
+def _command_import_vizier_dsos(args: argparse.Namespace) -> int:
+    if not args.openngc.exists():
+        raise ConfigError(
+            f"missing OpenNGC catalogue {args.openngc}; run 'nightsky data import-openngc' first"
+        )
+    openngc_objects = load_dso_catalog(args.openngc)
+    vizier_objects = tuple(iter_vizier_objects(args.raw))
+    result = import_vizier_catalogues(openngc_objects, vizier_objects)
+    count = write_dso_catalog(args.out, result.objects)
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(
+        json.dumps(
+            {
+                "catalogue_counts": result.counts,
+                "decisions": list(result.decisions),
+                "summary": {
+                    status: sum(row[status] for row in result.counts.values())
+                    for status in ("raw", "new_objects", "matched_aliases", "uncertain")
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    raw_manifest_path = args.raw / "manifest.json"
+    raw_manifest = (
+        json.loads(raw_manifest_path.read_text(encoding="utf-8"))
+        if raw_manifest_path.exists()
+        else {}
+    )
+    source_entries = []
+    raw_entries = {item["catalogue_id"]: item for item in raw_manifest.get("catalogues", [])}
+    for spec in VIZIER_CATALOGUES:
+        source_entries.append(
+            {
+                "catalogue_id": spec.catalogue_id,
+                "table": spec.table,
+                "name": spec.name,
+                "reference": spec.reference,
+                "version_note": spec.version_note,
+                "license_or_usage": spec.license_or_usage,
+                "source_url": spec.source_url,
+                "coordinate_frame": spec.coordinate_frame,
+                "row_count": result.counts[spec.catalogue_id]["raw"],
+                "retrieved": raw_entries.get(spec.catalogue_id, {}).get("retrieved"),
+                "raw_sha256": raw_entries.get(spec.catalogue_id, {}).get("sha256"),
+                "query_filters": dict(spec.query_filters),
+                "row_filter": {
+                    "field": spec.row_filter_field,
+                    "values": list(spec.row_filter_values),
+                    "designation_pattern": spec.designation_pattern,
+                    "prefix": spec.prefix_filter,
+                },
+                "fields_used": {
+                    "designation": spec.designation_field,
+                    "source_ra": spec.ra_field,
+                    "source_dec": spec.dec_field,
+                    "normalized_ra": spec.normalized_ra_field,
+                    "normalized_dec": spec.normalized_dec_field,
+                    "major_extent": spec.major_field,
+                    "minor_extent": spec.minor_field,
+                    "position_angle": spec.position_angle_field,
+                    "area": spec.area_field_deg2,
+                    "magnitude": spec.magnitude_field,
+                    "member_count": spec.member_count_field,
+                    "aliases": list(spec.raw_alias_fields),
+                    "catalogue_metadata": list(spec.metadata_fields),
+                    "member_table": spec.members_table,
+                    "member_designations": spec.member_designation_field,
+                    "member_component": spec.member_component_field,
+                },
+            }
+        )
+    manifest = {
+        "catalogue": "NightSkyAtlas merged DSO catalogue",
+        "source": "OpenNGC plus selected VizieR catalogues",
+        "license": "Mixed per source; no blanket redistribution licence asserted",
+        "coordinate_system": "J2000/ICRS degrees",
+        "coordinate_rule": (
+            "Historical VizieR table coordinates retained as raw fields; normalized positions "
+            "use the VizieR computed ICRS columns included in the archived TSV snapshots."
+        ),
+        "acknowledgement": VIZIER_ACKNOWLEDGEMENT,
+        "openngc_file": str(args.openngc),
+        "openngc_sha256": file_sha256(args.openngc),
+        "sources": source_entries,
+        "crossmatch_report": str(args.report),
+        "object_count": count,
+        "processed_file": args.out.name,
+        "processed_sha256": file_sha256(args.out),
+    }
+    write_manifest(args.manifest, manifest)
+    print(f"merged {count} physical-object records -> {args.out}")
+    print(f"cross-match report -> {args.report}")
+    for catalogue_id, counts in result.counts.items():
+        print(
+            f"{catalogue_id:8} raw {counts['raw']:4}  new {counts['new_objects']:4}  "
+            f"aliases {counts['matched_aliases']:4}  uncertain {counts['uncertain']:4}"
+        )
+    return 0
+
+
+def _command_dso_info(args: argparse.Namespace) -> int:
+    objects = load_dso_catalog(args.catalogue)
+    query = args.designation.casefold().strip()
+    matches = [
+        obj
+        for obj in objects
+        if query == obj.id.casefold()
+        or any(query == alias.casefold() for alias in obj.cross_ids)
+        or any(query == record.designation.casefold() for record in obj.catalogue_records)
+    ]
+    if getattr(args, "observing_config", None) and getattr(args, "observing_lists", None):
+        from nightsky_atlas.atlas.observing_config import (
+            load_observing_lists_config,
+            resolve_edition,
+        )
+        from nightsky_atlas.catalog.observing_lists import (
+            build_membership_index,
+            load_observing_lists,
+        )
+        from nightsky_atlas.catalog.selection import select_dso
+
+        config = load_observing_lists_config(args.observing_config)
+        index = build_membership_index(load_observing_lists(args.observing_lists))
+        policy = resolve_edition(config, getattr(args, "edition", "deep"))
+        payload = []
+        for obj in matches:
+            selected = select_dso(obj, index=index, policy=policy)
+            item = obj.to_dict()
+            item["edition_eligibility"] = {
+                "edition": getattr(args, "edition", "deep"),
+                "visible": selected.visible,
+                "forced": selected.forced,
+                "reasons": list(selected.visibility_reasons),
+            }
+            payload.append(item)
+    else:
+        payload = [obj.to_dict() for obj in matches]
+    print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
+    return 0 if matches else 1
+
+
+def _command_catalogue_report(args: argparse.Namespace) -> int:
+    report = build_catalogue_inventory(
+        catalogue_path=args.catalogue,
+        catalogue_manifest_path=args.manifest,
+        openngc_path=args.openngc,
+        openngc_manifest_path=args.openngc_manifest,
+        openngc_raw_dir=args.openngc_raw,
+        vizier_raw_dir=args.vizier_raw,
+        crossmatch_report_path=args.crossmatch_report,
+        observing_config_path=args.observing_config,
+        observing_lists_dir=args.observing_lists,
+    )
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(
+        "catalogue       raw  parsed  new physical  aliases  uncertain  unmatched  rejected  "
+        "Standard  Deep  Reference"
+    )
+    for row in report["source_rows"]:
+        eligible = row["eligible"]
+        print(
+            f"{row['catalogue']:<14} {row['raw_rows']:>5} {row['parsed_rows']:>7}"
+            f" {row['new_physical_objects']:>13} {row['matched_aliases']:>8}"
+            f" {row['uncertain_matches']:>10} {row['unmatched_aliases']:>9}"
+            f" {row['rejected_or_invalid']:>9}"
+            f" {eligible['standard']:>9} {eligible['deep']:>5} {eligible['reference']:>10}"
+        )
+    print(f"physical objects: {report['physical_object_count']}")
+    print(f"unique deep-sky objects: {report['physical_dso_count']}")
+    print(f"unique eligible: {report['unique_eligible_by_edition']}")
+    print(f"types: {report['physical_objects_by_type']}")
+    print(f"report -> {args.out}")
+    return 0
+
+
+def _command_selection_report(args: argparse.Namespace) -> int:
+    report = build_selection_report(
+        catalogue_path=args.catalogue,
+        catalogue_manifest_path=args.manifest,
+        openngc_path=args.openngc,
+        openngc_manifest_path=args.openngc_manifest,
+        openngc_raw_dir=args.openngc_raw,
+        vizier_raw_dir=args.vizier_raw,
+        crossmatch_report_path=args.crossmatch_report,
+        observing_config_path=args.observing_config,
+        observing_lists_dir=args.observing_lists,
+    )
+    print(summarize_selection_report(report))
+    print("\nmetadata availability (available / type total):")
+    for type_name, type_report in report["metadata_availability"].items():
+        fields = ", ".join(
+            f"{name} {values['available']}/{type_report['total']}"
+            for name, values in type_report["fields"].items()
+        )
+        print(f"  {type_name}: {fields}")
+    visibility = report["numeric_distributions"]["galaxy_visibility"]
+    print(f"\ngalaxy visibility classes: {visibility['classes']}")
+    print(f"galaxy magnitude bins: {visibility['magnitude_bins']}")
+    print(f"galaxy score distributions by aperture: {visibility['score_by_aperture']}")
+    print("numeric distributions (count, min, median, max; sizes in arcmin):")
+    for type_name, values in report["numeric_distributions"].items():
+        if type_name == "galaxy_visibility":
+            continue
+        magnitude = values["magnitude"]
+        size = values["major_axis_arcmin"]
+        print(
+            f"  {type_name}: mag n={magnitude['count']} "
+            f"{magnitude['min']}/{magnitude['q1']}/{magnitude['median']}/"
+            f"{magnitude['q3']}/{magnitude['max']}; "
+            f"size n={size['count']} "
+            f"{size['min']}/{size['q1']}/{size['median']}/{size['q3']}/{size['max']} "
+            f"bins={values['major_axis_bins_arcmin']}"
+        )
+    for warning in report["hierarchy_warnings"]:
+        if warning.get("examples"):
+            print(f"  examples for {warning['code']}: {', '.join(warning['examples'][:10])}")
+    if args.json:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        args.json.write_text(
+            json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"JSON -> {args.json}")
+    if args.csv:
+        write_selection_csv(report, args.csv)
+        print(f"CSV -> {args.csv}")
+    return 0
+
+
+def _command_why_object(args: argparse.Namespace) -> int:
+    from nightsky_atlas.atlas.observing_config import (
+        load_observing_lists_config,
+        resolve_edition,
+    )
+    from nightsky_atlas.catalog.observing_lists import (
+        build_membership_index,
+        load_observing_lists,
+    )
+
+    objects = load_dso_catalog(args.catalogue)
+    obj = find_object(objects, args.designation)
+    if obj is None:
+        print(f"no catalogue object found for {args.designation!r}")
+        return 1
+    index = build_membership_index(load_observing_lists(args.observing_lists))
+    config = load_observing_lists_config(args.observing_config)
+    sources = sorted(
+        {obj.provenance.catalogue} | {record.catalogue_id for record in obj.catalogue_records}
+    )
+    output = {
+        "canonical_designation": obj.id,
+        "aliases": sorted(obj.cross_ids),
+        "object_type": obj.object_type.value,
+        "semantic_subtype": obj.semantic_subtype,
+        "source_catalogues": sources,
+        "catalogue_records": [record.to_dict() for record in obj.catalogue_records],
+        "metadata": {
+            "ra_deg": obj.ra_deg,
+            "dec_deg": obj.dec_deg,
+            "magnitude": obj.magnitude,
+            "magnitude_band": obj.magnitude_band,
+            "surface_brightness_mag_arcsec2": obj.surface_brightness_mag_arcsec2(),
+            "major_axis_arcmin": obj.major_axis_arcmin,
+            "minor_axis_arcmin": obj.minor_axis_arcmin,
+            "hubble_type": obj.hubble_type,
+            "member_count": obj.member_count,
+            "member_designations": list(obj.member_designations),
+        },
+        "selection": {
+            edition: explain_selection(
+                obj,
+                edition=edition,
+                policy=resolve_edition(config, edition),
+                index=index,
+            )
+            for edition in ("standard", "deep", "reference")
+        },
+    }
+    print(json.dumps(output, indent=2, sort_keys=True, allow_nan=False), flush=True)
     return 0
 
 

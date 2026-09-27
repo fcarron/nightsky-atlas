@@ -22,6 +22,10 @@ def test_committed_fixture_loads() -> None:
     assert deneb.flamsteed == "50"
     assert deneb.constellation == "Cyg"
     assert deneb.display_text() == "Deneb"
+    assert names[10826].variable_marker is True
+    assert names[14576].variable_marker is True
+    assert names[97629].variable_marker is True
+    assert names[102098].variable_marker is False
 
 
 def test_display_text_precedence() -> None:
@@ -68,6 +72,7 @@ def test_curated_duplicate_preferred_name_is_rejected(tmp_path: Path) -> None:
         "  standard: []\n"
         "  extended: []\n"
         "variables: []\n"
+        "variable_markers: []\n"
         "preferred_designations: []\n",
         encoding="utf-8",
     )

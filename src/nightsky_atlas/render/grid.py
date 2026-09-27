@@ -49,6 +49,7 @@ class GridLine:
     kind: str
     value_deg: float
     points: tuple[PagePoint, ...]
+    polar: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,7 +171,7 @@ def build_grid(
         if len(points) >= 2 and (
             not polar or _polyline_hits_rect(tuple(points), rect, _RECT_HIT_TOLERANCE_MM)
         ):
-            lines.append(GridLine(kind="ra", value_deg=ra, points=tuple(points)))
+            lines.append(GridLine(kind="ra", value_deg=ra, points=tuple(points), polar=polar))
         ra += ra_step
 
     dec = _first_multiple(dec_min, grid.dec_step_deg)

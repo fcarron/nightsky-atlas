@@ -20,6 +20,7 @@ from nightsky_atlas.render.symbols import (
     dso_symbol_extent,
 )
 from nightsky_atlas.render.text import draw_text, measure_point_size
+from nightsky_atlas.render.variable_stars import draw_variable_star_ring
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = ["LegendSymbol", "draw_field_guide", "legend_symbols"]
@@ -31,6 +32,8 @@ class LegendSymbol:
     object_type: DsoType
     angular_size_arcmin: float | None
     extent: SymbolExtent
+    minimum_extent: SymbolExtent | None = None
+    minimum_label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,38 +54,94 @@ def galaxy_visibility_examples(style: StyleConfig) -> tuple[GalaxyVisibilityExam
     )
 
 
-_SAMPLES: tuple[tuple[str, DsoType, float | None, float | None], ...] = (
-    ("Galaxy", DsoType.GALAXY, 24.0, 10.0),
-    ("Globular cluster", DsoType.GLOBULAR_CLUSTER, 12.0, None),
-    ("Open cluster", DsoType.OPEN_CLUSTER, 20.0, None),
-    ("Planetary nebula", DsoType.PLANETARY_NEBULA, 6.0, None),
-    ("Bright nebula / SNR", DsoType.BRIGHT_NEBULA, 24.0, None),
-    ("Dark nebula", DsoType.DARK_NEBULA, 24.0, None),
-    ("Galaxy cluster", DsoType.GALAXY_CLUSTER, 20.0, None),
-    ("Other / unknown", DsoType.OTHER, None, None),
+def dso_size_legend_text(style: StyleConfig) -> str:
+    """Describe edition angular floors for DSO sizes and galaxy axes."""
+    minimum = style.dso.galaxy.min_angular_major_axis_arcmin
+    if minimum is None:
+        return "Angular extents follow catalogue sizes."
+    value = f"{minimum:g}′"
+    return (
+        f"First mark: to scale · second: <{value}, drawn at {value} minimum. "
+        f"Print floors may exceed it; galaxy limit is major axis. Other: fixed."
+    )
+
+
+_SAMPLES: tuple[tuple[str, DsoType], ...] = (
+    ("Galaxy", DsoType.GALAXY),
+    ("Globular cluster", DsoType.GLOBULAR_CLUSTER),
+    ("Open cluster", DsoType.OPEN_CLUSTER),
+    ("Planetary nebula", DsoType.PLANETARY_NEBULA),
+    ("Bright nebula / SNR", DsoType.BRIGHT_NEBULA),
+    ("Dark nebula", DsoType.DARK_NEBULA),
+    ("Galaxy cluster", DsoType.GALAXY_CLUSTER),
+    ("Other / unknown", DsoType.OTHER),
 )
 
 
 def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymbol, ...]:
-    """Use the same physical DSO geometry as the chart renderer."""
+    """Build to-scale and below-minimum examples with chart symbol geometry."""
     symbols = []
-    for name, object_type, major_arcmin, minor_arcmin in _SAMPLES:
-        sample = DeepSkyObject(
-            id=f"legend:{object_type.value}",
-            ra_deg=0.0,
-            dec_deg=0.0,
-            object_type=object_type,
-            provenance=Provenance("atlas-legend", object_type.value),
-            major_axis_arcmin=major_arcmin,
-            minor_axis_arcmin=minor_arcmin,
-            position_angle_deg=45.0 if object_type == DsoType.GALAXY else None,
+    for name, object_type in _SAMPLES:
+        extent_style = style.dso.extent_style(object_type)
+        minimum_arcmin = (
+            extent_style.min_angular_major_axis_arcmin
+            if object_type == DsoType.GALAXY
+            else extent_style.min_angular_size_arcmin
         )
+        if not extent_style.use_angular_size or minimum_arcmin is None:
+            minimum_arcmin = None
+        sample_arcmin = minimum_arcmin * 2.5 if minimum_arcmin is not None else None
+        minor_arcmin = (
+            sample_arcmin * 0.4
+            if object_type == DsoType.GALAXY and sample_arcmin
+            else None
+        )
+
+        def make_sample(
+            sample_id: str,
+            sample_type: DsoType,
+            major: float | None,
+            minor: float | None,
+        ) -> DeepSkyObject:
+            return DeepSkyObject(
+                id=sample_id,
+                ra_deg=0.0,
+                dec_deg=0.0,
+                object_type=sample_type,
+                provenance=Provenance("atlas-legend", sample_type.value),
+                major_axis_arcmin=major,
+                minor_axis_arcmin=minor,
+                position_angle_deg=90.0 if sample_type == DsoType.GALAXY else None,
+            )
+
+        sample = make_sample(
+            f"legend:{object_type.value}", object_type, sample_arcmin, minor_arcmin
+        )
+        minimum_extent = None
+        minimum_label = None
+        if minimum_arcmin is not None:
+            below_minimum = minimum_arcmin * 0.5
+            below_minor = below_minimum * 0.4 if object_type == DsoType.GALAXY else None
+            minimum_sample = make_sample(
+                f"legend:{object_type.value}:below-minimum",
+                object_type,
+                below_minimum,
+                below_minor,
+            )
+            minimum_extent = dso_symbol_extent(
+                minimum_sample,
+                mm_per_deg=mm_per_degree,
+                style=style,
+            )
+            minimum_label = f"<{minimum_arcmin:g}′"
         symbols.append(
             LegendSymbol(
                 name,
                 object_type,
-                major_arcmin,
+                sample_arcmin,
                 dso_symbol_extent(sample, mm_per_deg=mm_per_degree, style=style),
+                minimum_extent,
+                minimum_label,
             )
         )
     return tuple(symbols)
@@ -377,8 +436,19 @@ def draw_field_guide(
         _text(cr, f"{magnitude:g}", x - 2.4, 69.5, family, 6.3, bold=True)
         _dot(cr, x, 77.0, diameter)
 
+    if style.variable_stars.enabled:
+        _draw_variable_star_example(cr, left + 4.0, 85.0, style, star_model)
+        _text(
+            cr,
+            "Strong variables only · incomplete selection · no current brightness",
+            left + 12.0,
+            86.7,
+            family,
+            6.0,
+            gray=0.32,
+        )
     if style.double_stars.enabled:
-        _draw_double_star_examples(cr, left, 88.0, style, star_model, family)
+        _draw_double_star_examples(cr, left, 94.0, style, star_model, family)
 
     # Telrad rings are physical circles derived directly from the edition's
     # chart scale, using a right-hand column so Deep's 80 mm ring fits too.
@@ -400,7 +470,7 @@ def draw_field_guide(
     _text(cr, "DEEP-SKY OBJECTS", left, 114.0, family, 7.0, bold=True, gray=0.38)
     _text(
         cr,
-        "Shape = type · extent = angular size; print minimums apply",
+        "Shape = type · " + dso_size_legend_text(style),
         left,
         119.0,
         family,
@@ -410,18 +480,38 @@ def draw_field_guide(
     for index, symbol in enumerate(legend_symbols(style, mm_per_degree)):
         column, row = index % 2, index // 2
         x = left + column * 67.0
-        y = 124.0 + row * 7.5
+        y = 122.0 + row * 8.0
+        _text(cr, symbol.name, x + 1.5, y + 1.5, family, 5.8, bold=True)
         cr.set_source_rgb(0.0, 0.0, 0.0)
         cr.set_line_width(mm_to_pt(style.dso.line_width_mm))
         cr.new_path()
         draw_dso_symbol(
             cr,
-            mm_to_pt(x + 5.5),
-            mm_to_pt(y + 3.5),
+            mm_to_pt(x + (30.0 if symbol.minimum_extent is not None else 5.5)),
+            mm_to_pt(y + 5.5),
             symbol.extent,
             style.dso.dash_mm,
         )
-        _text(cr, symbol.name, x + 12.0, y + 1.5, family, 6.3, bold=True)
+        if symbol.minimum_extent is not None:
+            _text(
+                cr,
+                f"{symbol.angular_size_arcmin:g}′",
+                x + 33.5,
+                y + 6.4,
+                family,
+                5.0,
+            )
+            cr.new_path()
+            draw_dso_symbol(
+                cr,
+                mm_to_pt(x + 47.0),
+                mm_to_pt(y + 5.5),
+                symbol.minimum_extent,
+                style.dso.dash_mm,
+            )
+            _text(cr, symbol.minimum_label or "", x + 50.5, y + 6.4, family, 5.0)
+        else:
+            _text(cr, "fixed", x + 10.0, y + 6.4, family, 5.0, gray=0.35)
 
     _rule(cr, left, right, 154.0)
     _text(cr, "GALAXY VISIBILITY", left, 160.0, family, 7.0, bold=True, gray=0.38)
@@ -461,3 +551,15 @@ def draw_field_guide(
 
     _draw_map_lines(cr, style, family, left + width * 0.52, 160.0, width * 0.48)
     _footer(cr, page, atlas.resolved_edition().name, family)
+
+
+def _draw_variable_star_example(
+    cr: cairo.Context[cairo.Surface],
+    x: float,
+    y: float,
+    style: StyleConfig,
+    size_model: StarSizeModel,
+) -> None:
+    diameter = size_model.diameter_mm(4.5)
+    _dot(cr, x, y, diameter)
+    draw_variable_star_ring(cr, x, y, diameter, style)

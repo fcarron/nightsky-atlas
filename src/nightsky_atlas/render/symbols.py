@@ -126,15 +126,15 @@ def galaxy_ellipse(
     *,
     mm_per_deg: float,
     min_axis_mm: float,
-    min_minor_axis_mm: float | None = None,
+    min_major_axis_arcmin: float | None = None,
     max_axis_mm: float | None = None,
 ) -> EllipseGeometry | None:
     """Compute a true-scale, oriented ellipse for a galaxy.
 
-    Returns ``None`` when the object has no major-axis data.  The major axis is
-    scaled from arcminutes to millimetres using the chart scale; if it is below
-    ``min_axis_mm`` it is enlarged to the minimum while preserving the axis
-    ratio and position angle.  Position angle is measured from north through
+    Returns ``None`` when the object has no major-axis data. The major axis is
+    scaled from arcminutes to millimetres using the chart scale and may be
+    floored by a cartographic angular minimum. The axis ratio and position
+    angle are preserved. Position angle is measured from north through
     east and converted to a page rotation, where north is up and east is left.
     """
     if dso.major_axis_arcmin is None:
@@ -142,9 +142,10 @@ def galaxy_ellipse(
 
     major_mm = dso.major_axis_arcmin / 60.0 * mm_per_deg
     minor_mm = (dso.minor_axis_arcmin or dso.major_axis_arcmin) / 60.0 * mm_per_deg
-    scale = max(min_axis_mm / major_mm, 1.0)
-    if min_minor_axis_mm is not None and minor_mm > 0.0:
-        scale = max(scale, min_minor_axis_mm / minor_mm)
+    minimum_major_mm = min_axis_mm
+    if min_major_axis_arcmin is not None:
+        minimum_major_mm = max(minimum_major_mm, min_major_axis_arcmin / 60.0 * mm_per_deg)
+    scale = max(minimum_major_mm / major_mm, 1.0)
     major_mm *= scale
     minor_mm *= scale
     if max_axis_mm is not None and major_mm > max_axis_mm:
@@ -228,8 +229,18 @@ def _usable_axis_arcmin(dso: DeepSkyObject) -> float | None:
     return None
 
 
-def _clamped_diameter_mm(diameter_mm: float, extent: DsoExtentStyle) -> float:
-    diameter_mm = max(diameter_mm, extent.min_diameter_mm)
+def _clamped_diameter_mm(
+    diameter_mm: float,
+    extent: DsoExtentStyle,
+    *,
+    mm_per_deg: float | None = None,
+) -> float:
+    angular_minimum_mm = (
+        extent.min_angular_size_arcmin / 60.0 * mm_per_deg
+        if extent.min_angular_size_arcmin is not None and mm_per_deg is not None
+        else 0.0
+    )
+    diameter_mm = max(diameter_mm, extent.min_diameter_mm, angular_minimum_mm)
     if extent.max_diameter_mm is not None:
         diameter_mm = min(diameter_mm, extent.max_diameter_mm)
     return diameter_mm
@@ -259,7 +270,7 @@ def dso_symbol_extent(
                 dso,
                 mm_per_deg=mm_per_deg,
                 min_axis_mm=extent.min_diameter_mm,
-                min_minor_axis_mm=extent.min_minor_axis_mm,
+                min_major_axis_arcmin=extent.min_angular_major_axis_arcmin,
                 max_axis_mm=extent.max_diameter_mm,
             )
             if ellipse is not None:
@@ -273,7 +284,11 @@ def dso_symbol_extent(
         else:
             axis_arcmin = _usable_axis_arcmin(dso)
             if axis_arcmin is not None:
-                diameter_mm = _clamped_diameter_mm(axis_arcmin / 60.0 * mm_per_deg, extent)
+                diameter_mm = _clamped_diameter_mm(
+                    axis_arcmin / 60.0 * mm_per_deg,
+                    extent,
+                    mm_per_deg=mm_per_deg,
+                )
                 return _symbol_extent(shape, diameter_mm, diameter_mm, uses_angular_size=True)
 
     diameter_mm = _clamped_diameter_mm(extent.fallback_diameter_mm, extent)

@@ -60,9 +60,38 @@ def test_polar_grid_has_radial_meridians() -> None:
     meridians = [line for line in build_grid(chart, transform, STYLE) if line.kind == "ra"]
     assert meridians
     step = STYLE.grid.polar_ra_step_deg
-    assert step > STYLE.grid.ra_step_deg
+    assert step == pytest.approx(STYLE.grid.ra_step_deg)
     for line in meridians:
         assert line.value_deg % step == pytest.approx(0.0, abs=1e-9)
+        assert line.polar
+    parallels = [line for line in build_grid(chart, transform, STYLE) if line.kind == "dec"]
+    assert parallels
+    assert not any(line.polar for line in parallels)
+
+
+@pytest.mark.parametrize("center_dec", [90.0, -90.0])
+def test_polar_style_applies_to_north_and_south_polar_fields(center_dec: float) -> None:
+    chart = ChartDefinition(
+        id="polar", center_ra_deg=0.0, center_dec_deg=center_dec, width_deg=27.0, height_deg=18.5
+    )
+    transform = PageTransform(chart=chart, page=PAGE)
+    lines = build_grid(chart, transform, STYLE)
+    assert any(line.kind == "ra" and line.polar for line in lines)
+    assert any(line.kind == "dec" and not line.polar for line in lines)
+    assert STYLE.grid.polar_ra_line_width_mm == pytest.approx(0.08)
+    assert STYLE.grid.polar_ra_gray == pytest.approx(0.87)
+
+
+@pytest.mark.parametrize("center_dec", [90.0, -90.0])
+def test_polar_grid_keeps_ra_labels_on_thirty_degree_intervals(center_dec: float) -> None:
+    chart = ChartDefinition(
+        id="polar", center_ra_deg=0.0, center_dec_deg=center_dec, width_deg=27.0, height_deg=18.5
+    )
+    transform = PageTransform(chart=chart, page=PAGE)
+    labels = build_grid_labels(chart, transform, STYLE)
+    ra_labels = [label for label in labels if label.kind == "ra"]
+    assert ra_labels
+    assert all(label.value_deg % 30.0 == pytest.approx(0.0, abs=1e-9) for label in ra_labels)
 
 
 def test_polar_meridians_are_near_straight() -> None:
@@ -94,6 +123,32 @@ def test_grid_values_follow_step() -> None:
     for line in build_grid(CHART, TRANSFORM, STYLE):
         step = STYLE.grid.ra_step_deg if line.kind == "ra" else STYLE.grid.dec_step_deg
         assert line.value_deg % step == pytest.approx(0.0, abs=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("edition", "ra_step_deg", "dec_step_deg", "label_ra_step_deg", "label_dec_step_deg"),
+    (
+        ("pocket", 15.0, 10.0, 15.0, 20.0),
+        ("standard", 7.5, 5.0, 15.0, 10.0),
+        ("deep", 3.75, 2.0, 7.5, 4.0),
+    ),
+)
+def test_edition_coordinate_grid_intervals(
+    edition: str,
+    ra_step_deg: float,
+    dec_step_deg: float,
+    label_ra_step_deg: float,
+    label_dec_step_deg: float,
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    assert style.grid.ra_step_deg == pytest.approx(ra_step_deg)
+    assert style.grid.polar_ra_step_deg == pytest.approx(ra_step_deg)
+    assert style.grid.dec_step_deg == pytest.approx(dec_step_deg)
+    assert style.grid.label_ra_step_deg == pytest.approx(label_ra_step_deg)
+    assert style.grid.label_dec_step_deg == pytest.approx(label_dec_step_deg)
+    for line in build_grid(CHART, TRANSFORM, style):
+        step = ra_step_deg if line.kind == "ra" else dec_step_deg
+        assert line.value_deg / step == pytest.approx(round(line.value_deg / step), abs=1e-8)
 
 
 def test_grid_points_are_finite() -> None:
@@ -212,14 +267,22 @@ def test_label_step_reduces_label_count() -> None:
     every_line = STYLE.model_copy(
         update={
             "grid": STYLE.grid.model_copy(
-                update={"label_ra_step_deg": 2.0, "label_dec_step_deg": 2.0}
+                update={
+                    "label_ra_step_deg": STYLE.grid.ra_step_deg,
+                    "label_dec_step_deg": STYLE.grid.dec_step_deg,
+                    "label_min_spacing_mm": 0.0,
+                }
             )
         }
     )
     sparse_style = STYLE.model_copy(
         update={
             "grid": STYLE.grid.model_copy(
-                update={"label_ra_step_deg": 10.0, "label_dec_step_deg": 10.0}
+                    update={
+                        "label_ra_step_deg": STYLE.grid.ra_step_deg * 2.0,
+                        "label_dec_step_deg": STYLE.grid.dec_step_deg * 2.0,
+                        "label_min_spacing_mm": 0.0,
+                    }
             )
         }
     )
@@ -235,10 +298,17 @@ def test_min_spacing_thins_crowded_polar_labels() -> None:
     )
     transform = PageTransform(chart=chart, page=PAGE)
     dense = STYLE.model_copy(
-        update={"grid": STYLE.grid.model_copy(update={"label_min_spacing_mm": 0.0})}
+        update={
+            "grid": STYLE.grid.model_copy(
+                update={
+                    "label_min_spacing_mm": 0.0,
+                    "label_polar_ra_step_deg": STYLE.grid.polar_ra_step_deg,
+                }
+            )
+        }
     )
     thinned = STYLE.model_copy(
-        update={"grid": STYLE.grid.model_copy(update={"label_min_spacing_mm": 13.0})}
+        update={"grid": STYLE.grid.model_copy(update={"label_min_spacing_mm": 50.0})}
     )
     dense_labels = build_grid_labels(chart, transform, dense)
     thinned_labels = build_grid_labels(chart, transform, thinned)

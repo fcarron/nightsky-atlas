@@ -9,6 +9,7 @@ from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.render import front_matter
 from nightsky_atlas.render.front_matter import (
     draw_field_guide,
+    dso_size_legend_text,
     galaxy_visibility_examples,
     legend_symbols,
     telrad_ring_diameters_mm,
@@ -34,27 +35,54 @@ def _configured_mm_per_degree(edition: str) -> float:
 
 
 @pytest.mark.parametrize(
-    ("edition", "mm_per_degree", "galaxy_width_mm", "globular_width_mm"),
+    ("edition", "mm_per_degree", "minimum", "sample_size"),
     (
-        ("pocket", 5.0, 2.4, 1.2),
-        ("standard", 10.0, 4.0, 2.0),
-        ("deep", 20.0, 8.0, 4.0),
+        ("pocket", 5.0, 20.0, 50.0),
+        ("standard", 10.0, 10.0, 25.0),
+        ("deep", 20.0, 5.0, 12.5),
     ),
 )
 def test_legend_uses_edition_dso_geometry(
     edition: str,
     mm_per_degree: float,
-    galaxy_width_mm: float,
-    globular_width_mm: float,
+    minimum: float,
+    sample_size: float,
 ) -> None:
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     symbols = {item.name: item for item in legend_symbols(style, mm_per_degree)}
 
     assert len(symbols) == 8
-    assert symbols["Galaxy"].extent.width_mm == pytest.approx(galaxy_width_mm)
-    assert symbols["Globular cluster"].extent.width_mm == pytest.approx(globular_width_mm)
+    galaxy = symbols["Galaxy"]
+    globular = symbols["Globular cluster"]
+    assert galaxy.angular_size_arcmin == pytest.approx(sample_size)
+    assert galaxy.extent.width_mm == pytest.approx(sample_size / 60.0 * mm_per_degree)
+    assert globular.extent.width_mm == pytest.approx(sample_size / 60.0 * mm_per_degree)
+    assert galaxy.minimum_label == f"<{minimum:g}′"
+    assert globular.minimum_label == f"<{minimum:g}′"
+    assert galaxy.minimum_extent is not None
+    assert galaxy.minimum_extent.width_mm == pytest.approx(
+        minimum / 60.0 * mm_per_degree
+    )
+    assert globular.minimum_extent is not None
+    assert symbols["Open cluster"].minimum_extent is not None
+    assert symbols["Planetary nebula"].minimum_extent is not None
+    assert symbols["Bright nebula / SNR"].minimum_extent is not None
+    assert symbols["Dark nebula"].minimum_extent is not None
+    assert symbols["Galaxy cluster"].minimum_extent is not None
     assert symbols["Planetary nebula"].extent.width_mm > mm_per_degree * 6.0 / 60.0
     assert symbols["Other / unknown"].angular_size_arcmin is None
+    assert symbols["Other / unknown"].minimum_extent is None
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+def test_dso_legend_marks_large_example_to_scale_and_subminimum_sample(edition: str) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    note = dso_size_legend_text(style)
+
+    assert "First mark: to scale" in note
+    assert "second: <" in note
+    assert "drawn at" in note
+    assert "Other: fixed" in note
 
 
 @pytest.mark.parametrize(
@@ -97,6 +125,18 @@ def test_galaxy_visibility_key_uses_all_configured_contour_styles(edition: str) 
         style.dso.galaxy_contours.fine,
         style.dso.galaxy_contours.dotted,
     )
+
+
+@pytest.mark.parametrize(
+    ("edition", "minimum"), (("pocket", "20′"), ("standard", "10′"), ("deep", "5′"))
+)
+def test_dso_size_legend_explains_edition_minimum(edition: str, minimum: str) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    note = dso_size_legend_text(style)
+    assert f"second: <{minimum}" in note
+    assert f"drawn at {minimum} minimum" in note
+    assert "Print floors may exceed it" in note
+    assert "galaxy limit is major axis" in note
 
 
 def test_standard_design_scale_is_exact_and_chart_frame_follows_it() -> None:
@@ -175,7 +215,7 @@ def test_field_guide_double_star_example_uses_production_renderer(monkeypatch) -
     expected_scale_diameters = tuple(star_model.diameter_mm(value) for value in magnitudes)
     rendered_diameters = tuple(item[2] for item in star_disks)
     assert all(value in rendered_diameters for value in expected_scale_diameters)
-    assert len(star_disks) == len(magnitudes) + 2
+    assert len(star_disks) == len(magnitudes) + 3
     first_component, second_component = star_disks[-2:]
     component_separation = second_component[0] - first_component[0]
     component_radii = (first_component[2] + second_component[2]) / 2.0

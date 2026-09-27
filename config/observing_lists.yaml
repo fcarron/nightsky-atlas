@@ -46,7 +46,12 @@ lists:
     name: Abell Galaxy Clusters
 
 editions:
+  pocket:
+    included_catalogues:
+      - OpenNGC
   standard:
+    included_catalogues:
+      - OpenNGC
     forced_lists:
       - herschel400
     list_weights:
@@ -59,8 +64,73 @@ editions:
       sac_best_110: 25
       assa_top100: 25
       bennett: 25
+    selection_rules:
+      galaxy:
+        use_visibility: false
+        visibility_class_rules:
+          - contour_class: bold
+            minimum_major_axis_arcmin: 1.5
+            bright_magnitude_fallback: 10.5
+          - contour_class: normal
+            minimum_major_axis_arcmin: 1.5
+            bright_magnitude_fallback: 10.5
+      galaxy_cluster:
+        use_visibility: false
+        selection_reason_code: group_standard_curated_only
+        exclusion_reason_code: group_standard_curated_only
+      open_cluster:
+        use_visibility: false
+        selection_reason_code: open_cluster_standard_policy
+        minimum_major_axis_arcmin: 10
+        maximum_magnitude: 10.5
+        qualifying_memberships:
+          - messier
+          - caldwell
+          - herschel400
+          - rasc_finest_ngc
+          - rasc_deep_sky_gems
+          - nsog_best
+          - sac_best_110
+          - assa_top100
+          - bennett
+      globular_cluster:
+        use_visibility: false
+        selection_reason_code: globular_cluster_standard_policy
+        maximum_magnitude: 12.5
+        qualifying_memberships:
+          - messier
+          - caldwell
+          - herschel400
+          - rasc_finest_ngc
+          - rasc_deep_sky_gems
+          - nsog_best
+          - sac_best_110
+          - assa_top100
+          - bennett
   deep:
     inherit: standard
+    included_catalogues:
+      - OpenNGC
+      - VII/20
+      - VII/7A
+      - VII/9
+      - VII/21
+      - VII/220A
+      - "VII/92A:Collinder"
+      - "VII/92A:Melotte"
+      - "VII/92A:Stock"
+      - "IV/24:AbellPN"
+      - "VII/202:Palomar"
+      - "VII/202:Terzan"
+      - VII/213
+    # Source-size gates remain for catalogue families not covered by typed
+    # selection rules below.
+    catalogue_minimum_extent_arcmin:
+      VII/20: 15
+      VII/7A: 15
+      VII/9: 15
+      VII/21: 90
+      VII/220A: 15
     forced_lists:
       - herschel2
       - planetary_nebula_al
@@ -72,3 +142,146 @@ editions:
       sac_beyond_ngc: 25
       hickson: 20
       abell: 15
+    selection_rules:
+      galaxy:
+        use_visibility: false
+        visibility_class_rules:
+          - contour_class: bold
+            minimum_major_axis_arcmin: 1.5
+            bright_magnitude_fallback: 10.5
+          - contour_class: normal
+            minimum_major_axis_arcmin: 1.5
+            bright_magnitude_fallback: 10.5
+          - contour_class: fine
+            minimum_major_axis_arcmin: 1.5
+            bright_magnitude_fallback: 10.5
+          - contour_class: dotted
+            minimum_major_axis_arcmin: 0.5
+            minimum_score_400: -1.0
+      galaxy_cluster:
+        use_visibility: true
+        selection_reason_code: group_deep_policy
+        qualifying_catalogues:
+          - VII/213
+        catalogue_minimum_member_count: 3
+        catalogue_require_major_axis: true
+      open_cluster:
+        use_visibility: true
+        visibility_catalogues:
+          - OpenNGC
+        selection_reason_code: open_cluster_deep_policy
+        qualifying_catalogues:
+          - VII/92A:Collinder
+          - VII/92A:Melotte
+          - VII/92A:Stock
+        catalogue_minimum_major_axis_arcmin: 3
+        catalogue_maximum_magnitude: 11.5
+      globular_cluster:
+        use_visibility: true
+        selection_reason_code: globular_cluster_deep_policy
+        qualifying_catalogues:
+          - VII/202:Palomar
+          - VII/202:Terzan
+        catalogue_minimum_major_axis_arcmin: 0.01
+        catalogue_maximum_magnitude: 99
+      planetary_nebula:
+        use_visibility: true
+        maximum_magnitude: 14.5
+        maximum_surface_brightness: 23.5
+        selection_reason_code: planetary_nebula_deep_policy
+        qualifying_catalogues:
+          - IV/24:AbellPN
+        catalogue_minimum_major_axis_arcmin: 0.01
+        catalogue_maximum_magnitude: 14.5
+        catalogue_maximum_surface_brightness: 23.5
+      bright_nebula:
+        use_visibility: true
+        visibility_catalogues:
+          - OpenNGC
+          - VII/21
+        selection_reason_code: bright_nebula_deep_size
+        qualifying_catalogues:
+          - VII/20
+          - VII/9
+        catalogue_minimum_major_axis_arcmin: 15
+      dark_nebula:
+        use_visibility: true
+        selection_reason_code: dark_nebula_deep_size
+        visibility_catalogues:
+          - OpenNGC
+        qualifying_catalogues:
+          - VII/7A
+          - VII/220A
+        catalogue_minimum_major_axis_arcmin: 15
+  reference:
+    inherit: deep
+    include_uncertain_catalogue_matches: true
+    catalogue_minimum_extent_arcmin:
+      VII/20: 0
+      VII/7A: 0
+      VII/9: 0
+      VII/21: 0
+      VII/220A: 0
+      "VII/92A:Collinder": 0
+      "VII/92A:Melotte": 0
+      "VII/92A:Stock": 0
+    included_catalogues:
+      - OpenNGC
+      - VII/20
+      - VII/7A
+      - VII/9
+      - VII/21
+      - VII/220A
+      - "VII/92A:Collinder"
+      - "VII/92A:Melotte"
+      - "VII/92A:Stock"
+      - "IV/24:AbellPN"
+      - "VII/202:Palomar"
+      - "VII/202:Terzan"
+      - VII/213
+      - VII/74A
+    selection_rules:
+      galaxy:
+        use_visibility: false
+        visibility_classes:
+          - bold
+          - normal
+          - fine
+          - dotted
+        include_all_valid: true
+        require_major_axis: true
+      galaxy_cluster:
+        use_visibility: false
+        include_all_valid: true
+        selection_reason_code: reference_catalogue_complete
+        catalogue_minimum_member_count: null
+        catalogue_require_major_axis: false
+      open_cluster:
+        use_visibility: false
+        include_all_valid: true
+        selection_reason_code: reference_catalogue_complete
+      globular_cluster:
+        use_visibility: false
+        include_all_valid: true
+        selection_reason_code: reference_catalogue_complete
+      planetary_nebula:
+        use_visibility: false
+        include_all_valid: true
+        selection_reason_code: reference_catalogue_complete
+        require_photometry_or_size: true
+      bright_nebula:
+        use_visibility: false
+        include_all_valid: true
+        selection_reason_code: reference_catalogue_complete
+      bright_nebula_unspecified:
+        use_visibility: false
+        include_all_valid: true
+        selection_reason_code: reference_catalogue_complete
+      dark_nebula:
+        use_visibility: false
+        include_all_valid: true
+        selection_reason_code: reference_catalogue_complete
+      supernova_remnant:
+        use_visibility: false
+        include_all_valid: true
+        selection_reason_code: reference_catalogue_complete

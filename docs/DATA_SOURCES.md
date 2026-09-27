@@ -261,6 +261,151 @@ Attribution; version unspecified in the snapshot); see
 The source list is retained independently as d3-celestial BSD-3-Clause data;
 uncurated names remain available as aliases but are not automatically printed.
 
+`curated.yaml` also identifies a small set of conspicuous visual variable
+stars by HIP number for a printed open-ring finding symbol. Selection was
+cross-checked against the [AAVSO Variable Star Index (VSX)](https://www.aavso.org/search-and-download-data/)
+on 2026-09-26. No VSX catalogue records are redistributed; this is an
+intentionally incomplete atlas aid, not a variable-star observing sequence.
+See `data/fixtures/starnames/SOURCE.md` for scope and acknowledgement details.
+
+### VizieR nebula catalogues (Deep / Reference expansion)
+
+The importer is explicit and offline after acquisition:
+
+```text
+nightsky data fetch-vizier-dsos [--catalogues ...]
+nightsky data import-vizier-dsos
+nightsky data dso-info 'NGC 7000'
+nightsky atlas catalog-object 'HCG 92' --edition reference
+nightsky data selection-report --json build/selection-report.json
+nightsky atlas why-object 'NGC 891'
+```
+
+`data selection-report` summarizes current edition eligibility without changing
+selection policy. It reports unique physical objects separately from source
+entries/aliases, with type/source breakdowns, metadata availability,
+distributions and policy warnings; optional `--csv PATH` writes a tabular
+export. `atlas why-object DESIGNATION` resolves a canonical designation or
+alias and explains the current Standard, Deep and Reference decisions with
+machine-readable reason codes. These diagnostics are generated from the same
+selection function used by atlas builds.
+
+The fetch command saves each VizieR TSV response under `data/raw/vizier_dso/`,
+including the service-computed ICRS coordinate columns, and writes a manifest
+with retrieval timestamp, table/version metadata, raw row count, query URL and
+SHA-256. Partial fetches merge into the existing manifest. Import verifies
+those checksums and writes the merged physical-object
+catalogue plus a cross-match report. Builds do not contact VizieR. The processed
+catalogue retains every external designation and a source record with the raw
+fields and match decision. Cross-match uncertainty is reported, never silently
+merged. A positional footprint estimate derived from LDN area is explicitly an
+equivalent circular diameter, not a source-reported ellipse.
+
+| Source / table | Reference and VizieR URL | Rows seen (2026-09-24) | Input frame / fields used |
+| --- | --- | ---: | --- |
+| Sharpless H-II regions, `VII/20/catalog` | Sharpless 1959, ApJS 4, 257; [VizieR VII/20](https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VII%2F20) | 313 | FK4 B1900; `Sh2`, `RA1900`, `DE1900`, `Diam`, plus computed `_RAJ2000`, `_DEJ2000` |
+| Lynds Dark Nebulae, `VII/7A/ldn` | Lynds 1962, ApJS 7, 1; [VizieR VII/7A](https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VII%2F7A) | 1,787 | FK4 B1950; `LDN`, `RA1950`, `DE1950`, `Area`, `Opacity`, `Lynds2`, `Barn`, plus computed J2000 |
+| Lynds Bright Nebulae, `VII/9/catalog` | Lynds 1965, ApJS 12, 163; [VizieR VII/9](https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VII%2F9) | 1,125 | FK4 B1950; `Seq`, `RA1950`, `DE1950`, `Diam1/2`, `Area`, `Bright`, `Name`, plus computed J2000 |
+| van den Bergh reflection nebulae, `VII/21/catalog` | van den Bergh 1966, AJ 71, 990 (corrected VizieR table 2022-11-13); [VizieR VII/21](https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VII%2F21) | 158 | Original positions are absent; retains SIMBAD `_RA`, `_DE` J2000 positions, `Type`, `SurfBr`, radii and original Galactic fields |
+| Barnard dark nebulae, `VII/220A/barnard` | Barnard 1927; [VizieR VII/220A](https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VII%2F220A) | 349 | FK4 B1875; `Barn`, `RA1875`, `DE1875`, `Diam`, plus computed J2000 |
+
+The importer requests VizieR's computed J2000/ICRS coordinate columns explicitly
+for every table (`_RAJ2000`/`_DEJ2000` or `_RA.icrs`/`_DE.icrs`, as supplied by
+the source). These are the normalized atlas coordinates.
+Original historical coordinates and their frames remain in
+`CatalogSourceRecord` for audit. The importer does not reinterpret old
+coordinates as J2000. Nebulae map
+to bright/H-II, dark, or reflection subtypes while retaining those subtypes in
+the normalized object. It does not assign the galaxy-only Crumey visibility
+class. Historical brightness/classification fields (including van den Bergh's
+photographic `SurfBr`) are retained as raw metadata, not misrepresented as
+calibrated visual magnitudes or mag/arcsec².
+
+Cross-matching first compares normalized catalogue identifiers against existing
+canonical IDs and aliases. Only explicit, qualified identifiers are treated as
+aliases: LDN Barnard cross-references become `B n`; Lynds' `Lynds2` update
+sequence numbers are retained as raw metadata but are not global IDs. Otherwise
+matching uses compatible nebula classes and
+extent-aware angular proximity: smaller dark-cloud radii, larger nebula radii,
+and a wider ambiguity-search radius. A unique candidate inside the conservative
+match radius is merged; multiple or near-but-not-secure candidates are retained
+as separate objects and marked `uncertain`. Explicit LDN Barnard cross-IDs are
+used where present. Each source record records the distance, decision,
+confidence and reason. Review the generated report before publication, in
+particular around North America/Pelican, Crescent, Cocoon, Orion and overlapping
+dark clouds.
+
+Edition policy is independent of ingestion and is configured in
+`config/observing_lists.yaml`. Standard keeps conservative galaxy visibility,
+prominence-based cluster rules and explicit observing-list overrides. Deep
+uses the galaxy visibility classes and aperture-400 score, plus broader
+object-specific size, brightness and catalogue-family rules. Reference covers
+valid classified galaxies and valid objects from the intentionally imported
+observer catalogues; it does not promote unclassified galaxies or poorly typed
+OpenNGC “Other” entries. Uncertain auxiliary matches remain excluded except in
+Reference, where they are shown as conditional records. Arp is alias-only:
+unmatched Arp entries are not introduced as extra plotted galaxies. Hickson
+groups are separate `galaxy_cluster` objects with member relationships, while
+individual galaxies remain separate. The selection report and
+`atlas why-object` expose the production decision and its reason codes.
+These thresholds are editorial atlas policy, not astronomical visibility
+claims.
+
+### Second observer-oriented VizieR batch
+
+The 2026-09-24 snapshots add these source families. Lyngå VII/92A is one
+authoritative open-cluster table: sequence codes 6, 27 and 11 identify
+Collinder, Melotte and Stock respectively. VizieR-computed ICRS positions are
+used; B1950 input coordinates remain in provenance. The Abell PN filter uses
+the `A nn` alternate names in Kohoutek's galactic PN table, retains only rows
+not flagged misclassified (`f_PK` blank or `*`), and keeps PK cross-IDs. This is
+not an Abell galaxy-cluster import (`VII/110A`). Harris VII/202 is used for
+Palomar/Terzan names, integrated V magnitude and raw structural parameters
+including `Rh`, `Rc`, and `muV`; half-mass/core radii are not misrepresented as
+full visible diameters. Hickson groups and member galaxies come from separate
+tables. Arp VII/74A is an alias/system cross-reference layer only.
+
+| Family | VizieR table | Original reference | Family rows | Details |
+| --- | --- | --- | ---: | --- |
+| Collinder | `VII/92A/catalog`, `ClSeq=6` | Lyngå, *Catalogue of Open Cluster Data*, 5th ed. (1987), sequence code 6 | 67 | `ClNum`, `RA1950`, `DE1950`, `Diam`, `OCL`, cluster metadata |
+| Melotte | `VII/92A/catalog`, `ClSeq=27` | Lyngå 1987, sequence code 27 | 9 | same source fields; designation `Mel n` |
+| Stock | `VII/92A/catalog`, `ClSeq=11` | Lyngå 1987, sequence code 11 | 20 | same source fields; designation `Stock n` |
+| Abell planetary nebulae | `IV/24/table1` | Kohoutek, *Catalogue of Galactic Planetary Nebulae* (2001), `2001A&A...378..843K`; Abell names originate in Abell 1966, `1966ApJ...144..259A` | 74 | parent table 1,759 rows; selected `Name=A n` rows; `PK`, `RAB1950`, `DEB1950`, `f_PK`; computed J2000 coordinates |
+| Palomar globulars | `VII/202/catalog`, `ID` beginning `Pal` | Harris, AJ 112, 1487 (1996; VizieR 1997 table), `1996AJ....112.1487H` | 13 | J2000, `Vt`, `Name`, `Rh`, `Rc`, `muV`, `MVt`, `[Fe/H]` |
+| Terzan globulars | `VII/202/catalog`, `ID` beginning `Ter` | Harris 1996 / VII/202 | 11 | same fields as Palomar |
+| Hickson Compact Groups | `VII/213/groups` + `VII/213/galaxies` | Hickson, ApJ 255, 382 (1982), `1982ApJ...255..382H`, with 1989/1992 catalogue updates | 100 groups; 463 member rows | B1950 group positions with computed J2000; `AngSize`, `Totmag`, `MCount`; member `HCG`, `m_HCG`, `Names` |
+| Arp peculiar galaxies | `VII/74A/table2` | Arp, ApJS 14, 1 (1966), `1966ApJS....14....1A` | 338 | Arp number, `Name`, RA1970/DE1970 and computed ICRS; alias-only |
+
+Exact table URLs, queries, retrieval timestamps, checksums, imported fields,
+selection filters, member-table hashes, and VizieR acknowledgement are recorded
+in `data/raw/vizier_dso/manifest.json` and copied to the processed catalogue
+manifest. The source table revisions are pinned operationally by the archived
+response bytes and SHA-256, rather than by a moving `master` URL. VizieR
+catalogue landing pages: [VII/92A](https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/92A),
+[IV/24](https://cdsarc.cds.unistra.fr/viz-bin/cat/IV/24),
+[VII/202](https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/202),
+[VII/213](https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/213), and
+[VII/74A](https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/74A).
+
+The import added 266 unambiguous new physical objects in this batch, merged
+175 aliases into existing objects, and retained 8 uncertain non-Arp rows as
+separate Reference-only candidates. Arp contributed 155 matched aliases, 70
+uncertain associations and 113 unmatched alias-only records; no Arp row created
+a second plotted object. Across both VizieR batches, 3,436 rows were new
+physical records, 356 aliases were merged, 459 positional associations remain
+uncertain, and the normalized catalogue contains 17,197 physical records.
+Counts and examples are reproducibly generated by `nightsky data
+catalogue-report`; the raw snapshots are local/ignored and not committed.
+
+No blanket redistribution licence for these historical catalogues is asserted
+here. VizieR provides the tables but that is not itself
+an open-data licence; consult each source publication/rights holder before
+redistributing raw or processed records. The source manifest records each table
+citation, VizieR URL, fetched-at time, checksum, fields and coordinate handling.
+When citing use the catalogue references above and the requested service
+acknowledgement: *“This research has made use of the VizieR catalogue access
+tool, CDS, Strasbourg, France (DOI: 10.26093/cds/vizier).”*
+
 ## Committed versus ignored
 
 Git-ignored (regenerate, do not commit): `data/raw/`, `data/processed/`,
