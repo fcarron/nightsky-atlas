@@ -454,20 +454,20 @@ def test_overlapping_double_star_markers_get_one_deterministic_halo() -> None:
     size_model = StarSizeModel.from_style(STYLE.star)
     marks = (
         DoubleStarMark(
-            "system:wds:A",
-            PagePoint(140.0, 90.0),
-            6.0,
-            frozenset({"A"}),
-            2.0,
-            0.15,
+            system_id="system:wds:A",
+            page_point=PagePoint(140.0, 90.0),
+            magnitude=6.0,
+            marker_length_mm=2.0,
+            marker_line_width_mm=0.15,
+            star_id="A",
         ),
         DoubleStarMark(
-            "system:wds:B",
-            PagePoint(140.2, 90.0),
-            6.0,
-            frozenset({"B"}),
-            2.0,
-            0.15,
+            system_id="system:wds:B",
+            page_point=PagePoint(140.2, 90.0),
+            magnitude=6.0,
+            marker_length_mm=2.0,
+            marker_line_width_mm=0.15,
+            star_id="B",
         ),
     )
 
@@ -483,12 +483,12 @@ def test_star_and_double_star_marker_get_one_deterministic_halo() -> None:
     )
     size_model = StarSizeModel.from_style(STYLE.star)
     mark = DoubleStarMark(
-        "system:wds:A",
-        transform.to_page(ChartPoint(0.05, 0.0)),
-        6.0,
-        frozenset({"double:A", "double:B"}),
-        2.0,
-        0.15,
+        system_id="system:wds:A",
+        page_point=transform.to_page(ChartPoint(0.05, 0.0)),
+        magnitude=6.0,
+        marker_length_mm=2.0,
+        marker_line_width_mm=0.15,
+        star_id="double:A",
     )
 
     foreground_stars, foreground_marks = _foreground_star_double_marks(

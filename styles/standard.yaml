@@ -183,16 +183,19 @@ dso:
     fine: {line_width_mm: 0.071}
     dotted: {line_width_mm: 0.088, dash_mm: 0.4, gap_mm: 0.35}
 
-# Visual double/multiple stars (WDS overlay).  A pair is drawn as one symbol
-# plus a short horizontal marker only when its components cannot be separated on
-# the page, i.e. their printed separation is below min_component_separation_mm.
-# The marker scales with the printed star (marker_length_factor x diameter,
-# floored at min_marker_length_mm).  companion_magnitude_limit keeps the chart
-# selective: companions fainter than this are not marked unless they are
-# actually plotted.  The marker is a map symbol, not the real position angle.
+# WDS selection is profile-specific; map representation is based on actual
+# projected component centres and rendered stellar symbol radii.
 double_stars:
   enabled: true
-  min_component_separation_mm: 0.7
+  limits:
+    - {max_sep_arcsec: 30, max_secondary_mag: 11.5}
+    - {max_sep_arcsec: 120, max_secondary_mag: 10.0}
+    - {max_sep_arcsec: 200, max_secondary_mag: 9.0}
+  delta_mag_limits:
+    - {max_sep_arcsec: 2, max_delta_mag: 3}
+    - {max_sep_arcsec: 5, max_delta_mag: 5}
+  unresolved_clearance_mm: 0.15
+  marginal_clearance_mm: 0.8
   marker_length_factor: 1.8
   min_marker_length_mm: 0.8
   marker_line_width_mm: 0.15

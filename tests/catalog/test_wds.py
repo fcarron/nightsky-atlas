@@ -40,6 +40,10 @@ def test_parses_albireo_pair() -> None:
     assert system.separation_arcsec == pytest.approx(34.7)
     assert system.position_angle_deg == pytest.approx(54.0)
     assert system.component_magnitudes == pytest.approx((3.19, 4.68))
+    assert system.primary_magnitude == pytest.approx(3.19)
+    assert system.secondary_magnitude == pytest.approx(4.68)
+    assert system.delta_magnitude == pytest.approx(1.49)
+    assert system.component_designation == "AB"
     assert system.combined_magnitude == pytest.approx(2.935, abs=0.01)
     assert system.is_multiple is False
     assert system.match_status is MatchStatus.UNMATCHED
@@ -58,8 +62,20 @@ def test_negative_sentinels_become_none() -> None:
 def test_multiple_system_keeps_component_designation() -> None:
     system = fixture_systems()["STFA37:AB,CD"]
     assert system.is_multiple is True
+    assert system.component_designation == "AB,CD"
     assert system.id == "system:wds:STFA37:AB,CD"
     assert system.separation_arcsec == pytest.approx(209.4)
+
+
+def test_missing_component_magnitude_keeps_wds_slots_aligned() -> None:
+    line = FIXTURE.read_text(encoding="ascii").splitlines()[1]
+    system = parse_wds_record(f"{line[:58]}{'':6}{line[64:]}")
+    assert system is not None
+    assert system.component_magnitudes[0] is None
+    assert system.secondary_magnitude == pytest.approx(4.68)
+    assert system.primary_magnitude is None
+    assert system.delta_magnitude is None
+    assert type(system).from_dict(system.to_dict()) == system
 
 
 def test_parse_returns_none_for_unusable_records() -> None:

@@ -56,19 +56,17 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   the designation. The corresponding deep-sky *symbol* is drawn with the heavier
   `dso.bold_line_width_mm` whenever its label is bold, so the map mark matches
   the name.
-- Visual double/multiple stars (M22): Tycho-2 stays the star base; the
-  Washington Double Star Catalog is a separate overlay (`catalog/wds.py`,
-  `data/processed/double_stars/wds.json`, 157,644 systems). `StarSystem`
-  (`catalog/systems.py`) links to stars by ID with a match status; only
-  `exact`/`positional` matches influence the chart. `render/double_stars.py`
-  decides from the printed separation: an ordinary star is unchanged, an
-  unseparable pair collapses to one symbol (combined magnitude) plus a short
-  horizontal marker, and a separable pair stays two real positions. Config:
-  `double_stars.enabled`, `min_component_separation_mm` (0.7),
-  `marker_length_factor` (1.8, x symbol diameter), `min_marker_length_mm` (0.8),
-  `marker_line_width_mm` (0.15) and `companion_magnitude_limit` (9.0: a system is
-  marked only when the companion is plotted or catalogued bright enough to
-  observe). The marker is a map symbol, not the real position angle.
+- Visual double/multiple stars (M22): the Washington Double Star Catalog
+  remains an overlay on the base star catalogue (`catalog/wds.py`,
+  `data/processed/double_stars/wds.json`). `StarSystem` retains WDS pair and
+  component designations, magnitudes, separation and position angle; only
+  `exact`/`positional` matches influence the chart. Pocket/Standard/Deep
+  secondary-magnitude and separation rules plus the optional Δmag sanity filter
+  are configured in each style. The projected pair clearance is measured from
+  the two rendered symbol radii. An unresolved pair receives one horizontal
+  marker on its real rendered primary; marginal and clearly resolved pairs do
+  not receive a marker merely for being listed as a pair. WDS never inserts,
+  moves, combines, or changes the magnitude of a base-catalogue star.
 - Central DSO symbol extent: `render/symbols.py:dso_symbol_extent` is now the
   single source of DSO symbol geometry, returning a `SymbolExtent`
   (width/height/radii/rotation/collision radius). Globular and open clusters use
@@ -288,10 +286,8 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   label pass.  The former open item (dense meridian fan) is now handled by
   `label_polar_ra_step_deg` (30 deg) and the physical minimum label spacing.
 - The alpha manifest predates the first git commit, so its `git_commit` is null; a rebuild records the real commit.
-- Every safe WDS match whose companion is observable currently gets a
-  double-star marker (roughly 2-3% of plotted stars in dense fields after the
-  `companion_magnitude_limit` filter). A curated `visual_priority` and, if
-  needed, a per-chart cap are the M22.4 refinement.
+- WDS overlay markers are now filtered by atlas profile and printed map scale;
+  `visual_priority` and per-chart caps remain possible later refinements.
 - Coordinate labels: the v0.2 thinning (4 deg label step, 13 mm minimum
   spacing, 30 deg polar RA label step) resolved the "every 8 minutes" density
   from the v0.1 draft; no follow-up needed unless field testing disagrees.

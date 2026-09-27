@@ -106,6 +106,7 @@ class StarSystem:
     id: str
     source: str
     source_id: str
+    component_designation: str | None = None
     ra_deg: float | None = None
     dec_deg: float | None = None
     primary_star_id: str | None = None
@@ -113,12 +114,20 @@ class StarSystem:
     is_multiple: bool = False
     separation_arcsec: float | None = None
     position_angle_deg: float | None = None
-    component_magnitudes: tuple[float, ...] = ()
+    component_magnitudes: tuple[float | None, ...] = ()
     combined_magnitude: float | None = None
     visual_priority: VisualPriority = VisualPriority.NORMAL
     match_status: MatchStatus = MatchStatus.UNMATCHED
 
     def __post_init__(self) -> None:
+        if (
+            self.component_designation is None
+            and self.source.lower() == "wds"
+            and ":" in self.source_id
+        ):
+            object.__setattr__(
+                self, "component_designation", self.source_id.rsplit(":", 1)[-1]
+            )
         if not self.id.strip():
             raise ValueError("id must not be blank")
         if not self.source.strip():
@@ -142,8 +151,10 @@ class StarSystem:
                 f"position_angle_deg must be within [0, 360], got {self.position_angle_deg!r}"
             )
         for magnitude in self.component_magnitudes:
-            if not math.isfinite(magnitude):
+            if magnitude is not None and not math.isfinite(magnitude):
                 raise ValueError("component_magnitudes must be finite")
+        if self.component_designation is not None and not self.component_designation.strip():
+            raise ValueError("component_designation must not be blank when present")
         if self.combined_magnitude is not None and not math.isfinite(
             self.combined_magnitude
         ):
@@ -165,6 +176,21 @@ class StarSystem:
         ids.extend(self.component_star_ids)
         return tuple(ids)
 
+    @property
+    def primary_magnitude(self) -> float | None:
+        return self.component_magnitudes[0] if self.component_magnitudes else None
+
+    @property
+    def secondary_magnitude(self) -> float | None:
+        return self.component_magnitudes[1] if len(self.component_magnitudes) > 1 else None
+
+    @property
+    def delta_magnitude(self) -> float | None:
+        primary, secondary = self.primary_magnitude, self.secondary_magnitude
+        if primary is None or secondary is None:
+            return None
+        return abs(secondary - primary)
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable mapping of this system."""
         payload = asdict(self)
@@ -180,7 +206,8 @@ class StarSystem:
         payload = dict(data)
         payload["component_star_ids"] = tuple(payload.get("component_star_ids") or ())
         payload["component_magnitudes"] = tuple(
-            float(value) for value in payload.get("component_magnitudes") or ()
+            None if value is None else float(value)
+            for value in payload.get("component_magnitudes") or ()
         )
         payload["match_status"] = MatchStatus(payload.get("match_status", "unmatched"))
         payload["visual_priority"] = VisualPriority(

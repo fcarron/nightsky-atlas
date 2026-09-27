@@ -167,7 +167,8 @@ def parse_wds_record(line: str) -> StarSystem | None:
     mag1 = _parse_float(padded[_MAG1])
     mag2 = _parse_float(padded[_MAG2])
     magnitudes = tuple(
-        value for value in (mag1, mag2) if value is not None and math.isfinite(value)
+        value if value is not None and math.isfinite(value) else None
+        for value in (mag1, mag2)
     )
 
     source_id = _normalise(designation)
@@ -180,6 +181,7 @@ def parse_wds_record(line: str) -> StarSystem | None:
         id=identifier,
         source=CATALOGUE,
         source_id=source_id,
+        component_designation=_normalise(component) if component else None,
         ra_deg=ra_deg,
         dec_deg=dec_deg,
         is_multiple=_component_count(component) > 2,

@@ -388,7 +388,13 @@ def test_non_mapping_root_fails(tmp_path: Path) -> None:
 def test_shipped_style_declares_double_star_marker() -> None:
     config = load_style_config(STYLE_FIXTURE)
     assert config.double_stars.enabled is True
-    assert config.double_stars.min_component_separation_mm == pytest.approx(0.7)
+    actual_limits = [
+        (item.max_sep_arcsec, item.max_secondary_mag)
+        for item in config.double_stars.limits
+    ]
+    assert actual_limits == [(30.0, 11.5), (120.0, 10.0), (200.0, 9.0)]
+    assert config.double_stars.unresolved_clearance_mm == pytest.approx(0.15)
+    assert config.double_stars.marginal_clearance_mm == pytest.approx(0.8)
     assert config.double_stars.marker_length_factor == pytest.approx(1.8)
     assert config.double_stars.min_marker_length_mm == pytest.approx(0.8)
     assert config.double_stars.marker_line_width_mm == pytest.approx(0.15)
@@ -399,7 +405,7 @@ def test_double_star_style_defaults_when_omitted(tmp_path: Path) -> None:
     path = write_yaml(tmp_path / "style.yaml", valid_style_dict())
     config = load_style_config(path)
     assert config.double_stars.enabled is True
-    assert config.double_stars.min_component_separation_mm == pytest.approx(0.7)
+    assert config.double_stars.unresolved_clearance_mm == pytest.approx(0.15)
 
 
 def test_double_star_style_rejects_unknown_key(tmp_path: Path) -> None:

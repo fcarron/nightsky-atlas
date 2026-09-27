@@ -43,6 +43,8 @@ __all__ = [
     "ConstellationNameStyle",
     "ConstellationStyle",
     "DoubleStarStyle",
+    "DoubleStarPairLimit",
+    "DoubleStarDeltaMagnitudeLimit",
     "DsoExtentStyle",
     "DsoLabelPlacementStyle",
     "DsoLabelStyle",
@@ -912,27 +914,31 @@ class DsoStyle(_StrictModel):
         return self.other
 
 
+class DoubleStarPairLimit(_StrictModel):
+    max_sep_arcsec: PositiveFloat
+    max_secondary_mag: float
+
+
+class DoubleStarDeltaMagnitudeLimit(_StrictModel):
+    max_sep_arcsec: PositiveFloat
+    max_delta_mag: NonNegativeFloat
+
+
 class DoubleStarStyle(_StrictModel):
-    """Visual double/multiple star symbol behaviour.
-
-    Whether a pair is drawn as one symbol plus a marker or as two separate
-    components is decided by its separation **on the printed page**, not by a
-    fixed angular distance.  ``min_component_separation_mm`` is the page
-    distance above which the two components are plotted separately; below it
-    the pair collapses to one symbol carrying the combined magnitude and a
-    short horizontal marker.
-
-    The marker scales with the printed star: its length is
-    ``marker_length_factor`` times the symbol diameter, never shorter than
-    ``min_marker_length_mm``.  ``companion_magnitude_limit`` keeps the chart
-    selective: a system is only marked when a companion star is actually
-    plotted or the catalogued companion is bright enough to observe.  The
-    marker is a cartographic symbol only and does **not** encode the real
-    position angle.
-    """
+    """Profile selection and page-scale representation of WDS pairs."""
 
     enabled: bool = True
-    min_component_separation_mm: PositiveFloat = 0.7
+    limits: tuple[DoubleStarPairLimit, ...] = (
+        DoubleStarPairLimit(max_sep_arcsec=30.0, max_secondary_mag=11.5),
+        DoubleStarPairLimit(max_sep_arcsec=120.0, max_secondary_mag=10.0),
+        DoubleStarPairLimit(max_sep_arcsec=200.0, max_secondary_mag=9.0),
+    )
+    delta_mag_limits: tuple[DoubleStarDeltaMagnitudeLimit, ...] = (
+        DoubleStarDeltaMagnitudeLimit(max_sep_arcsec=2.0, max_delta_mag=3.0),
+        DoubleStarDeltaMagnitudeLimit(max_sep_arcsec=5.0, max_delta_mag=5.0),
+    )
+    unresolved_clearance_mm: NonNegativeFloat = 0.15
+    marginal_clearance_mm: PositiveFloat = 0.8
     marker_length_factor: PositiveFloat = 1.8
     min_marker_length_mm: PositiveFloat = 0.8
     marker_line_width_mm: PositiveFloat = 0.15

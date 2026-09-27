@@ -279,9 +279,9 @@ def _draw_double_star_examples(
     disk = size_model.diameter_mm(magnitude)
     collapsed = DoubleStarMark(
         system_id="legend:unresolved",
+        star_id="legend:a",
         page_point=PagePoint(x_mm=x + 11.0, y_mm=y + 12.0),
         magnitude=magnitude,
-        suppress_star_ids=frozenset(("legend:a", "legend:b")),
         marker_length_mm=max(
             style.double_stars.min_marker_length_mm,
             style.double_stars.marker_length_factor * disk,
@@ -293,9 +293,9 @@ def _draw_double_star_examples(
 
     first_diameter = size_model.diameter_mm(5.0)
     second_diameter = size_model.diameter_mm(6.5)
-    separation = max(
-        style.double_stars.min_component_separation_mm + 0.2,
-        (first_diameter + second_diameter) / 2.0 + 0.35,
+    separation = (
+        style.double_stars.marginal_clearance_mm + 0.2
+        + (first_diameter + second_diameter) / 2.0
     )
     first_x = x + 72.0
     second_x = first_x + separation

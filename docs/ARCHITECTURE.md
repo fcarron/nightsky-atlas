@@ -214,17 +214,15 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
 - Emphasized symbols (Messier, Herschel 400) use `dso.bold_line_width_mm` so the
   mark is bold wherever its label is. The renderer derives the set of bold
   targets from the labels' `font_weight`; it never re-derives catalogue facts.
-- Visual double/multiple stars use three cases, decided by the **printed**
-  separation, not a fixed angular separation: an ordinary star has no marker; a
-  pair whose components cannot be separated on the page
-  (`double_stars.min_component_separation_mm`) collapses to one symbol carrying
-  the combined magnitude plus a short horizontal marker; a separable pair is
-  drawn as two real star positions with their own magnitudes. The marker scales
-  with the printed star diameter and is only drawn when the companion is
-  actually plotted or catalogued bright enough to observe
-  (`double_stars.companion_magnitude_limit`). The marker is a cartographic symbol
-  only and does **not** encode the real position angle. The decision lives in
-  `render/double_stars.py`; the renderer only draws it.
+- WDS remains an overlay on the normal star catalogue. Profile-specific
+  separation/secondary-magnitude limits and a separate close-pair Δmag filter
+  select astronomical relationships before map representation. The projected
+  page separation minus the two real rendered star radii classifies a selected
+  pair as unresolved, marginal, or clearly resolved. Only an unresolved pair
+  adds a short horizontal bar to its rendered primary; base stars, positions,
+  and magnitudes are never replaced, and the bar does not encode position angle.
+  Selection lives in `catalog/wds_selection.py`; page-scale classification and
+  marker aggregation live in `render/double_stars.py`.
 
 ## Typography
 
