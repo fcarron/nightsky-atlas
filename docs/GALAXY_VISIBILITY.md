@@ -61,7 +61,7 @@ Inputs are the OpenNGC fields `Type`, `Name`, `M`, `MajAx`, `MinAx`, `SurfBr`,
 5. **Classification.**  `S100 >= -0.25` is `bold`, else `S200 >= -0.25` is
    `normal`, else `S400 >= -0.25` is `fine`, else `dotted`.  The contour class
    affects only the galaxy contour/symbol; the label hierarchy (Messier bold
-   and 1.15x, Herschel 400 bold, ordinary regular) is independent.
+   at 1.0x, Herschel 400 bold, ordinary regular) is independent.
 6. **Confidence.**  A diagnostic score (high/medium/low) from colour fallback,
    uncertain/missing morphology, derived surface brightness, inconsistent
    `SurfBr` vs `B-Mag`, very small best fraction, faint profile/solver fallback

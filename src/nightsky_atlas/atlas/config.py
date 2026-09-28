@@ -492,7 +492,7 @@ class DsoLabelStyle(_StrictModel):
     common_name_neighbor_radius_mm: PositiveFloat = 8.0
     common_name_max_neighbors: int = Field(default=5, ge=0)
     messier: DsoLabelTierStyle = Field(
-        default_factory=lambda: DsoLabelTierStyle(size_factor=1.15, weight="bold")
+        default_factory=lambda: DsoLabelTierStyle(size_factor=1.0, weight="bold")
     )
     herschel400: DsoLabelTierStyle = Field(
         default_factory=lambda: DsoLabelTierStyle(size_factor=1.0, weight="bold")

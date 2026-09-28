@@ -255,7 +255,8 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
   abbreviations (`Sh2-101`, `Cr399`, `B168`, `Mel111`, `Abell426`, `HCG92`).
   Common names are additional information and do not replace the designation.
 - Deep-sky labels form a typographic hierarchy configured under
-  `label.dso_labels`: Messier is bold at `size_factor` 1.15, a non-Messier
+  `label.dso_labels`: Messier is bold at the normal size
+  (`size_factor` 1.0), a non-Messier
   Herschel 400 object is bold at the normal size, ordinary objects are regular.
   Each `Label` carries its resolved `font_size_pt`/`font_weight`, so the
   renderer draws typography exactly as the layout specifies.

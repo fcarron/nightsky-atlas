@@ -249,7 +249,7 @@ def test_shipped_style_declares_dso_label_hierarchy() -> None:
     config = load_style_config(STYLE_FIXTURE)
     labels = config.label.dso_labels
     assert labels.normal_size_pt == pytest.approx(6.5)
-    assert labels.messier.size_factor == pytest.approx(1.15)
+    assert labels.messier.size_factor == pytest.approx(1.0)
     assert labels.messier.weight == "bold"
     assert labels.herschel400.weight == "bold"
     assert labels.normal.weight == "normal"

@@ -131,13 +131,13 @@ def test_herschel400_label_is_bold_normal_size() -> None:
     assert result.size_factor == pytest.approx(1.0)
 
 
-def test_messier_label_is_bold_and_larger() -> None:
+def test_messier_label_is_bold_at_normal_size() -> None:
     dso = make_dso("NGC4486", cross_ids=("M87",))
     result = format_dso_label(dso, STYLE, memberships=frozenset({"herschel400"}))
     assert result.text == "M87"
     assert result.tier is DsoLabelTier.MESSIER
     assert result.weight == "bold"
-    assert result.size_factor == pytest.approx(1.15)
+    assert result.size_factor == pytest.approx(1.0)
 
 
 def test_messier_wins_over_herschel400_tier() -> None:

@@ -5,7 +5,7 @@ model: catalogue identifiers are never rewritten, only rendered compactly
 (``AGENTS.md`` sections 5 and 14.5).  The rules are:
 
 - a bare number means NGC (``NGC 4565`` renders as ``4565``);
-- Messier designations take priority and are bold and slightly larger;
+- Messier designations take priority and are bold at the normal size;
 - non-Messier Herschel 400 objects are bold;
 - IC numbers render as ``I3476``; other catalogues use short abbreviations.
 

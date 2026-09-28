@@ -50,7 +50,7 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   touching the data model. The NGC prefix is dropped (a bare number means NGC,
   `NGC 4411B` -> `4411B`), IC renders as `I3476`, Messier wins over NGC/IC, and
   other catalogues use short abbreviations (`Sh2-101`, `Cr399`, `B168`).
-  Typography lives under `label.dso_labels`: Messier bold at 1.15x, non-Messier
+  Typography lives under `label.dso_labels`: Messier bold at 1.0x, non-Messier
   Herschel 400 bold at normal size, ordinary objects regular. Each `Label`
   carries resolved `font_size_pt`/`font_weight`; common names no longer replace
   the designation. The corresponding deep-sky *symbol* is drawn with the heavier

@@ -86,11 +86,11 @@ label:
     gray: 0.55
   dso_label_magnitude_limit: null
   # Deep-sky label hierarchy.  The catalogue prefix is dropped for NGC (a bare
-  # number means NGC); Messier is bold and larger, Herschel 400 is bold.
+  # number means NGC); Messier and Herschel 400 are bold, all label sizes equal.
   dso_labels:
     normal_size_pt: 6.5
     messier:
-      size_factor: 1.15
+      size_factor: 1.0
       weight: bold
     herschel400:
       size_factor: 1.0

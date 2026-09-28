@@ -230,9 +230,9 @@ redistribution/embedding rights.
   a bare number means NGC (`NGC 4565` → `4565`), `IC 3476` → `I3476`, Messier
   wins over NGC/IC, other catalogues use short abbreviations (`Sh2-101`,
   `Cr399`, `B168`). Common names do not replace the designation. Tiers are style
-  config (`label.dso_labels`): Messier bold at 1.15×, non-Messier Herschel 400
-  bold at normal size, ordinary regular. Each `Label` carries its resolved
-  `font_size_pt`/`font_weight`.
+  config (`label.dso_labels`): Messier bold at normal size (1.0×), non-Messier
+  Herschel 400 bold at normal size, ordinary regular. Each `Label` carries its
+  resolved `font_size_pt`/`font_weight`.
 - **14.6 Deterministic selection before placement** — `object visible != label
   visible`. Candidate labels pass semantic de-duplication (one primary visible
   label per printed name; catalogue aliases and duplicated star names collapse
