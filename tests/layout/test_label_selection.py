@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from nightsky_atlas.atlas.config import LabelSelectionStyle, load_style_config
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
+from nightsky_atlas.catalog.selection import SelectionPolicy
 from nightsky_atlas.catalog.star_names import StarName
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
@@ -73,6 +76,47 @@ def test_high_priority_labels_survive_dense_field() -> None:
     ids = {label.id for label in selected}
     assert "label:dso:NGC4486" in ids
     assert len(selected) < len(labels)
+
+
+def test_herschel400_designation_survives_dense_field() -> None:
+    objects = [
+        make_dso(f"NGC{9000 + index}", 187.5 + 0.02 * index, 12.0 + 0.01 * index,
+                 object_type=DsoType.OPEN_CLUSTER)
+        for index in range(24)
+    ]
+    target = objects[12]
+    scene = build_scene(
+        CHART,
+        (),
+        objects,
+        observing_index={target.id: frozenset({"herschel400"})},
+        selection_policy=SelectionPolicy(forced_lists=frozenset({"herschel400"})),
+    )
+    labels = build_dso_labels(scene, TRANSFORM, STYLE)
+    selected = select_labels(labels, scene, TRANSFORM, STYLE)
+    target_label = next(label for label in selected if label.target_id == target.id)
+    assert target_label.text == "9012"
+    assert target_label.mandatory
+    assert all(label.mandatory for label in selected if label.id.startswith("label:dso:"))
+
+
+def test_extreme_dso_density_restores_conservative_local_budget() -> None:
+    scene, labels = clustered_scene()
+    adaptive = select_labels(labels, scene, TRANSFORM, STYLE)
+    relaxed_selection = STYLE.label.selection.model_copy(
+        update={"dso_dense_start_neighbors": 1000, "dso_dense_full_neighbors": 1001}
+    )
+    relaxed_style = STYLE.model_copy(
+        update={"label": STYLE.label.model_copy(update={"selection": relaxed_selection})}
+    )
+    relaxed = select_labels(labels, scene, TRANSFORM, relaxed_style)
+    assert len(adaptive) < len(relaxed)
+    assert any(label.id == "label:dso:NGC4486" for label in adaptive)
+
+
+def test_dso_density_transition_must_increase() -> None:
+    with pytest.raises(ValueError, match="must exceed"):
+        LabelSelectionStyle(dso_dense_start_neighbors=12, dso_dense_full_neighbors=6)
 
 
 def test_dense_field_thins_ordinary_labels_but_sparse_field_keeps_them() -> None:

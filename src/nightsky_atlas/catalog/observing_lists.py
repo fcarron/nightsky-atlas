@@ -29,6 +29,7 @@ __all__ = [
     "DEFAULT_FIXTURE_DIR",
     "FILENAME",
     "ObservingList",
+    "ObservingMembershipIndex",
     "build_membership_index",
     "canonical_designation",
     "dso_memberships",
@@ -38,16 +39,20 @@ __all__ = [
 DEFAULT_FIXTURE_DIR = Path("data/fixtures/observing_lists")
 FILENAME = "*.json"
 
-_NGC_IC = re.compile(r"^(NGC|IC)0*(\d+)")
+_NGC_IC = re.compile(r"^(NGC|IC)0*(\d+)([A-Z]?)$")
 _MESSIER = re.compile(r"^M0*(\d+)")
+_PGC = re.compile(r"^PGC0*(\d+)$")
+_MELOTTE = re.compile(r"^(?:MEL|MELOTTE)0*(\d+)$")
+_COLLINDER = re.compile(r"^(?:CR|CL|COLLINDER)0*(\d+)$")
 
 
 @functools.lru_cache(maxsize=65536)
 def canonical_designation(designation: str) -> str:
     """Return a comparable form of a catalogue designation.
 
-    Whitespace is removed, NGC/IC numbers lose leading zeros and a Messier
-    number becomes ``M<n>``.  Anything unrecognized is returned upper-cased so
+    Whitespace is removed, NGC/IC/PGC numbers lose leading zeros while NGC/IC
+    component suffixes are retained, and a Messier number becomes ``M<n>``.
+    Anything unrecognized is returned upper-cased so
     that non-catalogue designations still compare consistently.  Cached because
     the same designations are canonicalized for every chart in a build.
     """
@@ -56,10 +61,19 @@ def canonical_designation(designation: str) -> str:
         return ""
     ngc = _NGC_IC.match(cleaned)
     if ngc is not None:
-        return f"{ngc.group(1)}{int(ngc.group(2))}"
+        return f"{ngc.group(1)}{int(ngc.group(2))}{ngc.group(3)}"
     messier = _MESSIER.match(cleaned)
     if messier is not None:
         return f"M{int(messier.group(1))}"
+    pgc = _PGC.match(cleaned)
+    if pgc is not None:
+        return f"PGC{int(pgc.group(1))}"
+    melotte = _MELOTTE.match(cleaned)
+    if melotte is not None:
+        return f"MEL{int(melotte.group(1))}"
+    collinder = _COLLINDER.match(cleaned)
+    if collinder is not None:
+        return f"CR{int(collinder.group(1))}"
     return cleaned
 
 
@@ -74,12 +88,32 @@ class ObservingList:
     url: str | None = None
     license: str | None = None
     retrieved: str | None = None
+    raw_entry_count: int | None = None
+    object_aliases: tuple[tuple[str, str], ...] = ()
+    non_dso_entries: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.id.strip():
             raise ValueError("observing list id must not be blank")
         if not self.name.strip():
             raise ValueError("observing list name must not be blank")
+
+
+@dataclass(frozen=True, slots=True)
+class ObservingMembershipIndex(Mapping[str, frozenset[str]]):
+    """Designation memberships plus known canonical physical-object IDs."""
+
+    by_designation: Mapping[str, frozenset[str]]
+    canonical_object_ids: frozenset[str] = frozenset()
+
+    def __getitem__(self, key: str) -> frozenset[str]:
+        return self.by_designation[key]
+
+    def __iter__(self):
+        return iter(self.by_designation)
+
+    def __len__(self) -> int:
+        return len(self.by_designation)
 
 
 def _load_list(path: Path) -> ObservingList:
@@ -106,6 +140,18 @@ def _load_list(path: Path) -> ObservingList:
     if not objects:
         raise ValueError(f"observing-list fixture has no objects: {path}")
 
+    raw_aliases = data.get("object_aliases", {})
+    if not isinstance(raw_aliases, dict):
+        raise ValueError(f"observing-list 'object_aliases' must be an object: {path}")
+    object_aliases = tuple(
+        sorted(
+            (canonical_designation(str(source)), canonical_designation(str(target)))
+            for source, target in raw_aliases.items()
+        )
+    )
+    raw_non_dso_entries = data.get("non_dso_entries", [])
+    if not isinstance(raw_non_dso_entries, list):
+        raise ValueError(f"observing-list 'non_dso_entries' must be a list: {path}")
     return ObservingList(
         id=list_id,
         name=name,
@@ -114,6 +160,13 @@ def _load_list(path: Path) -> ObservingList:
         url=_optional_str(data.get("url")),
         license=_optional_str(data.get("license")),
         retrieved=_optional_str(data.get("retrieved")),
+        raw_entry_count=(
+            int(data["raw_entry_count"]) if data.get("raw_entry_count") is not None else None
+        ),
+        object_aliases=object_aliases,
+        non_dso_entries=frozenset(
+            canonical_designation(str(entry)) for entry in raw_non_dso_entries
+        ),
     )
 
 
@@ -142,13 +195,28 @@ def load_observing_lists(
 
 def build_membership_index(
     lists: Mapping[str, ObservingList],
-) -> dict[str, frozenset[str]]:
-    """Build a designation -> list-id index over all observing lists."""
+    objects: tuple[DeepSkyObject, ...] | list[DeepSkyObject] | None = None,
+) -> ObservingMembershipIndex:
+    """Build an alias-aware designation index over all observing lists.
+
+    If the physical-object pool is provided, a list match against a canonical
+    object ID is not also propagated to a different object that merely carries
+    that ID as a cross-reference. This avoids assigning a list membership to,
+    for example, a nearby NED subcomponent because it references its host's
+    NGC designation.
+    """
     index: dict[str, frozenset[str]] = {}
     for list_id, observing_list in lists.items():
+        alias_targets = dict(observing_list.object_aliases)
         for designation in observing_list.objects:
-            index[designation] = index.get(designation, frozenset()) | {list_id}
-    return index
+            target = alias_targets.get(designation, designation)
+            index[target] = index.get(target, frozenset()) | {list_id}
+    return ObservingMembershipIndex(
+        by_designation=index,
+        canonical_object_ids=frozenset(
+            canonical_designation(obj.id) for obj in objects or ()
+        ),
+    )
 
 
 def dso_memberships(
@@ -161,8 +229,15 @@ def dso_memberships(
     even though OpenNGC stores the zero-padded form (``NGC4486``).
     """
     memberships: set[str] = set()
+    own_id = canonical_designation(dso.id)
+    canonical_ids = (
+        index.canonical_object_ids if isinstance(index, ObservingMembershipIndex) else frozenset()
+    )
     for designation in (dso.id, *dso.cross_ids):
-        memberships |= index.get(canonical_designation(designation), frozenset())
+        key = canonical_designation(designation)
+        if key != own_id and key in canonical_ids:
+            continue
+        memberships |= index.get(key, frozenset())
     return frozenset(memberships)
 
 

@@ -7,8 +7,10 @@ Priority and mandatory status follow the conceptual ordering in section 14.3.
 from __future__ import annotations
 
 from collections import defaultdict
+from math import hypot
 
 from nightsky_atlas.atlas.config import StyleConfig
+from nightsky_atlas.catalog.common_names import curated_common_name
 from nightsky_atlas.catalog.constellations import constellation_name
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.priority import (
@@ -106,6 +108,10 @@ def build_dso_labels(
     sources = {
         source.id: source for source in dso_source_geometries(scene, transform, style)
     }
+    anchors = {
+        item.dso.id: transform.to_page(item.chart_point)
+        for item in scene.deep_sky_objects
+    }
     for scene_dso in scene.deep_sky_objects:
         dso = scene_dso.dso
         always_label = dso.object_type in style.label.selection.always_label_object_types
@@ -127,11 +133,26 @@ def build_dso_labels(
             and dso.magnitude > limit
         ):
             continue
-        formatted = format_dso_label(dso, dso_labels, memberships=memberships)
+        anchor = anchors[dso.id]
+        curated = curated_common_name(dso) if dso_labels.common_name_display == "iconic" else None
+        include_common_name = bool(curated and curated.pocket_label)
+        if include_common_name:
+            radius = dso_labels.common_name_neighbor_radius_mm
+            nearby = sum(
+                other_id != dso.id
+                and hypot(other.x_mm - anchor.x_mm, other.y_mm - anchor.y_mm) < radius
+                for other_id, other in anchors.items()
+            )
+            include_common_name = nearby <= dso_labels.common_name_max_neighbors
+        formatted = format_dso_label(
+            dso,
+            dso_labels,
+            memberships=memberships,
+            include_common_name=include_common_name,
+        )
         size_pt = dso_labels.normal_size_pt * formatted.size_factor
         label_id = f"label:dso:{dso.id}"
         metrics = measurer_for(size_pt, formatted.weight).measure_mm(formatted.text)
-        anchor = transform.to_page(scene_dso.chart_point)
         source = sources.get(dso.id)
         exact_edge_distance = None
         approximate_edge_distance = None

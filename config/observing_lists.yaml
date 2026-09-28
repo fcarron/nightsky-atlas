@@ -49,6 +49,25 @@ editions:
   pocket:
     included_catalogues:
       - OpenNGC
+      - "VII/155"
+    forced_lists:
+      - messier
+      - caldwell
+      - herschel400
+    forced_list_reason_codes:
+      messier: pocket_messier
+      caldwell: pocket_caldwell
+      herschel400: pocket_herschel400
+    selection_rules:
+      galaxy:
+        use_visibility: false
+        minimum_visibility_score_by_aperture:
+          100: -0.25
+        minimum_major_axis_arcmin: 3.0
+        selection_reason_code: pocket_galaxy_visibility_100mm
+        exclusion_reason_code: pocket_below_100mm_visibility
+    excluded_designations:
+      - C014
   standard:
     included_catalogues:
       - OpenNGC

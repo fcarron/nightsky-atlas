@@ -33,12 +33,14 @@ def make_dso(object_id: str, *, cross_ids: tuple[str, ...] = ()) -> DeepSkyObjec
 
 def test_load_herschel400_fixture() -> None:
     lists = load_observing_lists(FIXTURE_DIR)
-    assert set(lists) == {"herschel400"}
+    assert {"messier", "caldwell", "herschel400"} <= set(lists)
     herschel = lists["herschel400"]
     assert herschel.name == "Herschel 400"
     assert herschel.license == "CC-BY-SA-4.0"
     assert len(herschel.objects) == 402
     assert {"NGC869", "NGC6514", "NGC7000"} <= herschel.objects
+    assert herschel.raw_entry_count == 400
+    assert dict(herschel.object_aliases)["NGC651"] == "NGC650"
 
 
 def test_missing_and_empty_directory_yield_no_lists() -> None:
@@ -59,13 +61,31 @@ def test_canonical_designation_normalizes_forms() -> None:
 
 def test_dso_memberships_matches_zero_padded_id() -> None:
     index = build_membership_index(load_observing_lists(FIXTURE_DIR))
-    assert dso_memberships(make_dso("NGC0869"), index) == {"herschel400"}
+    assert dso_memberships(make_dso("NGC0869"), index) == {"herschel400", "caldwell"}
 
 
 def test_dso_memberships_matches_cross_id_and_plain_ngc() -> None:
     index = build_membership_index(load_observing_lists(FIXTURE_DIR))
     dso = make_dso("M76", cross_ids=("NGC 650", "Little Dumbbell"))
-    assert dso_memberships(dso, index) == {"herschel400"}
+    assert dso_memberships(dso, index) == {"herschel400", "messier"}
+
+
+def test_observing_list_aliases_and_non_dso_entries_are_kept_separate() -> None:
+    lists = load_observing_lists(FIXTURE_DIR)
+    index = build_membership_index(lists)
+    assert dso_memberships(make_dso("NGC06882"), index) >= {"caldwell", "herschel400"}
+    assert "M40" in lists["messier"].non_dso_entries
+    assert "C14" not in lists["caldwell"].objects
+    assert {"NGC869", "NGC884"} <= lists["caldwell"].objects
+
+
+def test_canonical_list_target_does_not_leak_to_another_objects_cross_id() -> None:
+    lists = load_observing_lists(FIXTURE_DIR)
+    host = make_dso("NGC4656")
+    companion = make_dso("NGC4656 NED01", cross_ids=("NGC4656",))
+    index = build_membership_index(lists, [host, companion])
+    assert "herschel400" in dso_memberships(host, index)
+    assert "herschel400" not in dso_memberships(companion, index)
 
 
 def test_dso_memberships_unknown_object_is_empty() -> None:

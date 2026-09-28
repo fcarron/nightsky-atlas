@@ -11,8 +11,8 @@ tiling:
   target_overlap_mm: 10.0
   mm_per_degree: 5.0
   coverage_step_deg: 1.0
-  declination_centers: [-72.0, -38.0, -4.0, 30.0, 64.0]
-  chart_counts: []
+  declination_centers: [-67.0, -33.0, 0.0, 33.0, 67.0]
+  chart_counts: [5, 12, 12, 12, 5]
   polar_caps: true
   stagger_ra_centers: true
   auto_adjust_counts: true

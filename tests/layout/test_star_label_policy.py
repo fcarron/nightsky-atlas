@@ -16,6 +16,7 @@ from nightsky_atlas.scene.builder import build_scene
 
 ROOT = Path(__file__).resolve().parents[2]
 STYLE = load_style_config(ROOT / "styles/standard.yaml")
+POCKET_STYLE = load_style_config(ROOT / "styles/pocket.yaml")
 NAMES = load_star_names(ROOT / "data/fixtures/starnames")
 CHART = ChartDefinition(
     id="names",
@@ -29,7 +30,13 @@ TRANSFORM = PageTransform(
 )
 
 
-def labels_for(hip: int, magnitude: float, names: dict[int, StarName] | None = None):
+def labels_for(
+    hip: int,
+    magnitude: float,
+    names: dict[int, StarName] | None = None,
+    *,
+    style=STYLE,
+):
     star = Star(
         id=f"TYC {hip}-1-1",
         ra_deg=90.0,
@@ -38,7 +45,7 @@ def labels_for(hip: int, magnitude: float, names: dict[int, StarName] | None = N
         hip_id=f"HIP {hip}",
         provenance=Provenance(catalogue="TEST", source_id=str(hip)),
     )
-    return build_star_labels(build_scene(CHART, [star]), TRANSFORM, STYLE, names or NAMES)
+    return build_star_labels(build_scene(CHART, [star]), TRANSFORM, style, names or NAMES)
 
 
 def label_for(hip: int, magnitude: float, names: dict[int, StarName] | None = None):
@@ -83,6 +90,21 @@ def test_iconic_name_and_systematic_designation_form_one_label() -> None:
 )
 def test_standard_core_combined_names(hip: int, expected: str) -> None:
     assert NAMES[hip].display_variants(STYLE.label.star_labels, 1.0)[0][0] == expected
+
+
+@pytest.mark.parametrize(
+    ("hip", "expected"),
+    [
+        (102098, "Deneb α"),
+        (100453, "Sadr γ"),
+        (102488, "Aljanah ε"),
+        (100345, "Dabih β"),
+    ],
+)
+def test_pocket_uses_proper_name_and_compact_bayer(hip: int, expected: str) -> None:
+    labels = labels_for(hip, 2.0, style=POCKET_STYLE)
+    assert len(labels) == 1
+    assert labels[0].text == expected
 
 
 def test_bayer_flamsteed_and_tycho_suppression() -> None:

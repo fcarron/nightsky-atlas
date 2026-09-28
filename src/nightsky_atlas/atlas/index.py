@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import EditionConfig
+from nightsky_atlas.catalog.common_names import curated_common_name
 from nightsky_atlas.catalog.constellations import constellation_name
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.priority import messier_id
@@ -184,7 +185,11 @@ def build_atlas_index(
             if scene_dso.metadata is not None:
                 memberships.setdefault(dso.id, set()).update(scene_dso.metadata.list_memberships)
     entries: list[DsoIndexEntry] = []
+    common_name_references: list[tuple[str, str]] = []
     for dso_id, dso in objects.items():
+        curated = curated_common_name(dso)
+        if curated is not None:
+            common_name_references.append((curated.name, _canonical_designation(dso)))
         chart_ids = sorted(
             locations[dso_id],
             key=lambda chart_id: (
@@ -203,7 +208,7 @@ def build_atlas_index(
                 dso.constellation or "",
                 chart_codes[0],
                 chart_codes[1:],
-                (dso.common_name,) if dso.common_name else (),
+                (curated.name,) if curated is not None else (),
                 tuple(sorted(memberships.get(dso_id, set()))),
             )
         )
@@ -256,6 +261,7 @@ def build_atlas_index(
     return AtlasIndex(
         tuple(sorted(entries, key=lambda item: natural_designation_key(item.designation))),
         tuple(constellation_entries),
+        aliases=tuple(sorted(common_name_references, key=lambda item: item[0].casefold())),
         named_star_entries=tuple(
             sorted(named_star_entries, key=lambda item: (item.name.casefold(), item.canonical_id))
         ),

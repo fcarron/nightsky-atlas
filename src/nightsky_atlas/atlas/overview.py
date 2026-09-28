@@ -10,7 +10,7 @@ definitions (``AGENTS.md`` section 5).
 Two consumers share the same structure:
 
 - the front-of-atlas **overview pages**, one for the northern and one for the
-  southern sky;
+  southern sky. Equatorial charts appear on both hemisphere pages;
 - the optional per-chart **locator inset**, which reuses the hemisphere map
   containing the current chart.
 
@@ -18,11 +18,12 @@ Charts overlap by design (star-hop overlap), so drawing every chart field
 rectangle produces a tangle of near-parallel lines.  Instead each chart is
 represented by the declination-ring / right-ascension sector around its centre:
 the band boundaries lie midway between adjacent ring centres and the RA
-boundaries midway between adjacent chart centres.  Every chart therefore
-contributes exactly one trapezoidal cell, adjacent cells share a single
-boundary, and there is no overlap.  This is an index schematic, not a
-reproduction of the chart fields; constellation lines are drawn as straight
-chords so the whole overview reads as a clean line drawing.
+boundaries midway between adjacent chart centres. Every chart therefore
+contributes one trapezoidal cell per hemisphere it covers. Adjacent cells
+share a single boundary, and there is no overlap within a hemisphere. This is
+an index schematic, not a reproduction of the chart fields; constellation
+lines are drawn as straight chords so the whole overview reads as a clean line
+drawing.
 """
 
 from __future__ import annotations
@@ -173,8 +174,8 @@ def build_overview(
 ) -> OverviewMap:
     """Build the overview map for one hemisphere.
 
-    Charts whose centre lies on the other hemisphere are omitted; the caller
-    builds both maps to cover the whole atlas.  ``bright_stars`` are projected
+    Equatorial charts contribute a half-cell to each overview; other charts
+    appear only in their centre's hemisphere. ``bright_stars`` are projected
     as a quiet foreground; when ``star_limit_magnitude`` is given, fainter
     stars are dropped.
     """
@@ -187,7 +188,7 @@ def build_overview(
     hemisphere_charts: list[ChartDefinition] = []
     codes: dict[str, str] = {}
     for chart in charts:
-        if hemisphere_for(chart.center_dec_deg) != hemisphere:
+        if chart.center_dec_deg != 0.0 and hemisphere_for(chart.center_dec_deg) != hemisphere:
             continue
         presentation = presentation_for(
             chart,
@@ -198,13 +199,22 @@ def build_overview(
         codes[chart.id] = presentation.chart_code
 
     polygons = _sector_cells(hemisphere_charts, projector, hemisphere)
+    ring_decs = sorted({chart.center_dec_deg for chart in hemisphere_charts})
+    ring_bounds = _band_boundaries(ring_decs, hemisphere)
+    equator_label_dec = None
+    if 0.0 in ring_decs:
+        index = ring_decs.index(0.0)
+        equator_label_dec = (ring_bounds[index] + ring_bounds[index + 1]) / 2.0
     cells = tuple(
         OverviewCell(
             chart_id=chart.id,
             chart_code=codes[chart.id],
             polygon=polygons[chart.id],
             label_point=_label_point(
-                projector.project(chart.center_ra_deg, chart.center_dec_deg),
+                projector.project(
+                    chart.center_ra_deg,
+                    equator_label_dec if chart.center_dec_deg == 0.0 else chart.center_dec_deg,
+                ),
                 radius_deg,
             ),
         )

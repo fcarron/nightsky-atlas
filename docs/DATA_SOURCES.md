@@ -54,6 +54,26 @@ source provenance
 
 The model must not assume every field exists.
 
+### Curated DSO common names
+
+`data/fixtures/dso_common_names.json` is a small, explicit editorial mapping from
+normalized physical-object ID to one widely used English common name. Each row
+records at least two source references; the file's `sources` section gives the
+public source URLs. NASA's Hubble Messier/Caldwell guides, observatory sources,
+Sky & Telescope, SEDS and OpenNGC were cross-checked; the mapping is not
+generated from arbitrary web results. Catalogue raw `common_name`, aliases,
+observing-list membership and canonical chart designation remain separate.
+
+Only names in this mapping appear as common-name cross-references in the printed
+index or in searchable diagnostics. Pocket may append an iconic name after the
+designation (`M42 · Orion Nebula`) where the local DSO field is sufficiently
+uncrowded (configured Pocket default: at most five other plotted DSO anchors
+within 8 mm); other editions currently retain designation-only chart labels.
+The mapping is editorial metadata, not a source of astronomical coordinates,
+dimensions or selection decisions. Ambiguous names for multi-object regions
+are excluded unless the physical association is clear. Caldwell numbers remain
+observing-list metadata, never common names.
+
 ### Later catalogues
 
 NightSky Deep may need additional legally compatible datasets for non-NGC/IC
@@ -112,7 +132,7 @@ external catalogues.
 | Processed | `data/processed/stars/tycho2.sqlite` (2,539,913 stars, ~364 MB) |
 | Manifest | `data/processed/stars/tycho2.manifest.json` |
 | License | **CC-BY-NC-3.0 IGO** (non-commercial) |
-| Transformations | Johnson `V = VT - 0.090 * (BT - VT)`, VT/BT fallback; ICRS mean J2000 position, observed-position fallback |
+| Transformations | Johnson `V = VT - 0.090 * (BT - VT)`, VT/BT fallback; ICRS mean J2000 position except `pflag=P` photocentre records, whose component-specific observed positions are propagated to J2000; observed-position fallback |
 | Import | `nightsky data fetch-stars` then `nightsky data import-stars` |
 
 The non-commercial restriction must be reviewed before any public or commercial
@@ -212,6 +232,12 @@ Astronomical League programs, Hickson, Abell) are already named and weighted in
 `config/observing_lists.yaml`; they are integrated one at a time as legally
 clean fixtures become available.  NSOG-derived data is **not** imported until
 its licensing is resolved.
+
+Pocket mandatory-list snapshots are vendored as `messier.json` and
+`caldwell.json`, alongside `herschel400.json`. Their provenance, list-version
+notes, identity exceptions and unresolved rows are documented in
+`data/fixtures/observing_lists/SOURCE.md`. Caldwell is selection metadata only;
+the label formatter does not use Caldwell designations as chart labels.
 
 ### Constellation geometry
 
@@ -350,6 +376,50 @@ individual galaxies remain separate. The selection report and
 `atlas why-object` expose the production decision and its reason codes.
 These thresholds are editorial atlas policy, not astronomical visibility
 claims.
+
+### RC3 galaxy catalogue (ingested, not enabled for edition selection)
+
+The [revised Third Reference Catalogue of Bright Galaxies, RC3](https://cdsarc.cds.unistra.fr/viz-bin/ReadMe/VII/155?format=html&tex=true),
+by de Vaucouleurs, de Vaucouleurs, Corwin, Buta, Paturel and Fouqué (1991),
+is imported from VizieR `VII/155/rc3`. The corrected electronic table contains
+23,011 rows; the printed catalogue's often quoted 23,022 is not the row count
+of this revision. Retrieval date, exact query and SHA-256 are in the local
+VizieR source manifest. The source positions are FK4 B2000; VizieR's computed
+J2000/FK5 positions are used for the atlas, and original positions remain in
+source metadata. The VizieR acknowledgement above applies. RC3 asks users to
+credit its authors; unaltered electronic copies may be shared with its
+documentation and notice, while reproduction of the printed work is restricted.
+The raw snapshot is not committed to this repository.
+
+Each RC3 row is keyed by its PGC identifier where present (otherwise `name`).
+`name`, `altname` and `desig`
+are alternate identifiers; matching first uses these against the normalized
+OpenNGC and existing catalogue aliases. A unique explicit match retains the
+existing canonical object, including its OpenNGC photometry, and adds RC3
+provenance and aliases. A positional-only galaxy match is allowed only within
+15 arcsec, with no other candidate inside 30 arcsec and compatible reported
+extent. Discordant identifiers or multiple plausible matches remain uncertain
+and separate. PGC leading zeros are normalized for matching, while NGC/IC
+component suffixes are significant (`NGC 1023A` is not `NGC 1023`).
+Large/overlapping systems still require manual review before a
+future edition-selection expansion.
+
+RC3 `D25` is logarithmic in units of 0.1 arcmin: major-axis arcmin =
+`10**D25 / 10`. `R25` is the logarithmic major/minor ratio: minor-axis
+arcmin = major / `10**R25`. `PA` is retained. Valid `BT` is stored as a B-band
+magnitude, but `BT_code=V` is **not** mislabelled as B. The photographic `Bmag`,
+colour `B-VT`, morphology `type`/`T`, axis-uncertainty flags and mean-brightness
+`m'25` are preserved in raw source fields;
+the latter is in mag/arcmin² and is not silently fed to the existing
+mag/arcsec² galaxy-visibility model. Matched OpenNGC data are not overwritten.
+
+The 2026-09-27 snapshot parsed 23,011 rows: 7,259 aliases merged, 15,663
+unambiguous new objects, and 89 uncertain records retained separately. RC3
+adds 15,752 galaxy records to the normalized physical-DSO pool, including
+uncertain records. RC3-only galaxies are deliberately **not yet eligible** for
+Pocket, Standard, Deep or Reference; enabling them requires a separate visual
+selection policy and validation. With the current selection configuration,
+the edition totals are identical with and without RC3.
 
 ### Second observer-oriented VizieR batch
 

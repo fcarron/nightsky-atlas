@@ -14,6 +14,13 @@ double_stars:
   marker_length_factor: 1.8
   min_marker_length_mm: 0.8
   marker_line_width_mm: 0.15
+constellation:
+  boundaries:
+    enabled: true
+    gray: 0.68
+    line_width_mm: 0.12
+    dash_mm: 0.65
+    gap_mm: 0.85
 dso:
   galaxy: {min_angular_major_axis_arcmin: 20.0}
   globular_cluster: {min_angular_size_arcmin: 20.0, min_diameter_mm: 1.2}
@@ -31,13 +38,17 @@ grid:
   label_polar_ra_step_deg: 30.0
 label:
   star_labels:
-    proper_names: {core: true, standard: false, extended: false}
+    proper_names: {core: true, standard: true, extended: false}
     bayer: {enabled: true, max_magnitude: 4.5}
     flamsteed: {enabled: false, max_magnitude: 4.5}
     variables: {enabled: false, max_magnitude: 4.5}
-    combined_names: false
+    combined_names: true
     constellation_suffix: {default: false, allow_ambiguity_fallback: true}
-  dso_label_magnitude_limit: 10.5
+  dso_label_magnitude_limit: null
+  dso_labels:
+    common_name_display: iconic
+    common_name_neighbor_radius_mm: 8.0
+    common_name_max_neighbors: 5
   selection: {medium_density_budget: 0.08, low_density_budget: 0.025}
 furniture:
   scale_bar: {length_deg: 10.0}

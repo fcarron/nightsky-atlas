@@ -330,6 +330,33 @@ VIZIER_CATALOGUES: tuple[VizierCatalogueSpec, ...] = (
         vizier_id="VII/74A",
         alias_only=True,
     ),
+    VizierCatalogueSpec(
+        "VII/155",
+        "VII/155/rc3",
+        "Third Reference Catalogue of Bright Galaxies (RC3)",
+        "1991rc3..book.....D; 1994AJ....108.2128C",
+        "RC3 source positions B2000; computed J2000/ICRS positions from VizieR",
+        "name",
+        "RA2000",
+        "DE2000",
+        "_RAJ2000",
+        "_DEJ2000",
+        DsoType.GALAXY,
+        "RC3 galaxy",
+        major_field="D25",
+        minor_field="R25",
+        position_angle_field="PA",
+        magnitude_field="BT",
+        raw_alias_fields=("name", "altname", "desig"),
+        metadata_fields=(
+            "PGC", "type", "T", "u_D25", "u_R25", "BT_code", "Bmag", "B-VT", "m'25"
+        ),
+        version_note="Revised RC3 VizieR table; row count and retrieval recorded in manifest.",
+        license_or_usage=(
+            "Credit de Vaucouleurs et al. and Corwin et al.; consult the CDS/RC3 "
+            "ReadMe and original publication for redistribution terms."
+        ),
+    ),
 )
 
 _SPEC_BY_ID = {spec.catalogue_id: spec for spec in VIZIER_CATALOGUES}
@@ -396,6 +423,11 @@ def format_vizier_designation(catalogue_id: str, value: str) -> str:
     token = value.strip()
     if not token:
         raise ValueError(f"empty designation for {catalogue_id}")
+    if catalogue_id == "VII/155":
+        pgc = re.fullmatch(r"PGC\s*0*(\d+)", token, flags=re.IGNORECASE)
+        if pgc is not None:
+            return f"PGC {int(pgc.group(1))}"
+        return re.sub(r"\s+", " ", token)
     match = _NUMBER.search(token)
     if match is None:
         raise ValueError(f"malformed {catalogue_id} designation: {value!r}")
@@ -540,6 +572,8 @@ def parse_vizier_table(
             values.extend([""] * (len(header) - len(values)))
         row = dict(zip(header, values, strict=False))
         source_designation = _field(row, spec.designation_field)
+        if catalogue_id == "VII/155":
+            source_designation = _field(row, "PGC") or source_designation
         if source_designation is None:
             continue
         if spec.row_filter_field is not None:
@@ -565,6 +599,8 @@ def parse_vizier_table(
                 f"{catalogue_id} {source_designation}: missing/invalid computed ICRS coordinates"
             )
         designation = format_vizier_designation(catalogue_id, source_designation)
+        if catalogue_id == "VII/155" and re.fullmatch(r"\d+", designation):
+            designation = f"PGC {int(designation)}"
         if catalogue_id == "IV/24:AbellPN":
             match = _NUMBER.search(designation)
             if match is None:
@@ -572,10 +608,14 @@ def parse_vizier_table(
             designation = f"Abell PN {match.group(0)}"
         major = _float(row, spec.major_field)
         minor = _float(row, spec.minor_field)
-        if major is not None:
-            major *= spec.major_field_scale
-        if minor is not None:
-            minor *= spec.minor_field_scale
+        if catalogue_id == "VII/155":
+            major = 0.1 * 10.0**major if major is not None else None
+            minor = major / 10.0**minor if major is not None and minor is not None else None
+        else:
+            if major is not None:
+                major *= spec.major_field_scale
+            if minor is not None:
+                minor *= spec.minor_field_scale
         area = _float(row, spec.area_field_deg2)
         if major is None and area is not None and area > 0.0:
             major = minor = 120.0 * math.sqrt(area / math.pi)
@@ -600,6 +640,9 @@ def parse_vizier_table(
         aliases = _aliases(row, spec, designation)
         if catalogue_id == "IV/24:AbellPN":
             aliases = tuple(dict.fromkeys((*aliases, designation.replace("Abell PN ", "Abell "))))
+        magnitude = _float(row, spec.magnitude_field)
+        if catalogue_id == "VII/155" and (_field(row, "BT_code") or "").upper() == "V":
+            magnitude = None
         objects.append(
             DeepSkyObject(
                 id=designation,
@@ -614,8 +657,13 @@ def parse_vizier_table(
                 cross_ids=aliases,
                 semantic_subtype=spec.subtype,
                 position_angle_deg=_float(row, spec.position_angle_field),
-                magnitude=_float(row, spec.magnitude_field),
-                magnitude_band="V" if spec.magnitude_field == "Vt" else None,
+                magnitude=magnitude,
+                magnitude_band=(
+                    "B"
+                    if catalogue_id == "VII/155" and magnitude is not None
+                    else "V" if spec.magnitude_field == "Vt" else None
+                ),
+                b_magnitude=magnitude if catalogue_id == "VII/155" else None,
                 member_designations=(members_by_group or {}).get(source_designation, ()),
                 member_count=(
                     int(value)
@@ -975,8 +1023,13 @@ def crossmatch_vizier_objects(
                     if _compatible_types(objects[index].object_type, record.object_type)
                 }
             )
+            search_chord = (
+                2.0 * math.sin(math.radians(0.5 / 60.0) / 2.0)
+                if catalogue_id == "VII/155"
+                else max_search_chord
+            )
             nearby_indices = (
-                tree.query_ball_point(_unit_vector(record), max_search_chord)
+                tree.query_ball_point(_unit_vector(record), search_chord)
                 if tree is not None
                 else []
             )
@@ -986,7 +1039,11 @@ def crossmatch_vizier_objects(
                 if not _compatible_types(candidate.object_type, record.object_type):
                     continue
                 distance = _angular_distance_arcmin(record, candidate)
-                clear_radius, search_radius = _match_radii(record, candidate)
+                clear_radius, search_radius = (
+                    (0.25, 0.5)
+                    if catalogue_id == "VII/155"
+                    else _match_radii(record, candidate)
+                )
                 if distance <= search_radius:
                     if not _extent_compatible(record, candidate):
                         clear_radius = 0.0
@@ -998,9 +1055,12 @@ def crossmatch_vizier_objects(
             confidence = "high"
             reason = "no_candidate"
             if len(explicit_indices) == 1:
-                matched_index = explicit_indices[0]
-                distance = _angular_distance_arcmin(record, objects[matched_index])
-                reason = "explicit_cross_identifier"
+                distance = _angular_distance_arcmin(record, objects[explicit_indices[0]])
+                if catalogue_id != "VII/155" or distance <= 5.0:
+                    matched_index = explicit_indices[0]
+                    reason = "explicit_cross_identifier"
+                else:
+                    reason = "explicit_identifier_coordinate_disagreement"
             elif len(explicit_indices) > 1:
                 reason = "ambiguous_explicit_cross_identifiers"
             else:

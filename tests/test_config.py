@@ -239,9 +239,10 @@ def test_shipped_atlas_declares_visibility_limits() -> None:
     assert limits.min_axis_arcmin == pytest.approx(1.5)
 
 
-def test_shipped_style_declares_dso_label_limit() -> None:
+def test_shipped_style_requests_labels_without_magnitude_cutoff() -> None:
     config = load_style_config(STYLE_FIXTURE)
-    assert config.label.dso_label_magnitude_limit == pytest.approx(12.5)
+    assert config.label.dso_label_magnitude_limit is None
+    assert config.label.selection.dso_low_density_budget > config.label.selection.low_density_budget
 
 
 def test_shipped_style_declares_dso_label_hierarchy() -> None:

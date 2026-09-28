@@ -249,27 +249,41 @@ def test_build_dso_labels_uses_metadata_priority() -> None:
     labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE)
     assert len(labels) == 1
     assert labels[0].priority == scene.deep_sky_objects[0].metadata.label_priority
-    assert labels[0].mandatory is False
+    assert labels[0].mandatory is True
 
 
-def test_dso_label_magnitude_limit_omits_faint_object() -> None:
-    assert STYLE.label.dso_label_magnitude_limit is not None
-    faint = STYLE.label.dso_label_magnitude_limit + 0.5
+def test_selected_faint_dso_receives_label_by_default() -> None:
+    assert STYLE.label.dso_label_magnitude_limit is None
+    faint = 16.0
     scene = build_scene(
         CHART,
         (),
         [replace(make_dso("NGC9999", magnitude=faint), object_type=DsoType.GALAXY_CLUSTER)],
     )
     labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE)
-    assert labels == ()
+    assert {label.id for label in labels} == {"label:dso:NGC9999"}
+
+
+def test_explicit_dso_label_magnitude_limit_omits_faint_object() -> None:
+    style = STYLE.model_copy(
+        update={"label": STYLE.label.model_copy(update={"dso_label_magnitude_limit": 12.5})}
+    )
+    scene = build_scene(
+        CHART,
+        (),
+        [replace(make_dso("NGC9999", magnitude=13.0), object_type=DsoType.GALAXY_CLUSTER)],
+    )
+    assert build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), style) == ()
 
 
 def test_rendered_faint_galaxy_is_exempt_from_label_magnitude_limit() -> None:
-    assert STYLE.label.dso_label_magnitude_limit is not None
-    faint = STYLE.label.dso_label_magnitude_limit + 0.5
+    style = STYLE.model_copy(
+        update={"label": STYLE.label.model_copy(update={"dso_label_magnitude_limit": 12.5})}
+    )
+    faint = 13.0
     scene = build_scene(CHART, (), [make_dso("NGC9999", magnitude=faint)])
 
-    labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE)
+    labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), style)
 
     assert {label.id for label in labels} == {"label:dso:NGC9999"}
 

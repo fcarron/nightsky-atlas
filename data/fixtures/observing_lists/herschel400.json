@@ -5,6 +5,13 @@
   "url": "https://en.wikipedia.org/wiki/Herschel_400_Catalogue",
   "license": "CC-BY-SA-4.0",
   "retrieved": "2026-09-16",
+  "raw_entry_count": 400,
+  "object_aliases": {
+    "NGC651": "NGC650",
+    "NGC2372": "NGC2371",
+    "NGC6885": "NGC6882",
+    "NGC2244": "NGC2239"
+  },
   "objects": [
     "NGC40",
     "NGC129",

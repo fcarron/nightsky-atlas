@@ -37,7 +37,7 @@ label:
     variables: {enabled: true, max_magnitude: 7.0}
     combined_names: false
     constellation_suffix: {default: true, allow_ambiguity_fallback: false}
-  dso_label_magnitude_limit: 14.0
+  dso_label_magnitude_limit: null
   selection: {medium_density_budget: 0.18, low_density_budget: 0.09}
 furniture:
   scale_bar: {length_deg: 2.0}

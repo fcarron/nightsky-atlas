@@ -2481,7 +2481,7 @@ def _star_source_diagnostics(
         "star_source_system_id": (
             label.target_id if is_system_label else (system_ids[0] if system_ids else None)
         ),
-        "source_envelope_component_count": float(len(owned)),
+        "source_envelope_component_count": float(len(owner_marks)),
         "same_system_components_excluded": bool(related - owned),
     }
 

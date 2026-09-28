@@ -43,6 +43,13 @@ EDITION_REASON_NAMES = {
     "galaxy_visibility_standard": "galaxy meets the Standard visibility class and geometry policy",
     "galaxy_visibility_deep": "galaxy meets the Deep visibility score/class and geometry policy",
     "galaxy_visibility_reference": "galaxy has a classified visibility result and valid dimensions",
+    "pocket_galaxy_visibility_100mm": (
+        "galaxy passes the configured Pocket 100 mm score and size criteria"
+    ),
+    "pocket_below_100mm_visibility": "galaxy is below the Pocket 100 mm score or size criterion",
+    "pocket_messier": "mandatory Messier observing-list member",
+    "pocket_caldwell": "mandatory Caldwell observing-list member",
+    "pocket_herschel400": "mandatory Herschel 400 observing-list member",
     "catalogue_policy_inclusion": "included by a configured catalogue-specific policy",
     "curated_object_policy": "included by a configured curated-object policy",
     "reference_catalogue_complete": "included as a valid object in Reference catalogue coverage",
@@ -292,6 +299,21 @@ def explain_selection(
             "physical_detectability",
             EDITION_REASON_NAMES["galaxy_visibility_reference"],
         ),
+        "pocket_galaxy_visibility_100mm": (
+            "physical_detectability",
+            EDITION_REASON_NAMES["pocket_galaxy_visibility_100mm"],
+        ),
+        "pocket_below_100mm_visibility": (
+            "physical_detectability",
+            EDITION_REASON_NAMES["pocket_below_100mm_visibility"],
+        ),
+        "pocket_messier": ("semantic_importance", EDITION_REASON_NAMES["pocket_messier"]),
+        "pocket_caldwell": ("semantic_importance", EDITION_REASON_NAMES["pocket_caldwell"]),
+        "pocket_herschel400": ("semantic_importance", EDITION_REASON_NAMES["pocket_herschel400"]),
+        "pocket_duplicate_aggregate_excluded": (
+            "catalogue_coverage",
+            "aggregate catalogue row duplicates its separately represented cluster components",
+        ),
         "catalogue_policy_inclusion": (
             "catalogue_coverage",
             EDITION_REASON_NAMES["catalogue_policy_inclusion"],
@@ -387,6 +409,17 @@ def explain_selection(
     for code in selected.visibility_reasons:
         if code in reason_categories:
             category, explanation = reason_categories[code]
+            if code in {"pocket_galaxy_visibility_100mm", "pocket_below_100mm_visibility"}:
+                estimate = estimate_galaxy_visibility(obj)
+                score = estimate.by_aperture.get(100)
+                minimum_size = dict(policy.type_rules).get("galaxy")
+                size_limit = minimum_size.minimum_major_axis_arcmin if minimum_size else None
+                explanation = (
+                    f"S100={score.score:.3f} mag; threshold -0.25; "
+                    f"major axis {obj.major_axis_arcmin!r} arcmin, minimum {size_limit!r} arcmin"
+                    if score is not None
+                    else "no valid 100 mm visibility score is available"
+                )
             add(code, category, explanation)
     if selected.forced and not assessment.visible:
         add(
@@ -792,7 +825,7 @@ def build_selection_report(
     objects = load_dso_catalog(catalogue_path)
     dsos = [obj for obj in objects if obj.object_type not in {DsoType.STAR, DsoType.DOUBLE_STAR}]
     config = load_observing_lists_config(observing_config_path)
-    index = build_membership_index(load_observing_lists(observing_lists_dir))
+    index = build_membership_index(load_observing_lists(observing_lists_dir), dsos)
     policies = {edition: resolve_edition(config, edition) for edition in EDITIONS}
     decisions = {
         obj.id: {
@@ -991,10 +1024,34 @@ def summarize_selection_report(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def find_object(objects: list[DeepSkyObject], designation: str) -> DeepSkyObject | None:
+def find_object(
+    objects: list[DeepSkyObject],
+    designation: str,
+    *,
+    observing_lists_dir: str | Path = "data/fixtures/observing_lists",
+) -> DeepSkyObject | None:
+    """Find a physical object by canonical ID, catalogue alias or list alias."""
     query = _normalize_designation(designation)
     for obj in objects:
         names = (obj.id, *obj.cross_ids, *(record.designation for record in obj.catalogue_records))
         if query in {_normalize_designation(name) for name in names}:
+            return obj
+    for observing_list in load_observing_lists(observing_lists_dir).values():
+        for source, target in observing_list.object_aliases:
+            if _normalize_designation(source) == query:
+                normalized_target = _normalize_designation(target)
+                for obj in objects:
+                    names = (
+                        obj.id,
+                        *obj.cross_ids,
+                        *(record.designation for record in obj.catalogue_records),
+                    )
+                    if normalized_target in {_normalize_designation(name) for name in names}:
+                        return obj
+    from nightsky_atlas.catalog.common_names import curated_common_name
+
+    for obj in objects:
+        curated = curated_common_name(obj)
+        if curated is not None and _normalize_designation(curated.name) == query:
             return obj
     return None

@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from math import hypot
 from pathlib import Path
+
+import pytest
 
 from nightsky_atlas.atlas.config import StyleConfig, load_style_config
 from nightsky_atlas.catalog.models import Provenance, Star
-from nightsky_atlas.catalog.systems import MatchStatus, StarSystem
+from nightsky_atlas.catalog.systems import (
+    MatchStatus,
+    StarSystem,
+    combined_magnitude,
+    match_star_systems,
+)
+from nightsky_atlas.catalog.tycho import iter_tycho2_stars
 from nightsky_atlas.catalog.wds import iter_wds_systems
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
@@ -15,6 +24,12 @@ from nightsky_atlas.layout.collision import IssueType, find_hard_violations
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import _star_circles, _target_anchors, optimize_labels
 from nightsky_atlas.projection.base import ChartPoint
+from nightsky_atlas.projection.stereographic import StereographicProjection
+from nightsky_atlas.render.cairo import (
+    _foreground_close_stars,
+    _foreground_star_double_marks,
+    _marked_double_star_members,
+)
 from nightsky_atlas.render.double_stars import (
     MapResolution,
     classify_map_resolution,
@@ -97,28 +112,47 @@ def make_scene(
     )
 
 
-def test_close_pair_marks_primary_without_collapsing_base_stars() -> None:
+def test_close_pair_uses_combined_magnitude_for_one_printed_star() -> None:
     scene = make_scene(component_eta_deg=0.01)
     marks = resolve_double_stars(scene, TRANSFORM, STYLE)
     assert len(marks) == 1
     assert marks[0].star_id == "A"
-    assert marks[0].magnitude == 6.0
+    assert marks[0].magnitude == pytest.approx(combined_magnitude((6.0, 8.0)))
+    assert marks[0].suppress_star_ids == {"A", "B"}
     assert marks[0].pair_ids == ("system:wds:CLOSE",)
+
+
+def test_close_pair_components_do_not_overpaint_their_own_marker() -> None:
+    scene = make_scene(component_eta_deg=0.01)
+    size_model = StarSizeModel.from_style(STYLE.star)
+    marks = resolve_double_stars(scene, TRANSFORM, STYLE)
+    members = _marked_double_star_members(scene, marks)
+
+    assert members == {"A", "B"}
+    assert _foreground_star_double_marks(
+        scene, TRANSFORM, size_model, set(), marks, marked_members=members,
+    ) == ((), ())
+    assert _foreground_close_stars(
+        scene, TRANSFORM, size_model, set(), excluded_foreground_ids=members,
+    ) == ()
 
 
 def test_mark_extends_existing_star_obstacle_in_optimizer_and_hard_gate() -> None:
     scene = make_scene(component_eta_deg=0.01, primary_magnitude=6.2)
     obstacles = printed_star_obstacles(scene, TRANSFORM, STYLE)
-    assert {item.id for item in obstacles} == {"A", "B"}
+    assert {item.id for item in obstacles} == {"A"}
     obstacle = next(item for item in obstacles if item.id == "A")
-    assert obstacle.star_ids == {"A"}
+    assert obstacle.star_ids == {"A", "B"}
     assert obstacle.marker_length_mm > 0.0
-    original_radius = StarSizeModel.from_style(STYLE.star).radius_mm(6.2)
+    model = StarSizeModel.from_style(STYLE.star)
+    original_radius = model.radius_mm(6.2)
+    assert obstacle.magnitude == pytest.approx(combined_magnitude((6.2, 8.0)))
+    assert obstacle.disk_radius_mm == pytest.approx(model.radius_mm(obstacle.magnitude))
     assert obstacle.collision_radius_mm >= original_radius
     circles = _star_circles(scene, TRANSFORM, STYLE)
-    assert len(circles) == 2
+    assert len(circles) == 1
     assert circles[0].radius_mm == obstacle.disk_radius_mm
-    assert _target_anchors((), scene, TRANSFORM, STYLE)["B"] != obstacle.page_point
+    assert _target_anchors((), scene, TRANSFORM, STYLE)["B"] == obstacle.page_point
 
     x = obstacle.page_point.x_mm + (original_radius + obstacle.collision_radius_mm) / 2.0
     bounds = PageRect(x, obstacle.page_point.y_mm - 0.05, 0.1, 0.1)
@@ -202,7 +236,7 @@ def test_double_star_label_diagnostics_distinguish_resolved_and_unresolved_sourc
     )
     unresolved = optimize_labels((unresolved_label,), unresolved_scene, TRANSFORM, STYLE)
     unresolved_diagnostic = unresolved.label_diagnostics[unresolved_label.id]
-    assert unresolved_diagnostic["star_source_type"] == "resolved_double_component"
+    assert unresolved_diagnostic["star_source_type"] == "unresolved_double"
     assert unresolved_diagnostic["source_envelope_component_count"] == 1.0
 
 
@@ -232,7 +266,7 @@ def test_unlinked_companion_uses_catalogue_separation_without_inventing_star() -
     marks = resolve_double_stars(scene, TRANSFORM, STYLE)
     assert len(marks) == 1
     assert marks[0].star_id == "A"
-    assert marks[0].magnitude == 6.0
+    assert marks[0].magnitude == pytest.approx(combined_magnitude((6.0, 8.0)))
 
 
 def test_unrendered_component_does_not_replace_primary_marker_anchor() -> None:
@@ -260,7 +294,7 @@ def test_unrendered_component_does_not_replace_primary_marker_anchor() -> None:
 
     assert len(marks) == 1
     assert marks[0].star_id == "A"
-    assert marks[0].magnitude == 6.0
+    assert marks[0].magnitude == pytest.approx(combined_magnitude((6.0, 7.0)))
 
 
 def test_one_marker_per_star_aggregates_hierarchical_wds_relations() -> None:
@@ -281,6 +315,7 @@ def test_one_marker_per_star_aggregates_hierarchical_wds_relations() -> None:
     assert len(marks) == 1
     assert marks[0].star_id == "A"
     assert len(marks[0].pair_ids) == 2
+    assert marks[0].magnitude == pytest.approx(combined_magnitude((6.0, 8.0, 7.0)))
 
 
 def test_marker_length_scales_with_star_size() -> None:
@@ -464,3 +499,74 @@ def test_epsilon_lyrae_hierarchy_changes_with_print_scale() -> None:
     small_marks = resolve_double_stars(scene, small_transform, deep_style)
     eps1_mark = next(mark for mark in small_marks if mark.star_id == "eps1")
     assert "system:wds:STFA37:AB,CD" in eps1_mark.pair_ids
+
+
+def test_real_epsilon_lyrae_has_two_pocket_double_marks_at_combined_magnitude() -> None:
+    pocket_style = load_style_config(REPO_ROOT / "styles" / "pocket.yaml")
+    tycho_fixture = REPO_ROOT / "data" / "fixtures" / "tycho2" / "epsilon_lyrae.dat"
+    wds_fixture = REPO_ROOT / "data" / "fixtures" / "double_stars" / "wds_subset.dat"
+    stars = tuple(iter_tycho2_stars([tycho_fixture]))
+    systems = match_star_systems(
+        (
+            system for system in iter_wds_systems(wds_fixture)
+            if system.source_id in {"STF2382:AB", "STF2383:CD"}
+        ),
+        stars,
+    )
+    chart = ChartDefinition(
+        id="epsilon-pocket", center_ra_deg=281.09, center_dec_deg=39.64,
+        width_deg=4.0, height_deg=4.0,
+    )
+    projection = StereographicProjection(chart.center_ra_deg, chart.center_dec_deg)
+    scene = ChartScene(
+        definition=chart,
+        stars=tuple(
+            SceneStar(star, projection.project(star.ra_deg, star.dec_deg))
+            for star in stars
+        ),
+        star_systems=tuple(
+            SceneStarSystem(system, projection.project(system.ra_deg, system.dec_deg))
+            for system in systems
+            if system.ra_deg is not None and system.dec_deg is not None
+        ),
+    )
+    transform = PageTransform(chart, PAGE, scale_mm_per_degree=5.0)
+
+    marks = resolve_double_stars(scene, transform, pocket_style)
+
+    assert {mark.star_id for mark in marks} == {
+        "TYC 3122-3438-2", "TYC 3122-3439-1",
+    }
+    assert {mark.pair_ids for mark in marks} == {
+        ("system:wds:STF2382:AB",), ("system:wds:STF2383:CD",),
+    }
+    assert hypot(
+        marks[0].page_point.x_mm - marks[1].page_point.x_mm,
+        marks[0].page_point.y_mm - marks[1].page_point.y_mm,
+    ) == pytest.approx(0.29, abs=0.02)
+    size_model = StarSizeModel.from_style(pocket_style.star)
+    star_by_id = {star.id: star for star in stars}
+    expected_pairs = {
+        "TYC 3122-3438-2": ("TYC 3122-3438-1",),
+        "TYC 3122-3439-1": ("TYC 3122-3439-2",),
+    }
+    assert {mark.star_id: mark.suppress_star_ids for mark in marks} == {
+        primary: {primary, *companions} for primary, companions in expected_pairs.items()
+    }
+    for mark in marks:
+        expected_magnitude = combined_magnitude(
+            star_by_id[star_id].magnitude
+            for star_id in (mark.star_id, *expected_pairs[mark.star_id])
+        )
+        assert mark.magnitude == pytest.approx(expected_magnitude)
+        assert size_model.diameter_mm(mark.magnitude) > size_model.diameter_mm(
+            star_by_id[mark.star_id].magnitude
+        )
+    assert all(mark.marker_length_mm >= 1.7 for mark in marks)
+    obstacles = printed_star_obstacles(scene, transform, pocket_style)
+    assert len(obstacles) == 2
+    obstacle_by_id = {obstacle.id: obstacle for obstacle in obstacles}
+    for mark in marks:
+        assert obstacle_by_id[mark.star_id].disk_radius_mm == pytest.approx(
+            size_model.radius_mm(mark.magnitude)
+        )

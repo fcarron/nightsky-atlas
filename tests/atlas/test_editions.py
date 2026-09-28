@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 
 from nightsky_atlas.atlas.config import load_atlas_config, load_style_config
-from nightsky_atlas.atlas.tiling import TilingSpec, chart_definitions, coverage_report
+from nightsky_atlas.atlas.tiling import (
+    TilingSpec,
+    chart_definitions,
+    coverage_report,
+    neighbour_overlap_report,
+    resolve_ring_counts,
+)
 from nightsky_atlas.build.atlas import _style_with_star_profile
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
@@ -49,6 +55,31 @@ def test_pocket_overlap_is_mm_derived() -> None:
     pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
     spec = TilingSpec.from_config(pocket.tiling)
     assert spec.overlap_deg == pytest.approx(10.0 / pocket.tiling.mm_per_degree)
+
+
+def test_pocket_symmetric_navigation_tiling() -> None:
+    pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
+    spec = TilingSpec.from_config(pocket.tiling)
+    assert spec.declination_centers == (-67.0, -33.0, 0.0, 33.0, 67.0)
+    assert resolve_ring_counts(spec) == (5, 12, 12, 12, 5)
+    charts = chart_definitions(pocket)
+    assert len(charts) == 48
+    assert coverage_report(charts, step_deg=0.5).covers_all
+    assert neighbour_overlap_report(charts, step_deg=1.0).is_complete
+
+
+def test_pocket_constellation_boundaries_are_distinct_from_grid_and_figures() -> None:
+    pocket = load_style_config(ROOT / "styles" / "pocket.yaml")
+    standard = load_style_config(ROOT / "styles" / "standard.yaml")
+    boundary = pocket.constellation.boundaries
+    assert boundary.enabled
+    assert boundary.line_width_mm == pytest.approx(0.12)
+    assert boundary.gray == pytest.approx(0.68)
+    assert boundary.gray < pocket.grid.gray
+    assert boundary.gray > pocket.constellation.lines.gray
+    assert pocket.constellation.lines == standard.constellation.lines
+    assert pocket.grid.gray == standard.grid.gray
+    assert pocket.grid.line_width_mm == standard.grid.line_width_mm
 
 
 def test_deep_tiling_mirrors_standard_ring_design() -> None:

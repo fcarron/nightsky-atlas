@@ -13,11 +13,10 @@ It does two things, in order, without any AI:
    name must not appear twice.  Catalogue aliases and duplicated star names are
    collapsed to one primary label, preferring the higher priority, then the
    brighter target, then the stable id.
-2. **Local density selection** -- high-priority labels (Messier, prominent
-   Herschel 400, proper-named and bright Bayer stars) are always kept; medium
-   and low labels are kept only while the printed label area within a local
-   neighbourhood stays under a tier budget.  This is a local rule, so sparse
-   fields keep their labels and dense fields (Virgo) lose ordinary ones.
+2. **Local density selection** -- mandatory Messier and Herschel 400 labels
+   survive. Other DSO labels have a generous, separate density budget so only
+   exceptional local saturation removes them. Star labels retain their
+   existing budgets.
 
 Selection is deterministic: candidates are ordered by ``(-priority, id)`` and
 every comparison is total.
@@ -181,6 +180,15 @@ def _thin_by_density(
         LabelPriorityTier.MEDIUM: selection.medium_density_budget,
         LabelPriorityTier.LOW: selection.low_density_budget,
     }
+    dso_budgets = {
+        LabelPriorityTier.MEDIUM: selection.dso_medium_density_budget,
+        LabelPriorityTier.LOW: selection.dso_low_density_budget,
+    }
+    dso_anchors = [
+        (label.target_id, _anchor_for(label, anchors))
+        for label in labels
+        if label.id.startswith("label:dso:")
+    ]
 
     ordered = sorted(labels, key=lambda label: (-label.priority, label.id))
     accepted: list[Label] = []
@@ -205,7 +213,22 @@ def _thin_by_density(
             if _distance_sq(anchor, other) <= radius_sq
         )
         projected = (occupied + _label_area_mm2(label)) / neighbourhood_area
-        if projected <= budgets[tier]:
+        budget = budgets[tier]
+        if label.id.startswith("label:dso:"):
+            neighbours = sum(
+                other_id != label.target_id and _distance_sq(anchor, other) <= radius_sq
+                for other_id, other in dso_anchors
+            )
+            transition = max(
+                1,
+                selection.dso_dense_full_neighbors - selection.dso_dense_start_neighbors,
+            )
+            pressure = min(
+                1.0,
+                max(0.0, (neighbours - selection.dso_dense_start_neighbors) / transition),
+            )
+            budget = dso_budgets[tier] * (1.0 - pressure) + budget * pressure
+        if projected <= budget:
             accepted.append(label)
             accepted_anchors.append(anchor)
             accepted_areas.append(_label_area_mm2(label))

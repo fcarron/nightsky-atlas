@@ -375,7 +375,7 @@ def build_chart_context(
             constellation_boundaries=constellations.boundaries,
             nebula_outlines=outlines,
             star_systems=matched_systems,
-            observing_index=build_membership_index(observing_lists),
+            observing_index=build_membership_index(observing_lists, inputs.dsos),
             selection_policy=selection_policy,
         )
     transform = PageTransform(

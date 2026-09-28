@@ -15,6 +15,7 @@ from nightsky_atlas.catalog.models import (
     DsoType,
     Provenance,
 )
+from nightsky_atlas.catalog.observing_lists import canonical_designation
 from nightsky_atlas.catalog.selection import SelectionPolicy, select_dso
 from nightsky_atlas.catalog.visibility import VisibilityLimits
 from nightsky_atlas.catalog.vizier_dso import (
@@ -109,6 +110,46 @@ def test_catalogue_designation_formats_are_centralized() -> None:
     assert format_vizier_designation("VII/202:Terzan", "Ter 7") == "Ter 7"
     assert format_vizier_designation("VII/213", "1") == "HCG 1"
     assert format_vizier_designation("VII/74A", "244") == "Arp 244"
+    assert format_vizier_designation("VII/155", "NGC   891") == "NGC 891"
+    assert format_vizier_designation("VII/155", "PGC009031") == "PGC 9031"
+
+
+def test_rc3_log_axes_aliases_and_photometry() -> None:
+    obj = parse_vizier_table(
+        "name\taltname\tdesig\tPGC\tRA2000\tDE2000\t_RAJ2000\t_DEJ2000\tD25\tR25\tPA\tBT\tBT_code\tB-VT\tm'25\n"
+        "NGC 891\tUGC 1831\tMCG +07-05-046\tPGC 9031\t02 22 33.4\t+42 20 57\t"
+        "35.639\t42.349\t1.50\t0.30\t22\t10.8\t\t0.83\t13.2\n",
+        "VII/155",
+        retrieved="2026-09-27",
+    )[0]
+    assert obj.id == "PGC 9031"
+    assert {"NGC 891", "UGC 1831", "MCG +07-05-046"} <= set(obj.cross_ids)
+    assert obj.major_axis_arcmin == pytest.approx(10**1.5 / 10)
+    assert obj.minor_axis_arcmin == pytest.approx((10**1.5 / 10) / 10**0.3)
+    assert obj.magnitude == 10.8
+    assert obj.magnitude_band == "B"
+    assert obj.b_magnitude == 10.8
+    assert obj.position_angle_deg == 22
+    assert dict(obj.catalogue_records[0].raw_fields)["m'25"] == "13.2"
+
+
+def test_rc3_blank_name_uses_pgc_and_v_coded_bt_is_not_b_magnitude() -> None:
+    obj = parse_vizier_table(
+        "name\taltname\tPGC\tRA2000\tDE2000\t_RAJ2000\t_DEJ2000\tBT\tBT_code\n"
+        "\tUGC 12889\tPGC 2\t00 00 01.8\t+47 16 28\t0.007852\t47.274382\t14.2\tV\n",
+        "VII/155",
+        retrieved="2026-09-27",
+    )[0]
+    assert obj.id == "PGC 2"
+    assert "UGC 12889" in obj.cross_ids
+    assert obj.magnitude is None
+    assert obj.b_magnitude is None
+
+
+def test_ngc_component_suffix_remains_distinct_from_parent() -> None:
+    assert canonical_designation("NGC 1023A") == "NGC1023A"
+    assert canonical_designation("NGC 1023") == "NGC1023"
+    assert canonical_designation("PGC 009031") == canonical_designation("PGC 9031")
 
 
 @pytest.mark.parametrize(
@@ -345,6 +386,55 @@ def test_openngc_lbn_cross_id_merges_to_one_physical_object() -> None:
     assert result.objects[0].id == "NGC7000"
     assert "LBN 373" in result.objects[0].cross_ids
     assert result.objects[0].catalogue_records[0].crossmatch_decision == "matched_alias"
+
+
+def test_rc3_ngc_alias_merges_without_replacing_openngc_canonical() -> None:
+    canonical = _dso("NGC 891", 35.639, dso_type=DsoType.GALAXY, extent=13.0)
+    rc3 = parse_vizier_table(
+        "name\taltname\tPGC\tRA2000\tDE2000\t_RAJ2000\t_DEJ2000\tD25\tR25\n"
+        "NGC 891\tUGC 1831\tPGC 9031\t02 22 33\t+00 00 00\t35.640\t0.0\t2.0\t0.5\n",
+        "VII/155",
+        retrieved="2026-09-27",
+    )[0]
+    result = crossmatch_vizier_objects([canonical], [rc3])
+    assert len(result.objects) == 1
+    assert result.objects[0].id == "NGC 891"
+    assert {"PGC 9031", "UGC 1831"} <= set(result.objects[0].cross_ids)
+    assert result.counts["VII/155"]["matched_aliases"] == 1
+
+
+def test_rc3_dense_field_does_not_merge_nearby_distinct_galaxies() -> None:
+    canonical = _dso("NGC 100", 35.0, dso_type=DsoType.GALAXY, extent=1.0)
+    rc3 = _vizier_record(
+        _dso("PGC 999", 35.01, dso_type=DsoType.GALAXY, extent=1.0),
+        catalogue_id="VII/155",
+    )
+    result = crossmatch_vizier_objects([canonical], [rc3])
+    assert len(result.objects) == 2
+    assert result.counts["VII/155"]["new_objects"] == 1
+
+
+def test_rc3_conflicting_explicit_identifier_remains_uncertain() -> None:
+    canonical = _dso("NGC 100", 35.0, dso_type=DsoType.GALAXY, extent=1.0)
+    rc3 = _vizier_record(
+        _dso("PGC 999", 36.0, dso_type=DsoType.GALAXY, aliases=("NGC 100",), extent=1.0),
+        catalogue_id="VII/155",
+    )
+    result = crossmatch_vizier_objects([canonical], [rc3])
+    assert len(result.objects) == 2
+    assert result.counts["VII/155"]["uncertain"] == 1
+    assert result.decisions[0]["reason"] == "explicit_identifier_coordinate_disagreement"
+
+
+def test_rc3_component_name_does_not_merge_with_parent_galaxy() -> None:
+    parent = _dso("NGC 1023", 35.0, dso_type=DsoType.GALAXY, extent=1.0)
+    component = _vizier_record(
+        _dso("PGC 10139", 35.1, dso_type=DsoType.GALAXY, aliases=("NGC 1023A",), extent=1.0),
+        catalogue_id="VII/155",
+    )
+    result = crossmatch_vizier_objects([parent], [component])
+    assert len(result.objects) == 2
+    assert result.counts["VII/155"]["new_objects"] == 1
 
 
 def test_nearby_distinct_dark_nebulae_remain_distinct() -> None:

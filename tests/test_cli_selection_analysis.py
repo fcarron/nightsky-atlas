@@ -27,7 +27,7 @@ def test_atlas_why_object_command_reports_all_editions(monkeypatch, capsys) -> N
     payload = json.loads(capsys.readouterr().out)
     assert payload["canonical_designation"] == "HCG 92"
     assert payload["metadata"]["member_count"] == 5
-    assert set(payload["selection"]) == {"standard", "deep", "reference"}
+    assert set(payload["selection"]) == {"pocket", "standard", "deep", "reference"}
     assert "reasons" in payload["selection"]["deep"]
 
 

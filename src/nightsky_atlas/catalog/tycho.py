@@ -7,8 +7,10 @@ The catalogue is distributed as fixed-width records split across
 Normalization rules (documented because they define the stored display
 magnitude, ``AGENTS.md`` section 5.1):
 
-- coordinates prefer the ICRS J2000 mean position (``RAmdeg``/``DEmdeg``); when
-  absent the observed position (``RAdeg``/``DEdeg``) is used as a fallback;
+- coordinates prefer the ICRS J2000 mean position (``RAmdeg``/``DEmdeg``),
+  except for ``pflag=P`` photocentre solutions: their component-specific
+  observed positions are propagated to J2000 with the catalogue proper motion;
+  when the mean position is absent, the observed position is used as a fallback;
 - display magnitude is Johnson ``V`` derived from Tycho magnitudes as
   ``V = VT - 0.090 * (BT - VT)``; if only one is present it is used directly.
 
@@ -19,6 +21,7 @@ Import is deterministic and performs no network access.  Use
 from __future__ import annotations
 
 import gzip
+import math
 import urllib.request
 from collections.abc import Iterable, Iterator
 from pathlib import Path
@@ -47,11 +50,17 @@ _TYC2 = slice(5, 10)
 _TYC3 = slice(11, 12)
 _RA_MEAN = slice(15, 27)
 _DEC_MEAN = slice(28, 40)
+_PFLAG = 13
+_PM_RA = slice(41, 48)
+_PM_DEC = slice(49, 56)
 _BT_MAG = slice(110, 116)
 _VT_MAG = slice(123, 129)
 _HIP = slice(142, 148)
 _RA_OBSERVED = slice(152, 164)
 _DEC_OBSERVED = slice(165, 177)
+_EPOCH_RA = slice(178, 182)
+_EPOCH_DEC = slice(183, 187)
+_MAS_PER_DEG = 3_600_000.0
 
 
 def raw_part_paths(raw_dir: str | Path) -> list[Path]:
@@ -91,6 +100,24 @@ def _parse_int(text: str) -> int | None:
     return int(text)
 
 
+def _component_position_j2000(line: str) -> tuple[float, float] | None:
+    ra_deg = _parse_float(line[_RA_OBSERVED])
+    dec_deg = _parse_float(line[_DEC_OBSERVED])
+    if ra_deg is None or dec_deg is None:
+        return None
+    pm_dec = _parse_float(line[_PM_DEC])
+    dec_epoch = _parse_float(line[_EPOCH_DEC])
+    if pm_dec is not None and dec_epoch is not None:
+        dec_deg += pm_dec * (2000.0 - 1990.0 - dec_epoch) / _MAS_PER_DEG
+    pm_ra = _parse_float(line[_PM_RA])
+    ra_epoch = _parse_float(line[_EPOCH_RA])
+    if pm_ra is not None and ra_epoch is not None:
+        cos_dec = math.cos(math.radians(dec_deg))
+        if abs(cos_dec) > 1e-9:
+            ra_deg += pm_ra * (2000.0 - 1990.0 - ra_epoch) / (_MAS_PER_DEG * cos_dec)
+    return ra_deg % 360.0, dec_deg
+
+
 def parse_tycho2_record(line: str) -> Star | None:
     """Parse one fixed-width Tycho-2 record into a :class:`Star`.
 
@@ -103,11 +130,15 @@ def parse_tycho2_record(line: str) -> Star | None:
     if tyc1 is None or tyc2 is None or tyc3 is None:
         return None
 
-    ra_deg = _parse_float(line[_RA_MEAN])
-    dec_deg = _parse_float(line[_DEC_MEAN])
-    if ra_deg is None or dec_deg is None:
-        ra_deg = _parse_float(line[_RA_OBSERVED])
-        dec_deg = _parse_float(line[_DEC_OBSERVED])
+    component_position = _component_position_j2000(line) if line[_PFLAG] == "P" else None
+    if component_position is not None:
+        ra_deg, dec_deg = component_position
+    else:
+        ra_deg = _parse_float(line[_RA_MEAN])
+        dec_deg = _parse_float(line[_DEC_MEAN])
+        if ra_deg is None or dec_deg is None:
+            ra_deg = _parse_float(line[_RA_OBSERVED])
+            dec_deg = _parse_float(line[_DEC_OBSERVED])
     if ra_deg is None or dec_deg is None:
         return None
 

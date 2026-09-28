@@ -47,6 +47,27 @@ def test_hemispheres_cover_every_chart(charts, constellations) -> None:
     assert north.chart_count + south.chart_count == len(charts)
 
 
+def test_equatorial_pocket_charts_appear_on_both_symmetric_overviews() -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / "pocket.yaml")
+    charts = chart_definitions(atlas)
+    north = build_overview(charts, hemisphere=NORTH, edition=atlas.resolved_edition())
+    south = build_overview(charts, hemisphere=SOUTH, edition=atlas.resolved_edition())
+    equatorial_ids = {chart.id for chart in charts if chart.center_dec_deg == 0.0}
+    north_ids = {cell.chart_id for cell in north.cells}
+    south_ids = {cell.chart_id for cell in south.cells}
+    assert len(equatorial_ids) == 12
+    assert north.chart_count == south.chart_count == 30
+    assert north_ids & south_ids == equatorial_ids
+    assert north_ids | south_ids == {chart.id for chart in charts}
+    for overview in (north, south):
+        assert sum(_polygon_area(cell.polygon) for cell in overview.cells) == pytest.approx(
+            math.pi * overview.radius_deg**2, rel=0.01
+        )
+        for cell in overview.cells:
+            assert cell.label_point is not None
+            assert _point_in_polygon(cell.label_point, cell.polygon)
+
+
 def test_chart_codes_are_visible_and_sequential(charts, constellations) -> None:
     atlas = load_atlas_config(ATLAS)
     overview = build_overview(

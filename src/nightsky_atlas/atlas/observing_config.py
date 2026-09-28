@@ -81,6 +81,7 @@ class TypeSelectionPolicyConfig(_StrictModel):
     visibility_classes: tuple[str, ...] = ()
     visibility_class_rules: tuple[VisibilityClassPolicyConfig, ...] = ()
     minimum_visibility_score_400: float | None = None
+    minimum_visibility_score_by_aperture: dict[int, float] = Field(default_factory=dict)
     minimum_major_axis_arcmin: float | None = None
     bright_magnitude_fallback: float | None = None
     maximum_magnitude: float | None = None
@@ -122,8 +123,10 @@ class EditionPolicy(_StrictModel):
 
     inherit: str | None = None
     forced_lists: tuple[str, ...] = ()
+    forced_list_reason_codes: dict[str, str] = Field(default_factory=dict)
     list_weights: dict[str, int] = Field(default_factory=dict)
     included_catalogues: tuple[str, ...] | None = None
+    excluded_designations: tuple[str, ...] = ()
     forced_catalogues: tuple[str, ...] = ()
     catalogue_minimum_extent_arcmin: dict[str, float] = Field(default_factory=dict)
     include_uncertain_catalogue_matches: bool | None = None
@@ -226,8 +229,10 @@ def resolve_edition(config: ObservingListsConfig, edition_id: str) -> SelectionP
         current = policy.inherit
 
     forced: list[str] = []
+    forced_reason_codes: dict[str, str] = {}
     weights: dict[str, int] = {}
     included_catalogues: tuple[str, ...] | None = None
+    excluded_designations: list[str] = []
     forced_catalogues: list[str] = []
     catalogue_minimum_extent_arcmin: dict[str, float] = {}
     selection_rules: dict[str, dict[str, object]] = {}
@@ -236,9 +241,13 @@ def resolve_edition(config: ObservingListsConfig, edition_id: str) -> SelectionP
         for list_id in policy.forced_lists:
             if list_id not in forced:
                 forced.append(list_id)
+        forced_reason_codes.update(policy.forced_list_reason_codes)
         weights.update(policy.list_weights)
         if policy.included_catalogues is not None:
             included_catalogues = policy.included_catalogues
+        excluded_designations.extend(
+            item for item in policy.excluded_designations if item not in excluded_designations
+        )
         for catalogue in policy.forced_catalogues:
             if catalogue not in forced_catalogues:
                 forced_catalogues.append(catalogue)
@@ -251,10 +260,12 @@ def resolve_edition(config: ObservingListsConfig, edition_id: str) -> SelectionP
             include_uncertain_catalogue_matches = policy.include_uncertain_catalogue_matches
     return SelectionPolicy(
         forced_lists=frozenset(forced),
+        forced_list_reason_codes=tuple(sorted(forced_reason_codes.items())),
         list_weights=tuple(weights.items()),
         included_catalogues=(
             frozenset(included_catalogues) if included_catalogues is not None else None
         ),
+        excluded_designations=tuple(excluded_designations),
         forced_catalogues=frozenset(forced_catalogues),
         catalogue_minimum_extent_arcmin=tuple(catalogue_minimum_extent_arcmin.items()),
         include_uncertain_catalogue_matches=include_uncertain_catalogue_matches,
@@ -264,6 +275,9 @@ def resolve_edition(config: ObservingListsConfig, edition_id: str) -> SelectionP
                 TypeSelectionRule(
                     **{
                         **values,
+                        "minimum_visibility_score_by_aperture": tuple(
+                            sorted(values.get("minimum_visibility_score_by_aperture", {}).items())
+                        ),
                         "visibility_class_rules": tuple(
                             VisibilityClassRule(**item)
                             for item in values.get("visibility_class_rules", ())

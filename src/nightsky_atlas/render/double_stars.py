@@ -10,6 +10,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from nightsky_atlas.atlas.config import StyleConfig
+from nightsky_atlas.catalog.systems import StarSystem, combined_magnitude
 from nightsky_atlas.catalog.wds_selection import pair_passes_profile
 from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.render.symbols import StarSizeModel
@@ -144,7 +145,7 @@ def resolve_double_stars(
         star_id: transform.to_page(entry.chart_point) for star_id, entry in stars.items()
     }
     systems_by_star: dict[str, set[str]] = defaultdict(set)
-    marked_pairs: dict[str, list[str]] = defaultdict(list)
+    marked_pairs: dict[str, list[StarSystem]] = defaultdict(list)
 
     for scene_system in scene.star_systems:
         system = scene_system.system
@@ -179,26 +180,47 @@ def resolve_double_stars(
             style,
         )
         if resolution is MapResolution.UNRESOLVED:
-            marked_pairs[primary_id].append(system.id)
+            marked_pairs[primary_id].append(system)
 
     marks = []
-    for star_id, pairs in sorted(marked_pairs.items()):
+    for star_id, systems in sorted(marked_pairs.items()):
         star = stars[star_id].star
+        member_magnitudes = {star_id: star.magnitude}
+        suppressed_star_ids = {star_id}
+        fallback_magnitudes = {}
+        for system in systems:
+            suppressed_star_ids.update(system.linked_star_ids())
+            for index, component_id in enumerate(system.component_star_ids):
+                component = stars.get(component_id)
+                if component is not None:
+                    member_magnitudes[component_id] = component.star.magnitude
+                elif index + 1 < len(system.component_magnitudes):
+                    magnitude = system.component_magnitudes[index + 1]
+                    if magnitude is not None:
+                        fallback_magnitudes[f"{system.id}:{index}"] = magnitude
+            if not system.component_star_ids and system.secondary_magnitude is not None:
+                fallback_magnitudes[f"{system.id}:secondary"] = system.secondary_magnitude
+        total_magnitude = combined_magnitude(
+            (*member_magnitudes.values(), *fallback_magnitudes.values())
+        )
+        if total_magnitude is None:
+            total_magnitude = star.magnitude
         marker_length = max(
             config.min_marker_length_mm,
-            config.marker_length_factor * size_model.diameter_mm(star.magnitude),
+            config.marker_length_factor * size_model.diameter_mm(total_magnitude),
         )
-        pair_ids = tuple(sorted(set(pairs)))
+        pair_ids = tuple(sorted(system.id for system in systems))
         marks.append(
             DoubleStarMark(
                 system_id=pair_ids[0],
                 star_id=star_id,
                 page_point=page_by_star[star_id],
-                magnitude=star.magnitude,
+                magnitude=total_magnitude,
                 marker_length_mm=marker_length,
                 marker_line_width_mm=config.marker_line_width_mm,
                 system_ids=frozenset(systems_by_star[star_id]),
                 pair_ids=pair_ids,
+                suppress_star_ids=frozenset(suppressed_star_ids),
             )
         )
     return tuple(marks)
@@ -211,6 +233,7 @@ def printed_star_obstacles(
 ) -> tuple[PrintedStarObstacle, ...]:
     size_model = StarSizeModel.from_style(style.star)
     marks = {mark.star_id: mark for mark in resolve_double_stars(scene, transform, style)}
+    suppressed = {star_id for mark in marks.values() for star_id in mark.suppress_star_ids}
     systems_by_star: dict[str, set[str]] = defaultdict(set)
     for scene_system in scene.star_systems:
         system = scene_system.system
@@ -221,18 +244,21 @@ def printed_star_obstacles(
     obstacles = []
     for entry in scene.stars:
         star = entry.star
+        if star.id in suppressed and star.id not in marks:
+            continue
         page_point = transform.to_page(entry.chart_point)
-        disk_radius = size_model.radius_mm(star.magnitude)
         mark = marks.get(star.id)
+        obstacle_magnitude = mark.magnitude if mark is not None else star.magnitude
+        disk_radius = size_model.radius_mm(obstacle_magnitude)
         marker_length = mark.marker_length_mm if mark else 0.0
         marker_width = mark.marker_line_width_mm if mark else 0.0
         obstacles.append(
             PrintedStarObstacle(
                 id=star.id,
-                star_ids=frozenset((star.id,)),
+                star_ids=frozenset((star.id,)) | (mark.suppress_star_ids if mark else frozenset()),
                 system_ids=frozenset(systems_by_star[star.id]),
                 page_point=page_point,
-                magnitude=star.magnitude,
+                magnitude=obstacle_magnitude,
                 collision_radius_mm=max(
                     disk_radius, (marker_length + marker_width) / 2.0
                 ),

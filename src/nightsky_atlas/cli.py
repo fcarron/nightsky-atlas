@@ -8,6 +8,7 @@ import sqlite3
 import sys
 from collections import Counter
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from nightsky_atlas import __version__
@@ -613,6 +614,17 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     selection_report.add_argument("--csv", type=Path, default=None, help="write per-object CSV")
     selection_report.set_defaults(handler=_command_selection_report)
 
+    pocket_report = data_subparsers.add_parser(
+        "pocket-selection-report",
+        help="audit Pocket mandatory-list membership and 100 mm fill selection",
+    )
+    pocket_report.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    pocket_report.add_argument("--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG)
+    pocket_report.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
+    pocket_report.add_argument("--atlas", type=Path, default=Path("atlas/pocket.yaml"))
+    pocket_report.add_argument("--json", type=Path, default=None, help="write full JSON report")
+    pocket_report.set_defaults(handler=_command_pocket_selection_report)
+
     wds_fetch = data_subparsers.add_parser(
         "fetch-wds",
         help="download the raw Washington Double Star Catalog (network access)",
@@ -672,6 +684,10 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     why_object.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
     why_object.add_argument("--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG)
     why_object.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
+    why_object.add_argument(
+        "--edition", choices=("pocket", "standard", "deep", "reference"), default=None
+    )
+    why_object.add_argument("--atlas", type=Path, default=Path("atlas/pocket.yaml"))
     why_object.add_argument("designation", help="canonical designation or known alias")
     why_object.set_defaults(handler=_command_why_object)
 
@@ -1169,7 +1185,10 @@ def _command_import_stars(args: argparse.Namespace) -> int:
         "license": "CC-BY-NC-3.0 IGO",
         "epoch": "J2000",
         "magnitude_rule": "V = VT - 0.090 * (BT - VT); VT or BT fallback",
-        "coordinate_rule": "ICRS mean J2000 position; observed position fallback",
+        "coordinate_rule": (
+            "ICRS mean J2000 position; pflag=P component observed position propagated "
+            "to J2000; observed position fallback"
+        ),
         "raw_files": [path.name for path in parts],
         "star_count": count,
         "processed_file": args.out.name,
@@ -1409,6 +1428,8 @@ def _command_import_vizier_dsos(args: argparse.Namespace) -> int:
 
 
 def _command_dso_info(args: argparse.Namespace) -> int:
+    from nightsky_atlas.catalog.common_names import curated_common_name
+
     objects = load_dso_catalog(args.catalogue)
     query = args.designation.casefold().strip()
     matches = [
@@ -1417,6 +1438,10 @@ def _command_dso_info(args: argparse.Namespace) -> int:
         if query == obj.id.casefold()
         or any(query == alias.casefold() for alias in obj.cross_ids)
         or any(query == record.designation.casefold() for record in obj.catalogue_records)
+        or (
+            (curated := curated_common_name(obj)) is not None
+            and query == curated.name.casefold()
+        )
     ]
     if getattr(args, "observing_config", None) and getattr(args, "observing_lists", None):
         from nightsky_atlas.atlas.observing_config import (
@@ -1430,12 +1455,15 @@ def _command_dso_info(args: argparse.Namespace) -> int:
         from nightsky_atlas.catalog.selection import select_dso
 
         config = load_observing_lists_config(args.observing_config)
-        index = build_membership_index(load_observing_lists(args.observing_lists))
+        index = build_membership_index(load_observing_lists(args.observing_lists), objects)
         policy = resolve_edition(config, getattr(args, "edition", "deep"))
         payload = []
         for obj in matches:
             selected = select_dso(obj, index=index, policy=policy)
             item = obj.to_dict()
+            item["curated_common_name"] = (
+                curated.name if (curated := curated_common_name(obj)) is not None else None
+            )
             item["edition_eligibility"] = {
                 "edition": getattr(args, "edition", "deep"),
                 "visible": selected.visible,
@@ -1444,7 +1472,15 @@ def _command_dso_info(args: argparse.Namespace) -> int:
             }
             payload.append(item)
     else:
-        payload = [obj.to_dict() for obj in matches]
+        payload = [
+            {
+                **obj.to_dict(),
+                "curated_common_name": (
+                    curated.name if (curated := curated_common_name(obj)) is not None else None
+                ),
+            }
+            for obj in matches
+        ]
     print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
     return 0 if matches else 1
 
@@ -1538,28 +1574,75 @@ def _command_selection_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_pocket_selection_report(args: argparse.Namespace) -> int:
+    from nightsky_atlas.catalog.pocket_selection import (
+        build_pocket_selection_report,
+        summarize_pocket_selection_report,
+    )
+
+    report = build_pocket_selection_report(
+        catalogue_path=args.catalogue,
+        observing_config_path=args.observing_config,
+        observing_lists_dir=args.observing_lists,
+        atlas_path=args.atlas,
+    )
+    print(summarize_pocket_selection_report(report))
+    print("\nlist overlap counts: " + json.dumps(report["list_overlaps"], sort_keys=True))
+    print("source contribution counts:")
+    for source, counts in report["source_counts"].items():
+        print(
+            f"  {source:28} {counts['pool_physical_objects']:6} pool, "
+            f"{counts['selected_physical_objects']:6} selected"
+        )
+    if args.json:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        args.json.write_text(
+            json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"JSON -> {args.json}")
+    return 0
+
+
 def _command_why_object(args: argparse.Namespace) -> int:
     from nightsky_atlas.atlas.observing_config import (
         load_observing_lists_config,
         resolve_edition,
     )
+    from nightsky_atlas.catalog.common_names import curated_common_name
     from nightsky_atlas.catalog.observing_lists import (
         build_membership_index,
         load_observing_lists,
     )
+    from nightsky_atlas.layout.dso_labels import primary_designation
 
     objects = load_dso_catalog(args.catalogue)
-    obj = find_object(objects, args.designation)
+    obj = find_object(
+        objects,
+        args.designation,
+        observing_lists_dir=args.observing_lists,
+    )
     if obj is None:
         print(f"no catalogue object found for {args.designation!r}")
         return 1
-    index = build_membership_index(load_observing_lists(args.observing_lists))
+    index = build_membership_index(load_observing_lists(args.observing_lists), objects)
     config = load_observing_lists_config(args.observing_config)
     sources = sorted(
         {obj.provenance.catalogue} | {record.catalogue_id for record in obj.catalogue_records}
     )
+    editions = (args.edition,) if args.edition else ("pocket", "standard", "deep", "reference")
+    policies = {edition: resolve_edition(config, edition) for edition in editions}
+    if "pocket" in policies:
+        pocket_atlas = load_atlas_config(args.atlas)
+        policies["pocket"] = replace(
+            policies["pocket"], visibility=pocket_atlas.visibility.to_limits()
+        )
     output = {
         "canonical_designation": obj.id,
+        "display_designation": primary_designation(obj),
+        "curated_common_name": (
+            curated.name if (curated := curated_common_name(obj)) is not None else None
+        ),
         "aliases": sorted(obj.cross_ids),
         "object_type": obj.object_type.value,
         "semantic_subtype": obj.semantic_subtype,
@@ -1581,10 +1664,10 @@ def _command_why_object(args: argparse.Namespace) -> int:
             edition: explain_selection(
                 obj,
                 edition=edition,
-                policy=resolve_edition(config, edition),
+                policy=policies[edition],
                 index=index,
             )
-            for edition in ("standard", "deep", "reference")
+            for edition in editions
         },
     }
     print(json.dumps(output, indent=2, sort_keys=True, allow_nan=False), flush=True)

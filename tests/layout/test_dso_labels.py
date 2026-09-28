@@ -67,7 +67,7 @@ def make_dso(
         ("HCG 92", "HCG 92"),
         ("Hickson Compact Group 92", "HCG 92"),
         ("Arp 244", "Arp 244"),
-        ("C009", "C9"),
+        ("C009", "C009"),
     ],
 )
 def test_format_catalog_designation(raw: str, expected: str) -> None:
@@ -101,6 +101,13 @@ def test_primary_designation_uses_ic_when_no_ngc() -> None:
 def test_primary_designation_falls_back_to_other_catalogue() -> None:
     assert primary_designation(make_dso("Sh2-101")) == "Sh2-101"
     assert primary_designation(make_dso("Cl399")) == "Cr 399"
+
+
+def test_caldwell_metadata_is_never_used_as_chart_designation() -> None:
+    hyades = make_dso("C041", cross_ids=("Cl 050", "Mel 025"), common_name="Hyades")
+    coalsack = make_dso("C099", common_name="Coalsack Nebula")
+    assert primary_designation(hyades) == "Mel 25"
+    assert primary_designation(coalsack) == "Coalsack Nebula"
 
 
 def test_common_name_does_not_replace_designation() -> None:

@@ -67,7 +67,18 @@ def test_select_dso_forced_membership() -> None:
         make_dso("NGC0869", magnitude=14.0), index=index, policy=FORCED
     )
     assert metadata.forced is True
-    assert metadata.list_memberships == {"herschel400"}
+    assert metadata.list_memberships == {"herschel400", "caldwell"}
+    assert metadata.label_mandatory is True
+
+
+def test_messier_membership_is_mandatory_even_without_m_alias() -> None:
+    dso = make_dso("NGC1234")
+    metadata = select_dso(
+        dso,
+        index={"NGC1234": frozenset({"messier"})},
+        policy=SelectionPolicy(forced_lists=frozenset({"messier"})),
+    )
+    assert metadata.label_mandatory is True
     assert metadata.render_priority == FORCED.forced_render_priority
     assert metadata.label_priority >= HERSCHEL_PRIORITY
 
@@ -81,14 +92,20 @@ def test_select_dso_membership_bonus_without_force() -> None:
     assert metadata.forced is False
     assert metadata.render_priority == policy.render_base_priority + 50
     assert metadata.label_priority == 30 + 50
+    assert metadata.label_mandatory is True
 
 
 def test_every_herschel400_designation_is_forced() -> None:
     observing_lists = load_observing_lists(FIXTURE_DIR)
     index = build_membership_index(observing_lists)
-    for designation in sorted(observing_lists["herschel400"].objects):
+    aliases = dict(observing_lists["herschel400"].object_aliases)
+    targets = (
+        observing_lists["herschel400"].objects - aliases.keys()
+    ) | set(aliases.values())
+    for designation in sorted(targets):
         metadata = select_dso(make_dso(designation, magnitude=15.0), index=index, policy=FORCED)
         assert metadata.forced, designation
+        assert metadata.label_mandatory, designation
 
 
 @pytest.mark.skipif(not OPENNGC.exists(), reason="processed OpenNGC catalogue not built")
@@ -98,6 +115,8 @@ def test_all_resolvable_herschel400_objects_are_forced_in_openngc() -> None:
     forced = {
         dso.id for dso in dsos if select_dso(dso, index=index, policy=FORCED).forced
     }
-    resolvable = {dso.id for dso in dsos if dso_memberships(dso, index)}
+    resolvable = {
+        dso.id for dso in dsos if "herschel400" in dso_memberships(dso, index)
+    }
     assert resolvable <= forced
     assert len(forced) >= 390

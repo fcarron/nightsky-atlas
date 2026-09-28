@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from nightsky_atlas.astronomy.angles import angular_separation_deg
+from nightsky_atlas.catalog.systems import MatchStatus, match_star_systems
 from nightsky_atlas.catalog.tycho import (
     CATALOGUE,
     VERSION,
@@ -13,9 +15,11 @@ from nightsky_atlas.catalog.tycho import (
     parse_tycho2_record,
     raw_part_paths,
 )
+from nightsky_atlas.catalog.wds import iter_wds_systems
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = REPO_ROOT / "data" / "fixtures" / "tycho2" / "sample.dat"
+EPSILON_FIXTURE = REPO_ROOT / "data" / "fixtures" / "tycho2" / "epsilon_lyrae.dat"
 
 
 def first_line() -> str:
@@ -81,3 +85,30 @@ def test_raw_part_paths_are_deterministic() -> None:
     assert len(paths) == 20
     assert paths[0].name == "tyc2.dat.00.gz"
     assert paths[-1].name == "tyc2.dat.19.gz"
+
+
+def test_photocentre_records_keep_distinct_component_positions_at_j2000() -> None:
+    raw = EPSILON_FIXTURE.read_text(encoding="ascii").splitlines()
+    c, d = (parse_tycho2_record(line) for line in raw[2:])
+    assert c is not None and d is not None
+    assert raw[2][15:40] == raw[3][15:40]
+    assert c.ra_deg != d.ra_deg
+    assert c.dec_deg != d.dec_deg
+    assert angular_separation_deg(c.ra_deg, c.dec_deg, d.ra_deg, d.dec_deg) * 3600 == (
+        pytest.approx(2.34, abs=0.03)
+    )
+    assert c.dec_deg == pytest.approx(39.6127302, abs=0.00001)
+
+
+def test_real_epsilon_lyrae_southern_pair_matches_both_components() -> None:
+    stars = list(iter_tycho2_stars([EPSILON_FIXTURE]))
+    wds_fixture = REPO_ROOT / "data" / "fixtures" / "double_stars" / "wds_subset.dat"
+    systems = [
+        system
+        for system in iter_wds_systems(wds_fixture)
+        if system.source_id == "STF2383:CD"
+    ]
+    (matched,) = match_star_systems(systems, stars)
+    assert matched.match_status is MatchStatus.POSITIONAL
+    assert matched.primary_star_id == "TYC 3122-3439-1"
+    assert matched.component_star_ids == ("TYC 3122-3439-2",)

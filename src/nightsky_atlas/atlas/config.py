@@ -488,6 +488,9 @@ class DsoLabelStyle(_StrictModel):
     """
 
     normal_size_pt: PositiveFloat = 6.0
+    common_name_display: Literal["none", "iconic"] = "none"
+    common_name_neighbor_radius_mm: PositiveFloat = 8.0
+    common_name_max_neighbors: int = Field(default=5, ge=0)
     messier: DsoLabelTierStyle = Field(
         default_factory=lambda: DsoLabelTierStyle(size_factor=1.15, weight="bold")
     )
@@ -500,20 +503,27 @@ class DsoLabelStyle(_StrictModel):
 class LabelSelectionStyle(_StrictModel):
     """Deterministic label selection before placement.
 
-    Not every drawn object should carry a label.  Candidate labels are ranked by
-    the central priority tiers and the lower tiers are thinned by *local* label
-    density: within ``density_radius_mm`` of a candidate anchor, the printed
-    label area may not exceed a fraction of the neighbourhood area.  High-tier
-    labels (Messier, prominent Herschel 400, named stars) are never suppressed,
-    so dense fields lose ordinary labels rather than important ones.  This is a
-    local rule, never a global label percentage.
+    Candidate labels are ranked by priority and thinned only where local
+    printed-label density exceeds the configured budget. DSO budgets are more
+    permissive than stellar-label budgets. Messier and Herschel 400 labels are
+    mandatory regardless of density. This is a local rule, not a global quota.
     """
 
     enabled: bool = True
     density_radius_mm: PositiveFloat = 15.0
     medium_density_budget: PositiveFloat = 0.12
     low_density_budget: PositiveFloat = 0.05
+    dso_medium_density_budget: PositiveFloat = 0.35
+    dso_low_density_budget: PositiveFloat = 0.25
+    dso_dense_start_neighbors: int = Field(default=6, ge=0)
+    dso_dense_full_neighbors: int = Field(default=12, ge=1)
     always_label_object_types: tuple[DsoType, ...] = ()
+
+    @model_validator(mode="after")
+    def _validate_dso_density_transition(self) -> LabelSelectionStyle:
+        if self.dso_dense_full_neighbors <= self.dso_dense_start_neighbors:
+            raise ValueError("dso_dense_full_neighbors must exceed dso_dense_start_neighbors")
+        return self
 
 
 class StarDesignationStyle(_StrictModel):

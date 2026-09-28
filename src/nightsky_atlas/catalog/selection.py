@@ -68,11 +68,13 @@ class SelectionPolicy:
     """
 
     forced_lists: frozenset[str] = frozenset()
+    forced_list_reason_codes: tuple[tuple[str, str], ...] = ()
     list_weights: tuple[tuple[str, int], ...] = ()
     forced_render_priority: int = _DEFAULT_FORCED_RENDER_PRIORITY
     render_base_priority: int = _DEFAULT_RENDER_BASE_PRIORITY
     visibility: VisibilityLimits = field(default_factory=VisibilityLimits)
     included_catalogues: frozenset[str] | None = None
+    excluded_designations: tuple[str, ...] = ()
     forced_catalogues: frozenset[str] = frozenset()
     catalogue_minimum_extent_arcmin: tuple[tuple[str, float], ...] = ()
     include_uncertain_catalogue_matches: bool = False
@@ -96,6 +98,7 @@ class TypeSelectionRule:
     visibility_classes: tuple[str, ...] = ()
     visibility_class_rules: tuple[VisibilityClassRule, ...] = ()
     minimum_visibility_score_400: float | None = None
+    minimum_visibility_score_by_aperture: tuple[tuple[int, float], ...] = ()
     minimum_major_axis_arcmin: float | None = None
     bright_magnitude_fallback: float | None = None
     maximum_magnitude: float | None = None
@@ -225,9 +228,32 @@ def _rule_inclusion(
         rule.visibility_classes
         or rule.visibility_class_rules
         or rule.minimum_visibility_score_400 is not None
+        or rule.minimum_visibility_score_by_aperture
     ):
         estimate = estimate_galaxy_visibility(dso) if dso.object_type == DsoType.GALAXY else None
     if estimate is not None:
+        if rule.minimum_visibility_score_by_aperture:
+            scores_pass = all(
+                (aperture_score := estimate.by_aperture.get(aperture)) is not None
+                and aperture_score.score >= minimum
+                for aperture, minimum in rule.minimum_visibility_score_by_aperture
+            )
+            size_pass = (
+                rule.minimum_major_axis_arcmin is None
+                or _size_or_brightness(
+                    dso,
+                    minimum_size=rule.minimum_major_axis_arcmin,
+                    maximum_magnitude=None,
+                    maximum_surface_brightness=None,
+                )
+            )
+            if scores_pass and size_pass:
+                return True, rule.selection_reason_code or "galaxy_visibility_aperture_policy"
+            if not scores_pass:
+                return False, rule.exclusion_reason_code or (
+                    "galaxy_visibility_below_aperture_policy"
+                )
+            return False, rule.exclusion_reason_code or "below_minimum_size"
         if rule.visibility_class_rules:
             for class_rule in rule.visibility_class_rules:
                 if estimate.contour_class.value != class_rule.contour_class:
@@ -403,6 +429,7 @@ def select_dso(
     catalogue_allowed = effective_policy.included_catalogues is None or bool(
         source_catalogues & effective_policy.included_catalogues
     )
+    explicitly_excluded = dso.id in effective_policy.excluded_designations
     catalogue_forced = bool(source_catalogues & effective_policy.forced_catalogues)
     forced = bool(memberships & effective_policy.forced_lists) or catalogue_forced
     bonus = _membership_bonus(memberships, effective_policy)
@@ -459,6 +486,12 @@ def select_dso(
         visibility_reasons.append("type_visibility_passed")
     if forced:
         visibility_reasons.append("observing_list_override")
+        reason_codes = dict(effective_policy.forced_list_reason_codes)
+        visibility_reasons.extend(
+            reason_codes[list_id]
+            for list_id in sorted(memberships & effective_policy.forced_lists)
+            if list_id in reason_codes
+        )
     if policy_reason is not None:
         reason_code = (
             rule.selection_reason_code if type_policy_visible and rule is not None else None
@@ -492,12 +525,14 @@ def select_dso(
                 visibility_reasons.append("missing_photometry")
             if rule.require_major_axis and dso.major_axis_arcmin is None:
                 visibility_reasons.append("missing_size")
-        if rule is not None and rule.visibility_class_rules:
-            visibility_reasons.append("galaxy_visibility_below_edition_policy")
-    if not uncertain_match_allowed:
+            if rule is not None and rule.visibility_class_rules:
+                visibility_reasons.append("galaxy_visibility_below_edition_policy")
+    if explicitly_excluded and not forced:
+        visibility_reasons.append("pocket_duplicate_aggregate_excluded")
+    if not uncertain_match_allowed and not forced:
         visibility_reasons.append("uncertain-catalogue-match")
         visibility_reasons.append("uncertain_crossmatch_excluded")
-    elif not catalogue_allowed:
+    elif not catalogue_allowed and not forced:
         visibility_reasons.append("catalogue-not-enabled-for-edition")
         visibility_reasons.append("catalogue_not_allowed_for_edition")
 
@@ -524,9 +559,14 @@ def select_dso(
         importance_score=_importance_score(dso, memberships, forced, assessment.score),
         render_priority=render_priority,
         label_priority=label_priority,
-        label_mandatory=base_mandatory,
+        label_mandatory=base_mandatory or bool(memberships & {"messier", "herschel400"}),
         forced=forced,
-        visible=type_policy_visible and catalogue_allowed and uncertain_match_allowed,
+        visible=(
+            type_policy_visible
+            and catalogue_allowed
+            and uncertain_match_allowed
+            and not explicitly_excluded
+        ),
         visibility_reasons=tuple(dict.fromkeys(visibility_reasons)),
         galaxy_contour_class=galaxy_contour_class,
     )

@@ -66,7 +66,7 @@ def _edition_counts(
     observing_lists_dir: Path,
 ) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
     config = load_observing_lists_config(observing_config_path)
-    index = build_membership_index(load_observing_lists(observing_lists_dir))
+    index = build_membership_index(load_observing_lists(observing_lists_dir), objects)
     per_edition: dict[str, dict[str, int]] = {}
     selected_by_edition: dict[str, set[str]] = {}
     for edition in ("standard", "deep", "reference"):

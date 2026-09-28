@@ -54,7 +54,6 @@ _COMPACT_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^ABELL0*(\d+)$"), r"Abell \1"),
     (re.compile(r"^(?:HICKSON(?:COMPACTGROUP)?|HCG)0*(\d+)$"), r"HCG \1"),
     (re.compile(r"^ARP0*(\d+)$"), r"Arp \1"),
-    (re.compile(r"^C0*(\d+)$"), r"C\1"),
 )
 
 
@@ -109,6 +108,20 @@ def primary_designation(dso: DeepSkyObject) -> str:
                 formatted = format_catalog_designation(candidate)
                 if formatted is not None:
                     return formatted
+    if re.fullmatch(r"C0*\d+", dso.id, re.IGNORECASE):
+        for candidate in sorted(dso.cross_ids):
+            if re.fullmatch(r"(?:MEL|MELOTTE)\s*0*\d+", candidate, re.IGNORECASE):
+                formatted = format_catalog_designation(candidate)
+                if formatted is not None:
+                    return formatted
+        for candidate in sorted(dso.cross_ids):
+            if re.fullmatch(r"C0*\d+", candidate, re.IGNORECASE):
+                continue
+            formatted = format_catalog_designation(candidate)
+            if formatted is not None:
+                return formatted
+        if dso.common_name:
+            return dso.common_name
     return format_catalog_designation(dso.id) or dso.id
 
 
@@ -126,13 +139,21 @@ def format_dso_label(
     style: DsoLabelStyle | None = None,
     *,
     memberships: frozenset[str] = frozenset(),
+    include_common_name: bool = False,
 ) -> DsoLabelText:
     """Format a deep-sky label and resolve its typography from ``style``."""
     resolved = style if style is not None else DsoLabelStyle()
     tier = label_tier(dso, memberships)
     tier_style = getattr(resolved, tier.value)
+    text = primary_designation(dso)
+    if include_common_name:
+        from nightsky_atlas.catalog.common_names import curated_common_name
+
+        curated = curated_common_name(dso)
+        if curated is not None and curated.name.casefold() != text.casefold():
+            text = f"{text} · {curated.name}"
     return DsoLabelText(
-        text=primary_designation(dso),
+        text=text,
         tier=tier,
         size_factor=tier_style.size_factor,
         weight=tier_style.weight,

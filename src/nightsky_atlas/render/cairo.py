@@ -491,8 +491,9 @@ def _draw_stars(
             knockout_mm=style.star.close_overlap_halo_mm,
         )
 
+    marked_members = _marked_double_star_members(scene, marks)
     foreground_stars, foreground_marks = _foreground_star_double_marks(
-        scene, transform, size_model, suppressed, marks
+        scene, transform, size_model, suppressed, marks, marked_members=marked_members
     )
     for mark in foreground_marks:
         _draw_double_star_mark(
@@ -502,7 +503,9 @@ def _draw_stars(
             knockout_mm=style.star.close_overlap_halo_mm,
         )
 
-    for point, radius_mm in _foreground_close_stars(scene, transform, size_model, suppressed):
+    for point, radius_mm in _foreground_close_stars(
+        scene, transform, size_model, suppressed, excluded_foreground_ids=marked_members
+    ):
         _draw_star_with_halo(cr, point, radius_mm, style.star.close_overlap_halo_mm)
     for point, radius_mm in foreground_stars:
         _draw_star_with_halo(cr, point, radius_mm, style.star.close_overlap_halo_mm)
@@ -567,6 +570,8 @@ def _foreground_close_stars(
     transform: PageTransform,
     size_model: StarSizeModel,
     suppressed: set[str],
+    *,
+    excluded_foreground_ids: frozenset[str] = frozenset(),
 ) -> tuple[tuple[PagePoint, float], ...]:
     """Return weaker stars whose mark would otherwise merge into a brighter one."""
     placed = tuple(
@@ -580,6 +585,8 @@ def _foreground_close_stars(
     )
     foreground = []
     for scene_star, point, radius in placed:
+        if scene_star.star.id in excluded_foreground_ids:
+            continue
         if any(
             (
                 other.star.magnitude < scene_star.star.magnitude
@@ -726,12 +733,25 @@ def _foreground_double_star_marks(
     return tuple(foreground)
 
 
+def _marked_double_star_members(
+    scene: ChartScene, marks: tuple[DoubleStarMark, ...]
+) -> frozenset[str]:
+    pair_ids = {pair_id for mark in marks for pair_id in mark.pair_ids}
+    members = {mark.star_id for mark in marks if mark.star_id is not None}
+    for scene_system in scene.star_systems:
+        if scene_system.system.id in pair_ids:
+            members.update(scene_system.system.linked_star_ids())
+    return frozenset(members)
+
+
 def _foreground_star_double_marks(
     scene: ChartScene,
     transform: PageTransform,
     size_model: StarSizeModel,
     suppressed: set[str],
     marks: tuple[DoubleStarMark, ...],
+    *,
+    marked_members: frozenset[str] = frozenset(),
 ) -> tuple[tuple[tuple[PagePoint, float], ...], tuple[DoubleStarMark, ...]]:
     """Return the foreground layer for ordinary-star/double-marker overlaps.
 
@@ -742,7 +762,7 @@ def _foreground_star_double_marks(
     foreground_stars = []
     foreground_marks = []
     for scene_star in scene.stars:
-        if scene_star.star.id in suppressed:
+        if scene_star.star.id in suppressed or scene_star.star.id in marked_members:
             continue
         point = transform.to_page(scene_star.chart_point)
         radius = size_model.radius_mm(scene_star.star.magnitude)

@@ -84,9 +84,7 @@ label:
     label_gap_mm: 0.4
     width_mm: 0.08
     gray: 0.55
-  # Faint selected objects are drawn but not labelled (Messier, common names,
-  # bright DSOs and observing-list members are exempt).
-  dso_label_magnitude_limit: 12.5
+  dso_label_magnitude_limit: null
   # Deep-sky label hierarchy.  The catalogue prefix is dropped for NGC (a bare
   # number means NGC); Messier is bold and larger, Herschel 400 is bold.
   dso_labels:
@@ -100,19 +98,15 @@ label:
     normal:
       size_factor: 1.0
       weight: normal
-  # Deterministic selection before placement.  A drawn object is not
-  # necessarily a labelled object: high-priority labels (Messier, prominent
-  # Herschel 400, named stars) always survive, while medium/low labels are
-  # thinned by *local* printed-label density so crowded fields (Virgo) stay
-  # readable and sparse fields keep their labels.  This is never a global
-  # percentage.
   selection:
     enabled: true
     density_radius_mm: 15.0
     medium_density_budget: 0.12
     low_density_budget: 0.05
-    # A rendered galaxy is an observing target, not anonymous chart texture.
-    # It still remains optional for collision repair if every placement fails.
+    dso_medium_density_budget: 0.35
+    dso_low_density_budget: 0.25
+    dso_dense_start_neighbors: 6
+    dso_dense_full_neighbors: 12
     always_label_object_types: [galaxy]
 
 dso:
