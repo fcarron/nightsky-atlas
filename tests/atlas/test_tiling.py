@@ -100,7 +100,7 @@ def test_tile_sky_is_deterministic_and_unique() -> None:
 
 def test_ring_tiling_has_polar_caps_and_staggering() -> None:
     charts = tile_sky("standard", standard_spec())
-    assert len(charts) == 116
+    assert len(charts) == 118
     assert charts[0].center_dec_deg == pytest.approx(90.0)
     assert charts[-1].center_dec_deg == pytest.approx(-90.0)
     rings = {chart.center_dec_deg for chart in charts}
@@ -147,7 +147,7 @@ def test_frozen_ring_counts_match_declination_rings() -> None:
     assert per_ring[-24.0] == 13
     assert per_ring[-40.0] == 12
     assert per_ring[-56.0] == 9
-    assert per_ring[-72.0] == 8
+    assert per_ring[-72.0] == 10
     assert per_ring[90.0] == 1
     assert per_ring[-90.0] == 1
 

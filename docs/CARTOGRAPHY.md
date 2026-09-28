@@ -1,7 +1,8 @@
 # Standard edition cartography
 
-Frozen at M14.1 (2026-09-16); tiling revised for Standard v0.1 (full-sky draft)
-and again for v0.2 (north-to-south order, calmer coordinate labels).
+Frozen at M14.1 (2026-09-16); tiling revised for Standard v0.1 (full-sky draft),
+again for v0.2 (north-to-south order, calmer coordinate labels), and again for
+v0.3 (mirror-symmetric ring counts for regular navigation).
 
 ## Page and field
 
@@ -14,13 +15,13 @@ and again for v0.2 (north-to-south order, calmer coordinate labels).
 | Projection | stereographic, north up / east left |
 | Stellar limit | magnitude 9.0 |
 | DSO limit | magnitude 12.0 (objects with no magnitude are kept) |
-| Charts (tiled) | 116 |
+| Charts (tiled) | 118 |
 
 This sits between Sky Atlas 2000.0 (26 charts, ~10 mm/deg, mag 8.5) and
 Uranometria 2000.0 (~220 charts, mag ~9.75) in chart count: Tirion-like scale
 and readability, but a deeper limit and many more pages.
 
-## Tiling (Standard v0.2)
+## Tiling (Standard v0.3)
 
 Explicit declination rings with staggered right ascension and stereographic
 polar caps:
@@ -36,7 +37,7 @@ Charts are numbered **north to south, the reading order of the atlas**:
 - then the `+72, +56, ..., -72` rings in that order, each ring running in
   increasing right ascension (0h -> 24h) so the RA-wrap neighbour is always
   between the last and first chart of a ring;
-- `standard-116` = south polar cap.
+- `standard-118` = south polar cap.
 
 ### Resolved ring counts
 
@@ -45,7 +46,9 @@ sky.  The chart field is a rectangle in the tangent plane, so its declination
 extent shrinks away from the central meridian; a `cos(dec)` estimate is far too
 optimistic near the poles, where the outermost ring must interlock with the
 polar cap.  A coverage sweep fixed the minimum counts that leave no gap at
-0.25 deg sampling:
+0.25 deg sampling.  The counts are **mirror-symmetric** north/south: every
+`+dec` ring has the same number of charts as its `-dec` counterpart, so the two
+hemispheres pair chart-for-chart and navigation is regular:
 
 | Ring | Count | RA step |
 | --- | --- | --- |
@@ -58,27 +61,26 @@ polar cap.  A coverage sweep fixed the minimum counts that leave no gap at
 | -24 | 13 | 27.69 deg |
 | -40 | 12 | 30.00 deg |
 | -56 | 9 | 40.00 deg |
-| -72 | 8 | 45.00 deg |
+| -72 | 10 | 36.00 deg |
 | +90 | 1 | - |
 | -90 | 1 | - |
 
-Total **116 charts**.  The `+72`/`-72` counts differ (10 vs 8) because the
-stagger phase alternates around the ring stack, so the two poles meet their cap
-with opposite phase.  `auto_adjust_counts` is off: the conservative per-ring
-resolver would demand 10 charts in both outermost rings (120 charts), while the
-assembled tiling covers with 10/8.
+Total **118 charts**, 59 per hemisphere.  `auto_adjust_counts` is off: the
+conservative per-ring resolver would demand 10 charts in the outer rings too
+(120 charts), while the assembled tiling with the stagger covers at the counts
+above, which are already the equal north/south minimum.
 
 - Coverage validated numerically (`nightsky atlas coverage --step 0.5`): 0 gaps,
   overlap 1..4, 259,200 samples.
 - Every declared N/S/E/W neighbour pair shares covered sky
-  (`neighbour_overlap_report`): 458 pairs, 0 missing.
+  (`neighbour_overlap_report`): 629 pairs, 0 missing.
 - The two polar caps have no east/west neighbour; the remaining rings are
   complete circles.
 
 ## Build
 
 ```bash
-nightsky atlas tile                        # 116 chart definitions + neighbours
+nightsky atlas tile                        # 118 chart definitions + neighbours
 nightsky atlas coverage --step 0.5         # gaps=0, overlap 1..4
 nightsky atlas build --png-dpi 100         # per-page PDF/PNG + atlas.pdf + manifest
 nightsky atlas report                      # draft stats + region review list
@@ -104,7 +106,7 @@ Grid **lines** stay fine (`ra_step_deg`/`dec_step_deg` 2 deg).  Coordinate
 - polar charts use `label_polar_ra_step_deg` (30 deg), so the cap's RA fan is
   labelled only every two hours.
 
-Across the 116 charts this removes about half the coordinate text versus the
+Across the 118 charts this removes about half the coordinate text versus the
 every-line v0.1 draft while keeping the grid itself unchanged.
 
 ## Visible notation and page furniture
@@ -115,7 +117,7 @@ consistent notation built centrally in `chart/presentation.py`:
 | Edition | Name | Code | Visible chart code |
 | --- | --- | --- | --- |
 | Pocket | Pocket | P | P001 |
-| Standard | Standard | S | S001 … S116 |
+| Standard | Standard | S | S001 … S118 |
 | Deep | Deep | D | D001 |
 
 The edition name and code come from the atlas `edition:` block and fall back to
@@ -177,7 +179,7 @@ so no chart label is placed under it.
   pole is larger and the meridian fan is dense.  The polar grid uses the coarser
   `grid.polar_ra_step_deg` and labels it at `label_polar_ra_step_deg`; the
   minimum-spacing rule handles the near-pole (non-cap) rings.
-- The 116-chart count is geometry-driven.  A later optional pass may nudge
+- The 118-chart count is geometry-driven.  A later optional pass may nudge
   individual chart centres by +-1-2 deg to move important regions away from page
   edges, but the draft deliberately uses a clean geometric grid only.
 

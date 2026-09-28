@@ -12,7 +12,7 @@ ATLAS = REPO_ROOT / "atlas" / "standard.yaml"
 
 def test_draft_report_structure() -> None:
     report = build_draft_report(atlas_path=ATLAS, coverage_step_deg=5.0)
-    assert report["chart_count"] == 116
+    assert report["chart_count"] == 118
     assert report["chart_order"] == "north-to-south"
     assert report["coverage"]["covers_all"] is True
     assert report["coverage"]["gap_count"] == 0
@@ -55,6 +55,6 @@ def test_draft_report_density_flags_outliers() -> None:
 def test_text_summary_mentions_key_facts() -> None:
     report = build_draft_report(atlas_path=ATLAS, coverage_step_deg=10.0)
     text = render_text_summary(report)
-    assert "charts: 116" in text
+    assert "charts: 118" in text
     assert "gaps=0" in text
     assert "Virgo Cluster" in text

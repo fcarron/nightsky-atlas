@@ -103,7 +103,7 @@ def test_standard_detail_maps_are_supplemental_and_doubled_scale() -> None:
     standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
     deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
     details = standard.detail_charts
-    assert len(chart_definitions(standard)) == 116
+    assert len(chart_definitions(standard)) == 118
     assert {detail.code for detail in details} == {
         "SD053",
         "SD084",

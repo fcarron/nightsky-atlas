@@ -136,15 +136,15 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 - Chart pages now show subdued constellation names. Front matter records frame,
   projection and scale and has an expanded observing-symbol key.
 - `make check`: Ruff clean, 677 tests passing.
-- Standard v0.2 full-sky tiling (draft): explicit declination rings every
+- Standard v0.3 full-sky tiling (draft): explicit declination rings every
   16 deg (-72 ... +72), stereographic polar caps, RA staggering, frozen
   config-driven counts.  Ordering is north-to-south (reading order):
   `standard-001` north cap, then +72 ... -72 rings each sorted by RA (0h -> 24h),
-  `standard-116` south cap.  The requested 14/13/11/8/5 per hemisphere does not
-  cover; the frozen minimum that passes a 0.25 deg sweep is
-  `8/9/12/13/14/14/13/12/9/10` -> **116 charts**.  Numeric coverage at 0.5 deg:
-  0 gaps, overlap 1..4; 458 N/S/E/W neighbour pairs, 0 without overlap.  Tiling
-  code: `atlas/tiling.py`; draft report: `atlas/report.py`.
+  `standard-118` south cap.  The requested 14/13/11/8/5 per hemisphere does not
+  cover; the frozen minimum that passes a 0.25 deg sweep and is mirror-symmetric
+  north/south is `10/9/12/13/14/14/13/12/9/10` -> **118 charts**.  Numeric
+  coverage at 0.5 deg: 0 gaps, overlap 1..4; 629 N/S/E/W neighbour pairs, 0
+  without overlap.  Tiling code: `atlas/tiling.py`; draft report: `atlas/report.py`.
 
 ## Frozen Standard geometry (M14.1)
 
@@ -154,11 +154,11 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   sky: integrated magnitude 13.5, surface brightness 23.5, min axis 1.5 arcmin).
   There is no global deep-sky magnitude cut in the atlas config; per-type
   visibility is the only production path.
-- Tiling (Standard v0.2): declination-ring tiling, ring step 16 deg, nominal
-  vertical overlap 2 deg, staggered RA, stereographic polar caps; frozen counts
-  `8/9/12/13/14/14/13/12/9/10` (south->north) -> **116 charts**, ids
-  `standard-NNN` numbered north-to-south, N/S/E/W neighbour references (caps
-  have no E/W).
+- Tiling (Standard v0.3): declination-ring tiling, ring step 16 deg, nominal
+  vertical overlap 2 deg, staggered RA, stereographic polar caps; mirror-
+  symmetric frozen counts `10/9/12/13/14/14/13/12/9/10` (south->north) ->
+  **118 charts**, ids `standard-NNN` numbered north-to-south, N/S/E/W neighbour
+  references (caps have no E/W).
 - Coverage: 0 gaps at 0.5 deg sampling, overlap 1..4, 259,200 samples.
 - Star style: min 0.2 / max 2.4 mm, bright magnitude 0.0 / faint magnitude 9.0.
 - Label candidates: 3 concentric rings, ring gap 3.0 mm.
@@ -244,7 +244,7 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 
 ## Open issues
 
-- Re-run the complete 116-chart Standard build after `d915a6c`; the prior run
+- Re-run the complete 118-chart Standard build after `d915a6c`; the prior run
   stopped at `standard-036` on an unrendered WDS component, now covered by a
   regression test. `standard-036` itself rebuilds with zero hard issues.
 - M15.5 remains a human checkpoint: print Orion, Cygnus, Virgo/Coma,
@@ -270,8 +270,9 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   rings or a curated override; the earlier alpha's 14 hard violations on
   standard-007/008/009/020/059/060 belong to the superseded 135-chart band
   tiling and numbering, not the v0.2 ring tiling.
-- The 116-chart count is geometry-driven: a coverage sweep at 0.25 deg fixed the
-  minimum counts; the requested 14/13/11/8/5 per hemisphere leaves gaps. A later
+- The 118-chart count is geometry-driven: a coverage sweep at 0.25 deg fixed the
+  minimum counts, constrained to be mirror-symmetric north/south; the requested
+  14/13/11/8/5 per hemisphere leaves gaps. A later
   optional pass may nudge individual chart centres by +-1-2 deg or move important
   regions away from page edges; the draft deliberately uses a clean geometric
   grid only.
