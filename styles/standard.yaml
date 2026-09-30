@@ -16,7 +16,7 @@ star:
   diameter_curve: [[0.0, 6.0], [1.0, 5.0], [2.0, 4.2], [3.0, 3.15], [4.0, 2.4], [5.0, 1.65], [6.0, 1.1], [7.0, 0.78], [8.0, 0.58], [9.0, 0.36]]
 
 label:
-  font_family: "DejaVu Sans"
+  font_family: "Lato"
   font_size_pt: 6.0
   star_labels:
     proper_names: {core: true, standard: true, extended: false}

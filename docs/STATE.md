@@ -5,8 +5,8 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 
 ## Progress
 
-- M0–M14 complete. M15.1–M15.4 complete. M15.5 in progress (a full current
-  Standard rebuild and field test remain).
+- M0–M14 complete. M15.1–M15.4 complete. M15.5 in progress (full current
+  Standard build complete; field test remains).
 - M16.1 complete (manual Stable-ID label overrides, including locked placements).
 - M11.4 and M13.3 complete (live AI review through OpenRouter).
 - Grid coordinate edge labels added (RA along top/bottom, Dec along left/right),
@@ -94,6 +94,22 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   no valid candidate in the dense field. Review previews for the acceptance
   fields: `build/label-selection/standard/charts/{standard-001,021,031,053,
   063,083,116}/preview.png`.
+- Standard detail-map label fallback is enabled for Virgo core (`SD053A`),
+  southern Virgo (`SD053B`) and Fornax (`SD089`). An ordinary galaxy number is
+  omitted from the parent only when that stable DSO ID has a placed, hard-clean
+  label on the detail page. Symbols remain on both pages; Messier and H400
+  labels remain on the parent. The build manifest records omitted label IDs by
+  parent chart and detail code.
+- Pocket uses the same three label-transfer fields on `P025` and `P032`, with
+  compact parent-frame tags (`PD025A`, `PD025B`, `PD032`) to fit the smaller
+  field footprints.
+- Deep now has nine detail maps: NGC 7331/Stephan's Quintet, Pleiades, Coma
+  core, Markarian chain, M42, Fornax core, 30 Doradus, LMC bar and NGC 346.
+  Its ordinary-galaxy label fallback is limited to the four galaxy fields,
+  catalogue magnitude 12.5 or fainter, and three neighbouring galaxies within
+  15 mm on the parent. The detail label must still be placed and hard-clean;
+  Messier and H400 labels remain on the parent. Printed detail scale bars fit
+  their actual magnification.
 - Distant deep-sky labels can now carry a serialized leader-line state. The
   optimizer enables it only for legal far-ring placements; AI may request it
   for an individual DSO label, subject to the same deterministic route and
@@ -132,7 +148,8 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   state exists.
 - Pocket and Deep presets are implemented with physical 10-mm overlap targets,
   P/S/D chart codes, edition-specific DSO visibility and star-size curves.
-  Representative renders exist; do not build the complete Deep atlas yet.
+  Pocket's complete build is available; the Pocket field test remains. Do not
+  build the complete Deep atlas yet.
 - Chart pages now show subdued constellation names. Front matter records frame,
   projection and scale and has an expanded observing-symbol key.
 - `make check`: Ruff clean, 677 tests passing.
@@ -230,6 +247,20 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 
 ## Alpha artifacts (M15.5)
 
+- Complete edition builds with 100-dpi page previews: `build/complete-2026-09-29/pocket/`
+  (48 main + 3 detail charts, 32 hard issues) and
+  `build/complete-2026-09-29/standard/` (118 main + 9 detail charts, 42 hard
+  issues). Both atlas-level coverage reports show 0 gaps. Pocket's three
+  detail-map galaxy-label fallbacks omit 3 numbers on P025 and 6 on P032;
+  Standard omits 35 on S053 and 16 on S089. Both generated outputs pass
+  `nightsky atlas validate`.
+- Deep with nine detail maps: `build/complete-2026-09-30-deep-details-v3/deep/`
+  (430 main + 9 detail charts, 65 hard issues). The four marked galaxy fields
+  omit 5 numbers on D105, 23 on D121, 14 on D174 and 3 on D328, all backed
+  by placed detail labels. Atlas output validation passes. Three of the hard
+  issues are on detail pages: one M45 enclosing-cluster collision and one LMC
+  enclosing-region collision on each of DD405A and DD405B.
+
 - Rebuilt with grid labels + constellations: `build/standard/atlas.pdf` (135 charts
   + front matter), per-page artifacts under `build/standard/charts/<id>/`, and
   `build/standard/manifest.json`. Still 14 hard violations on 6 dense pages.
@@ -244,9 +275,10 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 
 ## Open issues
 
-- Re-run the complete 118-chart Standard build after `d915a6c`; the prior run
-  stopped at `standard-036` on an unrendered WDS component, now covered by a
-  regression test. `standard-036` itself rebuilds with zero hard issues.
+- The complete current 118-chart Standard build is at
+  `build/complete-2026-09-29/standard/`; its 42 hard layout issues are recorded
+  per page in the manifest. `standard-035` and the LMC pages remain the largest
+  known problem areas.
 - M15.5 remains a human checkpoint: print Orion, Cygnus, Virgo/Coma,
   Sagittarius and polar pages at 100% and use them under red light / at the
   telescope before treating Standard as publication-ready.
@@ -256,20 +288,18 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   checked again after rendering. Publication is staged, and a previous output
   is retained on success or left untouched on failure. `atlas validate
   --publication` independently checks the finished manifest, inputs, chart set,
-  hard-issue totals and output file checksums. A complete real-data Standard
-  build remains the M15.5 field-test prerequisite.
+  hard-issue totals and output file checksums. The current complete Standard
+  build passes ordinary atlas validation; the M15.5 field test remains.
 
 - The alpha artifacts predate the Hipparcos bright-star supplement and must be
   rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page
   already includes Deneb.
 - Label prioritisation/selection in dense fields is implemented (see Progress),
-  which resolved the `standard-109` violation and the Virgo density problem.
-  One known hard violation remains on `standard-110` (LMC): the mandatory
-  large-Magellanic-Cloud label has no valid candidate among the configured
-  candidate rings in that dense field. Options are more mandatory candidate
-  rings or a curated override; the earlier alpha's 14 hard violations on
-  standard-007/008/009/020/059/060 belong to the superseded 135-chart band
-  tiling and numbering, not the v0.2 ring tiling.
+  but dense-page conflicts remain in the full builds. Pocket reports 32 hard
+  issues, including 14 on `pocket-026` and 7 on `pocket-025`. Standard reports
+  42, including 11 on `standard-035`, 7 each on `standard-110` and `standard-111`,
+  and 4 on the Pleiades detail page. Per-page diagnostics are in the respective
+  manifests; the earlier alpha's 14 issues belong to superseded geometry.
 - The 118-chart count is geometry-driven: a coverage sweep at 0.25 deg fixed the
   minimum counts, constrained to be mirror-symmetric north/south; the requested
   14/13/11/8/5 per hemisphere leaves gaps. A later

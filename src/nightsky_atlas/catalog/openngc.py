@@ -125,6 +125,12 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
     object_type = _TYPE_MAP.get(type_code)
     if object_type is None:
         object_type = DsoType.OTHER
+    if name == "NGC6334":
+        object_type = DsoType.BRIGHT_NEBULA
+    elif name == "NGC3324":
+        object_type = DsoType.OPEN_CLUSTER
+    elif name in {"B033", "C099"}:
+        object_type = DsoType.DARK_NEBULA
 
     ra_text = (row.get("RA") or "").strip()
     dec_text = (row.get("Dec") or "").strip()
@@ -152,6 +158,8 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
         minor = None
 
     common_name = (row.get("Common names") or "").strip() or None
+    if name == "IC0434":
+        common_name = None
     constellation = (row.get("Const") or "").strip() or None
 
     return DeepSkyObject(
@@ -172,7 +180,7 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
         position_angle_deg=position_angle,
         common_name=common_name,
         constellation=constellation,
-        cross_ids=_cross_ids(row, name),
+        cross_ids=("B 33", *_cross_ids(row, name)) if name == "B033" else _cross_ids(row, name),
     )
 
 

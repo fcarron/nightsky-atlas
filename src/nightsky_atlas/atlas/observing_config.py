@@ -31,6 +31,7 @@ from pydantic import (
 from nightsky_atlas.atlas.config import ConfigError
 from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.catalog.selection import (
+    RegionalDesignationAllowlist,
     SelectionPolicy,
     TypeSelectionRule,
     VisibilityClassRule,
@@ -41,6 +42,7 @@ __all__ = [
     "EditionPolicy",
     "ObservingListEntry",
     "ObservingListsConfig",
+    "RegionalDesignationAllowlistConfig",
     "TypeSelectionPolicyConfig",
     "VisibilityClassPolicyConfig",
     "load_observing_lists_config",
@@ -76,10 +78,20 @@ class VisibilityClassPolicyConfig(_StrictModel):
     minimum_score_400: float | None = None
 
 
+class RegionalDesignationAllowlistConfig(_StrictModel):
+    id: str = Field(min_length=1)
+    center_ra_deg: float = Field(ge=0, lt=360)
+    center_dec_deg: float = Field(ge=-90, le=90)
+    radius_deg: float = Field(gt=0, le=180)
+    allowed_designations: tuple[str, ...] = Field(min_length=1)
+
+
 class TypeSelectionPolicyConfig(_StrictModel):
     use_visibility: bool = True
     visibility_classes: tuple[str, ...] = ()
     visibility_class_rules: tuple[VisibilityClassPolicyConfig, ...] = ()
+    regional_allowlists: tuple[RegionalDesignationAllowlistConfig, ...] = ()
+    curated_designations: tuple[str, ...] = ()
     minimum_visibility_score_400: float | None = None
     minimum_visibility_score_by_aperture: dict[int, float] = Field(default_factory=dict)
     minimum_major_axis_arcmin: float | None = None
@@ -281,6 +293,10 @@ def resolve_edition(config: ObservingListsConfig, edition_id: str) -> SelectionP
                         "visibility_class_rules": tuple(
                             VisibilityClassRule(**item)
                             for item in values.get("visibility_class_rules", ())
+                        ),
+                        "regional_allowlists": tuple(
+                            RegionalDesignationAllowlist(**item)
+                            for item in values.get("regional_allowlists", ())
                         ),
                     }
                 ),

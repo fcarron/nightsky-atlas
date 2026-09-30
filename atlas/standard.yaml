@@ -63,6 +63,39 @@ detail_charts:
     height_deg: 9.25
     mm_per_degree: 20.0
     star_profile: deep
+  - id: detail-virgo-core-label-fallback
+    code: SD053A
+    name: Virgo core
+    parent_chart_id: standard-053
+    center_ra_deg: 186.75
+    center_dec_deg: 13.0
+    width_deg: 4.0
+    height_deg: 3.0
+    mm_per_degree: 60.0
+    star_profile: deep
+    fallback_parent_galaxy_labels: true
+  - id: detail-virgo-south-label-fallback
+    code: SD053B
+    name: South Virgo
+    parent_chart_id: standard-053
+    center_ra_deg: 185.5
+    center_dec_deg: 5.0
+    width_deg: 4.0
+    height_deg: 3.0
+    mm_per_degree: 60.0
+    star_profile: deep
+    fallback_parent_galaxy_labels: true
+  - id: detail-fornax-core-label-fallback
+    code: SD089
+    name: Fornax core
+    parent_chart_id: standard-089
+    center_ra_deg: 54.62
+    center_dec_deg: -35.45
+    width_deg: 4.0
+    height_deg: 3.0
+    mm_per_degree: 60.0
+    star_profile: deep
+    fallback_parent_galaxy_labels: true
   - id: detail-sagittarius
     code: SD084
     name: Sagittarius clusters · M22 / M28

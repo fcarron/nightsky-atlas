@@ -100,6 +100,9 @@ from nightsky_atlas.catalog.tycho import (
     iter_tycho2_stars,
     raw_part_paths,
 )
+from nightsky_atlas.catalog.tycho_density import build_report as build_tycho_density_report
+from nightsky_atlas.catalog.tycho_density import write_csv as write_tycho_density_csv
+from nightsky_atlas.catalog.tycho_density import write_json as write_tycho_density_json
 from nightsky_atlas.catalog.vizier_dso import (
     VIZIER_ACKNOWLEDGEMENT,
     VIZIER_CATALOGUES,
@@ -509,6 +512,16 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     counter.add_argument("--store", type=Path, default=_DEFAULT_STORE)
     counter.set_defaults(handler=_command_star_count)
 
+    density = data_subparsers.add_parser(
+        "tycho-density-report", help="measure Tycho-2 stellar density by magnitude and sky region"
+    )
+    density.add_argument("--store", type=Path, default=_DEFAULT_STORE)
+    density.add_argument("--json", type=Path, default=None, help="write the full report as JSON")
+    density.add_argument(
+        "--csv", type=Path, default=None, help="write count and density tables as CSV"
+    )
+    density.set_defaults(handler=_command_tycho_density_report)
+
     labels = data_subparsers.add_parser(
         "star-label-report", help="count eligible stellar label types for an edition"
     )
@@ -791,6 +804,7 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     build.add_argument("--limit", type=int, default=None)
     build.add_argument("--charts", default=None, help="comma-separated chart ids")
     build.add_argument("--png-dpi", type=float, default=150.0)
+    build.add_argument("--jobs", type=int, default=2, help="parallel chart workers (default: 2)")
     build.add_argument("--no-png", action="store_true")
     build.add_argument("--no-optimize", action="store_true")
     build.add_argument("--no-front-matter", action="store_true")
@@ -1215,6 +1229,43 @@ def _command_import_stars(args: argparse.Namespace) -> int:
 def _command_star_count(args: argparse.Namespace) -> int:
     with StarStore.open(args.store) as store:
         print(f"{store.count()} stars in {args.store}")
+    return 0
+
+
+def _command_tycho_density_report(args: argparse.Namespace) -> int:
+    report = build_tycho_density_report(args.store)
+    print(f"Tycho-2 rows: {report['measured_catalogue_rows']:,} (from {args.store})")
+    print(f"Magnitude: {report['magnitude_field']}")
+    print("\nAll-sky cumulative counts / 0.5-mag increments")
+    previous = 0
+    for magnitude, count in report["all_sky_cumulative_counts"].items():
+        print(f"  <= {magnitude:>4}: {count:>10,}  (+{count - previous:,})")
+        previous = count
+    print("\nGrowth intervals")
+    for row in report["growth_intervals"]:
+        print(f"  {row['interval']:>11}: {row['factor']:.4f}x  alpha={row['alpha']:.4f}")
+    print("\nEdition paper densities (stars/cm²)")
+    for edition, row in report["edition_densities"].items():
+        vals = row["stars_per_cm2"]
+        ratios = row["density_ratio_to_standard"]
+        print(
+            f"  {edition:<15} all-sky={vals['all_sky']:.3f} sparse={vals['sparse']:.3f} "
+            f"Virgo={vals['virgo']:.3f} Cygnus={vals['cygnus']:.3f} "
+            f"Sagittarius={vals['sagittarius']:.3f} south={vals['southern_milky_way']:.3f}; "
+            f"ratios all/sparse/Cyg/Sag="
+            f"{ratios['all_sky']:.2f}/{ratios['sparse']:.2f}/"
+            f"{ratios['cygnus']:.2f}/{ratios['sagittarius']:.2f}x"
+        )
+    recommendation = report["recommendation"]
+    print(f"\nRecommended official limits: {recommendation['official_defaults']}")
+    print(f"Optional deeper modes: {recommendation['optional_deeper_modes']}")
+    print(f"\nCompleteness: {report['completeness_note']}")
+    if args.json:
+        write_tycho_density_json(report, args.json)
+        print(f"JSON -> {args.json}")
+    if args.csv:
+        write_tycho_density_csv(report, args.csv)
+        print(f"CSV -> {args.csv}")
     return 0
 
 
@@ -1802,6 +1853,7 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         optimize=not args.no_optimize,
         render_png=not args.no_png,
         png_dpi=args.png_dpi,
+        jobs=args.jobs,
         write_front_matter=not args.no_front_matter,
         write_overviews=not args.no_overviews,
         write_draft_report=not args.no_draft_report,

@@ -643,19 +643,20 @@ def parse_vizier_table(
         magnitude = _float(row, spec.magnitude_field)
         if catalogue_id == "VII/155" and (_field(row, "BT_code") or "").upper() == "V":
             magnitude = None
+        is_simeis_147 = catalogue_id == "VII/20" and designation == "Sh2-240"
         objects.append(
             DeepSkyObject(
                 id=designation,
                 ra_deg=normalized_ra,
                 dec_deg=normalized_dec,
-                object_type=spec.object_type,
+                object_type=DsoType.SUPERNOVA_REMNANT if is_simeis_147 else spec.object_type,
                 provenance=Provenance(
                     catalogue=catalogue_id, source_id=designation, version=retrieved
                 ),
                 major_axis_arcmin=major,
                 minor_axis_arcmin=minor,
                 cross_ids=aliases,
-                semantic_subtype=spec.subtype,
+                semantic_subtype="supernova remnant" if is_simeis_147 else spec.subtype,
                 position_angle_deg=_float(row, spec.position_angle_field),
                 magnitude=magnitude,
                 magnitude_band=(

@@ -84,12 +84,9 @@ def test_field_query_box_reaches_projected_corners() -> None:
     star_box = chart_query_box(definition, padding_deg=0.0)
     field_box = field_query_box(definition, padding_deg=0.0)
     corner_radius = math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0)
-    assert field_box.dec_min_deg <= star_box.dec_min_deg
-    assert field_box.dec_max_deg >= star_box.dec_max_deg
+    assert field_box == star_box
     assert field_box.dec_max_deg == pytest.approx(12.0 + corner_radius)
     assert field_box.dec_min_deg == pytest.approx(12.0 - corner_radius)
-    assert field_box.ra_min_deg < star_box.ra_min_deg
-    assert field_box.ra_max_deg > star_box.ra_max_deg
 
 
 def test_build_atlas_subset(tmp_path: Path) -> None:

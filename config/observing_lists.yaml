@@ -59,6 +59,17 @@ editions:
       caldwell: pocket_caldwell
       herschel400: pocket_herschel400
     selection_rules:
+      globular_cluster:
+        regional_allowlists:
+          - id: lmc
+            center_ra_deg: 80.894
+            center_dec_deg: -69.756
+            radius_deg: 6.5
+            allowed_designations:
+              - NGC1786
+              - NGC1835
+              - NGC1978
+              - NGC2210
       galaxy:
         use_visibility: false
         minimum_visibility_score_by_aperture:
@@ -116,6 +127,20 @@ editions:
         use_visibility: false
         selection_reason_code: globular_cluster_standard_policy
         maximum_magnitude: 12.5
+        regional_allowlists:
+          - id: lmc
+            center_ra_deg: 80.894
+            center_dec_deg: -69.756
+            radius_deg: 6.5
+            allowed_designations:
+              - NGC1754
+              - NGC1786
+              - NGC1835
+              - NGC1868
+              - NGC1916
+              - NGC1978
+              - NGC2005
+              - NGC2210
         qualifying_memberships:
           - messier
           - caldwell
@@ -132,7 +157,6 @@ editions:
       - OpenNGC
       - VII/20
       - VII/7A
-      - VII/9
       - VII/21
       - VII/220A
       - "VII/92A:Collinder"
@@ -147,7 +171,6 @@ editions:
     catalogue_minimum_extent_arcmin:
       VII/20: 15
       VII/7A: 15
-      VII/9: 15
       VII/21: 90
       VII/220A: 15
     forced_lists:
@@ -197,6 +220,24 @@ editions:
         catalogue_maximum_magnitude: 11.5
       globular_cluster:
         use_visibility: true
+        regional_allowlists:
+          - id: lmc
+            center_ra_deg: 80.894
+            center_dec_deg: -69.756
+            radius_deg: 6.5
+            allowed_designations:
+              - NGC1754
+              - NGC1786
+              - NGC1806
+              - NGC1835
+              - NGC1846
+              - NGC1868
+              - NGC1916
+              - NGC1939
+              - NGC1978
+              - NGC2005
+              - NGC2019
+              - NGC2210
         selection_reason_code: globular_cluster_deep_policy
         qualifying_catalogues:
           - VII/202:Palomar
@@ -221,24 +262,33 @@ editions:
         selection_reason_code: bright_nebula_deep_size
         qualifying_catalogues:
           - VII/20
-          - VII/9
         catalogue_minimum_major_axis_arcmin: 15
       dark_nebula:
-        use_visibility: true
-        selection_reason_code: dark_nebula_deep_size
-        visibility_catalogues:
-          - OpenNGC
-        qualifying_catalogues:
-          - VII/7A
-          - VII/220A
-        catalogue_minimum_major_axis_arcmin: 15
+        use_visibility: false
+        selection_reason_code: curated_dark_nebula_deep
+        exclusion_reason_code: outside_curated_dark_nebula_set
+        curated_designations:
+          - B033
+          - C099
+          - LDN 935
+          - B 59
+          - B 72
+          - B 78
+          - B 86
+          - B 92
+          - B 93
+          - B 142
+          - B 143
+          - B 150
+          - B 168
+          - B 228
+          - B 352
   reference:
     inherit: deep
     include_uncertain_catalogue_matches: true
     catalogue_minimum_extent_arcmin:
       VII/20: 0
       VII/7A: 0
-      VII/9: 0
       VII/21: 0
       VII/220A: 0
       "VII/92A:Collinder": 0
@@ -248,7 +298,6 @@ editions:
       - OpenNGC
       - VII/20
       - VII/7A
-      - VII/9
       - VII/21
       - VII/220A
       - "VII/92A:Collinder"
@@ -298,6 +347,7 @@ editions:
         selection_reason_code: reference_catalogue_complete
       dark_nebula:
         use_visibility: false
+        curated_designations: []
         include_all_valid: true
         selection_reason_code: reference_catalogue_complete
       supernova_remnant:

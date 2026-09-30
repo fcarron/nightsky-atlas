@@ -41,6 +41,7 @@ __all__ = [
     "OverviewTransform",
     "draw_locator_inset",
     "draw_overview_page",
+    "draw_overview_spread_page",
     "locator_rect",
 ]
 
@@ -95,7 +96,8 @@ class _DiskStyle:
     name_font_size_pt: float
     code_gray: float
     code_font_size_pt: float
-    show_names: bool
+    show_constellation_names: bool
+    show_codes: bool
     show_stars: bool
     star_gray: float
     star_size_model: StarSizeModel | None
@@ -121,7 +123,8 @@ def _page_disk_style(style: StyleConfig) -> _DiskStyle:
         name_font_size_pt=config.name_font_size_pt,
         code_gray=config.code_gray,
         code_font_size_pt=config.code_font_size_pt,
-        show_names=True,
+        show_constellation_names=config.show_constellation_names,
+        show_codes=True,
         show_stars=config.show_stars,
         star_gray=config.star_gray,
         star_size_model=StarSizeModel(
@@ -153,7 +156,8 @@ def _locator_disk_style(style: StyleConfig) -> _DiskStyle:
         name_font_size_pt=0.0,
         code_gray=config.current_gray,
         code_font_size_pt=0.0,
-        show_names=False,
+        show_constellation_names=False,
+        show_codes=False,
         show_stars=False,
         star_gray=0.0,
         star_size_model=None,
@@ -243,6 +247,62 @@ def draw_overview_page(
     )
     _draw_rim_labels(cr, transform, overview, style, radius_mm)
     _draw_centre_marker(cr, transform, overview, style)
+
+
+def draw_overview_spread_page(
+    cr: cairo.Context[cairo.Surface],
+    north: OverviewMap,
+    south: OverviewMap,
+    page: PageGeometry,
+    style: StyleConfig,
+    pdf_navigation: PdfNavigation | None = None,
+) -> None:
+    """Draw both hemisphere locators at print size on one landscape page."""
+    config = style.overview
+    family = style.label.font_family
+    cr.set_source_rgb(1.0, 1.0, 1.0)
+    cr.paint()
+
+    title_y = page.margin_mm + config.title_font_size_pt * 0.3528 + 2.5
+    heading_y = title_y + config.subtitle_font_size_pt * 0.3528 + 3.5
+    radius_mm = min(config.radius_mm * 0.72, 54.0)
+    center_y = (heading_y + 6.0 + page.height_mm - page.margin_mm) / 2.0
+    centers_x = (page.width_mm * 0.27, page.width_mm * 0.73)
+    cr.set_source_rgb(0.1, 0.1, 0.1)
+    draw_centered_text(
+        cr,
+        f"{PRODUCT_NAME} \N{EM DASH} {north.edition_name}",
+        mm_to_pt(page.width_mm / 2.0),
+        mm_to_pt(title_y),
+        family,
+        config.title_font_size_pt,
+    )
+
+    disk_style = _page_disk_style(style)
+    for overview, center_x in zip((north, south), centers_x, strict=True):
+        cr.set_source_rgb(0.35, 0.35, 0.35)
+        draw_centered_text(
+            cr,
+            overview.title,
+            mm_to_pt(center_x),
+            mm_to_pt(heading_y),
+            family,
+            config.subtitle_font_size_pt,
+        )
+        transform = OverviewTransform(center_x, center_y, radius_mm / overview.radius_deg)
+        _draw_disk(
+            cr,
+            transform,
+            overview,
+            style,
+            radius_mm,
+            disk_style,
+            None,
+            frozenset(),
+            pdf_navigation,
+        )
+        _draw_rim_labels(cr, transform, overview, style, radius_mm)
+        _draw_centre_marker(cr, transform, overview, style)
 
 
 def draw_locator_inset(
@@ -340,10 +400,10 @@ def _draw_disk(
         _draw_cell(
             cr, transform, cell, disk_style, current_chart_id, neighbour_ids
         )
-    if disk_style.show_names:
+    if disk_style.show_constellation_names:
         _draw_names(cr, transform, overview, disk_style, style.label.font_family)
     for cell in overview.cells:
-        if disk_style.show_names and cell.label_point is not None:
+        if disk_style.show_codes and cell.label_point is not None:
             page_point = transform.to_page(cell.label_point)
             cr.set_source_rgb(
                 disk_style.code_gray, disk_style.code_gray, disk_style.code_gray
@@ -539,6 +599,8 @@ def _draw_centre_marker(
     overview: OverviewMap,
     style: StyleConfig,
 ) -> None:
+    if not style.overview.show_pole_label:
+        return
     label = _CENTRE_LABELS.get(overview.hemisphere)
     if label is None:
         return

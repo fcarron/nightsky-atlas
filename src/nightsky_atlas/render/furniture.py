@@ -26,6 +26,7 @@ from nightsky_atlas.chart.presentation import (
     neighbour_code,
     neighbour_markup,
     presentation_for,
+    product_edition_title,
 )
 from nightsky_atlas.render.overview import locator_rect
 from nightsky_atlas.render.pdf_navigation import PdfNavigation
@@ -118,6 +119,7 @@ class FurniturePlan:
     """Resolved furniture for one chart page, in millimetres."""
 
     title: PlacedText | None
+    brand: PlacedText | None
     navigation: tuple[PlacedText, ...]
     scale_bar: ScaleBar | None
     legend: MagnitudeLegend | None
@@ -229,10 +231,14 @@ def _scale_bar(
     if not bar.enabled:
         return None
     page = transform.page
-    length_mm = bar.length_deg * transform.mm_per_deg
+    length_deg = bar.length_deg
+    length_mm = length_deg * transform.mm_per_deg
     if length_mm <= 0.0:
         return None
-    label = f"{bar.length_deg:g}\N{DEGREE SIGN}"
+    while length_mm > min(80.0, page.width_mm * 0.28):
+        length_deg /= 2.0
+        length_mm = length_deg * transform.mm_per_deg
+    label = f"{length_deg:g}\N{DEGREE SIGN}"
     line_y = page.height_mm - _FOOTER_DOT_CENTER_FROM_BOTTOM_MM
     label_height = TextMeasurer(style.label.font_family, bar.font_size_pt).measure_mm(
         label
@@ -325,15 +331,46 @@ def build_furniture_plan(
     obstacles: list[PageRect] = []
 
     title: PlacedText | None = None
-    title_measurer = TextMeasurer(family, style.furniture.title_font_size_pt)
-    title_metrics = title_measurer.measure_markup_mm(presentation.title_markup)
-    if presentation.title:
+    brand: PlacedText | None = None
+    if style.furniture.footer_layout == "split":
+        code = presentation.chart_code
+        if code:
+            code_markup = f"<b>{escape_markup(code)}</b>"
+            code_size = style.furniture.footer_code_font_size_pt
+            code_height = TextMeasurer(family, code_size).measure_markup_mm(code_markup).height_mm
+            title = PlacedText(
+                code,
+                page.width_mm - page.margin_mm,
+                page.height_mm - _FOOTER_TITLE_CENTER_FROM_BOTTOM_MM - code_height / 2.0,
+                "right",
+                code_size,
+                code_markup,
+            )
+            obstacles.append(_obstacle_for_text(title, family))
+        brand_text = product_edition_title(
+            presentation.edition_name, product_name=presentation.product_name
+        )
+        brand_size = style.furniture.footer_brand_font_size_pt
+        brand_height = TextMeasurer(family, brand_size).measure_mm(brand_text).height_mm
+        brand = PlacedText(
+            brand_text,
+            page.width_mm / 2.0,
+            page.height_mm - _FOOTER_TITLE_CENTER_FROM_BOTTOM_MM - brand_height / 2.0,
+            "center",
+            brand_size,
+        )
+        obstacles.append(_obstacle_for_text(brand, family))
+    elif presentation.title:
+        title_size = style.furniture.title_font_size_pt
+        title_metrics = TextMeasurer(family, title_size).measure_markup_mm(
+            presentation.title_markup
+        )
         title = PlacedText(
             presentation.title,
             page.width_mm - page.margin_mm,
             page.height_mm - _FOOTER_TITLE_CENTER_FROM_BOTTOM_MM - title_metrics.height_mm / 2.0,
             "right",
-            style.furniture.title_font_size_pt,
+            title_size,
             presentation.title_markup,
         )
         obstacles.append(_obstacle_for_text(title, family))
@@ -390,6 +427,7 @@ def build_furniture_plan(
 
     return FurniturePlan(
         title=title,
+        brand=brand,
         navigation=navigation,
         scale_bar=scale_bar,
         legend=legend,
@@ -523,6 +561,10 @@ def draw_furniture(
     if plan.title is not None:
         title_gray = style.furniture.title_gray
         _draw_placed_text(cr, plan.title, family, title_gray)
+
+    if plan.brand is not None:
+        brand_gray = style.furniture.footer_brand_gray
+        _draw_placed_text(cr, plan.brand, family, brand_gray)
 
     nav_gray = style.furniture.navigation.gray
     for nav_text in plan.navigation:

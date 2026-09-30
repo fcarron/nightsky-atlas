@@ -68,7 +68,7 @@ def build_detail_marker(
     )
     return DetailMapMarker(
         chart_code=detail.code,
-        label=detail.name,
+        label=detail.name if detail.parent_marker_label is None else detail.parent_marker_label,
         boundary=boundary,
     )
 
@@ -111,7 +111,11 @@ def draw_detail_markers(
 
         if not draw_labels:
             continue
-        text = f"{marker.label} · {marker.chart_code}"
+        text = (
+            f"{marker.label} · {marker.chart_code}"
+            if marker.label
+            else marker.chart_code
+        )
         font_size_pt = style.label.font_size_pt * _LABEL_SIZE_FACTOR
         metrics = TextMeasurer(style.label.font_family, font_size_pt).measure_mm(text)
         tag_width = metrics.width_mm + 2.0 * _LABEL_PAD_X_MM

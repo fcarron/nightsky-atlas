@@ -399,27 +399,8 @@ def build_chart_context(
 
 
 def field_query_box(definition: ChartDefinition, *, padding_deg: float = 2.0) -> QueryBox:
-    """Return a radial query box that reaches the projected field corners.
-
-    :func:`nightsky_atlas.catalog.store.chart_query_box` sizes the declination
-    range from half the chart height, but the projected field reaches further
-    at its corners.  Using the corner radius as both half-extents yields a
-    superset of the field, so pre-filtering a catalogue never drops an object
-    the scene builder would keep.
-    """
-    radius = math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0) + padding_deg
-    dec_min = max(-90.0, definition.center_dec_deg - radius)
-    dec_max = min(90.0, definition.center_dec_deg + radius)
-    worst_dec = min(89.9, max(abs(dec_min), abs(dec_max)))
-    cos_dec = math.cos(math.radians(worst_dec))
-    if cos_dec < 0.02:
-        return QueryBox(0.0, 360.0, dec_min, dec_max)
-    half_width = radius / cos_dec
-    if half_width >= 180.0:
-        return QueryBox(0.0, 360.0, dec_min, dec_max)
-    ra_min = (definition.center_ra_deg - half_width) % 360.0
-    ra_max = (definition.center_ra_deg + half_width) % 360.0
-    return QueryBox(ra_min, ra_max, dec_min, dec_max)
+    """Return the catalogue query box that contains the projected field."""
+    return chart_query_box(definition, padding_deg=padding_deg)
 
 
 def _coordinates_in_box(ra_deg: float, dec_deg: float, box: QueryBox) -> bool:

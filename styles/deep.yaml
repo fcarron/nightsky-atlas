@@ -20,8 +20,8 @@ dso:
   globular_cluster: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.1}
   open_cluster: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.4}
   planetary_nebula: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.1}
-  bright_nebula: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.6}
-  dark_nebula: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.6}
+  bright_nebula: {use_angular_size: false, min_diameter_mm: 1.6}
+  dark_nebula: {use_angular_size: false, min_diameter_mm: 1.6}
   galaxy_cluster: {min_angular_size_arcmin: 5.0, min_diameter_mm: 1.6}
 grid:
   ra_step_deg: 3.75
@@ -34,6 +34,7 @@ grid:
   tick_dec_step_deg: 1.0
   tick_polar_ra_step_deg: 3.75
 label:
+  font_family: "Lato"
   star_labels:
     bayer: {enabled: true, max_magnitude: 6.5}
     flamsteed: {enabled: true, max_magnitude: 6.0}

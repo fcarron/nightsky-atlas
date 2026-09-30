@@ -2,9 +2,46 @@
 extends: standard.yaml
 id: pocket
 edition: {name: Pocket, code: P}
+chart_directory_position: back
 mm_per_degree: null
 stellar_limit_magnitude: 7.5
-detail_charts: []
+detail_charts:
+  - id: pocket-detail-virgo-core
+    code: PD025A
+    name: Virgo core
+    parent_chart_id: pocket-025
+    center_ra_deg: 186.75
+    center_dec_deg: 13.0
+    width_deg: 4.0
+    height_deg: 3.0
+    mm_per_degree: 60.0
+    star_profile: deep
+    fallback_parent_galaxy_labels: true
+    parent_marker_label: ""
+  - id: pocket-detail-virgo-south
+    code: PD025B
+    name: South Virgo
+    parent_chart_id: pocket-025
+    center_ra_deg: 185.5
+    center_dec_deg: 5.0
+    width_deg: 4.0
+    height_deg: 3.0
+    mm_per_degree: 60.0
+    star_profile: deep
+    fallback_parent_galaxy_labels: true
+    parent_marker_label: ""
+  - id: pocket-detail-fornax-core
+    code: PD032
+    name: Fornax core
+    parent_chart_id: pocket-032
+    center_ra_deg: 54.62
+    center_dec_deg: -35.45
+    width_deg: 4.0
+    height_deg: 3.0
+    mm_per_degree: 60.0
+    star_profile: deep
+    fallback_parent_galaxy_labels: true
+    parent_marker_label: ""
 tiling:
   width_deg: 54.0
   height_deg: 36.0

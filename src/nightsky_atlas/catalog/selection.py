@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
+from nightsky_atlas.astronomy.angles import angular_separation_deg
 from nightsky_atlas.catalog.galaxy_visibility import (
     GalaxyContourClass,
     estimate_galaxy_visibility,
@@ -41,6 +42,7 @@ from nightsky_atlas.catalog.visibility import (
 __all__ = [
     "DsoMetadata",
     "VisibilityClassRule",
+    "RegionalDesignationAllowlist",
     "TypeSelectionRule",
     "SelectionPolicy",
     "base_label_priority",
@@ -91,12 +93,23 @@ class VisibilityClassRule:
 
 
 @dataclass(frozen=True, slots=True)
+class RegionalDesignationAllowlist:
+    id: str
+    center_ra_deg: float
+    center_dec_deg: float
+    radius_deg: float
+    allowed_designations: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class TypeSelectionRule:
     """Configurable, object-type-specific inclusion gates for one edition."""
 
     use_visibility: bool = True
     visibility_classes: tuple[str, ...] = ()
     visibility_class_rules: tuple[VisibilityClassRule, ...] = ()
+    regional_allowlists: tuple[RegionalDesignationAllowlist, ...] = ()
+    curated_designations: tuple[str, ...] = ()
     minimum_visibility_score_400: float | None = None
     minimum_visibility_score_by_aperture: tuple[tuple[int, float], ...] = ()
     minimum_major_axis_arcmin: float | None = None
@@ -214,6 +227,10 @@ def _rule_inclusion(
     memberships: frozenset[str],
     assessment_visible: bool,
 ) -> tuple[bool, str | None]:
+    if rule.curated_designations:
+        if dso.id in rule.curated_designations:
+            return True, "curated_object_policy"
+        return False, "outside_curated_object_set"
     if (
         rule.use_visibility
         and assessment_visible
@@ -459,14 +476,19 @@ def select_dso(
                 else ("below-catalogue-minimum-extent",)
             ),
         )
+    rule_map = dict(effective_policy.type_rules)
+    rule = rule_map.get(_selection_rule_key(dso))
+    curated_object = rule is not None and dso.id in rule.curated_designations
     uncertain_external_match = not primary_is_openngc and any(
         record.crossmatch_decision == "uncertain" for record in dso.catalogue_records
     )
     uncertain_match_allowed = (
-        effective_policy.include_uncertain_catalogue_matches or not uncertain_external_match
+        effective_policy.include_uncertain_catalogue_matches
+        or not uncertain_external_match
+        or curated_object
     )
-    rule_map = dict(effective_policy.type_rules)
-    rule = rule_map.get(_selection_rule_key(dso))
+    if rule is not None and rule.curated_designations:
+        forced = forced and curated_object
     assessment_visible = assessment.visible and catalogue_extent_eligible
     policy_reason: str | None = None
     if rule is None:
@@ -479,6 +501,17 @@ def select_dso(
             memberships=memberships,
             assessment_visible=assessment_visible,
         )
+        if not forced:
+            for region in rule.regional_allowlists:
+                if angular_separation_deg(
+                    dso.ra_deg,
+                    dso.dec_deg,
+                    region.center_ra_deg,
+                    region.center_dec_deg,
+                ) <= region.radius_deg and dso.id not in region.allowed_designations:
+                    type_policy_visible = False
+                    policy_reason = f"regional_allowlist_{region.id}"
+                    break
     visibility_reasons: list[str] = []
     if rule is None or (not type_policy_visible and policy_reason is None):
         visibility_reasons.extend(assessment.reasons)

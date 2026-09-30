@@ -1,5 +1,27 @@
 # Performance notes
 
+## Atlas page parallelism
+
+The atlas builder can compute independent main chart pages in separate processes
+with `atlas build --jobs N`. The combined PDF, navigation and index are assembled
+in chart order in the main process. The CLI uses two workers by default; one
+worker preserves the serial path.
+
+On 2026-09-29, four dense Pocket charts (P025, P039, P045, P046), including two
+Virgo detail charts, at 100 DPI gave these wall times and peak summed process-tree
+proportional set sizes (PSS):
+
+| Workers | Wall time | Peak PSS |
+| --- | ---: | ---: |
+| 1 | 81.4 s | 494 MiB |
+| 2 | 52.3 s | 1,274 MiB |
+| 4 | 37.8 s | 1,973 MiB |
+
+The 51-page complete Pocket build took 136.9 s with four workers. All 51 layout
+hashes, hard-issue counts and preview PNGs matched the serial build. PDF bytes
+can differ because Cairo writes PDF metadata. Two workers are the CLI default
+because four workers nearly doubled peak memory for a smaller additional speedup.
+
 ## M4 — indexed star queries (SQLite)
 
 Environment: Ubuntu 24.04, Python 3.12, SQLite via the standard library,

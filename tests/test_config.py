@@ -407,7 +407,7 @@ def test_shipped_style_declares_double_star_marker() -> None:
 @pytest.mark.parametrize(
     ("edition", "expected"),
     [
-        ("pocket", ((30.0, 10.5), (200.0, 8.5))),
+        ("pocket", ((1.0, 200.0, 10.5),)),
         ("standard", ((30.0, 11.5), (120.0, 10.0), (200.0, 9.0))),
         ("deep", ((30.0, 13.0), (120.0, 11.5), (300.0, 10.0))),
     ],
@@ -415,16 +415,28 @@ def test_shipped_style_declares_double_star_marker() -> None:
 def test_double_star_profile_limits_are_configured(edition: str, expected: tuple) -> None:
     config = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     actual = tuple(
-        (limit.max_sep_arcsec, limit.max_secondary_mag)
+        (
+            limit.min_sep_arcsec,
+            limit.max_sep_arcsec,
+            limit.max_secondary_mag,
+        )
         for limit in config.double_stars.limits
     )
-    assert actual == expected
+    if edition == "pocket":
+        assert actual == expected
+    else:
+        assert tuple((maximum, magnitude) for _, maximum, magnitude in actual) == expected
 
 
 def test_deep_double_star_marker_is_finer_than_pocket() -> None:
     pocket = load_style_config(REPO_ROOT / "styles" / "pocket.yaml").double_stars
     deep = load_style_config(REPO_ROOT / "styles" / "deep.yaml").double_stars
     assert deep.marker_line_width_mm < pocket.marker_line_width_mm
+
+
+def test_pocket_double_star_profile_has_no_delta_magnitude_cut() -> None:
+    pocket = load_style_config(REPO_ROOT / "styles" / "pocket.yaml").double_stars
+    assert pocket.delta_mag_limits == ()
 
 
 def test_double_star_style_defaults_when_omitted(tmp_path: Path) -> None:

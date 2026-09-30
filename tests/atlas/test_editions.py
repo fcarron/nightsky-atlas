@@ -57,6 +57,12 @@ def test_pocket_overlap_is_mm_derived() -> None:
     assert spec.overlap_deg == pytest.approx(10.0 / pocket.tiling.mm_per_degree)
 
 
+def test_pocket_labels_named_stars_through_magnitude_5_5() -> None:
+    style = load_style_config(ROOT / "styles" / "pocket.yaml")
+    assert style.star.label_magnitude_limit == pytest.approx(5.5)
+    assert style.label.star_labels.bayer.max_magnitude == pytest.approx(5.5)
+
+
 def test_pocket_symmetric_navigation_tiling() -> None:
     pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
     spec = TilingSpec.from_config(pocket.tiling)
@@ -106,12 +112,18 @@ def test_standard_detail_maps_are_supplemental_and_doubled_scale() -> None:
     assert len(chart_definitions(standard)) == 118
     assert {detail.code for detail in details} == {
         "SD053",
+        "SD053A",
+        "SD053B",
+        "SD089",
         "SD084",
         "SD031",
         "SD063",
         "SD013",
         "SD035",
     }
+    assert {
+        detail.code for detail in details if detail.fallback_parent_galaxy_labels
+    } == {"SD053A", "SD053B", "SD089"}
     assert {detail.name for detail in details} >= {
         "Virgo Cluster",
         "Sagittarius clusters · M22 / M28",
@@ -120,7 +132,16 @@ def test_standard_detail_maps_are_supplemental_and_doubled_scale() -> None:
         "Perseus Double Cluster",
         "Pleiades · M45",
     }
-    assert all(detail.mm_per_degree == 20.0 for detail in details)
+    assert {
+        detail.code: detail.mm_per_degree
+        for detail in details
+        if detail.code in {"SD053A", "SD053B", "SD089"}
+    } == {"SD053A": 60.0, "SD053B": 60.0, "SD089": 60.0}
+    assert all(
+        detail.mm_per_degree == 20.0
+        for detail in details
+        if detail.code not in {"SD053A", "SD053B", "SD089"}
+    )
     assert all(detail.star_profile == "deep" for detail in details)
     assert deep.stellar_limit_magnitude == 10.0
 

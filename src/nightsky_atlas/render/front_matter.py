@@ -23,7 +23,7 @@ from nightsky_atlas.render.text import draw_text, measure_point_size
 from nightsky_atlas.render.variable_stars import draw_variable_star_ring
 from nightsky_atlas.units import mm_to_pt
 
-__all__ = ["LegendSymbol", "draw_field_guide", "legend_symbols"]
+__all__ = ["LegendSymbol", "draw_field_guide", "draw_introduction", "legend_symbols"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,9 +183,13 @@ def _dot(cr: cairo.Context[cairo.Surface], x_mm: float, y_mm: float, diameter_mm
 
 
 def _footer(
-    cr: cairo.Context[cairo.Surface], page: PageGeometry, edition: str, family: str
+    cr: cairo.Context[cairo.Surface],
+    page: PageGeometry,
+    edition: str,
+    family: str,
+    section: str = "Field guide & symbol key",
 ) -> None:
-    text = f"NightSky Atlas — {edition} · Field guide & symbol key"
+    text = f"NightSky Atlas — {edition} · {section}"
     width_pt, _ = measure_point_size(cr, text, family, 7.0)
     x_pt = mm_to_pt(page.width_mm - page.margin_mm) - width_pt
     _text(
@@ -197,6 +201,171 @@ def _footer(
         7.0,
         gray=0.38,
     )
+
+
+def _paragraph(
+    cr: cairo.Context[cairo.Surface],
+    words: str,
+    x_mm: float,
+    y_mm: float,
+    width_mm: float,
+    family: str,
+    *,
+    size_pt: float = 8.0,
+    line_step_mm: float = 5.1,
+) -> float:
+    line = ""
+    for word in words.split():
+        candidate = f"{line} {word}" if line else word
+        candidate_width_pt, _ = measure_point_size(cr, candidate, family, size_pt)
+        if line and candidate_width_pt > mm_to_pt(width_mm):
+            _text(cr, line, x_mm, y_mm, family, size_pt)
+            y_mm += line_step_mm
+            line = word
+        else:
+            line = candidate
+    if line:
+        _text(cr, line, x_mm, y_mm, family, size_pt)
+        y_mm += line_step_mm
+    return y_mm
+
+
+def draw_introduction(
+    cr: cairo.Context[cairo.Surface], atlas: AtlasConfig, style: StyleConfig
+) -> None:
+    """Draw the short practical introduction shared by all editions."""
+    page = atlas.page.to_geometry()
+    family = style.label.font_family
+    left = page.margin_mm + 4.0
+    right = page.width_mm - page.margin_mm - 4.0
+    width = right - left
+    column_width = (width - 12.0) / 2.0
+    right_column = left + column_width + 12.0
+
+    _text(
+        cr,
+        "NIGHTSKY ATLAS  /  INTRODUCTION",
+        left,
+        page.margin_mm,
+        family,
+        7.0,
+        bold=True,
+        gray=0.42,
+    )
+    _text(
+        cr,
+        "A practical atlas for the night sky",
+        left,
+        page.margin_mm + 13.0,
+        family,
+        17.0,
+        bold=True,
+    )
+    _text(
+        cr,
+        "Open-source charts for visual observing and star-hopping",
+        left,
+        page.margin_mm + 22.0,
+        family,
+        8.8,
+        gray=0.32,
+    )
+    _rule(cr, left, right, page.margin_mm + 27.0)
+
+    _text(cr, "PURPOSE", left, 47.0, family, 7.2, bold=True, gray=0.38)
+    _paragraph(
+        cr,
+        "NightSky Atlas is an open-source set of printable sky charts for visual observers. "
+        "Use star patterns to find a target at the telescope. The source code is MIT licensed; "
+        "catalogue and artwork terms are listed on the credits page.",
+        left,
+        53.0,
+        width,
+        family,
+    )
+
+    _text(cr, "THREE EDITIONS", left, 73.0, family, 7.2, bold=True, gray=0.38)
+    _text(cr, "Edition", left, 81.0, family, 7.0, bold=True)
+    _text(cr, "Scale", left + 57.0, 81.0, family, 7.0, bold=True)
+    _text(cr, "Stars to", left + 100.0, 81.0, family, 7.0, bold=True)
+    _text(cr, "Field and deep-sky content", left + 135.0, 81.0, family, 7.0, bold=True)
+    for row, (name, scale, magnitude, use) in enumerate(
+        (
+            ("Pocket", "5 mm/°", "mag 7.5", "Wide fields; selected bright targets"),
+            ("Standard", "10 mm/°", "mag 9", "Balanced observing; Messier and Herschel 400"),
+            ("Deep", "20 mm/°", "mag 10", "Small fields; deeper DSO catalogue"),
+        )
+    ):
+        y = 90.0 + row * 8.0
+        _text(cr, name, left, y, family, 8.2, bold=name == atlas.resolved_edition().name)
+        _text(cr, scale, left + 57.0, y, family, 8.2)
+        _text(cr, magnitude, left + 100.0, y, family, 8.2)
+        _text(cr, use, left + 135.0, y, family, 8.2)
+    _text(
+        cr,
+        "Stellar limits describe plotted stars; visibility at the eyepiece depends on conditions.",
+        left,
+        114.0,
+        family,
+        6.6,
+        gray=0.34,
+    )
+    _rule(cr, left, right, 119.0)
+
+    _text(cr, "READING A CHART", left, 128.0, family, 7.2, bold=True, gray=0.38)
+    _paragraph(
+        cr,
+        "Start with the north or south overview, then use chart codes and the object index. "
+        "Main charts overlap; codes at the edges point to neighbouring pages. A dashed frame "
+        "and its code lead to a detail map. Coordinates are J2000/ICRS, north is up and east "
+        "is left. Small ticks outside the chart frame mark coordinate intervals.",
+        left,
+        134.0,
+        column_width,
+        family,
+    )
+    _text(cr, "STARS AND DOUBLE STARS", left, 169.0, family, 7.2, bold=True, gray=0.38)
+    _paragraph(
+        cr,
+        "Star disks encode magnitude; familiar names, Bayer letters and Flamsteed numbers are "
+        "selective. Tycho-2 is supplemented by Hipparcos for bright stars. Selected WDS pairs "
+        "show two real positions when separable; a short bar marks an unresolved pair, "
+        "not its angle.",
+        left,
+        175.0,
+        column_width,
+        family,
+        size_pt=7.4,
+        line_step_mm=4.4,
+    )
+
+    _text(cr, "DEEP-SKY OBJECTS", right_column, 128.0, family, 7.2, bold=True, gray=0.38)
+    _paragraph(
+        cr,
+        "Symbols distinguish galaxies, clusters and nebulae. M denotes Messier; bare numbers "
+        "mean NGC and I denotes IC. Galaxy ellipses follow catalogue axes when available. A small "
+        "dashed nebula symbol locates an object; a traced outline shows image-based form where "
+        "available. Stronger galaxy contours suggest easier visual detection, never certainty.",
+        right_column,
+        134.0,
+        column_width,
+        family,
+        size_pt=7.8,
+        line_step_mm=4.8,
+    )
+    _text(cr, "PRINTING AND USE", right_column, 174.0, family, 7.2, bold=True, gray=0.38)
+    _paragraph(
+        cr,
+        "Print the vector PDF on A4 landscape at 100% or actual size. Personal printing is free. "
+        "Check the credits and source licences before redistributing an atlas PDF.",
+        right_column,
+        180.0,
+        column_width,
+        family,
+        size_pt=7.4,
+        line_step_mm=4.4,
+    )
+    _footer(cr, page, atlas.resolved_edition().name, family, "Introduction")
 
 
 def _draw_map_lines(

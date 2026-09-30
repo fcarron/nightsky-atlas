@@ -151,7 +151,11 @@ class DetailChartConfig(_StrictModel):
     width_deg: PositiveFloat
     height_deg: PositiveFloat
     mm_per_degree: PositiveFloat
-    star_profile: Literal["pocket", "standard", "deep"] = "deep"
+    star_profile: Literal["pocket", "standard", "deep", "deep_detail", "deep_detail_40"] = "deep"
+    fallback_parent_galaxy_labels: bool = False
+    fallback_parent_min_magnitude: float | None = None
+    fallback_parent_min_nearby_galaxies: int = Field(default=0, ge=0)
+    parent_marker_label: str | None = None
 
     @field_validator("id", "name", "parent_chart_id")
     @classmethod
@@ -371,6 +375,7 @@ class AtlasConfig(_StrictModel):
     charts: list[ChartConfig] = Field(default_factory=list)
     detail_charts: tuple[DetailChartConfig, ...] = ()
     tiling: TilingConfig | None = None
+    chart_directory_position: Literal["front", "back"] = "front"
     mm_per_degree: PositiveFloat | None = None
     stellar_limit_magnitude: PositiveFloat | None = None
     visibility: VisibilityConfig = Field(default_factory=VisibilityConfig)
@@ -948,8 +953,15 @@ class DsoStyle(_StrictModel):
 
 
 class DoubleStarPairLimit(_StrictModel):
+    min_sep_arcsec: NonNegativeFloat | None = None
     max_sep_arcsec: PositiveFloat
     max_secondary_mag: float
+
+    @model_validator(mode="after")
+    def _validate_separation_range(self) -> DoubleStarPairLimit:
+        if self.min_sep_arcsec is not None and self.min_sep_arcsec >= self.max_sep_arcsec:
+            raise ValueError("min_sep_arcsec must be lower than max_sep_arcsec")
+        return self
 
 
 class DoubleStarDeltaMagnitudeLimit(_StrictModel):
@@ -1214,6 +1226,10 @@ class FurnitureStyle(_StrictModel):
 
     title_font_size_pt: PositiveFloat = 8.5
     title_gray: float = 0.15
+    footer_layout: Literal["inline", "split"] = "inline"
+    footer_code_font_size_pt: PositiveFloat = 11.0
+    footer_brand_font_size_pt: PositiveFloat = 6.0
+    footer_brand_gray: float = 0.6
     chart_border_width_mm: PositiveFloat = 0.25
     scale_bar: ScaleBarStyle = Field(default_factory=ScaleBarStyle)
     navigation: NavigationStyle = Field(default_factory=NavigationStyle)
@@ -1231,6 +1247,7 @@ class OverviewStyle(_StrictModel):
     """
 
     enabled: bool = True
+    hemispheres_per_page: Literal[1, 2] = 1
     radius_mm: PositiveFloat = 76.0
     title_font_size_pt: PositiveFloat = 15.0
     subtitle_font_size_pt: PositiveFloat = 9.0
@@ -1245,6 +1262,8 @@ class OverviewStyle(_StrictModel):
     boundary_line_width_mm: PositiveFloat = 0.1
     name_font_size_pt: PositiveFloat = 5.5
     name_gray: float = 0.3
+    show_constellation_names: bool = True
+    show_pole_label: bool = True
     footprint_gray: float = 0.45
     footprint_line_width_mm: PositiveFloat = 0.2
     code_font_size_pt: PositiveFloat = 5.25

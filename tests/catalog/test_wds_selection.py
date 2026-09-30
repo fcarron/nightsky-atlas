@@ -25,9 +25,12 @@ def pair(separation: float, primary: float | None, secondary: float | None) -> S
 @pytest.mark.parametrize(
     ("edition", "separation", "secondary", "expected"),
     [
-        ("pocket", 30.0, 10.5, True),
-        ("pocket", 30.1, 10.5, False),
-        ("pocket", 200.0, 8.5, True),
+        ("pocket", 1.0, 8.0, False),
+        ("pocket", 1.01, 10.5, True),
+        ("pocket", 30.1, 10.5, True),
+        ("pocket", 200.0, 10.5, True),
+        ("pocket", 200.1, 8.0, False),
+        ("pocket", 10.0, 10.51, False),
         ("standard", 30.0, 11.5, True),
         ("standard", 120.0, 10.0, True),
         ("standard", 200.0, 9.0, True),

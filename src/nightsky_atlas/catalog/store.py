@@ -80,20 +80,21 @@ class QueryBox:
 def chart_query_box(definition: ChartDefinition, *, padding_deg: float = 2.0) -> QueryBox:
     """Compute a generous catalogue query box for a chart.
 
-    The box is a superset of the chart field: RA convergence with declination is
-    accounted for and extra padding is added.  The scene builder performs the
-    exact field test afterwards, so over-selection is safe.
+    The box is a superset of the chart field, including its projected corners.
+    RA convergence with declination is accounted for and extra padding is
+    added. The scene builder performs the exact field test afterwards, so
+    over-selection is safe.
     """
-    half_height = definition.height_deg / 2.0 + padding_deg
-    dec_min = max(-90.0, definition.center_dec_deg - half_height)
-    dec_max = min(90.0, definition.center_dec_deg + half_height)
+    radius = math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0) + padding_deg
+    dec_min = max(-90.0, definition.center_dec_deg - radius)
+    dec_max = min(90.0, definition.center_dec_deg + radius)
 
     worst_dec = min(89.9, max(abs(dec_min), abs(dec_max)))
     cos_dec = math.cos(math.radians(worst_dec))
     if cos_dec < 0.02:
         return QueryBox(0.0, 360.0, dec_min, dec_max)
 
-    half_width = (definition.width_deg / 2.0 + padding_deg) / cos_dec
+    half_width = radius / cos_dec
     if half_width >= 180.0:
         return QueryBox(0.0, 360.0, dec_min, dec_max)
 

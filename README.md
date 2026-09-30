@@ -18,6 +18,9 @@ make lint    # run Ruff
 make check   # lint + test (standard pre-commit verification)
 ```
 
+The Standard style uses the Lato font family. Install Lato Regular and Bold on
+the build machine so Pango measures and renders the intended typeface.
+
 Run the command-line interface:
 
 ```bash
@@ -108,6 +111,10 @@ Raw and processed catalogue data are build inputs and are not committed. See
 ```bash
 .venv/bin/nightsky atlas build --star-store data/processed/stars/tycho2.sqlite
 ```
+
+Atlas builds use two chart workers by default. Use `--jobs 4` with several GiB
+of free memory, or `--jobs 1` for a serial build. Chart pages are
+assembled into the atlas PDF in chart order regardless of worker count.
 
 Add `--publication` for a strict release build. It requires the complete chart
 set, full-sky coverage, nonempty processed star and DSO catalogues, and matching

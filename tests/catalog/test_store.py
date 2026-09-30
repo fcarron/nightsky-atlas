@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sqlite3
 from pathlib import Path
 
@@ -112,11 +113,26 @@ def test_chart_query_box_equatorial() -> None:
         id="c", center_ra_deg=187.5, center_dec_deg=12.0, width_deg=20.0, height_deg=14.0
     )
     box = chart_query_box(definition, padding_deg=2.0)
-    assert box.dec_min_deg == pytest.approx(3.0)
-    assert box.dec_max_deg == pytest.approx(21.0)
+    radius = math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0) + 2.0
+    assert box.dec_min_deg == pytest.approx(12.0 - radius)
+    assert box.dec_max_deg == pytest.approx(12.0 + radius)
     assert not box.wraps_ra
-    assert box.ra_min_deg == pytest.approx(174.65, abs=0.1)
-    assert box.ra_max_deg == pytest.approx(200.35, abs=0.1)
+    worst_dec = max(abs(box.dec_min_deg), abs(box.dec_max_deg))
+    half_width = radius / math.cos(math.radians(worst_dec))
+    assert box.ra_min_deg == pytest.approx(187.5 - half_width)
+    assert box.ra_max_deg == pytest.approx(187.5 + half_width)
+
+
+def test_chart_query_box_reaches_projected_polar_corners() -> None:
+    definition = ChartDefinition(
+        id="p", center_ra_deg=0.0, center_dec_deg=90.0, width_deg=54.0, height_deg=36.0
+    )
+    box = chart_query_box(definition, padding_deg=0.0)
+    corner_radius = math.hypot(definition.width_deg / 2.0, definition.height_deg / 2.0)
+    assert box.ra_min_deg == 0.0
+    assert box.ra_max_deg == 360.0
+    assert box.dec_min_deg == pytest.approx(90.0 - corner_radius)
+    assert box.dec_max_deg == 90.0
 
 
 def test_chart_query_box_near_pole_uses_full_ra() -> None:

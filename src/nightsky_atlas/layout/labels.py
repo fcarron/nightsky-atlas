@@ -134,9 +134,15 @@ def build_dso_labels(
         ):
             continue
         anchor = anchors[dso.id]
-        curated = curated_common_name(dso) if dso_labels.common_name_display == "iconic" else None
-        include_common_name = bool(curated and curated.pocket_label)
-        if include_common_name:
+        curated = curated_common_name(dso)
+        include_common_name = bool(
+            curated
+            and (
+                curated.show_in_all_editions
+                or (dso_labels.common_name_display == "iconic" and curated.pocket_label)
+            )
+        )
+        if include_common_name and not curated.show_in_all_editions:
             radius = dso_labels.common_name_neighbor_radius_mm
             nearby = sum(
                 other_id != dso.id

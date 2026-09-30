@@ -18,6 +18,8 @@ class CuratedCommonName:
     object_id: str
     name: str
     pocket_label: bool
+    label_mode: str
+    show_in_all_editions: bool
     sources: tuple[str, ...]
 
 
@@ -35,8 +37,14 @@ def load_curated_common_names(
     for row in data["objects"]:
         object_id = canonical_designation(row["id"])
         name = row["name"].strip()
+        label_mode = row.get("label_mode", "designation_and_name")
         evidence = tuple(row["sources"])
-        if not object_id or not name or len(set(evidence)) < 2:
+        if (
+            not object_id
+            or not name
+            or len(set(evidence)) < 2
+            or label_mode not in {"designation_and_name", "name_only"}
+        ):
             raise ValueError(f"incomplete common-name entry: {row!r}")
         if any(source not in sources for source in evidence):
             raise ValueError(f"unknown common-name source for {object_id}")
@@ -47,6 +55,8 @@ def load_curated_common_names(
             object_id=object_id,
             name=name,
             pocket_label=bool(row.get("pocket_label", False)),
+            label_mode=label_mode,
+            show_in_all_editions=bool(row.get("show_in_all_editions", False)),
             sources=evidence,
         )
     return result

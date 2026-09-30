@@ -3,18 +3,23 @@ extends: standard.yaml
 id: pocket
 star:
   faint_magnitude: 7.5
-  label_magnitude_limit: 4.5
+  label_magnitude_limit: 5.5
   min_diameter_mm: 0.32
   max_diameter_mm: 5.0
   diameter_curve: [[0.0, 5.0], [1.0, 3.9], [2.0, 3.0], [3.0, 2.25], [4.0, 1.7], [5.0, 1.05], [6.0, 0.65], [7.0, 0.45], [7.5, 0.32]]
 double_stars:
   limits:
-    - {max_sep_arcsec: 30, max_secondary_mag: 10.5}
-    - {max_sep_arcsec: 200, max_secondary_mag: 8.5}
+    - {min_sep_arcsec: 1, max_sep_arcsec: 200, max_secondary_mag: 10.5}
+  delta_mag_limits: []
   marker_length_factor: 1.8
   min_marker_length_mm: 0.8
   marker_line_width_mm: 0.15
 constellation:
+  lines:
+    gray: 0.64
+    bold_width_mm: 0.18
+    normal_width_mm: 0.12
+    thin_width_mm: 0.08
   boundaries:
     enabled: true
     gray: 0.68
@@ -23,6 +28,8 @@ constellation:
     gap_mm: 0.85
 dso:
   galaxy: {min_angular_major_axis_arcmin: 20.0}
+  outline_line_width_mm: 0.14
+  outline_gray: 0.58
   globular_cluster: {min_angular_size_arcmin: 20.0, min_diameter_mm: 1.2}
   open_cluster: {min_angular_size_arcmin: 20.0, min_diameter_mm: 1.6}
   planetary_nebula: {min_angular_size_arcmin: 20.0, min_diameter_mm: 1.2}
@@ -32,17 +39,38 @@ dso:
 grid:
   ra_step_deg: 15.0
   dec_step_deg: 10.0
-  polar_ra_step_deg: 15.0
+  polar_ra_step_deg: 30.0
+  polar_ra_gray: 0.72
+  polar_ra_line_width_mm: 0.12
   label_ra_step_deg: 15.0
   label_dec_step_deg: 20.0
   label_polar_ra_step_deg: 30.0
   tick_ra_step_deg: 3.75
   tick_dec_step_deg: 5.0
   tick_polar_ra_step_deg: 30.0
+overview:
+  hemispheres_per_page: 2
+  radius_mm: 76.0
+  code_font_size_pt: 6.4
+  code_gray: 0.0
+  show_grid: false
+  grid_gray: 0.94
+  constellation_gray: 0.91
+  constellation_line_width_mm: 0.12
+  boundary_gray: 0.93
+  boundary_line_width_mm: 0.08
+  show_constellation_names: false
+  show_pole_label: false
+  footprint_gray: 0.28
+  footprint_line_width_mm: 0.25
+  show_stars: true
+  star_limit_magnitude: 4.0
+  star_gray: 0.18
 label:
+  font_family: "Lato"
   star_labels:
     proper_names: {core: true, standard: true, extended: false}
-    bayer: {enabled: true, max_magnitude: 4.5}
+    bayer: {enabled: true, max_magnitude: 5.5}
     flamsteed: {enabled: false, max_magnitude: 4.5}
     variables: {enabled: false, max_magnitude: 4.5}
     combined_names: true
@@ -54,4 +82,8 @@ label:
     common_name_max_neighbors: 5
   selection: {medium_density_budget: 0.08, low_density_budget: 0.025}
 furniture:
-  scale_bar: {length_deg: 10.0}
+  footer_layout: split
+  footer_code_font_size_pt: 11.0
+  footer_brand_font_size_pt: 6.0
+  footer_brand_gray: 0.6
+  scale_bar: {enabled: false, length_deg: 10.0}

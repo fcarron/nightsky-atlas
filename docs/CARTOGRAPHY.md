@@ -146,6 +146,35 @@ Furniture sits outside the chart frame and is deliberately quiet
 - **Title** is right-aligned in the footer. The magnitude legend sits at left;
   Deep's scale bar sits in the centre.
 
+## Pocket and Standard detail charts and galaxy labels
+
+Standard detail charts are framed on their parent page and tagged with their
+printed detail code. A detail chart may opt into `fallback_parent_galaxy_labels`:
+for that field, an ordinary galaxy number is omitted from the parent only when
+the same stable DSO ID has a placed detail label and that label has no hard
+layout violation. The galaxy symbol remains on both pages. Messier and Herschel
+400 labels are never transferred. It is enabled for Standard Virgo core
+(`SD053A`), southern Virgo (`SD053B`) and Fornax (`SD089`), and for the same
+three fields in Pocket (`PD025A`, `PD025B`, `PD032`). Pocket parent maps use
+the compact detail code as the frame tag; the detail page carries the full
+region name.
+
+Deep has nine close-ups: NGC 7331 with Stephan's Quintet (`DD105`), the
+Pleiades (`DD111`), the Coma core (`DD121`), the Markarian chain (`DD174`),
+M42 (`DD223`), the Fornax core (`DD328`), 30 Doradus (`DD405A`), the LMC bar
+(`DD405B`) and NGC 346 in the SMC (`DD415`). Their dedicated star profile plots
+stars to magnitude 11.5, while Deep main charts stay at magnitude 10.0.
+DD105 at 40 mm/degree uses a separate star-diameter curve, extending the
+Standard-to-Deep size progression by one magnitude; its stellar limit remains
+11.5. The other Deep detail charts retain their existing star sizes.
+Galaxy-label fallback is enabled only for the four galaxy fields. In addition
+to the stable-ID and hard-clean
+detail-label requirements above, a Deep parent galaxy must be at least
+magnitude 12.5 and have three other plotted galaxies within the style's
+15-mm label-density radius. Brighter galaxies, Messier and H400 objects keep
+their main-chart labels. Deep's printed scale bar halves its angular span as
+needed to fit the higher magnification of a detail chart.
+
 ## Overview maps and locator
 
 The atlas opens with two whole-sky **overview pages** (after the front matter):
@@ -188,4 +217,3 @@ so no chart label is placed under it.
 - The 118-chart count is geometry-driven.  A later optional pass may nudge
   individual chart centres by +-1-2 deg to move important regions away from page
   edges, but the draft deliberately uses a clean geometric grid only.
-

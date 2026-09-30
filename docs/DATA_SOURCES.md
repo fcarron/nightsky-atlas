@@ -54,6 +54,20 @@ source provenance
 
 The model must not assume every field exists.
 
+The OpenNGC importer applies source-specific semantic corrections while
+retaining the raw snapshot: IC 434 does not inherit the erroneous “Flame
+Nebula” common name (the Flame is NGC 2024); NGC 6334 is an H II/star-forming
+nebula rather than an SNR; NGC 3324 is the ionizing cluster within the
+separate Gum 31/IC 2599 nebula; B033 (Barnard 33) and C099 (Coalsack) are
+dark nebulae rather than unspecified objects. B033 carries `B 33` as a
+cross-identifier, allowing the Barnard source record to merge into that
+OpenNGC object. Supporting identifications:
+[ASSA Orion chart](https://assa.saao.ac.za/wp-content/uploads/sites/23/2017/10/concards_v154.pdf),
+[NASA on Horsehead/Barnard 33](https://science.nasa.gov/asset/hubble/the-horsehead-nebula/),
+[NASA on Coalsack/Caldwell 99](https://science.nasa.gov/mission/hubble/science/explore-the-night-sky/hubble-caldwell-catalog/caldwell-99/),
+[NASA on NGC 6334](https://science.nasa.gov/asset/webb/cats-paw-nebula-nircam-image/),
+[NASA on Gum 31](https://science.nasa.gov/missions/webb/new-visualization-from-nasas-webb-telescope-explores-cosmic-cliffs/).
+
 ### Curated DSO common names
 
 `data/fixtures/dso_common_names.json` is a small, explicit editorial mapping from
@@ -131,9 +145,13 @@ external catalogues.
 | Raw | `data/raw/tycho2/` (20 gzip parts, ~159 MB) |
 | Processed | `data/processed/stars/tycho2.sqlite` (2,539,913 stars, ~364 MB) |
 | Manifest | `data/processed/stars/tycho2.manifest.json` |
+| Completeness | approximately 99% to V=11.0 and 90% to V=11.5; see [ESO Tycho-2 catalogue properties](https://archive.eso.org/ASTROM/TYC-2/docs/htmfiles/property.html) |
 | License | **CC-BY-NC-3.0 IGO** (non-commercial) |
 | Transformations | Johnson `V = VT - 0.090 * (BT - VT)`, VT/BT fallback; ICRS mean J2000 position except `pflag=P` photocentre records, whose component-specific observed positions are propagated to J2000; observed-position fallback |
 | Import | `nightsky data fetch-stars` then `nightsky data import-stars` |
+
+The atlas stores Tycho-2 Johnson display magnitude as `V = VT - 0.090 * (BT - VT)`.
+Counts near V=11.5 are observed catalogue counts and are not completeness-corrected.
 
 The non-commercial restriction must be reviewed before any public or commercial
 distribution of a generated atlas. Tycho-2 is the primary catalogue; the
@@ -334,6 +352,10 @@ equivalent circular diameter, not a source-reported ellipse.
 | Lynds Bright Nebulae, `VII/9/catalog` | Lynds 1965, ApJS 12, 163; [VizieR VII/9](https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VII%2F9) | 1,125 | FK4 B1950; `Seq`, `RA1950`, `DE1950`, `Diam1/2`, `Area`, `Bright`, `Name`, plus computed J2000 |
 | van den Bergh reflection nebulae, `VII/21/catalog` | van den Bergh 1966, AJ 71, 990 (corrected VizieR table 2022-11-13); [VizieR VII/21](https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VII%2F21) | 158 | Original positions are absent; retains SIMBAD `_RA`, `_DE` J2000 positions, `Type`, `SurfBr`, radii and original Galactic fields |
 | Barnard dark nebulae, `VII/220A/barnard` | Barnard 1927; [VizieR VII/220A](https://vizier.cds.unistra.fr/viz-bin/VizieR-3?-source=VII%2F220A) | 349 | FK4 B1875; `Barn`, `RA1875`, `DE1875`, `Diam`, plus computed J2000 |
+
+The Sharpless importer classifies Sh 2-240 (Simeis 147) as an SNR rather than
+an H II region; its raw Sharpless row is preserved. The SNR identification is
+supported by [multiwavelength research on Simeis 147](https://arxiv.org/abs/2401.17312).
 
 The importer requests VizieR's computed J2000/ICRS coordinate columns explicitly
 for every table (`_RAJ2000`/`_DEJ2000` or `_RA.icrs`/`_DE.icrs`, as supplied by

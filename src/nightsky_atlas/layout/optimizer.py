@@ -1453,19 +1453,6 @@ def optimize_labels(
         cost_cache,
     )
     component_stats.update(hard_repair_stats)
-    cost_after, totals_after = _evaluate(
-        ordered,
-        placements,
-        anchors,
-        printable,
-        symbols,
-        sources,
-        stars,
-        style,
-        weights,
-        constellation_lines,
-    )
-
     optimized = tuple(
         label.with_placement(placements.get(label.id), hidden=placements.get(label.id) is None)
         for label in labels
@@ -1572,6 +1559,22 @@ def optimize_labels(
         )
     )
     optimized = tuple(auto_labels)
+    final_placements: dict[str, str | None] = {}
+    for label in optimized:
+        candidate = None if label.hidden else label.effective_candidate()
+        final_placements[label.id] = candidate.id if candidate is not None else None
+    cost_after, totals_after = _evaluate(
+        ordered,
+        final_placements,
+        anchors,
+        printable,
+        symbols,
+        sources,
+        stars,
+        style,
+        weights,
+        constellation_lines,
+    )
     placed_count = sum(1 for value in placements.values() if value is not None)
     final_placed_index = _build_placed_index(optimized, style)
     label_diagnostics = _label_diagnostics(
@@ -1701,7 +1704,7 @@ def _consider_dso_leader_fallbacks(
     transform: PageTransform,
     cost_cache: _CandidateScoreCache,
 ) -> tuple[Label, ...]:
-    """Replace a poor direct DSO association only when a legal short leader wins."""
+    """Compare direct and routed placements for poorly associated DSO labels."""
     config = style.label.leader_lines
     if not config.enabled:
         return labels
@@ -1761,8 +1764,19 @@ def _consider_dso_leader_fallbacks(
             continue
 
         current_cost = current_breakdown.total(weights)
-        best: tuple[float, float, str, Label, PageRect] | None = None
-        eligible: list[tuple[float, str, LabelCandidate]] = []
+        current_rejection = _candidate_rejection_reason(
+            label,
+            current,
+            placed_index,
+            symbols_index,
+            stars_index,
+            stars,
+            printable,
+            style,
+            furniture=furniture,
+            source_geometries=sources,
+        )
+        eligible: list[tuple[float, str, LabelCandidate, CostBreakdown]] = []
         for candidate in label.candidates:
             breakdown = _candidate_breakdown(
                 label,
@@ -1781,11 +1795,10 @@ def _consider_dso_leader_fallbacks(
             )
             if breakdown.label_source_facing_edge_distance_mm > config.dso_preferred_gap_mm:
                 continue
-            eligible.append((breakdown.total(weights), candidate.id, candidate))
+            eligible.append((breakdown.total(weights), candidate.id, candidate, breakdown))
 
-        # The route check is comparatively expensive, so try the best local
-        # source-facing positions first and stop at the existing bounded set.
-        for _direct_cost, _, candidate in sorted(eligible)[:48]:
+        options: list[tuple[float, int, float, str, Label]] = []
+        for direct_cost, _, candidate, breakdown in sorted(eligible)[:48]:
             rejection = _candidate_rejection_reason(
                 label,
                 candidate,
@@ -1798,6 +1811,14 @@ def _consider_dso_leader_fallbacks(
                 furniture=furniture,
                 source_geometries=sources,
             )
+            if rejection is None:
+                options.append((
+                    direct_cost,
+                    0,
+                    0.0,
+                    candidate.id,
+                    label.with_placement(candidate.id),
+                ))
             if rejection not in (None, "foreign_source_closer_than_owner"):
                 continue
             line_label = replace(
@@ -1818,44 +1839,35 @@ def _consider_dso_leader_fallbacks(
             )
             if route is None:
                 continue
-            breakdown = _candidate_breakdown(
-                label,
-                candidate,
-                anchors,
-                printable,
-                placed_index,
-                symbols_index,
-                sources,
-                stars_index,
-                stars,
-                style,
-                weights,
-                constellation_lines,
-                cost_cache,
-            )
             ownership_cost = _weighted_ownership_cost(breakdown, weights)
             leader_cost = (
-                breakdown.total(weights)
+                direct_cost
                 - ownership_cost * (1.0 - config.dso_association_residual_factor)
                 + config.dso_length_weight * _route_length(route) ** 2
             )
-            if leader_cost >= current_cost - 0.25:
-                continue
-            key = (
+            options.append((
                 leader_cost,
+                1,
                 _route_length(route),
                 candidate.id,
                 line_label,
-                _collision_bounds(label, candidate, style),
-            )
-            if best is None or key[:3] < best[:3]:
-                best = key
+            ))
 
-        if best is not None:
-            _, _, _, output[position], selected_bounds = best
-            placed_index.set(label.id, selected_bounds, selected_bounds)
-        else:
-            bounds = _collision_bounds(label, current, style)
+        for option_cost, _, _, _, replacement in sorted(options):
+            if current_rejection is None and option_cost >= current_cost - 0.25:
+                break
+            proposed = list(output)
+            proposed[position] = replacement
+            enabled_count = sum(item.leader_line for item in proposed)
+            if len(resolve_leader_lines(
+                tuple(proposed), scene, transform, style, context=routing_context
+            )) != enabled_count:
+                continue
+            output[position] = replacement
+            break
+        selected = output[position].effective_candidate()
+        if selected is not None:
+            bounds = _collision_bounds(label, selected, style)
             placed_index.set(label.id, bounds, bounds)
     result = tuple(output)
     enabled = sum(label.leader_line for label in result)

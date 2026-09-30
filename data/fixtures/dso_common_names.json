@@ -13,6 +13,7 @@
     "nasa_pelican": "https://science.nasa.gov/image-article/apod/apod-2026-september-7-the-pelican-nebula-in-gas-dust-and-stars/",
     "skyandtelescope_coathanger": "https://skyandtelescope.org/astronomy-resources/stargazing-basics/learn-the-sky/stargazing-simplified/",
     "skyandtelescope_south": "https://skyandtelescope.org/stargazing-and-observing/beginners-guide-to-the-southern-hemisphere-sky/",
+    "esa_magellanic": "https://www.esa.int/ESA_Multimedia/Images/2021/11/Dwarf_galaxies_around_the_Milky_Way",
     "astronomy_eta_carinae": "https://www.astronomy.com/science/the-eta-carinae-nebula-spiral-galaxy-m95-and-the-gamma-leonis-group/",
     "seds_messier": "https://messier.seds.org/"
   },
@@ -61,6 +62,8 @@
     {"id":"NGC3372","name":"Eta Carinae Nebula","pocket_label":true,"sources":["astronomy_eta_carinae","openngc"]},
     {"id":"NGC4755","name":"Jewel Box Cluster","pocket_label":true,"sources":["nasa_caldwell","skyandtelescope_south"]},
     {"id":"NGC2070","name":"Tarantula Nebula","pocket_label":true,"sources":["nasa_tarantula","esa_tarantula"]},
+    {"id":"ESO056-115","name":"Large Magellanic Cloud","pocket_label":true,"label_mode":"name_only","show_in_all_editions":true,"sources":["esa_magellanic","openngc"]},
+    {"id":"NGC0292","name":"Small Magellanic Cloud","pocket_label":true,"label_mode":"name_only","show_in_all_editions":true,"sources":["esa_magellanic","openngc"]},
     {"id":"NGC0104","name":"47 Tucanae","pocket_label":true,"sources":["skyandtelescope_south","openngc"]},
     {"id":"NGC5139","name":"Omega Centauri","pocket_label":true,"sources":["skyandtelescope_south","openngc"]},
     {"id":"NGC5128","name":"Centaurus A","pocket_label":true,"sources":["skyandtelescope_south","openngc"]},

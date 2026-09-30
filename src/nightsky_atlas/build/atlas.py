@@ -14,7 +14,12 @@ import os
 import subprocess
 import tempfile
 import time
+from collections import deque
+from collections.abc import Iterator
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
+from itertools import islice
+from multiprocessing import get_context
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +27,8 @@ import cairo
 
 from nightsky_atlas.atlas.config import (
     AtlasConfig,
+    DetailChartConfig,
+    EditionConfig,
     StyleConfig,
     load_atlas_config,
     load_style_config,
@@ -39,6 +46,8 @@ from nightsky_atlas.atlas.tiling import (
 from nightsky_atlas.build.chart import (
     DEFAULT_DOUBLE_STAR_PATH,
     OPENNGC_OUTLINE_DIR,
+    ChartContext,
+    ChartInputs,
     build_chart_context,
     default_dso_path,
     load_chart_inputs,
@@ -52,18 +61,21 @@ from nightsky_atlas.build.preflight import (
 )
 from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.manifest import file_sha256
-from nightsky_atlas.catalog.models import Star
+from nightsky_atlas.catalog.models import DsoType, Star
 from nightsky_atlas.catalog.observing_lists import (
     DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
 )
+from nightsky_atlas.catalog.priority import HERSCHEL_400, messier_id
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
 )
 from nightsky_atlas.catalog.star_names import (
+    StarName,
     load_star_names,
 )
 from nightsky_atlas.catalog.store import QueryBox, StarStore
+from nightsky_atlas.catalog.systems import StarSystem
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import (
@@ -71,6 +83,7 @@ from nightsky_atlas.chart.presentation import (
     presentation_from_edition,
 )
 from nightsky_atlas.layout.labels import build_labels
+from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.optimizer import layout_cost, layout_hash, optimize_labels
 from nightsky_atlas.layout.overrides import (
     OverridesLibrary,
@@ -78,17 +91,21 @@ from nightsky_atlas.layout.overrides import (
     load_override_library,
 )
 from nightsky_atlas.layout.selection import select_labels
-from nightsky_atlas.layout.validation import validate_layout
+from nightsky_atlas.layout.validation import ValidationResult, validate_layout
 from nightsky_atlas.render.atlas_index import draw_atlas_index_pages
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
 from nightsky_atlas.render.chart_directory import draw_chart_directory_pages
-from nightsky_atlas.render.detail_markers import build_detail_marker
-from nightsky_atlas.render.front_matter import draw_field_guide
+from nightsky_atlas.render.detail_markers import DetailMapMarker, build_detail_marker
+from nightsky_atlas.render.front_matter import draw_field_guide, draw_introduction
 from nightsky_atlas.render.furniture import furniture_obstacles
-from nightsky_atlas.render.overview import LocatorInset, draw_overview_page
+from nightsky_atlas.render.overview import (
+    LocatorInset,
+    draw_overview_page,
+    draw_overview_spread_page,
+)
 from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.render.text import draw_text
-from nightsky_atlas.scene.models import SceneDso
+from nightsky_atlas.scene.models import ChartScene, SceneDso
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = [
@@ -113,6 +130,16 @@ def _style_with_star_profile(base_style: StyleConfig, star_profile: StyleConfig)
 
 
 @dataclass(frozen=True, slots=True)
+class _PreparedDetail:
+    context: ChartContext
+    style: StyleConfig
+    labels: tuple[Label, ...]
+    cost_before: float
+    cost_after: float
+    validation: ValidationResult
+
+
+@dataclass(frozen=True, slots=True)
 class ChartPageResult:
     """Per-page diagnostics for an atlas build."""
 
@@ -129,6 +156,7 @@ class ChartPageResult:
     cost_after: float
     layout_hash: str
     neighbours: tuple[tuple[str, str], ...] = ()
+    fallback_label_ids: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         primary_neighbours: dict[str, str] = {}
@@ -147,6 +175,10 @@ class ChartPageResult:
             "cost_before": self.cost_before,
             "cost_after": self.cost_after,
             "layout_hash": self.layout_hash,
+            "fallback_label_ids": {
+                code: list(label_ids) for code, label_ids in self.fallback_label_ids
+            },
+            "fallback_label_count": sum(len(label_ids) for _, label_ids in self.fallback_label_ids),
             "neighbours": primary_neighbours,
             "navigation": [
                 {"direction": direction, "chart_id": neighbour}
@@ -171,6 +203,298 @@ class AtlasBuildResult:
     @property
     def total_hard_issues(self) -> int:
         return sum(page.hard_issues for page in self.pages)
+
+
+@dataclass(frozen=True, slots=True)
+class _MainChartShared:
+    atlas_path: str | Path
+    style_path: str | Path
+    star_store: str | Path | None
+    stars_csv: str | Path | None
+    double_stars_path: str | Path | bool | None
+    inputs: ChartInputs
+    star_systems: tuple[StarSystem, ...]
+    star_names: dict[int, StarName]
+    library: OverridesLibrary | None
+    detail_charts: tuple[DetailChartConfig, ...]
+    fallback_ids_by_detail: dict[str, frozenset[str]]
+    edition: EditionConfig
+    overviews: dict[str, OverviewMap]
+    variable_star_hips: frozenset[int]
+    outroot: Path
+    optimize: bool
+    render_png: bool
+    png_dpi: float
+
+
+@dataclass(frozen=True, slots=True)
+class _BuiltMainChart:
+    scene: ChartScene
+    transform: PageTransform
+    style: StyleConfig
+    labels: tuple[Label, ...]
+    presentation: ChartPresentation
+    locator: LocatorInset | None
+    detail_markers: tuple[DetailMapMarker, ...]
+    page_result: ChartPageResult
+    observing_list_names: tuple[str, ...]
+    forced_lists: tuple[str, ...]
+    applied_overrides: bool
+    timings: tuple[float, float, float, float, float, float, float]
+
+
+_CHART_WORKER_SHARED: _MainChartShared | None = None
+
+
+def _init_chart_worker(shared: _MainChartShared) -> None:
+    global _CHART_WORKER_SHARED
+    _CHART_WORKER_SHARED = shared
+
+
+def _build_chart_in_worker(definition: ChartDefinition) -> _BuiltMainChart:
+    if _CHART_WORKER_SHARED is None:
+        raise RuntimeError("chart worker was not initialized")
+    return _build_main_chart(definition, _CHART_WORKER_SHARED)
+
+
+def _iter_parallel_charts(
+    pool: ProcessPoolExecutor,
+    charts: tuple[ChartDefinition, ...],
+    jobs: int,
+) -> Iterator[_BuiltMainChart]:
+    definitions = iter(charts)
+    pending = deque(
+        pool.submit(_build_chart_in_worker, definition)
+        for definition in islice(definitions, 2 * jobs)
+    )
+    while pending:
+        built = pending.popleft().result()
+        next_definition = next(definitions, None)
+        if next_definition is not None:
+            pending.append(pool.submit(_build_chart_in_worker, next_definition))
+        yield built
+
+
+def _build_main_chart(
+    definition: ChartDefinition,
+    shared: _MainChartShared,
+    progress: Progress | None = None,
+) -> _BuiltMainChart:
+    chart_start = time.perf_counter()
+    stage_start = chart_start
+    chart_context = build_chart_context(
+        atlas_path=shared.atlas_path,
+        style_path=shared.style_path,
+        definition=definition,
+        star_store=shared.star_store,
+        stars_csv=shared.stars_csv,
+        double_stars_path=shared.double_stars_path,
+        star_systems=shared.star_systems,
+        progress=progress,
+        inputs=shared.inputs,
+    )
+    detail_markers = tuple(
+        build_detail_marker(detail, definition, chart_context.transform)
+        for detail in shared.detail_charts
+        if detail.parent_chart_id == definition.id
+    )
+    context_s = time.perf_counter() - stage_start
+    stage_start = time.perf_counter()
+    labels = build_labels(
+        chart_context.scene, chart_context.transform, chart_context.style, shared.star_names
+    )
+    labels_s = time.perf_counter() - stage_start
+    chart_overrides = shared.library.for_chart(definition.id) if shared.library else None
+    protected_ids = (
+        frozenset(
+            label_id
+            for label_id, spec in chart_overrides.labels.items()
+            if spec.hidden is not True
+        )
+        if chart_overrides is not None
+        else frozenset()
+    )
+    parent_galaxies = tuple(
+        scene_dso
+        for scene_dso in chart_context.scene.deep_sky_objects
+        if scene_dso.dso.object_type == DsoType.GALAXY
+        and scene_dso.symbol_visible
+    )
+    parent_ordinary_galaxies = {
+        scene_dso.dso.id: scene_dso
+        for scene_dso in parent_galaxies
+        if messier_id(scene_dso.dso) is None
+        and HERSCHEL_400
+        not in (
+            scene_dso.metadata.list_memberships if scene_dso.metadata is not None else ()
+        )
+    }
+    fallback_label_ids: list[tuple[str, tuple[str, ...]]] = []
+    for detail in shared.detail_charts:
+        if detail.parent_chart_id != definition.id or not detail.fallback_parent_galaxy_labels:
+            continue
+        detail_ids = (
+            shared.fallback_ids_by_detail.get(detail.id, frozenset())
+            & parent_ordinary_galaxies.keys()
+        )
+        if detail.fallback_parent_min_magnitude is not None:
+            detail_ids = {
+                item
+                for item in detail_ids
+                if parent_ordinary_galaxies[item].dso.magnitude is not None
+                and parent_ordinary_galaxies[item].dso.magnitude
+                >= detail.fallback_parent_min_magnitude
+            }
+        if detail.fallback_parent_min_nearby_galaxies:
+            galaxy_positions = {
+                scene_dso.dso.id: chart_context.transform.to_page(scene_dso.chart_point)
+                for scene_dso in parent_galaxies
+            }
+            radius_sq = chart_context.style.label.selection.density_radius_mm**2
+            detail_ids = {
+                item
+                for item in detail_ids
+                if sum(
+                    other_id != item
+                    and (galaxy_positions[item].x_mm - position.x_mm) ** 2
+                    + (galaxy_positions[item].y_mm - position.y_mm) ** 2
+                    <= radius_sq
+                    for other_id, position in galaxy_positions.items()
+                )
+                >= detail.fallback_parent_min_nearby_galaxies
+            }
+        available_parent_label_ids = {label.id for label in labels}
+        detail_ids = {
+            item for item in detail_ids if f"label:dso:{item}" in available_parent_label_ids
+        }
+        if detail_ids:
+            fallback_label_ids.append(
+                (detail.code, tuple(sorted(f"label:dso:{item}" for item in detail_ids)))
+            )
+    omitted_label_ids = {
+        label_id
+        for _, label_ids in fallback_label_ids
+        for label_id in label_ids
+        if label_id not in protected_ids
+    }
+    if omitted_label_ids:
+        labels = tuple(label for label in labels if label.id not in omitted_label_ids)
+    labels = select_labels(
+        labels,
+        chart_context.scene,
+        chart_context.transform,
+        chart_context.style,
+        protected_ids=protected_ids,
+    )
+    if chart_overrides is not None:
+        labels = apply_overrides(labels, chart_overrides)
+    presentation = presentation_from_edition(definition, shared.edition)
+    locator: LocatorInset | None = None
+    if shared.inputs.style.locator.enabled and shared.overviews:
+        locator = LocatorInset(
+            overview=shared.overviews[hemisphere_for(definition.center_dec_deg)],
+            current_chart_id=definition.id,
+            neighbour_ids=frozenset(neighbour for _, neighbour in definition.neighbours),
+        )
+    furniture = furniture_obstacles(
+        chart_context.transform, definition, chart_context.style, presentation
+    )
+    optimize_s = 0.0
+    cost_s = 0.0
+    if shared.optimize:
+        stage_start = time.perf_counter()
+        optimized = optimize_labels(
+            labels,
+            chart_context.scene,
+            chart_context.transform,
+            chart_context.style,
+            furniture=furniture,
+        )
+        labels = optimized.labels
+        optimize_s = time.perf_counter() - stage_start
+        cost_before = optimized.cost_before
+        cost_after = optimized.cost_after
+    else:
+        stage_start = time.perf_counter()
+        cost_before = layout_cost(
+            labels, chart_context.scene, chart_context.transform, chart_context.style
+        )[0]
+        cost_after = cost_before
+        cost_s = time.perf_counter() - stage_start
+    stage_start = time.perf_counter()
+    validation = validate_layout(
+        labels,
+        chart_context.scene,
+        chart_context.transform,
+        chart_context.style,
+        furniture=furniture,
+    )
+    validate_s = time.perf_counter() - stage_start
+    stage_start = time.perf_counter()
+    page_dir = shared.outroot / "charts" / definition.id
+    render_chart(
+        chart_context.scene,
+        chart_context.transform,
+        chart_context.style,
+        labels=labels,
+        presentation=presentation,
+        locator=locator,
+        detail_markers=detail_markers,
+        variable_star_hips=shared.variable_star_hips,
+        pdf_path=page_dir / "chart.pdf",
+        png_path=page_dir / "preview.png" if shared.render_png else None,
+        png_dpi=shared.png_dpi,
+    )
+    render_s = time.perf_counter() - stage_start
+    placed = sum(1 for label in labels if not label.hidden and label.candidates)
+    page_result = ChartPageResult(
+        chart_id=definition.id,
+        star_count=chart_context.scene.star_count,
+        dso_count=chart_context.scene.dso_count,
+        star_system_count=chart_context.scene.star_system_count,
+        label_count=len(labels),
+        placed_count=placed,
+        hidden_count=len(labels) - placed,
+        overrides_applied=len(chart_overrides) if chart_overrides is not None else 0,
+        hard_issues=len(validation.issues),
+        cost_before=cost_before,
+        cost_after=cost_after,
+        layout_hash=layout_hash(labels),
+        neighbours=definition.neighbours,
+        fallback_label_ids=tuple(
+            (
+                code,
+                tuple(label_id for label_id in label_ids if label_id in omitted_label_ids),
+            )
+            for code, label_ids in fallback_label_ids
+        ),
+    )
+    return _BuiltMainChart(
+        scene=chart_context.scene,
+        transform=chart_context.transform,
+        style=chart_context.style,
+        labels=labels,
+        presentation=presentation,
+        locator=locator,
+        detail_markers=detail_markers,
+        page_result=page_result,
+        observing_list_names=tuple(chart_context.observing_lists or ()),
+        forced_lists=(
+            tuple(sorted(chart_context.selection_policy.forced_lists))
+            if chart_context.selection_policy is not None
+            else ()
+        ),
+        applied_overrides=chart_overrides is not None,
+        timings=(
+            time.perf_counter() - chart_start,
+            context_s,
+            labels_s,
+            cost_s,
+            optimize_s,
+            validate_s,
+            render_s,
+        ),
+    )
 
 
 def _git_commit() -> str | None:
@@ -252,7 +576,7 @@ def _draw_front_matter_pages(
     geometry_inputs: dict[str, str | None],
     geometry_catalogues: dict[str, list[str]],
 ) -> int:
-    """Write the compact field guide and provenance page."""
+    """Write the introduction, field guide and provenance page."""
     page = atlas.page.to_geometry()
     family = style.label.font_family
     mm_per_degree = PageTransform(
@@ -260,6 +584,9 @@ def _draw_front_matter_pages(
         page,
         scale_mm_per_degree=atlas.mm_per_degree,
     ).mm_per_deg
+    draw_introduction(cr, atlas, style)
+    surface.show_page()
+
     draw_field_guide(cr, atlas, style, chart_count, mm_per_degree)
     surface.show_page()
 
@@ -341,7 +668,7 @@ def _draw_front_matter_pages(
         7.0,
     )
     surface.show_page()
-    return 2
+    return 3
 
 
 def _build_atlas_impl(
@@ -364,6 +691,7 @@ def _build_atlas_impl(
     optimize: bool = True,
     render_png: bool = True,
     png_dpi: float = 150.0,
+    jobs: int = 1,
     write_front_matter: bool = True,
     write_overviews: bool = True,
     write_draft_report: bool = True,
@@ -396,6 +724,8 @@ def _build_atlas_impl(
             raise ValueError(f"unknown chart IDs: {', '.join(sorted(unknown))}")
     if limit is not None and limit <= 0:
         raise ValueError("limit must be positive")
+    if jobs <= 0:
+        raise ValueError("jobs must be positive")
     charts = all_charts
     if chart_ids is not None:
         wanted = set(chart_ids)
@@ -536,11 +866,119 @@ def _build_atlas_impl(
         )
         star_systems = load_star_systems(double_stars_path)
 
+    prepared_details: dict[str, _PreparedDetail] = {}
+    fallback_ids_by_detail: dict[str, frozenset[str]] = {}
+    for detail in detail_charts:
+        if not detail.fallback_parent_galaxy_labels:
+            continue
+        definition = detail.to_definition(atlas_id=atlas.id)
+        stellar_limit_magnitude, detail_style = detail_star_profiles[detail.star_profile]
+        detail_context = build_chart_context(
+            atlas_path=atlas_path,
+            style_path=style_path,
+            definition=definition,
+            star_store=star_store,
+            stars_csv=stars_csv,
+            double_stars_path=double_stars_path,
+            star_systems=star_systems,
+            magnitude_limit=stellar_limit_magnitude,
+            scale_mm_per_degree=detail.mm_per_degree,
+            progress=progress,
+            inputs=inputs,
+        )
+        detail_labels = build_labels(
+            detail_context.scene,
+            detail_context.transform,
+            detail_style,
+            star_names,
+        )
+        detail_labels = select_labels(
+            detail_labels,
+            detail_context.scene,
+            detail_context.transform,
+            detail_style,
+        )
+        detail_overrides = library.for_chart(definition.id) if library is not None else None
+        if detail_overrides is not None:
+            detail_labels = apply_overrides(detail_labels, detail_overrides)
+            applied_chart_ids.add(definition.id)
+        detail_presentation = ChartPresentation(
+            edition_name=f"Detail · {detail.name}",
+            edition_code="SD",
+            chart_index=None,
+            internal_chart_id=detail.code,
+        )
+        detail_furniture = furniture_obstacles(
+            detail_context.transform,
+            definition,
+            detail_style,
+            detail_presentation,
+        )
+        if optimize:
+            optimized = optimize_labels(
+                detail_labels,
+                detail_context.scene,
+                detail_context.transform,
+                detail_style,
+                furniture=detail_furniture,
+            )
+            detail_labels = optimized.labels
+            detail_cost_before = optimized.cost_before
+            detail_cost_after = optimized.cost_after
+        else:
+            detail_cost_before = layout_cost(
+                detail_labels,
+                detail_context.scene,
+                detail_context.transform,
+                detail_style,
+            )[0]
+            detail_cost_after = detail_cost_before
+        detail_validation = validate_layout(
+            detail_labels,
+            detail_context.scene,
+            detail_context.transform,
+            detail_style,
+            furniture=detail_furniture,
+        )
+        prepared_details[detail.id] = _PreparedDetail(
+            context=detail_context,
+            style=detail_style,
+            labels=detail_labels,
+            cost_before=detail_cost_before,
+            cost_after=detail_cost_after,
+            validation=detail_validation,
+        )
+        placed_label_ids = {
+            label.id
+            for label in detail_labels
+            if not label.hidden and label.effective_candidate() is not None
+        }
+        problematic_detail_labels = {
+            element_id
+            for issue in detail_validation.issues
+            for element_id in issue.element_ids
+            if element_id.startswith("label:dso:")
+        }
+        fallback_ids_by_detail[detail.id] = frozenset(
+            scene_dso.dso.id
+            for scene_dso in detail_context.scene.deep_sky_objects
+            if scene_dso.dso.object_type == DsoType.GALAXY
+            and scene_dso.symbol_visible
+            and messier_id(scene_dso.dso) is None
+            and HERSCHEL_400
+            not in (
+                scene_dso.metadata.list_memberships if scene_dso.metadata is not None else ()
+            )
+            and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
+            and f"label:dso:{scene_dso.dso.id}" not in problematic_detail_labels
+        )
+
     page = atlas.page.to_geometry()
     outroot = Path(outdir) / atlas.id
     outroot.mkdir(parents=True, exist_ok=True)
     combined_pdf = outroot / "atlas.pdf"
-    progress.info(f"atlas {atlas.id!r}: {len(charts)} charts -> {outroot}")
+    effective_jobs = min(jobs, len(charts))
+    progress.info(f"atlas {atlas.id!r}: {len(charts)} charts, {effective_jobs} jobs -> {outroot}")
 
     surface = cairo.PDFSurface(str(combined_pdf), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm))
     context = cairo.Context(surface)
@@ -577,16 +1015,17 @@ def _build_atlas_impl(
     chart_directory_pages = 0
     if write_front_matter:
         chart_directory = build_chart_directory(charts, edition)
-        with progress.step("chart directory", detail=True):
-            chart_directory_pages = draw_chart_directory_pages(
-                context,
-                surface,
-                chart_directory,
-                page,
-                style,
-                edition,
-                pdf_navigation,
-            )
+        if atlas.chart_directory_position == "front":
+            with progress.step("chart directory", detail=True):
+                chart_directory_pages = draw_chart_directory_pages(
+                    context,
+                    surface,
+                    chart_directory,
+                    page,
+                    style,
+                    edition,
+                    pdf_navigation,
+                )
 
     overviews: dict[str, OverviewMap] = {}
     overview_page_info: list[dict[str, Any]] = []
@@ -610,18 +1049,39 @@ def _build_atlas_impl(
                 )
     if write_overview_pages:
         with progress.step("overview pages", detail=True):
-            for hemisphere in ("north", "south"):
-                overview = overviews[hemisphere]
-                draw_overview_page(context, overview, page, style, pdf_navigation)
+            if style.overview.hemispheres_per_page == 2:
+                draw_overview_spread_page(
+                    context,
+                    overviews["north"],
+                    overviews["south"],
+                    page,
+                    style,
+                    pdf_navigation,
+                )
                 surface.show_page()
                 overview_page_info.append(
                     {
-                        "hemisphere": hemisphere,
-                        "title": overview.title,
-                        "chart_count": overview.chart_count,
-                        "star_count": len(overview.stars),
+                        "hemisphere": "both",
+                        "title": "Northern and southern sky",
+                        "chart_count": overviews["north"].chart_count
+                        + overviews["south"].chart_count,
+                        "star_count": len(overviews["north"].stars)
+                        + len(overviews["south"].stars),
                     }
                 )
+            else:
+                for hemisphere in ("north", "south"):
+                    overview = overviews[hemisphere]
+                    draw_overview_page(context, overview, page, style, pdf_navigation)
+                    surface.show_page()
+                    overview_page_info.append(
+                        {
+                            "hemisphere": hemisphere,
+                            "title": overview.title,
+                            "chart_count": overview.chart_count,
+                            "star_count": len(overview.stars),
+                        }
+                    )
 
     results: list[ChartPageResult] = []
     index_dsos: dict[str, tuple[SceneDso, ...]] = {}
@@ -634,183 +1094,102 @@ def _build_atlas_impl(
     }
     observing_lists: dict[str, object] = {}
     forced_lists: list[str] = []
-    chart_total = len(charts)
-    for index, definition in enumerate(charts, start=1):
-        chart_start = time.perf_counter()
-        progress.detail(f"[{index}/{chart_total}] {definition.id}: start")
-        stage_start = time.perf_counter()
-        chart_context = build_chart_context(
-            atlas_path=atlas_path,
-            style_path=style_path,
-            definition=definition,
-            star_store=star_store,
-            stars_csv=stars_csv,
-            double_stars_path=double_stars_path,
-            star_systems=star_systems,
-            progress=progress,
-            inputs=inputs,
+    shared = _MainChartShared(
+        atlas_path=atlas_path,
+        style_path=style_path,
+        star_store=star_store,
+        stars_csv=stars_csv,
+        double_stars_path=double_stars_path,
+        inputs=inputs,
+        star_systems=tuple(star_systems),
+        star_names=star_names,
+        library=library,
+        detail_charts=detail_charts,
+        fallback_ids_by_detail=fallback_ids_by_detail,
+        edition=edition,
+        overviews=overviews if style.locator.enabled else {},
+        variable_star_hips=variable_star_hips,
+        outroot=outroot,
+        optimize=optimize,
+        render_png=render_png,
+        png_dpi=png_dpi,
+    )
+    pool = (
+        ProcessPoolExecutor(
+            max_workers=effective_jobs,
+            mp_context=get_context("spawn"),
+            initializer=_init_chart_worker,
+            initargs=(shared,),
         )
-        detail_markers = tuple(
-            build_detail_marker(detail, definition, chart_context.transform)
-            for detail in detail_charts
-            if detail.parent_chart_id == definition.id
+        if effective_jobs > 1
+        else None
+    )
+    try:
+        built_pages = (
+            _iter_parallel_charts(pool, charts, effective_jobs)
+            if pool is not None
+            else (_build_main_chart(definition, shared, progress) for definition in charts)
         )
-        context_s = time.perf_counter() - stage_start
-        stage_start = time.perf_counter()
-        labels = build_labels(
-            chart_context.scene, chart_context.transform, chart_context.style, star_names
-        )
-        labels_s = time.perf_counter() - stage_start
-        chart_overrides = library.for_chart(definition.id) if library is not None else None
-        if chart_context.observing_lists:
-            observing_lists = chart_context.observing_lists
-        if chart_context.selection_policy is not None:
-            forced_lists = sorted(chart_context.selection_policy.forced_lists)
-        protected_ids = (
-            frozenset(
-                label_id
-                for label_id, spec in chart_overrides.labels.items()
-                if spec.hidden is not True
+        for index, (definition, built) in enumerate(
+            zip(charts, built_pages, strict=True), start=1
+        ):
+            progress.detail(f"[{index}/{len(charts)}] {definition.id}: compose")
+            if built.applied_overrides:
+                applied_chart_ids.add(definition.id)
+            if built.observing_list_names:
+                observing_lists = dict.fromkeys(built.observing_list_names)
+            if built.forced_lists:
+                forced_lists = list(built.forced_lists)
+            index_dsos[definition.id] = tuple(built.scene.deep_sky_objects)
+            index_stars[definition.id] = tuple(item.star for item in built.scene.stars)
+            index_constellations[definition.id] = frozenset(
+                boundary_constellations[segment.source_id]
+                for segment in built.scene.constellation_boundaries
+                if segment.source_id in boundary_constellations
             )
-            if chart_overrides is not None
-            else frozenset()
-        )
-        labels = select_labels(
-            labels,
-            chart_context.scene,
-            chart_context.transform,
-            chart_context.style,
-            protected_ids=protected_ids,
-        )
-        if chart_overrides is not None:
-            labels = apply_overrides(labels, chart_overrides)
-            applied_chart_ids.add(definition.id)
-        overrides_applied = len(chart_overrides) if chart_overrides is not None else 0
-        presentation = presentation_from_edition(definition, edition)
-        locator: LocatorInset | None = None
-        if style.locator.enabled and overviews:
-            locator = LocatorInset(
-                overview=overviews[hemisphere_for(definition.center_dec_deg)],
-                current_chart_id=definition.id,
-                neighbour_ids=frozenset(neighbour for _, neighbour in definition.neighbours),
-            )
-        furniture = furniture_obstacles(
-            chart_context.transform, definition, chart_context.style, presentation
-        )
-        optimize_s = 0.0
-        cost_s = 0.0
-        if optimize:
             stage_start = time.perf_counter()
-            optimized = optimize_labels(
-                labels,
-                chart_context.scene,
-                chart_context.transform,
-                chart_context.style,
-                furniture=furniture,
+            draw_chart_page(
+                context,
+                built.scene,
+                built.transform,
+                built.style,
+                labels=built.labels,
+                presentation=built.presentation,
+                locator=built.locator,
+                pdf_navigation=pdf_navigation,
+                detail_markers=built.detail_markers,
+                variable_star_hips=variable_star_hips,
             )
-            labels = optimized.labels
-            optimize_s = time.perf_counter() - stage_start
-            cost_before = optimized.cost_before
-            cost_after = optimized.cost_after
-        else:
-            stage_start = time.perf_counter()
-            cost_before = layout_cost(
-                labels, chart_context.scene, chart_context.transform, chart_context.style
-            )[0]
-            cost_after = cost_before
-            cost_s = time.perf_counter() - stage_start
-        stage_start = time.perf_counter()
-        validation = validate_layout(
-            labels,
-            chart_context.scene,
-            chart_context.transform,
-            chart_context.style,
-            furniture=furniture,
-        )
-        validate_s = time.perf_counter() - stage_start
-
-        # The index consumes the same clipped scene that is rendered.  Boundary
-        # source IDs make constellation coverage a real chart-footprint result.
-        index_dsos[definition.id] = tuple(chart_context.scene.deep_sky_objects)
-        index_stars[definition.id] = tuple(item.star for item in chart_context.scene.stars)
-        index_constellations[definition.id] = frozenset(
-            boundary_constellations[segment.source_id]
-            for segment in chart_context.scene.constellation_boundaries
-            if segment.source_id in boundary_constellations
-        )
-
-        page_dir = outroot / "charts" / definition.id
-        stage_start = time.perf_counter()
-        render_chart(
-            chart_context.scene,
-            chart_context.transform,
-            chart_context.style,
-            labels=labels,
-            presentation=presentation,
-            locator=locator,
-            detail_markers=detail_markers,
-            variable_star_hips=variable_star_hips,
-            pdf_path=page_dir / "chart.pdf",
-            png_path=page_dir / "preview.png" if render_png else None,
-            png_dpi=png_dpi,
-        )
-        render_s = time.perf_counter() - stage_start
-        stage_start = time.perf_counter()
-        draw_chart_page(
-            context,
-            chart_context.scene,
-            chart_context.transform,
-            chart_context.style,
-            labels=labels,
-            presentation=presentation,
-            locator=locator,
-            pdf_navigation=pdf_navigation,
-            detail_markers=detail_markers,
-            variable_star_hips=variable_star_hips,
-        )
-        pdf_navigation.mark_chart_page(surface, context, presentation.chart_code)
-        pdf_navigation.add_outline(
-            surface,
-            outline_root,
-            presentation.chart_code,
-            presentation.chart_code,
-        )
-        surface.show_page()
-        compose_s = time.perf_counter() - stage_start
-
-        placed = sum(1 for label in labels if not label.hidden and label.candidates)
-        total_s = time.perf_counter() - chart_start
-        progress.info(
-            f"[{index}/{chart_total}] {definition.id}: "
-            f"{chart_context.scene.star_count} stars, "
-            f"{chart_context.scene.dso_count} DSOs, "
-            f"{chart_context.scene.star_system_count} systems, "
-            f"{placed}/{len(labels)} labels, "
-            f"{len(validation.issues)} hard issues ({total_s:.2f}s)"
-        )
-        progress.detail(
-            f"context {context_s:.2f}s | labels {labels_s:.2f}s | "
-            f"cost {cost_s:.2f}s | optimize {optimize_s:.2f}s | "
-            f"validate {validate_s:.2f}s | render {render_s:.2f}s | "
-            f"compose {compose_s:.2f}s"
-        )
-        results.append(
-            ChartPageResult(
-                chart_id=definition.id,
-                star_count=chart_context.scene.star_count,
-                dso_count=chart_context.scene.dso_count,
-                star_system_count=chart_context.scene.star_system_count,
-                label_count=len(labels),
-                placed_count=placed,
-                hidden_count=len(labels) - placed,
-                overrides_applied=overrides_applied,
-                hard_issues=len(validation.issues),
-                cost_before=cost_before,
-                cost_after=cost_after,
-                layout_hash=layout_hash(labels),
-                neighbours=definition.neighbours,
+            pdf_navigation.mark_chart_page(surface, context, built.presentation.chart_code)
+            pdf_navigation.add_outline(
+                surface,
+                outline_root,
+                built.presentation.chart_code,
+                built.presentation.chart_code,
             )
-        )
+            surface.show_page()
+            compose_s = time.perf_counter() - stage_start
+            page_result = built.page_result
+            progress.info(
+                f"[{index}/{len(charts)}] {definition.id}: "
+                f"{page_result.star_count} stars, "
+                f"{page_result.dso_count} DSOs, "
+                f"{page_result.star_system_count} systems, "
+                f"{page_result.placed_count}/{page_result.label_count} labels, "
+                f"{page_result.hard_issues} hard issues "
+                f"({built.timings[0] + compose_s:.2f}s work)"
+            )
+            _, context_s, labels_s, cost_s, optimize_s, validate_s, render_s = built.timings
+            progress.detail(
+                f"context {context_s:.2f}s | labels {labels_s:.2f}s | "
+                f"cost {cost_s:.2f}s | optimize {optimize_s:.2f}s | "
+                f"validate {validate_s:.2f}s | render {render_s:.2f}s | "
+                f"compose {compose_s:.2f}s"
+            )
+            results.append(page_result)
+    finally:
+        if pool is not None:
+            pool.shutdown(cancel_futures=True)
 
     atlas_index = build_atlas_index(
         index_dsos,
@@ -836,70 +1215,82 @@ def _build_atlas_impl(
         progress.detail(
             f"[{detail_index}/{len(detail_charts)}] {detail.id}: detail chart start"
         )
-        chart_context = build_chart_context(
-            atlas_path=atlas_path,
-            style_path=style_path,
-            definition=definition,
-            star_store=star_store,
-            stars_csv=stars_csv,
-            double_stars_path=double_stars_path,
-            star_systems=star_systems,
-            magnitude_limit=stellar_limit_magnitude,
-            scale_mm_per_degree=detail.mm_per_degree,
-            progress=progress,
-            inputs=inputs,
-        )
-        labels = build_labels(
-            chart_context.scene, chart_context.transform, detail_style, star_names
-        )
-        labels = select_labels(
-            labels,
-            chart_context.scene,
-            chart_context.transform,
-            detail_style,
-        )
         chart_overrides = library.for_chart(definition.id) if library is not None else None
-        if chart_overrides is not None:
-            labels = apply_overrides(labels, chart_overrides)
-            applied_chart_ids.add(definition.id)
-        presentation = ChartPresentation(
-            edition_name=(
-                f"Detail · {detail.name} · stars to mag "
-                f"{stellar_limit_magnitude:g}"
-            ),
-            edition_code="SD",
-            chart_index=None,
-            internal_chart_id=detail.code,
-        )
-        furniture = furniture_obstacles(
-            chart_context.transform,
-            definition,
-            detail_style,
-            presentation,
-        )
-        if optimize:
-            optimized = optimize_labels(
+        prepared = prepared_details.get(detail.id)
+        if prepared is None:
+            chart_context = build_chart_context(
+                atlas_path=atlas_path,
+                style_path=style_path,
+                definition=definition,
+                star_store=star_store,
+                stars_csv=stars_csv,
+                double_stars_path=double_stars_path,
+                star_systems=star_systems,
+                magnitude_limit=stellar_limit_magnitude,
+                scale_mm_per_degree=detail.mm_per_degree,
+                progress=progress,
+                inputs=inputs,
+            )
+            labels = build_labels(
+                chart_context.scene, chart_context.transform, detail_style, star_names
+            )
+            labels = select_labels(
+                labels,
+                chart_context.scene,
+                chart_context.transform,
+                detail_style,
+            )
+            if chart_overrides is not None:
+                labels = apply_overrides(labels, chart_overrides)
+                applied_chart_ids.add(definition.id)
+            presentation = ChartPresentation(
+                edition_name=f"Detail · {detail.name}",
+                edition_code="SD",
+                chart_index=None,
+                internal_chart_id=detail.code,
+            )
+            furniture = furniture_obstacles(
+                chart_context.transform,
+                definition,
+                detail_style,
+                presentation,
+            )
+            if optimize:
+                optimized = optimize_labels(
+                    labels,
+                    chart_context.scene,
+                    chart_context.transform,
+                    detail_style,
+                    furniture=furniture,
+                )
+                labels = optimized.labels
+                cost_before = optimized.cost_before
+                cost_after = optimized.cost_after
+            else:
+                cost_before = layout_cost(
+                    labels, chart_context.scene, chart_context.transform, detail_style
+                )[0]
+                cost_after = cost_before
+            validation = validate_layout(
                 labels,
                 chart_context.scene,
                 chart_context.transform,
                 detail_style,
                 furniture=furniture,
             )
-            labels = optimized.labels
-            cost_before = optimized.cost_before
-            cost_after = optimized.cost_after
         else:
-            cost_before = layout_cost(
-                labels, chart_context.scene, chart_context.transform, detail_style
-            )[0]
-            cost_after = cost_before
-        validation = validate_layout(
-            labels,
-            chart_context.scene,
-            chart_context.transform,
-            detail_style,
-            furniture=furniture,
-        )
+            chart_context = prepared.context
+            detail_style = prepared.style
+            labels = prepared.labels
+            cost_before = prepared.cost_before
+            cost_after = prepared.cost_after
+            validation = prepared.validation
+            presentation = ChartPresentation(
+                edition_name=f"Detail · {detail.name}",
+                edition_code="SD",
+                chart_index=None,
+                internal_chart_id=detail.code,
+            )
         page_dir = outroot / "charts" / definition.id
         render_chart(
             chart_context.scene,
@@ -966,6 +1357,18 @@ def _build_atlas_impl(
             pdf_navigation,
         )
 
+    if write_front_matter and atlas.chart_directory_position == "back":
+        with progress.step("append chart directory", detail=True):
+            chart_directory_pages = draw_chart_directory_pages(
+                context,
+                surface,
+                chart_directory,
+                page,
+                style,
+                edition,
+                pdf_navigation,
+            )
+
     with progress.step("finish combined PDF"):
         surface.finish()
 
@@ -1011,6 +1414,7 @@ def _build_atlas_impl(
             "forced": forced_lists,
         },
         "chart_count": len(results),
+        "parallel_jobs": effective_jobs,
         "main_chart_count": len(charts),
         "detail_chart_count": len(detail_charts),
         "main_chart_ids": [chart.id for chart in charts],
@@ -1027,6 +1431,10 @@ def _build_atlas_impl(
                 "height_deg": detail.height_deg,
                 "mm_per_degree": detail.mm_per_degree,
                 "star_profile": detail.star_profile,
+                "fallback_parent_galaxy_labels": detail.fallback_parent_galaxy_labels,
+                "fallback_parent_min_magnitude": detail.fallback_parent_min_magnitude,
+                "fallback_parent_min_nearby_galaxies": detail.fallback_parent_min_nearby_galaxies,
+                "parent_marker_label": detail.parent_marker_label,
                 "stellar_limit_magnitude": detail_star_profiles[detail.star_profile][0],
             }
             for detail in detail_charts
@@ -1146,6 +1554,7 @@ def build_atlas(
     optimize: bool = True,
     render_png: bool = True,
     png_dpi: float = 150.0,
+    jobs: int = 1,
     write_front_matter: bool = True,
     write_overviews: bool = True,
     write_draft_report: bool = True,
@@ -1171,6 +1580,7 @@ def build_atlas(
         optimize=optimize,
         render_png=render_png,
         png_dpi=png_dpi,
+        jobs=jobs,
         write_front_matter=write_front_matter,
         write_overviews=write_overviews,
         write_draft_report=write_draft_report,

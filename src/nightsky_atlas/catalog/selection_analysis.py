@@ -63,6 +63,7 @@ EDITION_REASON_NAMES = {
     "below_minimum_size": "object is smaller than this edition's configured threshold",
     "no_matching_policy_rule": "no configured inclusion rule passed for this object type",
     "group_standard_curated_only": "this group is not among the curated Standard group objects",
+    "regional_allowlist_lmc": "not among the selected Large Magellanic Cloud globular clusters",
     "insufficient_group_members": "group lacks the configured minimum member information",
 }
 

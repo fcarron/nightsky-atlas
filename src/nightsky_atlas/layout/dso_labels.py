@@ -150,8 +150,11 @@ def format_dso_label(
         from nightsky_atlas.catalog.common_names import curated_common_name
 
         curated = curated_common_name(dso)
-        if curated is not None and curated.name.casefold() != text.casefold():
-            text = f"{text} · {curated.name}"
+        if curated is not None:
+            if curated.label_mode == "name_only":
+                text = curated.name
+            elif curated.name.casefold() != text.casefold():
+                text = f"{text} · {curated.name}"
     return DsoLabelText(
         text=text,
         tier=tier,

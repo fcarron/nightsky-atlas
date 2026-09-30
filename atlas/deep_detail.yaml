@@ -1,0 +1,2 @@
+extends: deep.yaml
+stellar_limit_magnitude: 11.5

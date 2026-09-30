@@ -18,7 +18,7 @@ from nightsky_atlas.layout.leader_lines import (
     resolve_leader_lines,
 )
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
-from nightsky_atlas.layout.optimizer import layout_hash, optimize_labels
+from nightsky_atlas.layout.optimizer import layout_cost, layout_hash, optimize_labels
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import render_chart
 from nightsky_atlas.review.models import ReviewRequest
@@ -189,9 +189,12 @@ def test_short_leader_beats_wrong_owner_direct_candidate_and_far_direct() -> Non
         ring=4,
     )
     label = replace(make_label(), candidates=(near, far), selected_candidate_id=None)
-    result = optimize_labels((label,), scene, TRANSFORM, placement_style).labels[0]
+    optimization = optimize_labels((label,), scene, TRANSFORM, placement_style)
+    result = optimization.labels[0]
     assert result.leader_line
     assert result.selected_candidate_id == near.id
+    final_cost, _ = layout_cost(optimization.labels, scene, TRANSFORM, placement_style)
+    assert optimization.cost_after == final_cost
     route = resolve_leader_lines((result,), scene, TRANSFORM, placement_style)[0]
     length = ((route.end.x_mm - route.start.x_mm) ** 2
               + (route.end.y_mm - route.start.y_mm) ** 2) ** 0.5

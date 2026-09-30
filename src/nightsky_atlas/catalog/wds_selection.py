@@ -8,6 +8,7 @@ from nightsky_atlas.catalog.systems import StarSystem
 
 
 class _PairLimit(Protocol):
+    min_sep_arcsec: float | None
     max_sep_arcsec: float
     max_secondary_mag: float
 
@@ -29,7 +30,13 @@ def pair_passes_profile(pair: StarSystem, config: _SelectionConfig) -> bool:
     if separation is None or secondary_magnitude is None:
         return False
     limit = next(
-        (item for item in config.limits if separation <= item.max_sep_arcsec), None
+        (
+            item
+            for item in config.limits
+            if separation <= item.max_sep_arcsec
+            and (item.min_sep_arcsec is None or separation > item.min_sep_arcsec)
+        ),
+        None,
     )
     if limit is None or secondary_magnitude > limit.max_secondary_mag:
         return False
