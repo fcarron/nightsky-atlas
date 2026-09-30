@@ -575,6 +575,7 @@ class LeaderLineStyle(_StrictModel):
     dso_ambiguity_threshold: PositiveFloat = 2.5
     dso_min_length_mm: PositiveFloat = 0.75
     dso_preferred_gap_mm: PositiveFloat = 2.5
+    dso_candidate_max_gap_mm: PositiveFloat = 2.5
     dso_length_weight: NonNegativeFloat = 4.0
     dso_association_residual_factor: float = Field(default=0.10, ge=0.0, le=1.0)
     min_length_mm: PositiveFloat = 2.5

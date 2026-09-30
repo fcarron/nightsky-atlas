@@ -76,6 +76,7 @@ label:
     dso_ambiguity_threshold: 2.5
     dso_min_length_mm: 0.75
     dso_preferred_gap_mm: 2.5
+    dso_candidate_max_gap_mm: 2.5
     dso_length_weight: 4.0
     dso_association_residual_factor: 0.10
     min_length_mm: 2.5

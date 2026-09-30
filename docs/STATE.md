@@ -260,6 +260,11 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   by placed detail labels. Atlas output validation passes. Three of the hard
   issues are on detail pages: one M45 enclosing-cluster collision and one LMC
   enclosing-region collision on each of DD405A and DD405B.
+- A bounded S053/D174 leader-line experiment is documented in
+  `docs/LEADER_LINE_EXPERIMENT.md`. Allowing more distant DSO
+  line candidates changed only three small areas on the two finished parent
+  maps, without a clear print-scale legibility gain. The active 2.5-mm
+  candidate limit remains unchanged; broader use awaits observer comparison.
 
 - Rebuilt with grid labels + constellations: `build/standard/atlas.pdf` (135 charts
   + front matter), per-page artifacts under `build/standard/charts/<id>/`, and

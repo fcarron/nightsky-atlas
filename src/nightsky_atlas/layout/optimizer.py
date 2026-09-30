@@ -1793,7 +1793,7 @@ def _consider_dso_leader_fallbacks(
                 constellation_lines,
                 cost_cache,
             )
-            if breakdown.label_source_facing_edge_distance_mm > config.dso_preferred_gap_mm:
+            if breakdown.label_source_facing_edge_distance_mm > config.dso_candidate_max_gap_mm:
                 continue
             eligible.append((breakdown.total(weights), candidate.id, candidate, breakdown))
 
