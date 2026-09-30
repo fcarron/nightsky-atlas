@@ -39,7 +39,7 @@ from nightsky_atlas.render.double_stars import (
 )
 from nightsky_atlas.render.ecliptic import build_ecliptic
 from nightsky_atlas.render.furniture import build_furniture_plan, draw_furniture
-from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels
+from nightsky_atlas.render.grid import GridLine, build_grid, build_grid_labels, build_grid_ticks
 from nightsky_atlas.render.overview import LocatorInset, draw_locator_inset
 from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.render.symbols import (
@@ -171,6 +171,7 @@ def draw_chart_page(
     _draw_constellations(cr, transform, scene, style, label_list)
     _draw_labels(cr, constellation_labels, style)
     _draw_chart_border(cr, transform, style)
+    _draw_grid_ticks(cr, transform, scene.definition, style)
     _draw_outlines(cr, transform, scene, style)
     _draw_leader_lines(cr, label_list, scene, transform, style)
     _draw_stars(cr, transform, scene, size_model, style)
@@ -1327,6 +1328,43 @@ def _draw_grid(
         cr.stroke()
     cr.restore()
     return lines
+
+
+def _draw_grid_ticks(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    definition: ChartDefinition,
+    style: StyleConfig,
+) -> None:
+    ticks = build_grid_ticks(definition, transform, style)
+    if not ticks:
+        return
+    rect = transform.chart_rect
+    gray = style.grid.tick_gray
+    cr.save()
+    cr.set_source_rgb(gray, gray, gray)
+    cr.set_line_width(mm_to_pt(style.grid.tick_line_width_mm))
+    for tick in ticks:
+        position = mm_to_pt(tick.position_mm)
+        length = mm_to_pt(tick.length_mm)
+        if tick.edge == "top":
+            edge = mm_to_pt(rect.top_mm)
+            cr.move_to(position, edge)
+            cr.line_to(position, edge - length)
+        elif tick.edge == "bottom":
+            edge = mm_to_pt(rect.bottom_mm)
+            cr.move_to(position, edge)
+            cr.line_to(position, edge + length)
+        elif tick.edge == "left":
+            edge = mm_to_pt(rect.left_mm)
+            cr.move_to(edge, position)
+            cr.line_to(edge - length, position)
+        else:
+            edge = mm_to_pt(rect.right_mm)
+            cr.move_to(edge, position)
+            cr.line_to(edge + length, position)
+    cr.stroke()
+    cr.restore()
 
 
 def _draw_ecliptic(

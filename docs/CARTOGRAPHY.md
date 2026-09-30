@@ -11,7 +11,7 @@ v0.3 (mirror-symmetric ring counts for regular navigation).
 | Page | A4 landscape, 297 x 210 mm |
 | Margin | 12 mm (printable 273 x 186 mm) |
 | Field of view | 27 x 18.5 degrees |
-| Scale | ~10.05 mm per degree |
+| Scale | 10 mm per degree |
 | Projection | stereographic, north up / east left |
 | Stellar limit | magnitude 9.0 |
 | DSO limit | magnitude 12.0 (objects with no magnitude are kept) |
@@ -92,22 +92,30 @@ data-source manifests, and the git commit.  `build/<atlas>/draft-report.json`
 holds the north-to-south chart order, per-ring RA step, coverage, density
 outliers, neighbour-reference problems and the region review list.
 
-## Coordinate labels (v0.2)
+## Coordinate grid, edge labels and ticks
 
-Grid **lines** stay fine (`ra_step_deg`/`dec_step_deg` 2 deg).  Coordinate
-**labels** are a separate, sparser layer:
+The chart grid uses edition-specific angular intervals. Right ascension is
+given below in time; 1 h = 15°.
 
-- a label every second grid line by default (`label_ra_step_deg` /
-  `label_dec_step_deg` 4 deg), so grid-line density and label density are
-  deliberately decoupled;
-- `label_min_spacing_mm` (13 mm) additionally drops any label that would print
-  closer than that to a neighbour on the same page edge, which is what tames
-  the converging meridian fan on charts near the poles;
-- polar charts use `label_polar_ra_step_deg` (30 deg), so the cap's RA fan is
-  labelled only every two hours.
+| Edition | RA grid | Dec grid | RA labels | Dec labels | Outer RA ticks | Outer Dec ticks | Polar RA grid/ticks |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Pocket | 1 h | 10° | 1 h | 20° | 15 min | 5° | 2 h |
+| Standard | 30 min | 5° | 1 h | 10° | 10 min | 1° | 30 min |
+| Deep | 15 min | 2° | 30 min | 4° | 5 min | 1° | 15 min |
 
-Across the 118 charts this removes about half the coordinate text versus the
-every-line v0.1 draft while keeping the grid itself unchanged.
+At the equator, RA grid lines print about 75 mm apart in every edition; their
+spacing changes with declination and the stereographic projection. Short ticks
+project the coordinate subdivisions onto the outside of the rectangular chart
+frame, like an axis on a graph. Ticks coinciding with a full grid line are
+slightly longer (1.2 mm instead of 0.8 mm). Ticks closer than 4 mm along an
+edge are thinned, with full-grid values retained first. On polar fields, ticks
+follow the polar meridian interval rather than adding a dense set of minor RA
+marks. Declination ticks retain the edition's usual subdivision.
+
+Coordinate labels remain separate from lines and ticks. RA values sit above and
+below the frame; declination values sit at its sides. Labels closer than 13 mm
+along an edge are thinned, favouring round values, and labels are omitted where
+they would overlap page furniture. Polar RA labels appear only every 2 h.
 
 ## Visible notation and page furniture
 
@@ -128,17 +136,15 @@ this registry when omitted.  The footer title is
 Furniture sits outside the chart frame and is deliberately quiet
 (`styles/standard.yaml` → `furniture:`):
 
-- **Navigation** is smaller than the coordinate labels, mid-grey, and placed
+- **Navigation** is larger than the coordinate labels, mid-grey, and placed
   further out than the RA/Dec labels (east left, west right, per the printed
   orientation).  Coordinate labels treat navigation rectangles as obstacles.
-- **Scale bar** is a thin (~0.13 mm) mid-grey line with end ticks and a compact
-  `5°` label; the angular value is chosen per edition so the printed bar stays
-  roughly 40–50 mm long (Pocket 10°, Standard 5°, Deep 2°).
+- **Scale bar** is omitted in Pocket and Standard; the edge ticks provide the
+  coordinate reference. Deep retains its 2° footer bar.
 - **Magnitude legend** is a compact `mag 2 4 6 8` reference whose dots use the
   real `StarSizeModel`, so the printed sizes match the chart exactly.
-- **Title** is right-aligned in the footer.  The footer row is magnitude legend
-  (left), scale bar (centre), title (right); nothing is stacked in the middle of
-  the chart.
+- **Title** is right-aligned in the footer. The magnitude legend sits at left;
+  Deep's scale bar sits in the centre.
 
 ## Overview maps and locator
 
@@ -176,9 +182,9 @@ so no chart label is placed under it.
   Large Magellanic Cloud); the reference MVP charts validate cleanly.  DSO and
   star label prioritisation in dense fields is the next work package.
 - Polar charts are stereographic like every other chart; local distortion at the
-  pole is larger and the meridian fan is dense.  The polar grid uses the coarser
-  `grid.polar_ra_step_deg` and labels it at `label_polar_ra_step_deg`; the
-  minimum-spacing rule handles the near-pole (non-cap) rings.
+  pole is larger and the meridian fan can be dense, especially in Deep. Each
+  edition uses `grid.polar_ra_step_deg` for its polar meridians and labels them
+  at `label_polar_ra_step_deg`; the minimum-spacing rule handles crowded edges.
 - The 118-chart count is geometry-driven.  A later optional pass may nudge
   individual chart centres by +-1-2 deg to move important regions away from page
   edges, but the draft deliberately uses a clean geometric grid only.

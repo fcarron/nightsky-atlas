@@ -1029,6 +1029,10 @@ class GridStyle(_StrictModel):
     crowd together (meridians converging toward a pole, or a field far from the
     inner chart) the renderer automatically skips every second/third/... line so
     the printed labels keep breathing room.  A value of ``0`` disables the rule.
+
+    Optional ticks subdivide the grid along the outside of the chart frame.
+    Their steps must divide the corresponding grid-line steps; polar RA ticks
+    can use their own interval. Crowded ticks are thinned in physical millimetres.
     """
 
     enabled: bool = True
@@ -1048,6 +1052,15 @@ class GridStyle(_StrictModel):
     label_ra_step_deg: PositiveFloat | None = None
     label_dec_step_deg: PositiveFloat | None = None
     label_polar_ra_step_deg: PositiveFloat | None = 30.0
+    ticks_enabled: bool = False
+    tick_ra_step_deg: PositiveFloat | None = None
+    tick_dec_step_deg: PositiveFloat | None = None
+    tick_polar_ra_step_deg: PositiveFloat | None = None
+    tick_length_mm: PositiveFloat = 0.8
+    tick_major_length_mm: PositiveFloat = 1.2
+    tick_line_width_mm: PositiveFloat = 0.12
+    tick_gray: float = Field(default=0.45, ge=0.0, le=1.0)
+    tick_min_spacing_mm: NonNegativeFloat = 4.0
 
     @model_validator(mode="after")
     def _label_steps_align_with_lines(self) -> GridStyle:
@@ -1064,6 +1077,21 @@ class GridStyle(_StrictModel):
             if ratio < 1.0 or abs(ratio - round(ratio)) > 1e-6:
                 raise ValueError(
                     f"{label_name} ({label_step:g}) must be a whole multiple of "
+                    f"{line_name} ({line_step:g})"
+                )
+        for tick_name, line_name in (
+            ("tick_ra_step_deg", "ra_step_deg"),
+            ("tick_dec_step_deg", "dec_step_deg"),
+            ("tick_polar_ra_step_deg", "polar_ra_step_deg"),
+        ):
+            tick_step = getattr(self, tick_name)
+            if tick_step is None:
+                continue
+            line_step = getattr(self, line_name)
+            ratio = line_step / tick_step
+            if ratio < 1.0 or abs(ratio - round(ratio)) > 1e-6:
+                raise ValueError(
+                    f"{tick_name} ({tick_step:g}) must divide "
                     f"{line_name} ({line_step:g})"
                 )
         return self
@@ -1135,12 +1163,7 @@ class ConstellationStyle(_StrictModel):
 
 
 class ScaleBarStyle(_StrictModel):
-    """Subtle linear angular scale drawn in the page footer.
-
-    The bar is deliberately quiet: a thin mid-grey line with short end ticks and
-    a compact ``5°`` label, sized so that its physical length stays roughly
-    constant across editions even though the angular value differs.
-    """
+    """Optional linear angular scale drawn in the page footer."""
 
     enabled: bool = True
     length_deg: PositiveFloat = 5.0

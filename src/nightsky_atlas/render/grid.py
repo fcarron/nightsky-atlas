@@ -28,8 +28,10 @@ from nightsky_atlas.scene.builder import default_projection
 __all__ = [
     "GridLabel",
     "GridLine",
+    "GridTick",
     "build_grid",
     "build_grid_labels",
+    "build_grid_ticks",
     "format_dec_deg",
     "format_ra_deg",
 ]
@@ -61,6 +63,13 @@ class GridLabel:
     value_deg: float
     text: str
     bounds: PageRect
+
+
+@dataclass(frozen=True, slots=True)
+class GridTick:
+    edge: str
+    position_mm: float
+    length_mm: float
 
 
 def _ra_half_width_deg(definition: ChartDefinition, dec_deg: float) -> float:
@@ -126,6 +135,10 @@ def build_grid(
     definition: ChartDefinition,
     transform: PageTransform,
     style: StyleConfig,
+    *,
+    ra_step_deg: float | None = None,
+    dec_step_deg: float | None = None,
+    polar_ra_step_deg: float | None = None,
 ) -> tuple[GridLine, ...]:
     """Build RA and Dec grid polylines for a chart."""
     grid = style.grid
@@ -134,15 +147,18 @@ def build_grid(
 
     projector = default_projection(definition)
     half_height = definition.height_deg / 2.0
-    dec_min = definition.center_dec_deg - half_height
-    dec_max = definition.center_dec_deg + half_height
+    dec_min = max(-90.0, definition.center_dec_deg - half_height)
+    dec_max = min(90.0, definition.center_dec_deg + half_height)
     worst_dec = min(89.9, max(abs(dec_min), abs(dec_max)))
     ra_half = _ra_half_width_deg(definition, worst_dec)
     polar = _is_polar_field(definition)
     rect = transform.chart_rect
     lines: list[GridLine] = []
 
-    ra_step = grid.polar_ra_step_deg if polar else grid.ra_step_deg
+    if polar:
+        ra_step = polar_ra_step_deg or grid.polar_ra_step_deg
+    else:
+        ra_step = ra_step_deg or grid.ra_step_deg
     if polar:
         ra = 0.0
         ra_limit = 360.0 - 1e-9
@@ -174,7 +190,8 @@ def build_grid(
             lines.append(GridLine(kind="ra", value_deg=ra, points=tuple(points), polar=polar))
         ra += ra_step
 
-    dec = _first_multiple(dec_min, grid.dec_step_deg)
+    dec_step = dec_step_deg or grid.dec_step_deg
+    dec = _first_multiple(dec_min, dec_step)
     dec_limit = dec_max + 1e-9
     while dec <= dec_limit:
         ra_half_dec = _ra_half_width_deg(definition, dec)
@@ -196,7 +213,7 @@ def build_grid(
         ]
         if len(points) >= 2:
             lines.append(GridLine(kind="dec", value_deg=dec, points=tuple(points)))
-        dec += grid.dec_step_deg
+        dec += dec_step
 
     return tuple(lines)
 
@@ -251,6 +268,65 @@ def _scan_crossings(points: tuple[PagePoint, ...], edge_value: float, axis: str)
             seen.add(key)
             unique.append(value)
     return unique
+
+
+def build_grid_ticks(
+    definition: ChartDefinition,
+    transform: PageTransform,
+    style: StyleConfig,
+) -> tuple[GridTick, ...]:
+    grid = style.grid
+    if not grid.enabled or not grid.ticks_enabled:
+        return ()
+    polar = _is_polar_field(definition)
+    lines = build_grid(
+        definition,
+        transform,
+        style,
+        ra_step_deg=grid.tick_ra_step_deg,
+        dec_step_deg=grid.tick_dec_step_deg,
+        polar_ra_step_deg=grid.tick_polar_ra_step_deg,
+    )
+    rect = transform.chart_rect
+    candidates: dict[str, list[tuple[bool, int, float, GridTick]]] = {
+        edge: [] for edge in ("top", "bottom", "left", "right")
+    }
+    for line in lines:
+        if line.kind == "ra":
+            major_step = grid.polar_ra_step_deg if polar else grid.ra_step_deg
+            edges = (("top", rect.top_mm), ("bottom", rect.bottom_mm))
+            axis = "y"
+            lower, upper = rect.left_mm, rect.right_mm
+        else:
+            major_step = grid.dec_step_deg
+            edges = (("left", rect.left_mm), ("right", rect.right_mm))
+            axis = "x"
+            lower, upper = rect.top_mm, rect.bottom_mm
+        major = _is_multiple(line.value_deg, major_step)
+        length = grid.tick_major_length_mm if major else grid.tick_length_mm
+        for edge, edge_value in edges:
+            for position in _scan_crossings(line.points, edge_value, axis):
+                if not lower + length <= position <= upper - length:
+                    continue
+                candidates[edge].append(
+                    (
+                        major,
+                        _label_tier(line.kind, line.value_deg),
+                        position,
+                        GridTick(edge=edge, position_mm=position, length_mm=length),
+                    )
+                )
+
+    placed: list[GridTick] = []
+    for edge_candidates in candidates.values():
+        edge_candidates.sort(key=lambda item: (not item[0], item[1], item[2]))
+        positions: list[float] = []
+        for _, _, position, tick in edge_candidates:
+            if any(abs(position - previous) < grid.tick_min_spacing_mm for previous in positions):
+                continue
+            positions.append(position)
+            placed.append(tick)
+    return tuple(placed)
 
 
 def build_grid_labels(

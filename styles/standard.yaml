@@ -246,6 +246,15 @@ grid:
   label_polar_ra_step_deg: 30.0
   label_ra_step_deg: 15.0
   label_dec_step_deg: 10.0
+  ticks_enabled: true
+  tick_ra_step_deg: 2.5
+  tick_dec_step_deg: 1.0
+  tick_polar_ra_step_deg: 7.5
+  tick_length_mm: 0.8
+  tick_major_length_mm: 1.2
+  tick_line_width_mm: 0.12
+  tick_gray: 0.45
+  tick_min_spacing_mm: 4.0
 
 ecliptic:
   enabled: true
@@ -258,10 +267,8 @@ furniture:
   title_font_size_pt: 8.5
   title_gray: 0.15
   chart_border_width_mm: 0.25
-  # Angular scale: thin, mid-grey and quiet.  A per-edition angular value keeps
-  # the printed bar roughly 40-50 mm long whatever the chart scale.
   scale_bar:
-    enabled: true
+    enabled: false
     length_deg: 5.0
     thickness_mm: 0.13
     gray: 0.5

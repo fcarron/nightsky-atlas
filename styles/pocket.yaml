@@ -36,6 +36,9 @@ grid:
   label_ra_step_deg: 15.0
   label_dec_step_deg: 20.0
   label_polar_ra_step_deg: 30.0
+  tick_ra_step_deg: 3.75
+  tick_dec_step_deg: 5.0
+  tick_polar_ra_step_deg: 30.0
 label:
   star_labels:
     proper_names: {core: true, standard: true, extended: false}

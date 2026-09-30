@@ -30,6 +30,9 @@ grid:
   label_ra_step_deg: 7.5
   label_dec_step_deg: 4.0
   label_polar_ra_step_deg: 30.0
+  tick_ra_step_deg: 1.25
+  tick_dec_step_deg: 1.0
+  tick_polar_ra_step_deg: 3.75
 label:
   star_labels:
     bayer: {enabled: true, max_magnitude: 6.5}
@@ -40,4 +43,4 @@ label:
   dso_label_magnitude_limit: null
   selection: {medium_density_budget: 0.18, low_density_budget: 0.09}
 furniture:
-  scale_bar: {length_deg: 2.0}
+  scale_bar: {enabled: true, length_deg: 2.0}

@@ -148,24 +148,28 @@ def test_normal_chart_pages_have_no_magnitude_legend(edition: str) -> None:
 
 
 def test_scale_bar_length_follows_mm_per_degree() -> None:
-    plan, transform = build_plan()
+    transform = make_transform()
+    style = load_style_config(REPO_ROOT / "styles" / "deep.yaml")
+    plan = build_furniture_plan(
+        transform, transform.chart, style, presentation_for(transform.chart)
+    )
     assert plan.scale_bar is not None
-    expected = STYLE.furniture.scale_bar.length_deg * transform.mm_per_deg
+    expected = style.furniture.scale_bar.length_deg * transform.mm_per_deg
     assert (plan.scale_bar.right_mm - plan.scale_bar.left_mm) == pytest.approx(expected)
     assert plan.scale_bar.label.endswith("\N{DEGREE SIGN}")
     assert "deg" not in plan.scale_bar.label
     label_height = TextMeasurer(
-        STYLE.label.font_family, plan.scale_bar.font_size_pt
+        style.label.font_family, plan.scale_bar.font_size_pt
     ).measure_mm(plan.scale_bar.label).height_mm
     assert plan.scale_bar.label_y_mm + label_height < plan.scale_bar.line_y_mm
-    assert plan.scale_bar.line_y_mm + STYLE.furniture.scale_bar.tick_mm / 2.0 < PAGE.height_mm - 2.0
+    assert plan.scale_bar.line_y_mm + style.furniture.scale_bar.tick_mm / 2.0 < PAGE.height_mm - 2.0
 
 
-def test_footer_sits_below_the_chart_frame() -> None:
+def test_standard_footer_has_no_scale_bar() -> None:
     plan, transform = build_plan((("S", "standard-054"),))
-    rect = transform.chart_rect
-    assert plan.scale_bar is not None
-    assert plan.scale_bar.line_y_mm > rect.bottom_mm
+    assert plan.scale_bar is None
+    assert plan.title is not None
+    assert plan.title.y_mm > transform.chart_rect.bottom_mm
 
 
 def test_locator_rect_is_a_label_obstacle_when_enabled() -> None:
