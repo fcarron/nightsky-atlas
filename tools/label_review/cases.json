@@ -1,0 +1,1594 @@
+{
+  "experiment_id": "leader-lines-curated-2026-10-01",
+  "seed": 20261001,
+  "dpi": 300,
+  "cases": [
+    {
+      "case_id": "p012-ngc3227",
+      "chart_id": "pocket-012",
+      "chart_code": "P012",
+      "label_id": "label:dso:NGC3227",
+      "object_id": "NGC3227",
+      "label_text": "3227",
+      "question": "Welches Symbol gehört zur Nummer 3227?",
+      "control": false,
+      "accuracy_evaluable": false,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1928,
+          1766,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "pocket-default-2026-09-30",
+          "image": "cases/assets/p012-ngc3227-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/pocket/atlas.pdf#page=16",
+          "target_px": [
+            345.4708,
+            243.343
+          ],
+          "crop_box_px": [
+            1928,
+            1766,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P012-300dpi-1928-1766-591-531"
+        },
+        {
+          "variant_id": "pocket-gap5-weight1-2026-10-01",
+          "image": "cases/assets/p012-ngc3227-trial.png",
+          "source_page": "build/label-review/atlas-conservative-pocket-a/pocket/atlas.pdf#page=1",
+          "target_px": [
+            345.4708,
+            243.343
+          ],
+          "crop_box_px": [
+            1928,
+            1766,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P012-300dpi-1928-1766-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "p022-ngc2252",
+      "chart_id": "pocket-022",
+      "chart_code": "P022",
+      "label_id": "label:dso:NGC2252",
+      "object_id": "NGC2252",
+      "label_text": "2252",
+      "question": "Welches Symbol gehört zur Nummer 2252?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          896,
+          630,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "pocket-default-2026-09-30",
+          "image": "cases/assets/p022-ngc2252-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/pocket/atlas.pdf#page=26",
+          "target_px": [
+            339.8539,
+            287.6549
+          ],
+          "crop_box_px": [
+            896,
+            630,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P022-300dpi-896-630-591-531"
+        },
+        {
+          "variant_id": "pocket-gap5-weight1-2026-10-01",
+          "image": "cases/assets/p022-ngc2252-trial.png",
+          "source_page": "build/label-review/atlas-conservative-pocket-a/pocket/atlas.pdf#page=3",
+          "target_px": [
+            339.8539,
+            287.6549
+          ],
+          "crop_box_px": [
+            896,
+            630,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P022-300dpi-896-630-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "p025-ngc4273",
+      "chart_id": "pocket-025",
+      "chart_code": "P025",
+      "label_id": "label:dso:NGC4273",
+      "object_id": "NGC4273",
+      "label_text": "4273",
+      "question": "Welches Symbol gehört zur Nummer 4273?",
+      "control": false,
+      "accuracy_evaluable": false,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1200,
+          686,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "pocket-default-2026-09-30",
+          "image": "cases/assets/p025-ngc4273-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/pocket/atlas.pdf#page=29",
+          "target_px": [
+            256.8177,
+            234.2654
+          ],
+          "crop_box_px": [
+            1200,
+            686,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P025-300dpi-1200-686-591-531"
+        },
+        {
+          "variant_id": "pocket-gap5-weight1-2026-10-01",
+          "image": "cases/assets/p025-ngc4273-trial.png",
+          "source_page": "build/label-review/atlas-conservative-pocket-a/pocket/atlas.pdf#page=4",
+          "target_px": [
+            256.8177,
+            234.2654
+          ],
+          "crop_box_px": [
+            1200,
+            686,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P025-300dpi-1200-686-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "p039-ngc6475",
+      "chart_id": "pocket-039",
+      "chart_code": "P039",
+      "label_id": "label:dso:NGC6475",
+      "object_id": "NGC6475",
+      "label_text": "M7",
+      "question": "Welches Symbol gehört zu M7?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          768,
+          1086,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "pocket-default-2026-09-30",
+          "image": "cases/assets/p039-ngc6475-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/pocket/atlas.pdf#page=43",
+          "target_px": [
+            325.3972,
+            304.7046
+          ],
+          "crop_box_px": [
+            768,
+            1086,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P039-300dpi-768-1086-591-531"
+        },
+        {
+          "variant_id": "pocket-gap5-weight1-2026-10-01",
+          "image": "cases/assets/p039-ngc6475-trial.png",
+          "source_page": "build/label-review/atlas-conservative-pocket-b/pocket/atlas.pdf#page=2",
+          "target_px": [
+            325.3972,
+            304.7046
+          ],
+          "crop_box_px": [
+            768,
+            1086,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P039-300dpi-768-1086-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "s026-ngc3430",
+      "chart_id": "standard-026",
+      "chart_code": "S026",
+      "label_id": "label:dso:NGC3430",
+      "object_id": "NGC3430",
+      "label_text": "3430",
+      "question": "Welches Symbol gehört zur Nummer 3430?",
+      "control": false,
+      "accuracy_evaluable": false,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1644,
+          1816,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s026-ngc3430-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#page=33",
+          "target_px": [
+            304.1846,
+            255.8626
+          ],
+          "crop_box_px": [
+            1644,
+            1816,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S026-300dpi-1644-1816-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-10-01",
+          "image": "cases/assets/s026-ngc3430-trial.png",
+          "source_page": "build/label-review/atlas-conservative-c/standard/atlas.pdf#page=3",
+          "target_px": [
+            304.1846,
+            255.8626
+          ],
+          "crop_box_px": [
+            1644,
+            1816,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S026-300dpi-1644-1816-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "s027-ngc4618",
+      "chart_id": "standard-027",
+      "chart_code": "S027",
+      "label_id": "label:dso:NGC4618",
+      "object_id": "NGC4618",
+      "label_text": "4618",
+      "question": "Welches Symbol gehört zur Nummer 4618?",
+      "control": false,
+      "accuracy_evaluable": false,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1916,
+          840,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s027-ngc4618-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#page=34",
+          "target_px": [
+            248.1855,
+            253.4855
+          ],
+          "crop_box_px": [
+            1916,
+            840,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S027-300dpi-1916-840-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-10-01",
+          "image": "cases/assets/s027-ngc4618-trial.png",
+          "source_page": "build/label-review/atlas-conservative/standard/atlas.pdf#page=1",
+          "target_px": [
+            248.1855,
+            253.4855
+          ],
+          "crop_box_px": [
+            1916,
+            840,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S027-300dpi-1916-840-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "s053-ngc4633",
+      "chart_id": "standard-053",
+      "chart_code": "S053",
+      "label_id": "label:dso:NGC4633",
+      "object_id": "NGC4633",
+      "label_text": "4633",
+      "question": "Welches Symbol gehört zur Nummer 4633?",
+      "control": false,
+      "accuracy_evaluable": false,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1740,
+          232,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s053-ngc4633-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#page=60",
+          "target_px": [
+            266.6281,
+            255.5938
+          ],
+          "crop_box_px": [
+            1740,
+            232,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S053-300dpi-1740-232-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-10-01",
+          "image": "cases/assets/s053-ngc4633-trial.png",
+          "source_page": "build/label-review/atlas-conservative/standard/atlas.pdf#page=3",
+          "target_px": [
+            266.6281,
+            255.5938
+          ],
+          "crop_box_px": [
+            1740,
+            232,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S053-300dpi-1740-232-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "s081-ngc5054",
+      "chart_id": "standard-081",
+      "chart_code": "S081",
+      "label_id": "label:dso:NGC5054",
+      "object_id": "NGC5054",
+      "label_text": "5054",
+      "question": "Welches Symbol gehört zur Nummer 5054?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          2492,
+          112,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s081-ngc5054-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#page=88",
+          "target_px": [
+            223.1101,
+            281.761
+          ],
+          "crop_box_px": [
+            2492,
+            112,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S081-300dpi-2492-112-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-10-01",
+          "image": "cases/assets/s081-ngc5054-trial.png",
+          "source_page": "build/label-review/atlas-conservative-d/standard/atlas.pdf#page=2",
+          "target_px": [
+            223.1101,
+            281.761
+          ],
+          "crop_box_px": [
+            2492,
+            112,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S081-300dpi-2492-112-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "d097-ngc5579",
+      "chart_id": "deep-097",
+      "chart_code": "D097",
+      "label_id": "label:dso:NGC5579",
+      "object_id": "NGC5579",
+      "label_text": "5579",
+      "question": "Welches Symbol gehört zur Nummer 5579?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          648,
+          1182,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d097-ngc5579-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=109",
+          "target_px": [
+            371.1479,
+            235.5711
+          ],
+          "crop_box_px": [
+            648,
+            1182,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D097-300dpi-648-1182-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d097-ngc5579-trial.png",
+          "source_page": "build/label-review/atlas-conservative-b/deep/atlas.pdf#page=4",
+          "target_px": [
+            371.1479,
+            235.5711
+          ],
+          "crop_box_px": [
+            648,
+            1182,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D097-300dpi-648-1182-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "d120-ngc4213",
+      "chart_id": "deep-120",
+      "chart_code": "D120",
+      "label_id": "label:dso:NGC4213",
+      "object_id": "NGC4213",
+      "label_text": "4213",
+      "question": "Welches Symbol gehört zur Nummer 4213?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          2192,
+          1886,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d120-ngc4213-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=132",
+          "target_px": [
+            273.7258,
+            294.7337
+          ],
+          "crop_box_px": [
+            2192,
+            1886,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D120-300dpi-2192-1886-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d120-ngc4213-trial.png",
+          "source_page": "build/label-review/atlas-conservative/deep/atlas.pdf#page=2",
+          "target_px": [
+            273.7258,
+            294.7337
+          ],
+          "crop_box_px": [
+            2192,
+            1886,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D120-300dpi-2192-1886-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "d174-ngc4478",
+      "chart_id": "deep-174",
+      "chart_code": "D174",
+      "label_id": "label:dso:NGC4478",
+      "object_id": "NGC4478",
+      "label_text": "4478",
+      "question": "Welches Symbol gehört zur Nummer 4478?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          2648,
+          966,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d174-ngc4478-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=186",
+          "target_px": [
+            326.2309,
+            184.6791
+          ],
+          "crop_box_px": [
+            2648,
+            966,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D174-300dpi-2648-966-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d174-ngc4478-trial.png",
+          "source_page": "build/label-review/atlas-conservative/deep/atlas.pdf#page=7",
+          "target_px": [
+            326.2309,
+            184.6791
+          ],
+          "crop_box_px": [
+            2648,
+            966,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D174-300dpi-2648-966-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "d201-ngc4266",
+      "chart_id": "deep-201",
+      "chart_code": "D201",
+      "label_id": "label:dso:NGC4266",
+      "object_id": "NGC4266",
+      "label_text": "4266",
+      "question": "Welches Symbol gehört zur Nummer 4266?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          336,
+          574,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d201-ngc4266-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=213",
+          "target_px": [
+            258.7799,
+            298.617
+          ],
+          "crop_box_px": [
+            336,
+            574,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D201-300dpi-336-574-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d201-ngc4266-trial.png",
+          "source_page": "build/label-review/atlas-conservative-b/deep/atlas.pdf#page=6",
+          "target_px": [
+            258.7799,
+            298.617
+          ],
+          "crop_box_px": [
+            336,
+            574,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D201-300dpi-336-574-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "d260-ngc4760",
+      "chart_id": "deep-260",
+      "chart_code": "D260",
+      "label_id": "label:dso:NGC4760",
+      "object_id": "NGC4760",
+      "label_text": "4760",
+      "question": "Welches Symbol gehört zur Nummer 4760?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          2856,
+          662,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d260-ngc4760-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=272",
+          "target_px": [
+            294.2245,
+            236.7218
+          ],
+          "crop_box_px": [
+            2856,
+            662,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D260-300dpi-2856-662-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d260-ngc4760-trial.png",
+          "source_page": "build/label-review/atlas-conservative-b/deep/atlas.pdf#page=7",
+          "target_px": [
+            294.2245,
+            236.7218
+          ],
+          "crop_box_px": [
+            2856,
+            662,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D260-300dpi-2856-662-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "d318-ngc6520",
+      "chart_id": "deep-318",
+      "chart_code": "D318",
+      "label_id": "label:dso:NGC6520",
+      "object_id": "NGC6520",
+      "label_text": "6520",
+      "question": "Welches Symbol gehört zur Nummer 6520?",
+      "control": false,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          488,
+          990,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d318-ngc6520-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=330",
+          "target_px": [
+            336.538,
+            240.1778
+          ],
+          "crop_box_px": [
+            488,
+            990,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D318-300dpi-488-990-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d318-ngc6520-trial.png",
+          "source_page": "build/label-review/atlas-conservative-b/deep/atlas.pdf#page=8",
+          "target_px": [
+            336.538,
+            240.1778
+          ],
+          "crop_box_px": [
+            488,
+            990,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D318-300dpi-488-990-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "p026-ngc4594",
+      "chart_id": "pocket-026",
+      "chart_code": "P026",
+      "label_id": "label:dso:NGC4594",
+      "object_id": "NGC4594",
+      "label_text": "M104",
+      "question": "Welches Symbol gehört zu M104?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          2652,
+          1693,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "pocket-default-2026-09-30",
+          "image": "cases/assets/p026-ngc4594-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/pocket/atlas.pdf#page=30",
+          "target_px": [
+            295.7003,
+            265.0014
+          ],
+          "crop_box_px": [
+            2652,
+            1693,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P026-300dpi-2652-1693-591-531"
+        },
+        {
+          "variant_id": "pocket-gap5-weight1-2026-10-01",
+          "image": "cases/assets/p026-ngc4594-trial.png",
+          "source_page": "build/label-review/atlas-conservative-pocket-b/pocket/atlas.pdf#page=1",
+          "target_px": [
+            295.7003,
+            265.0014
+          ],
+          "crop_box_px": [
+            2652,
+            1693,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P026-300dpi-2652-1693-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "p040-ngc6809",
+      "chart_id": "pocket-040",
+      "chart_code": "P040",
+      "label_id": "label:dso:NGC6809",
+      "object_id": "NGC6809",
+      "label_text": "M55",
+      "question": "Welches Symbol gehört zu M55?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          946,
+          877,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "pocket-default-2026-09-30",
+          "image": "cases/assets/p040-ngc6809-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/pocket/atlas.pdf#page=44",
+          "target_px": [
+            295.6706,
+            265.1929
+          ],
+          "crop_box_px": [
+            946,
+            877,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P040-300dpi-946-877-591-531"
+        },
+        {
+          "variant_id": "pocket-gap5-weight1-2026-10-01",
+          "image": "cases/assets/p040-ngc6809-trial.png",
+          "source_page": "build/label-review/atlas-conservative-pocket-b/pocket/atlas.pdf#page=3",
+          "target_px": [
+            295.6706,
+            265.1929
+          ],
+          "crop_box_px": [
+            946,
+            877,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "P040-300dpi-946-877-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "s079-ngc3242",
+      "chart_id": "standard-079",
+      "chart_code": "S079",
+      "label_id": "label:dso:NGC3242",
+      "object_id": "NGC3242",
+      "label_text": "3242",
+      "question": "Welches Symbol gehört zur Nummer 3242?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1058,
+          388,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s079-ngc3242-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#page=86",
+          "target_px": [
+            260.1789,
+            224.2661
+          ],
+          "crop_box_px": [
+            1058,
+            388,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S079-300dpi-1058-388-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-10-01",
+          "image": "cases/assets/s079-ngc3242-trial.png",
+          "source_page": "build/label-review/atlas-conservative/standard/atlas.pdf#page=5",
+          "target_px": [
+            260.1789,
+            224.2661
+          ],
+          "crop_box_px": [
+            1058,
+            388,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S079-300dpi-1058-388-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "s089-ngc1433",
+      "chart_id": "standard-089",
+      "chart_code": "S089",
+      "label_id": "label:dso:NGC1433",
+      "object_id": "NGC1433",
+      "label_text": "1433",
+      "question": "Welches Symbol gehört zur Nummer 1433?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1856,
+          1880,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s089-ngc1433-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#page=96",
+          "target_px": [
+            259.7441,
+            224.1013
+          ],
+          "crop_box_px": [
+            1856,
+            1880,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S089-300dpi-1856-1880-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-10-01",
+          "image": "cases/assets/s089-ngc1433-trial.png",
+          "source_page": "build/label-review/atlas-conservative/standard/atlas.pdf#page=6",
+          "target_px": [
+            259.7441,
+            224.1013
+          ],
+          "crop_box_px": [
+            1856,
+            1880,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S089-300dpi-1856-1880-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "s094-ngc5128",
+      "chart_id": "standard-094",
+      "chart_code": "S094",
+      "label_id": "label:dso:NGC5128",
+      "object_id": "NGC5128",
+      "label_text": "5128",
+      "question": "Welches Symbol gehört zur Nummer 5128?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          2240,
+          1410,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s094-ngc5128-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#page=101",
+          "target_px": [
+            259.6573,
+            224.1531
+          ],
+          "crop_box_px": [
+            2240,
+            1410,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S094-300dpi-2240-1410-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-10-01",
+          "image": "cases/assets/s094-ngc5128-trial.png",
+          "source_page": "build/label-review/atlas-conservative/standard/atlas.pdf#page=7",
+          "target_px": [
+            259.6573,
+            224.1531
+          ],
+          "crop_box_px": [
+            2240,
+            1410,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S094-300dpi-2240-1410-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "s083-ngc6494",
+      "chart_id": "standard-083",
+      "chart_code": "S083",
+      "label_id": "label:dso:NGC6494",
+      "object_id": "NGC6494",
+      "label_text": "M23",
+      "question": "Welches Symbol gehört zu M23?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          801,
+          437,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s083-ngc6494-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#page=90",
+          "target_px": [
+            259.5467,
+            224.2518
+          ],
+          "crop_box_px": [
+            801,
+            437,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S083-300dpi-801-437-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-10-01",
+          "image": "cases/assets/s083-ngc6494-trial.png",
+          "source_page": "build/label-review/atlas-conservative-d/standard/atlas.pdf#page=3",
+          "target_px": [
+            259.5467,
+            224.2518
+          ],
+          "crop_box_px": [
+            801,
+            437,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S083-300dpi-801-437-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "d121-ngc5272",
+      "chart_id": "deep-121",
+      "chart_code": "D121",
+      "label_id": "label:dso:NGC5272",
+      "object_id": "NGC5272",
+      "label_text": "M3",
+      "question": "Welches Symbol gehört zu M3?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          638,
+          873,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d121-ngc5272-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=133",
+          "target_px": [
+            295.5232,
+            265.1167
+          ],
+          "crop_box_px": [
+            638,
+            873,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D121-300dpi-638-873-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d121-ngc5272-trial.png",
+          "source_page": "build/label-review/atlas-conservative/deep/atlas.pdf#page=3",
+          "target_px": [
+            295.5232,
+            265.1167
+          ],
+          "crop_box_px": [
+            638,
+            873,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D121-300dpi-638-873-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "d172-ngc3368",
+      "chart_id": "deep-172",
+      "chart_code": "D172",
+      "label_id": "label:dso:NGC3368",
+      "object_id": "NGC3368",
+      "label_text": "M96",
+      "question": "Welches Symbol gehört zu M96?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          2720,
+          1005,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d172-ngc3368-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=184",
+          "target_px": [
+            295.3999,
+            265.2943
+          ],
+          "crop_box_px": [
+            2720,
+            1005,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D172-300dpi-2720-1005-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d172-ngc3368-trial.png",
+          "source_page": "build/label-review/atlas-conservative/deep/atlas.pdf#page=5",
+          "target_px": [
+            295.3999,
+            265.2943
+          ],
+          "crop_box_px": [
+            2720,
+            1005,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D172-300dpi-2720-1005-591-531"
+        }
+      ]
+    },
+    {
+      "case_id": "d074-ngc4736",
+      "chart_id": "deep-074",
+      "chart_code": "D074",
+      "label_id": "label:dso:NGC4736",
+      "object_id": "NGC4736",
+      "label_text": "M94",
+      "question": "Welches Symbol gehört zu M94?",
+      "control": true,
+      "accuracy_evaluable": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          720,
+          1637,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d074-ngc4736-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#page=86",
+          "target_px": [
+            295.1532,
+            265.4021
+          ],
+          "crop_box_px": [
+            720,
+            1637,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D074-300dpi-720-1637-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-10-01",
+          "image": "cases/assets/d074-ngc4736-trial.png",
+          "source_page": "build/label-review/atlas-conservative-b/deep/atlas.pdf#page=2",
+          "target_px": [
+            295.1532,
+            265.4021
+          ],
+          "crop_box_px": [
+            720,
+            1637,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D074-300dpi-720-1637-591-531"
+        }
+      ]
+    }
+  ]
+}

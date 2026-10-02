@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kartenvergleich · NightSky Atlas</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">NightSky Atlas · lokale Forschungsansicht</p>
+      <h1>Karten vergleichen</h1>
+      <p>Beurteile, ob eine Beschriftung eindeutig zu ihrem Himmelssymbol führt.</p>
+    </header>
+
+    <section id="calibration" class="panel">
+      <h2>Anzeige einstellen</h2>
+      <p>Miss die Linie mit einem Lineal. Stelle den Wert ein, bis sie auf deinem Bildschirm 50 mm lang ist. Während einer Bewertung bleibt die Bildgröße fest.</p>
+      <label for="pxPerMm">Anzeigegröße (CSS-Pixel pro Millimeter)</label>
+      <div class="calibration-row">
+        <input id="pxPerMm" type="number" min="1" max="20" step="0.05" value="3.78">
+        <span id="scaleValue">3,78 px/mm</span>
+      </div>
+      <div class="ruler-wrap"><div id="ruler" aria-label="50 Millimeter Referenz"></div></div>
+      <div class="button-row">
+        <button id="startCalibrated" class="primary">Kalibrieren und starten</button>
+        <button id="startUncalibrated" class="secondary">Ohne Kalibrierung starten</button>
+      </div>
+      <p class="muted">Die Kalibrierung gilt für diesen Bildschirm und Browser-Zoom.</p>
+      <p id="calibrationError" class="message" role="status"></p>
+    </section>
+
+    <section id="review" class="hidden">
+      <div class="review-topline">
+        <span id="progress">Fall 0 von 0</span>
+        <span id="calibrationStatus"></span>
+      </div>
+      <h2 id="chartTitle"></h2>
+      <p id="question" class="question"></p>
+      <div class="pair-scroll">
+        <div id="pair" class="pair">
+          <figure>
+            <figcaption>Bild A</figcaption>
+            <img id="imageA" alt="Kartenausschnitt A">
+            <p id="statusA" class="click-status">Symbol anklicken</p>
+          </figure>
+          <figure>
+            <figcaption>Bild B</figcaption>
+            <img id="imageB" alt="Kartenausschnitt B">
+            <p id="statusB" class="click-status">Symbol anklicken</p>
+          </figure>
+        </div>
+      </div>
+      <p class="muted">Klicke in beiden Bildern auf das Symbol, zu dem die Nummer gehört. Es werden keine Zielmarkierungen eingeblendet.</p>
+      <fieldset id="preference" disabled>
+        <legend>Welche Fassung macht die Zuordnung klarer?</legend>
+        <div class="choices">
+          <button data-value="A" class="choice">A</button>
+          <button data-value="B" class="choice">B</button>
+          <button data-value="equal" class="choice">Gleich gut</button>
+          <button data-value="both_bad" class="choice">Beide schlecht</button>
+        </div>
+      </fieldset>
+      <label for="note">Notiz (optional)</label>
+      <textarea id="note" rows="2" maxlength="1000" placeholder="Was war klar oder unklar?"></textarea>
+      <div class="button-row actions">
+        <button id="skip" class="secondary">Überspringen</button>
+        <button id="save" class="primary" disabled>Antwort speichern</button>
+      </div>
+      <p id="message" class="message" role="status"></p>
+    </section>
+
+    <section id="finished" class="panel hidden">
+      <h2>Alle Fälle beantwortet</h2>
+      <p>Die Antworten liegen lokal im JSONL-Protokoll. Die App hat keine Optimiererparameter geändert.</p>
+      <button id="newSession" class="secondary">Neue Bewertungsrunde starten</button>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>

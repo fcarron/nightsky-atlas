@@ -110,6 +110,14 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   15 mm on the parent. The detail label must still be placed and hard-clean;
   Messier and H400 labels remain on the parent. Printed detail scale bars fit
   their actual magnification.
+- A standalone local blind-review tool for label variants lives in
+  `tools/label_review/`. Its curated 23-case set uses crops from assembled
+  Pocket, Standard and Deep atlas pages (14 changed areas, 9 identical
+  controls); five dense pairs are preference-only because clicks cannot
+  distinguish overlapping symbols. The original three-case pilot and its
+  answers remain separate. The app records clicks and preferences append-only
+  under `build/label-review/`; it does not invoke the optimizer or alter
+  production inputs. See its README for startup and interpretation limits.
 - Distant deep-sky labels can now carry a serialized leader-line state. The
   optimizer enables it only for legal far-ring placements; AI may request it
   for an individual DSO label, subject to the same deterministic route and

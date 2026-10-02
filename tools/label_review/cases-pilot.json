@@ -1,0 +1,211 @@
+{
+  "experiment_id": "leader-lines-s053-d174-2026-09-30",
+  "seed": 271828,
+  "dpi": 300,
+  "cases": [
+    {
+      "case_id": "s053-ngc4633",
+      "chart_id": "standard-053",
+      "chart_code": "S053",
+      "label_id": "label:dso:NGC4633",
+      "object_id": "NGC4633",
+      "label_text": "4633",
+      "question": "Welches Galaxiensymbol gehört zur Nummer 4633?",
+      "control": false,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1747,
+          263,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s053-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#chart=S053",
+          "target_px": [
+            259.6281,
+            224.5938
+          ],
+          "crop_box_px": [
+            1747,
+            263,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S053-300dpi-1747-263-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-09-30",
+          "image": "cases/assets/s053-trial.png",
+          "source_page": "build/leader-experiment-2026-09-30/atlas-conservative/standard/atlas.pdf#chart=S053",
+          "target_px": [
+            259.6281,
+            224.5938
+          ],
+          "crop_box_px": [
+            1747,
+            263,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S053-300dpi-1747-263-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "s053-control-m60",
+      "chart_id": "standard-053",
+      "chart_code": "S053",
+      "label_id": "label:dso:NGC4649",
+      "object_id": "NGC4649",
+      "label_text": "M60",
+      "question": "Welches Galaxiensymbol gehört zum Label M60?",
+      "control": true,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          1719,
+          595,
+          520,
+          449
+        ],
+        "print_size_mm": [
+          44.027,
+          38.015
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "standard-default-2026-09-30",
+          "image": "cases/assets/s053-control-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/standard/atlas.pdf#chart=S053",
+          "target_px": [
+            259.7292,
+            224.7666
+          ],
+          "crop_box_px": [
+            1719,
+            595,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S053-300dpi-1719-595-520-449"
+        },
+        {
+          "variant_id": "standard-gap5-weight1-2026-09-30",
+          "image": "cases/assets/s053-control-trial.png",
+          "source_page": "build/leader-experiment-2026-09-30/atlas-conservative/standard/atlas.pdf#chart=S053",
+          "target_px": [
+            259.7292,
+            224.7666
+          ],
+          "crop_box_px": [
+            1719,
+            595,
+            520,
+            449
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "S053-300dpi-1719-595-520-449"
+        }
+      ]
+    },
+    {
+      "case_id": "d174-ngc4478",
+      "chart_id": "deep-174",
+      "chart_code": "D174",
+      "label_id": "label:dso:NGC4478",
+      "object_id": "NGC4478",
+      "label_text": "4478",
+      "question": "Welches Galaxiensymbol gehört zur Nummer 4478?",
+      "control": false,
+      "crop": {
+        "page_size_px": [
+          3508,
+          2480
+        ],
+        "box_px": [
+          2679,
+          885,
+          591,
+          531
+        ],
+        "print_size_mm": [
+          50.038,
+          44.958
+        ]
+      },
+      "variants": [
+        {
+          "variant_id": "deep-default-2026-09-30",
+          "image": "cases/assets/d174-baseline.png",
+          "source_page": "build/complete-2026-09-30-editions/deep/atlas.pdf#chart=D174",
+          "target_px": [
+            295.2309,
+            265.6791
+          ],
+          "crop_box_px": [
+            2679,
+            885,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D174-300dpi-2679-885-591-531"
+        },
+        {
+          "variant_id": "deep-gap5-weight1-2026-09-30",
+          "image": "cases/assets/d174-trial.png",
+          "source_page": "build/leader-experiment-2026-09-30/atlas-conservative/deep/atlas.pdf#chart=D174",
+          "target_px": [
+            295.2309,
+            265.6791
+          ],
+          "crop_box_px": [
+            2679,
+            885,
+            591,
+            531
+          ],
+          "source_page_size_px": [
+            3508,
+            2480
+          ],
+          "registration_id": "D174-300dpi-2679-885-591-531"
+        }
+      ]
+    }
+  ]
+}

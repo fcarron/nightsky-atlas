@@ -89,3 +89,40 @@ Dabei sollten Karten mit korrekter Direktbeschriftung als Kontrollen enthalten
 sein. Für echte Fernplatzierungen könnte später ein begrenzter gemeinsamer
 Label-und-Linien-Suchschritt in einem lokalen Konfliktgebiet geprüft werden;
 dieser Versuch liefert dafür noch keinen positiven Beleg.
+
+## Blindbewertung des erweiterten Satzes (01.10.2026)
+
+Die lokale Bewertungs-App unter `tools/label_review/` sammelte eine vollständige
+Runde mit 23 Fällen aus fertigen Atlas-PDF-Seiten: 14 mit tatsächlicher Änderung
+und 9 pixelgleichen Kontrollen. Es war ein Beobachter in einer Sitzung. Keine
+Antwort wurde übersprungen; alle Antworten wurden ohne 50-mm-Anzeigekalibrierung
+abgegeben. Fünf der geänderten Fälle erlauben wegen eng überlagerter Symbole
+keine belastbare Klickwertung.
+
+| Edition | Geänderte Fälle | Bisher bevorzugt | Versuch bevorzugt | Gleich | Beide schlecht |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pocket | 4 | 1 | 3 | 0 | 0 |
+| Standard | 4 | 1 | 2 | 0 | 1 |
+| Deep | 6 | 4 | 1 | 1 | 0 |
+| Insgesamt | 14 | 6 | 6 | 1 | 1 |
+
+In den neun geänderten Fällen mit Klickwertung waren bei sieben beide Fassungen
+richtig und bei zwei beide falsch. Es gab keinen Fall mit richtigem Klick nur
+in einer Fassung. Bei den neun pixelgleichen Kontrollen wurde achtmal „gleich“
+gewählt und einmal die bisherige Variante. Zwei Kontrollfälle hatten jeweils
+einen richtigen und einen falschen Klick auf dasselbe Bildmotiv. Die
+Klickgrenze von 1 mm erzeugt somit sichtbares Messrauschen. Der falsch
+geklickte Fall P039/M7 betrifft außerdem ein ausgedehntes Sternhaufensymbol;
+die Zielmitte ist hier als binäre Klickfrage wenig aussagekräftig.
+
+Die konkreten Problemfälle sind D201/NGC 4266 (beide Klicks falsch; Notiz:
+„kann es nicht richtig erkennen“) und S027/NGC 4618 (beide Fassungen schlecht;
+Vorschlag des Beobachters: drei Führungslinien). Bei D174/NGC 4478 wurde die
+bisherige Fassung trotz korrekter Zuordnung in beiden Bildern bevorzugt. Diese
+Fälle eignen sich für gezielte Varianten mit explizit geprüften Linien und
+Nachbarlabels. Der Versuch zeigt weder einen generellen Gewinn durch größere
+Kandidatenabstände noch einen Grund, die bisherige Regel atlasweit zu ersetzen.
+Weil Kandidatenabstand und Linienlängen-Gewicht gleichzeitig geändert wurden,
+ist selbst eine lokale Präferenz keinem Einzelparameter zuzuordnen. Vor einer
+erneuten Druckbeurteilung sollte die 50-mm-Anzeige kalibriert oder ein
+tatsächlicher Ausdruck verwendet werden.
