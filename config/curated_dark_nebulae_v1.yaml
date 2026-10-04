@@ -1,0 +1,427 @@
+schema_version: 1
+kind: dark_nebula
+id: curated_dark_nebulae_v1
+edition: deep
+scope: NightSkyAtlas-owned curation decisions; not an imported catalogue list
+representation_policy: A locator marks a target position; it does not claim cloud
+  morphology.
+entries:
+- id: b-103
+  preferred_designation: B 103
+  object_ids:
+  - B 103
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-104
+  preferred_designation: B 104
+  object_ids:
+  - B 104
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-108
+  preferred_designation: B 108
+  object_ids:
+  - B 108
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-111
+  preferred_designation: B 111
+  object_ids:
+  - B 111
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-133
+  preferred_designation: B 133
+  object_ids:
+  - B 133
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-150-seahorse
+  preferred_designation: B 150 / Seahorse
+  object_ids:
+  - B 150
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-163
+  preferred_designation: B 163
+  object_ids:
+  - B 163
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-168-cocoon-dark-lane
+  preferred_designation: B 168 / Cocoon dark lane
+  object_ids:
+  - B 168
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-169
+  preferred_designation: B 169
+  object_ids:
+  - B 169
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-228
+  preferred_designation: B 228
+  object_ids:
+  - B 228
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-33-horsehead
+  preferred_designation: B 33 / Horsehead
+  object_ids:
+  - B033
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-34
+  preferred_designation: B 34
+  object_ids:
+  - B 34
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-352
+  preferred_designation: B 352
+  object_ids:
+  - B 352
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-5
+  preferred_designation: B 5
+  object_ids: []
+  status: review
+  representation_quality: unresolved_identity
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - object_identity_missing
+- id: b-68
+  preferred_designation: B 68
+  object_ids:
+  - B 68
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-7-taurus-dark-lane
+  preferred_designation: B 7 / Taurus dark lane
+  object_ids:
+  - B 7
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-72-snake
+  preferred_designation: B 72 / Snake
+  object_ids:
+  - B 72
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-86-ink-spot
+  preferred_designation: B 86 / Ink Spot
+  object_ids:
+  - B 86
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-87
+  preferred_designation: B 87
+  object_ids:
+  - B 87
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-92
+  preferred_designation: B 92
+  object_ids:
+  - B 92
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: b-93
+  preferred_designation: B 93
+  object_ids:
+  - B 93
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: barnard-s-e
+  preferred_designation: Barnard's E
+  object_ids:
+  - B 142
+  - B 143
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-100
+  preferred_designation: LDN 100
+  object_ids:
+  - LDN 100
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-108
+  preferred_designation: LDN 108
+  object_ids:
+  - LDN 108
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-11
+  preferred_designation: LDN 11
+  object_ids:
+  - LDN 11
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-111
+  preferred_designation: LDN 111
+  object_ids:
+  - LDN 111
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-1153
+  preferred_designation: LDN 1153
+  object_ids:
+  - LDN 1153
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-1166
+  preferred_designation: LDN 1166
+  object_ids:
+  - LDN 1166
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-1523
+  preferred_designation: LDN 1523
+  object_ids:
+  - LDN 1523
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-1682
+  preferred_designation: LDN 1682
+  object_ids:
+  - LDN 1682
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-1685
+  preferred_designation: LDN 1685
+  object_ids:
+  - LDN 1685
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-17
+  preferred_designation: LDN 17
+  object_ids:
+  - LDN 17
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-173
+  preferred_designation: LDN 173
+  object_ids:
+  - LDN 173
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-1746
+  preferred_designation: LDN 1746
+  object_ids:
+  - LDN 1746
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-323
+  preferred_designation: LDN 323
+  object_ids:
+  - LDN 323
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-42
+  preferred_designation: LDN 42
+  object_ids:
+  - LDN 42
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-530
+  preferred_designation: LDN 530
+  object_ids:
+  - LDN 530
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-534
+  preferred_designation: LDN 534
+  object_ids:
+  - LDN 534
+  status: review
+  representation_quality: area_derived_locator_only
+  decision_basis: broad_region_contains_multiple_barnard_targets
+  review_reasons:
+  - do_not_plot_parent_without_clear_region_footprint
+- id: candidate-ldn-66
+  preferred_designation: LDN 66
+  object_ids:
+  - LDN 66
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: candidate-ldn-93
+  preferred_designation: LDN 93
+  object_ids:
+  - LDN 93
+  status: exclude
+  representation_quality: area_derived_locator_only
+  decision_basis: represented_by_single_B_86_map_locator
+  review_reasons: []
+- id: candidate-ldn-99
+  preferred_designation: LDN 99
+  object_ids:
+  - LDN 99
+  status: include
+  representation_quality: area_derived_locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: coalsack
+  preferred_designation: Coalsack
+  object_ids:
+  - C099
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: dark-doodad-black-python
+  preferred_designation: Dark Doodad / Black Python
+  object_ids: []
+  status: review
+  representation_quality: unresolved_identity
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - object_identity_missing
+- id: ldn-557
+  preferred_designation: LDN 557
+  object_ids:
+  - LDN 557
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: ldn-582
+  preferred_designation: LDN 582
+  object_ids:
+  - LDN 582
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: ldn-617
+  preferred_designation: LDN 617
+  object_ids:
+  - LDN 617
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: ldn-889
+  preferred_designation: LDN 889
+  object_ids:
+  - LDN 889
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: ldn-935-north-america-pelican-lane
+  preferred_designation: LDN 935 / North America–Pelican lane
+  object_ids:
+  - LDN 935
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: pipe-nebula
+  preferred_designation: Pipe Nebula
+  object_ids:
+  - B 59
+  - B 78
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+- id: r-cra-dark-cloud
+  preferred_designation: R CrA dark cloud
+  object_ids: []
+  status: review
+  representation_quality: unresolved_identity
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - object_identity_missing
+- id: sl-11
+  preferred_designation: SL 11
+  object_ids: []
+  status: review
+  representation_quality: unresolved_identity
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - object_identity_missing
+- id: sl-7
+  preferred_designation: SL 7
+  object_ids: []
+  status: review
+  representation_quality: unresolved_identity
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - object_identity_missing

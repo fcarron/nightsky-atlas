@@ -110,6 +110,7 @@ class TypeSelectionRule:
     visibility_class_rules: tuple[VisibilityClassRule, ...] = ()
     regional_allowlists: tuple[RegionalDesignationAllowlist, ...] = ()
     curated_designations: tuple[str, ...] = ()
+    curated_memberships: tuple[str, ...] = ()
     minimum_visibility_score_400: float | None = None
     minimum_visibility_score_by_aperture: tuple[tuple[int, float], ...] = ()
     minimum_major_axis_arcmin: float | None = None
@@ -231,6 +232,8 @@ def _rule_inclusion(
         if dso.id in rule.curated_designations:
             return True, "curated_object_policy"
         return False, "outside_curated_object_set"
+    if rule.curated_memberships and memberships.intersection(rule.curated_memberships):
+        return True, "curated_membership_policy"
     if (
         rule.use_visibility
         and assessment_visible
@@ -527,7 +530,9 @@ def select_dso(
         )
     if policy_reason is not None:
         reason_code = (
-            rule.selection_reason_code if type_policy_visible and rule is not None else None
+            "curated_membership_policy"
+            if policy_reason == "curated_membership_policy"
+            else rule.selection_reason_code if type_policy_visible and rule is not None else None
         )
         reason_code = reason_code or {
             "galaxy_visibility_policy": (

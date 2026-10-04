@@ -92,6 +92,7 @@ class TypeSelectionPolicyConfig(_StrictModel):
     visibility_class_rules: tuple[VisibilityClassPolicyConfig, ...] = ()
     regional_allowlists: tuple[RegionalDesignationAllowlistConfig, ...] = ()
     curated_designations: tuple[str, ...] = ()
+    curated_memberships: tuple[str, ...] = ()
     minimum_visibility_score_400: float | None = None
     minimum_visibility_score_by_aperture: dict[int, float] = Field(default_factory=dict)
     minimum_major_axis_arcmin: float | None = None
@@ -187,6 +188,8 @@ class ObservingListsConfig(_StrictModel):
         known = set(self.lists)
         for edition_id, policy in self.editions.items():
             referenced = set(policy.forced_lists) | set(policy.list_weights)
+            for rule in policy.selection_rules.values():
+                referenced.update(rule.curated_memberships)
             unknown = referenced - known
             if unknown:
                 raise ValueError(

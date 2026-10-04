@@ -30,6 +30,8 @@ lists:
     name: Herschel II / Herschel 400 II
   planetary_nebula_al:
     name: Astronomical League Planetary Nebula Program
+  nightsky_curated_bright_nebulae_v1:
+    name: NightSkyAtlas curated bright nebulae v1
   bright_nebula_al:
     name: Astronomical League Bright Nebula Program
   dark_nebula_al:
@@ -256,6 +258,8 @@ editions:
         catalogue_maximum_surface_brightness: 23.5
       bright_nebula:
         use_visibility: true
+        curated_memberships:
+          - nightsky_curated_bright_nebulae_v1
         visibility_catalogues:
           - OpenNGC
           - VII/21
@@ -263,26 +267,66 @@ editions:
         qualifying_catalogues:
           - VII/20
         catalogue_minimum_major_axis_arcmin: 15
+      bright_nebula_unspecified:
+        use_visibility: true
+        curated_memberships:
+          - nightsky_curated_bright_nebulae_v1
+      supernova_remnant:
+        use_visibility: true
+        curated_memberships:
+          - nightsky_curated_bright_nebulae_v1
       dark_nebula:
         use_visibility: false
         selection_reason_code: curated_dark_nebula_deep
         exclusion_reason_code: outside_curated_dark_nebula_set
         curated_designations:
-          - B033
-          - C099
-          - LDN 935
-          - B 59
-          - B 72
-          - B 78
-          - B 86
-          - B 92
-          - B 93
+          - B 103
+          - B 104
+          - B 108
+          - B 111
+          - B 133
           - B 142
           - B 143
           - B 150
+          - B 163
           - B 168
+          - B 169
           - B 228
+          - B 34
           - B 352
+          - B 59
+          - B 68
+          - B 7
+          - B 72
+          - B 78
+          - B 86
+          - B 87
+          - B 92
+          - B 93
+          - B033
+          - C099
+          - LDN 100
+          - LDN 108
+          - LDN 11
+          - LDN 111
+          - LDN 1153
+          - LDN 1166
+          - LDN 1523
+          - LDN 1682
+          - LDN 1685
+          - LDN 17
+          - LDN 173
+          - LDN 1746
+          - LDN 323
+          - LDN 42
+          - LDN 530
+          - LDN 557
+          - LDN 582
+          - LDN 617
+          - LDN 66
+          - LDN 889
+          - LDN 935
+          - LDN 99
   reference:
     inherit: deep
     include_uncertain_catalogue_matches: true

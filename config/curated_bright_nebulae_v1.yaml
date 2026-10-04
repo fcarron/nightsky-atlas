@@ -1,0 +1,458 @@
+schema_version: 1
+kind: bright_nebula
+id: curated_bright_nebulae_v1
+edition: deep
+scope: NightSkyAtlas-owned curation decisions; no broad LBN selection
+representation_policy: Photographic isophotes and catalogue extents are not asserted
+  as visual boundaries.
+entries:
+- id: bubble-nebula
+  preferred_designation: NGC 7635
+  object_ids:
+  - NGC7635
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: california-nebula
+  preferred_designation: NGC 1499
+  object_ids:
+  - NGC1499
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: candidate-ngc1980
+  preferred_designation: NGC1980
+  object_ids:
+  - NGC1980
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: candidate-ngc1981
+  preferred_designation: NGC1981
+  object_ids:
+  - NGC1981
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: candidate-ngc6530
+  preferred_designation: NGC6530
+  object_ids:
+  - NGC6530
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: candidate-ngc6611
+  preferred_designation: NGC6611
+  object_ids:
+  - NGC6611
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: cat-s-paw-nebula
+  preferred_designation: NGC 6334
+  object_ids:
+  - NGC6334
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: cocoon-nebula
+  preferred_designation: IC 5146
+  object_ids:
+  - IC5146
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: mixed
+- id: cone-nebula-region
+  preferred_designation: NGC 2264
+  object_ids:
+  - NGC2264
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: crab-nebula
+  preferred_designation: M 1
+  object_ids:
+  - NGC1952
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: snr
+- id: crescent-nebula
+  preferred_designation: NGC 6888
+  object_ids:
+  - NGC6888
+  status: include
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: de-mairan-s-nebula
+  preferred_designation: M 43
+  object_ids:
+  - NGC1982
+  status: include
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: eagle-nebula
+  preferred_designation: Eagle (IC 4703 / Sh 2-49)
+  object_ids:
+  - IC4703
+  - Sh2-49
+  status: review
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - region_parent_and_component_scope_review
+  category: emission
+- id: eta-carinae-nebula
+  preferred_designation: NGC 3372
+  object_ids:
+  - NGC3372
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: flaming-star-nebula
+  preferred_designation: IC 405
+  object_ids:
+  - IC0405
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: mixed
+- id: gamma-cygni-nebula
+  preferred_designation: IC 1318 A/B/C
+  object_ids:
+  - IC1318
+  status: review
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - region_parent_and_component_scope_review
+  category: emission
+- id: heart-nebula
+  preferred_designation: IC 1805
+  object_ids:
+  - IC1805
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: ic-1396
+  preferred_designation: IC 1396
+  object_ids:
+  - IC1396
+  status: include
+  representation_quality: locator_only
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: ic-2599
+  preferred_designation: IC 2599
+  object_ids:
+  - IC2599
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: ic-434
+  preferred_designation: IC 434
+  object_ids:
+  - IC0434
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: iris-nebula
+  preferred_designation: NGC 7023
+  object_ids:
+  - NGC7023
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: reflection
+- id: jellyfish-nebula
+  preferred_designation: IC 443
+  object_ids:
+  - IC0443
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: snr
+- id: lagoon-nebula
+  preferred_designation: M 8
+  object_ids:
+  - NGC6523
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: lobster-nebula
+  preferred_designation: NGC 6357
+  object_ids:
+  - NGC6357
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: m78
+  preferred_designation: M 78
+  object_ids:
+  - NGC2068
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: reflection
+- id: monkey-head-nebula
+  preferred_designation: NGC 2174
+  object_ids:
+  - NGC2174
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: n-66-ngc-346-region
+  preferred_designation: N 66 / NGC 346 region
+  object_ids:
+  - NGC0346
+  status: review
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - region_parent_and_component_scope_review
+  category: emission
+- id: ngc-1333
+  preferred_designation: NGC 1333
+  object_ids:
+  - NGC1333
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: reflection
+- id: ngc-2023
+  preferred_designation: NGC 2023
+  object_ids:
+  - NGC2023
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: reflection
+- id: ngc-3579
+  preferred_designation: NGC 3579
+  object_ids:
+  - NGC3579
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: ngc-6188
+  preferred_designation: NGC 6188
+  object_ids:
+  - NGC6188
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: north-america-nebula
+  preferred_designation: NGC 7000
+  object_ids:
+  - NGC7000
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: omega-nebula
+  preferred_designation: M 17
+  object_ids:
+  - NGC6618
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: orion-nebula
+  preferred_designation: M 42
+  object_ids:
+  - NGC1976
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: pacman-nebula
+  preferred_designation: NGC 281
+  object_ids:
+  - NGC0281
+  status: include
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: pelican-nebula
+  preferred_designation: IC 5070
+  object_ids:
+  - IC5070
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: prawn-nebula
+  preferred_designation: IC 4628
+  object_ids:
+  - IC4628
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: rho-ophiuchi-nebula
+  preferred_designation: IC 4604
+  object_ids:
+  - IC4604
+  status: include
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: reflection
+- id: rosette-nebula
+  preferred_designation: Rosette (NGC 2237/38/39/46)
+  object_ids:
+  - NGC2237
+  status: review
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - region_parent_and_component_scope_review
+  category: emission
+- id: running-chicken-nebula
+  preferred_designation: IC 2944
+  object_ids:
+  - IC2944
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: running-man-nebula
+  preferred_designation: NGC 1977
+  object_ids:
+  - NGC1977
+  status: include
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: reflection
+- id: seagull-nebula
+  preferred_designation: IC 2177
+  object_ids:
+  - IC2177
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: simeis-147
+  preferred_designation: Sh 2-240
+  object_ids:
+  - Sh2-240
+  status: include
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: snr
+- id: soul-nebula
+  preferred_designation: IC 1848
+  object_ids:
+  - IC1848
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: tarantula-nebula
+  preferred_designation: 30 Doradus
+  object_ids: []
+  status: review
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - no_unambiguous_local_object_id
+  - region_parent_and_component_scope_review
+  category: emission
+- id: thor-s-helmet
+  preferred_designation: NGC 2359
+  object_ids:
+  - NGC2359
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: emission
+- id: trifid-nebula
+  preferred_designation: M 20
+  object_ids:
+  - NGC6514
+  status: include
+  representation_quality: survey_isophote_not_visual_threshold
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons: []
+  category: mixed
+- id: veil-nebula
+  preferred_designation: Veil (NGC 6960/6992/6995; IC 1340)
+  object_ids:
+  - NGC6960
+  - IC1340
+  status: review
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - region_parent_and_component_scope_review
+  category: snr
+- id: vela-supernova-remnant
+  preferred_designation: G263.9-3.3
+  object_ids: []
+  status: review
+  representation_quality: catalogue_extent_or_rough_region
+  decision_basis: NightSkyAtlas_visual_curation
+  review_reasons:
+  - no_unambiguous_local_object_id
+  - region_parent_and_component_scope_review
+  category: snr

@@ -1,0 +1,285 @@
+schema_version: 1
+id: nebula_manual_review_v1
+relationship_checks:
+- first_object_id: LDN 66
+  second_object_id: B 72
+  source_relationship: catalogue_cross_id
+  assessment: REVIEW
+  center_separation_arcmin: 7.6
+  first_extent_equivalent_diameter_arcmin: 6.42
+  second_extent_arcmin: null
+  recommendation: Keep the IDs separate. Include LDN 66 as its own locator target: its 7.6 arcmin offset from B 72 gives distinct printed positions at Deep scale. This is a chart-selection decision, not proof of exact physical identity or a cloud subcomponent.
+- first_object_id: LDN 93
+  second_object_id: B 86
+  source_relationship: catalogue_cross_id
+  assessment: OVERLAPPING_REGION
+  center_separation_arcmin: 4.28
+  first_extent_equivalent_diameter_arcmin: 5.66
+  second_extent_diameter_arcmin: 5.0
+  recommendation: On the 20 mm/degree Deep chart the 4.28 arcmin offset is 1.43 mm, smaller than the 1.6 mm locator diameter. Use B 86 as the single v1 map locator for this field; retain LDN 93 as a separate catalogue ID/cross-reference and do not merge canonical identities.
+- first_object_id: LDN 534
+  second_object_ids:
+  - B 108
+  - B 111
+  - B 117A
+  - B 119A
+  - B 323
+  - B 325
+  source_relationship: multiple_catalogue_cross_ids
+  assessment: OVERLAPPING_REGION
+  ldn_area_square_deg: 3.185
+  recommendation: Treat as a broad region associated with several Barnard structures; never merge the six identities.
+entries:
+- kind: dark_nebula
+  id: b-5
+  preferred_designation: B 5
+  object_ids: []
+  reason_codes:
+  - object_identity_missing
+  representation_quality: unresolved_identity
+- kind: dark_nebula
+  id: candidate-ldn-100
+  preferred_designation: LDN 100
+  object_ids:
+  - LDN 100
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-108
+  preferred_designation: LDN 108
+  object_ids:
+  - LDN 108
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-11
+  preferred_designation: LDN 11
+  object_ids:
+  - LDN 11
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-111
+  preferred_designation: LDN 111
+  object_ids:
+  - LDN 111
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-1153
+  preferred_designation: LDN 1153
+  object_ids:
+  - LDN 1153
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-1166
+  preferred_designation: LDN 1166
+  object_ids:
+  - LDN 1166
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-1523
+  preferred_designation: LDN 1523
+  object_ids:
+  - LDN 1523
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-1682
+  preferred_designation: LDN 1682
+  object_ids:
+  - LDN 1682
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-1685
+  preferred_designation: LDN 1685
+  object_ids:
+  - LDN 1685
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-17
+  preferred_designation: LDN 17
+  object_ids:
+  - LDN 17
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-173
+  preferred_designation: LDN 173
+  object_ids:
+  - LDN 173
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-1746
+  preferred_designation: LDN 1746
+  object_ids:
+  - LDN 1746
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-323
+  preferred_designation: LDN 323
+  object_ids:
+  - LDN 323
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-42
+  preferred_designation: LDN 42
+  object_ids:
+  - LDN 42
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-530
+  preferred_designation: LDN 530
+  object_ids:
+  - LDN 530
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-534
+  preferred_designation: LDN 534
+  object_ids:
+  - LDN 534
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-66
+  preferred_designation: LDN 66
+  object_ids:
+  - LDN 66
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-93
+  preferred_designation: LDN 93
+  object_ids:
+  - LDN 93
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: candidate-ldn-99
+  preferred_designation: LDN 99
+  object_ids:
+  - LDN 99
+  reason_codes:
+  - catalogue_relationship_and_visual_footprint_review
+  representation_quality: area_derived_locator_only
+- kind: dark_nebula
+  id: dark-doodad-black-python
+  preferred_designation: Dark Doodad / Black Python
+  object_ids: []
+  reason_codes:
+  - object_identity_missing
+  representation_quality: unresolved_identity
+- kind: dark_nebula
+  id: r-cra-dark-cloud
+  preferred_designation: R CrA dark cloud
+  object_ids: []
+  reason_codes:
+  - object_identity_missing
+  representation_quality: unresolved_identity
+- kind: dark_nebula
+  id: sl-11
+  preferred_designation: SL 11
+  object_ids: []
+  reason_codes:
+  - object_identity_missing
+  representation_quality: unresolved_identity
+- kind: dark_nebula
+  id: sl-7
+  preferred_designation: SL 7
+  object_ids: []
+  reason_codes:
+  - object_identity_missing
+  representation_quality: unresolved_identity
+- kind: bright_nebula
+  id: eagle-nebula
+  preferred_designation: Eagle (IC 4703 / Sh 2-49)
+  object_ids:
+  - IC4703
+  - Sh2-49
+  reason_codes:
+  - region_parent_and_component_scope_review
+  representation_quality: catalogue_extent_or_rough_region
+- kind: bright_nebula
+  id: gamma-cygni-nebula
+  preferred_designation: IC 1318 A/B/C
+  object_ids:
+  - IC1318
+  reason_codes:
+  - region_parent_and_component_scope_review
+  representation_quality: catalogue_extent_or_rough_region
+- kind: bright_nebula
+  id: ic-1396
+  preferred_designation: IC 1396
+  object_ids:
+  - IC1396
+  reason_codes:
+  - region_parent_and_component_scope_review
+  representation_quality: survey_isophote_not_visual_threshold
+- kind: bright_nebula
+  id: n-66-ngc-346-region
+  preferred_designation: N 66 / NGC 346 region
+  object_ids:
+  - NGC0346
+  reason_codes:
+  - region_parent_and_component_scope_review
+  representation_quality: catalogue_extent_or_rough_region
+- kind: bright_nebula
+  id: rosette-nebula
+  preferred_designation: Rosette (NGC 2237/38/39/46)
+  object_ids:
+  - NGC2237
+  reason_codes:
+  - region_parent_and_component_scope_review
+  representation_quality: catalogue_extent_or_rough_region
+- kind: bright_nebula
+  id: tarantula-nebula
+  preferred_designation: 30 Doradus
+  object_ids: []
+  reason_codes:
+  - no_unambiguous_local_object_id
+  - region_parent_and_component_scope_review
+  representation_quality: survey_isophote_not_visual_threshold
+- kind: bright_nebula
+  id: veil-nebula
+  preferred_designation: Veil (NGC 6960/6992/6995; IC 1340)
+  object_ids:
+  - NGC6960
+  - IC1340
+  reason_codes:
+  - region_parent_and_component_scope_review
+  representation_quality: catalogue_extent_or_rough_region
+- kind: bright_nebula
+  id: vela-supernova-remnant
+  preferred_designation: G263.9-3.3
+  object_ids: []
+  reason_codes:
+  - no_unambiguous_local_object_id
+  - region_parent_and_component_scope_review
+  representation_quality: catalogue_extent_or_rough_region

@@ -323,6 +323,11 @@ def explain_selection(
             "semantic_importance",
             EDITION_REASON_NAMES["curated_object_policy"],
         ),
+        "curated_membership_policy": (
+            "semantic_importance",
+            "included by an independently curated target list; "
+            "catalogue measurements are unchanged",
+        ),
         "size_or_brightness_inclusion": (
             "physical_detectability",
             "included by configured size or brightness threshold",
