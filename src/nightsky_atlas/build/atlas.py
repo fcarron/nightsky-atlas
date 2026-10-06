@@ -903,7 +903,7 @@ def _build_atlas_impl(
             detail_labels = apply_overrides(detail_labels, detail_overrides)
             applied_chart_ids.add(definition.id)
         detail_presentation = ChartPresentation(
-            edition_name=f"Detail · {detail.name}",
+            edition_name=f"Detail · {detail.name} · Stars to {stellar_limit_magnitude:.1f}",
             edition_code="SD",
             chart_index=None,
             internal_chart_id=detail.code,
@@ -1244,7 +1244,9 @@ def _build_atlas_impl(
                 labels = apply_overrides(labels, chart_overrides)
                 applied_chart_ids.add(definition.id)
             presentation = ChartPresentation(
-                edition_name=f"Detail · {detail.name}",
+                edition_name=(
+                    f"Detail · {detail.name} · Stars to {stellar_limit_magnitude:.1f}"
+                ),
                 edition_code="SD",
                 chart_index=None,
                 internal_chart_id=detail.code,
@@ -1286,7 +1288,9 @@ def _build_atlas_impl(
             cost_after = prepared.cost_after
             validation = prepared.validation
             presentation = ChartPresentation(
-                edition_name=f"Detail · {detail.name}",
+                edition_name=(
+                    f"Detail · {detail.name} · Stars to {stellar_limit_magnitude:.1f}"
+                ),
                 edition_code="SD",
                 chart_index=None,
                 internal_chart_id=detail.code,
