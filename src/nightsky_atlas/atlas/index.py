@@ -32,6 +32,8 @@ __all__ = [
 class DsoIndexEntry:
     canonical_id: str
     designation: str
+    ra_deg: float
+    dec_deg: float
     object_type: str
     constellation: str
     primary_chart: str
@@ -43,6 +45,8 @@ class DsoIndexEntry:
         return {
             "canonical_id": self.canonical_id,
             "designation": self.designation,
+            "ra_deg": self.ra_deg,
+            "dec_deg": self.dec_deg,
             "object_type": self.object_type,
             "constellation": self.constellation,
             "primary_chart": self.primary_chart,
@@ -204,6 +208,8 @@ def build_atlas_index(
             DsoIndexEntry(
                 dso_id,
                 _canonical_designation(dso),
+                dso.ra_deg,
+                dso.dec_deg,
                 _type_name(dso),
                 dso.constellation or "",
                 chart_codes[0],

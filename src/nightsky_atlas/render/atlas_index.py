@@ -35,11 +35,16 @@ def index_page_count(index: AtlasIndex, page: PageGeometry) -> int:
     count = max(1, math.ceil(len(index.dso_entries) / dso_capacity))
     count += max(1, math.ceil(len(index.constellation_entries) / constellation_capacity))
     count += max(1, math.ceil(len(index.aliases) / dso_capacity)) if index.aliases else 0
-    return count + (
-        max(1, math.ceil(len(index.named_star_entries) / dso_capacity))
-        if index.named_star_entries
-        else 0
-    )
+    return count
+
+
+def _compact_position(ra_deg: float, dec_deg: float) -> str:
+    ra_minutes = round((ra_deg % 360.0) * 4.0) % (24 * 60)
+    hours, minutes = divmod(ra_minutes, 60)
+    declination_minutes = round(abs(dec_deg) * 60.0)
+    degrees, arcminutes = divmod(declination_minutes, 60)
+    sign = "−" if dec_deg < 0.0 else "+"
+    return f"{hours:02d}h{minutes:02d}m {sign}{degrees:02d}°{arcminutes:02d}"
 
 
 def _footer(
@@ -69,14 +74,15 @@ def _draw_dso_row(
 ) -> None:
     for text, offset in (
         (entry.designation, 0),
-        (entry.object_type, 30),
-        (entry.constellation, 76),
+        (_compact_position(entry.ra_deg, entry.dec_deg), 32),
+        (entry.object_type, 62),
+        (entry.constellation, 94),
     ):
         draw_text(cr, text, mm_to_pt(x + offset), mm_to_pt(y), family, _FONT_SIZE_PT)
     _draw_chart_references(
         cr,
         (entry.primary_chart, *entry.secondary_charts),
-        x + 91,
+        x + 106,
         y,
         family,
         pdf_navigation,
@@ -263,7 +269,7 @@ def draw_atlas_index_pages(
         surface,
         index.dso_entries,
         "DEEP-SKY OBJECT INDEX",
-        (("Designation", 0), ("Type", 30), ("Con", 76), ("Chart", 91)),
+        (("Designation", 0), ("RA/Dec", 32), ("Type", 62), ("Con", 94), ("Chart", 106)),
         page,
         style,
         edition,
@@ -290,19 +296,6 @@ def draw_atlas_index_pages(
             index.aliases,
             "CROSS-REFERENCE INDEX",
             (("Common name", 0), ("See", 70)),
-            page,
-            style,
-            edition,
-            next_page,
-            pdf_navigation=pdf_navigation,
-        )
-    if index.named_star_entries:
-        _draw_section(
-            cr,
-            surface,
-            index.named_star_entries,
-            "NAMED STAR INDEX",
-            (("Name", 0), ("Designation", 35), ("Con", 75), ("Chart", 90)),
             page,
             style,
             edition,
