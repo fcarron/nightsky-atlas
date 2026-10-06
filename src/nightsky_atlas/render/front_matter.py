@@ -482,12 +482,15 @@ def _draw_telrad(
         )
     cr.stroke()
     cr.restore()
-    for diameter, label in zip(diameters, ("0.5°", "2°", "4°"), strict=True):
+    label_x = center_x + diameters[-1] / 2.0 + 2.0
+    for label, label_offset_mm in zip(
+        ("0.5°", "2°", "4°"), (-5.0, 0.0, 5.0), strict=True
+    ):
         _text(
             cr,
             label,
-            center_x + diameter / 2.0 + 1.0,
-            center_y + 0.8,
+            label_x,
+            center_y + label_offset_mm + 0.8,
             family,
             6.0,
             gray=0.28,
@@ -682,20 +685,20 @@ def draw_field_guide(
         else:
             _text(cr, "fixed", x + 10.0, y + 6.4, family, 5.0, gray=0.35)
 
-    _rule(cr, left, right, 154.0)
-    _text(cr, "GALAXY VISIBILITY", left, 160.0, family, 7.0, bold=True, gray=0.38)
+    _rule(cr, left, right, 156.0)
+    _text(cr, "GALAXY VISIBILITY", left, 162.0, family, 7.0, bold=True, gray=0.38)
     _text(
         cr,
         "Stronger contour = easier integrated-light visibility",
         left + 39.0,
-        160.0,
+        162.0,
         family,
         6.1,
         gray=0.32,
     )
     for index, example in enumerate(galaxy_visibility_examples(style)):
         contour = example.contour
-        y = 168.0 + index * 4.0
+        y = 170.0 + index * 4.0
         cr.save()
         cr.set_source_rgb(0.0, 0.0, 0.0)
         cr.set_line_width(mm_to_pt(contour.line_width_mm))
