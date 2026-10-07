@@ -141,12 +141,12 @@ Furniture sits outside the chart frame and is deliberately quiet
 - **Navigation** is larger than the coordinate labels, mid-grey, and placed
   further out than the RA/Dec labels (east left, west right, per the printed
   orientation).  Coordinate labels treat navigation rectangles as obstacles.
-- **Scale bar** is omitted in Pocket and Standard; the edge ticks provide the
-  coordinate reference. Deep retains its 2° footer bar.
+- **Scale bar** is omitted from chart pages in all editions; the edge ticks
+  and coordinate grid provide the chart reference.
 - **Magnitude legend** is a compact `mag 2 4 6 8` reference whose dots use the
   real `StarSizeModel`, so the printed sizes match the chart exactly.
-- **Title** is right-aligned in the footer. The magnitude legend sits at left;
-  Deep's scale bar sits in the centre.
+- **Footer** uses the same one-line atlas, constellation and chart identifier
+  across editions. The magnitude legend remains at left where configured.
 
 ## Pocket and Standard detail charts and galaxy labels
 
@@ -180,8 +180,8 @@ to the stable-ID and hard-clean
 detail-label requirements above, a Deep parent galaxy must be at least
 magnitude 12.5 and have three other plotted galaxies within the style's
 15-mm label-density radius. Brighter galaxies, Messier and H400 objects keep
-their main-chart labels. Deep's printed scale bar halves its angular span as
-needed to fit the higher magnification of a detail chart.
+their main-chart labels. Chart pages do not include scale bars; angular scale
+is stated in the edition introduction and chart field information.
 
 ## Short leaders for broad DSO labels
 

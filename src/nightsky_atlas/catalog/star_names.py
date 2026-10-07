@@ -50,6 +50,8 @@ class StarName:
     def canonical_display_variant(self) -> tuple[str, str] | None:
         """Return this star's edition-independent chart label and category."""
         if self.curated_name and self.proper_name_tier in {"core", "standard"}:
+            if self.bayer and _BAYER.fullmatch(self.bayer):
+                return f"{self.curated_name} {self.bayer}", "combined"
             return self.curated_name, f"proper_{self.proper_name_tier}"
         if self.bayer and _BAYER.fullmatch(self.bayer):
             return self.bayer, "bayer"
@@ -69,8 +71,10 @@ class StarName:
         proper_magnitude_limit: float,
     ) -> bool:
         """Return whether an edition permits this canonical label category."""
-        if kind.startswith("proper_"):
-            tier = kind.removeprefix("proper_")
+        if kind == "combined" or kind.startswith("proper_"):
+            tier = self.proper_name_tier if kind == "combined" else kind.removeprefix("proper_")
+            if tier is None:
+                return False
             return getattr(policy.proper_names, tier, False) and magnitude <= proper_magnitude_limit
         designation = {
             "bayer": policy.bayer,

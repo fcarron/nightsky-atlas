@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from nightsky_atlas.atlas.config import EditionConfig
 from nightsky_atlas.catalog.common_names import curated_common_name
 from nightsky_atlas.catalog.constellations import constellation_name
+from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.priority import messier_id
 from nightsky_atlas.catalog.star_names import StarName, hip_number
@@ -189,7 +190,7 @@ def build_atlas_index(
     chart_constellations: dict[str, frozenset[str]],
     charts: tuple[ChartDefinition, ...],
     edition: EditionConfig,
-    chart_stars: dict[str, Iterable[Star]] | None = None,
+    chart_stars: dict[str, Iterable[Star | FaintStar]] | None = None,
     star_names: dict[int, StarName] | None = None,
 ) -> AtlasIndex:
     """Build all index content from the exact set of charts being published."""
@@ -253,6 +254,8 @@ def build_atlas_index(
         star_locations: dict[int, set[str]] = {}
         for chart_id, scene_stars in chart_stars.items():
             for star in scene_stars:
+                if not isinstance(star, Star):
+                    continue
                 number = hip_number(star.hip_id)
                 if number is None or number not in star_names or not star_names[number].name:
                     continue

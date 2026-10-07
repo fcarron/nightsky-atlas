@@ -19,6 +19,6 @@ grid:
   tick_dec_step_deg: 0.25
   tick_polar_ra_step_deg: 5.0
 furniture:
-  scale_bar: {length_deg: 0.5}
+  scale_bar: {enabled: false, length_deg: 0.5}
 overview:
   enabled: false

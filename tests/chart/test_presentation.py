@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.presentation import (
     PRODUCT_NAME,
@@ -38,7 +40,7 @@ def test_chart_index_missing_for_manual_ids() -> None:
 def test_visible_chart_code_uses_edition_code() -> None:
     presentation = presentation_for(make_definition("standard-068"))
     assert presentation.chart_code == "S068"
-    assert presentation.title == f"{PRODUCT_NAME} \N{EM DASH} Standard \N{MIDDLE DOT} S068"
+    assert presentation.title == f"{PRODUCT_NAME} \N{MIDDLE DOT} S068"
 
 
 def test_chart_header_includes_compact_constellation_context() -> None:
@@ -48,6 +50,7 @@ def test_chart_header_includes_compact_constellation_context() -> None:
     )
     assert presentation.chart_code == "S042"
     assert presentation.chart_header_code == "Cyg \N{MIDDLE DOT} S042"
+    assert presentation.title == "NightSky Atlas · Cyg · S042"
 
 
 def test_constellation_context_uses_two_names_only_for_shared_fields() -> None:
@@ -78,7 +81,57 @@ def test_edition_name_and_code_override_registry() -> None:
         edition_code="D",
     )
     assert presentation.chart_code == "D007"
-    assert "Deep Field" in presentation.title
+    assert presentation.title == "NightSky Atlas · D007"
+
+
+@pytest.mark.parametrize(
+    ("chart_id", "atlas_id", "edition_name", "edition_code", "width", "context", "expected"),
+    (
+        ("pocket-17", "pocket", "Pocket", "P", 2, "Cyg", "NightSky Atlas · Cyg · P17"),
+        ("standard-004", "standard", "Standard", "S", 3, "Cam", "NightSky Atlas · Cam · S004"),
+        ("deep-087", "deep", "Deep", "D", 3, "Vir", "NightSky Atlas · Vir · D087"),
+        (
+            "eyepiece-0432",
+            "eyepiece",
+            "Eyepiece",
+            "E",
+            4,
+            "And",
+            "NightSky Atlas · And · E0432",
+        ),
+    ),
+)
+def test_chart_titles_keep_brand_constellation_and_code_without_edition_name(
+    chart_id, atlas_id, edition_name, edition_code, width, context, expected
+) -> None:
+    presentation = presentation_for(
+        make_definition(chart_id, atlas_id),
+        edition_name=edition_name,
+        edition_code=edition_code,
+        chart_index_width=width,
+        constellation_area_fractions={context: 1.0},
+    )
+    assert presentation.title == expected
+    assert edition_name not in presentation.title
+    assert presentation.product_name == PRODUCT_NAME
+
+
+def test_boundary_chart_title_keeps_both_constellations() -> None:
+    presentation = presentation_for(
+        make_definition("standard-042"),
+        constellation_area_fractions={"Cyg": 0.48, "Cep": 0.44, "Lac": 0.08},
+    )
+    assert presentation.title == "NightSky Atlas · Cyg/Cep · S042"
+
+
+def test_chart_title_markup_subordinates_brand_and_emphasizes_chart_code() -> None:
+    presentation = presentation_for(
+        make_definition("standard-004"),
+        constellation_area_fractions={"Cam": 1.0},
+    )
+    assert presentation.title_markup == (
+        '<span size="small">NightSky Atlas</span> · Cam · <b>S004</b>'
+    )
 
 
 def test_manual_chart_falls_back_to_internal_id() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from nightsky_atlas.atlas.config import EditionConfig
 from nightsky_atlas.atlas.directory import build_chart_directory
 from nightsky_atlas.atlas.index import build_atlas_index, natural_designation_key
+from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.star_names import StarName
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
@@ -130,6 +131,20 @@ def test_named_star_index_uses_visible_stars_and_nearest_chart() -> None:
         "S040",
         ("S041",),
     )
+
+
+def test_faint_stars_are_excluded_from_named_star_index() -> None:
+    primary = Star("HIP 123", 11.0, 20.0, 1.0, Provenance("test", "123"), hip_id="HIP 123")
+    faint = FaintStar("UCAC4 1", 11.1, 20.1, 12.0)
+    index = build_atlas_index(
+        {},
+        {},
+        (_chart("standard-040", 10.0),),
+        EditionConfig(name="Standard", code="S"),
+        chart_stars={"standard-040": (primary, faint)},
+        star_names={123: StarName(123, name="Test Star", constellation="Com")},
+    )
+    assert [entry.name for entry in index.named_star_entries] == ["Test Star"]
 
 
 def test_chart_directory_uses_edition_codes_and_published_neighbours() -> None:

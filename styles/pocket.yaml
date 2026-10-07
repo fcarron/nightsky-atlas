@@ -83,8 +83,4 @@ label:
     common_name_max_neighbors: 5
   selection: {medium_density_budget: 0.08, low_density_budget: 0.025}
 furniture:
-  footer_layout: split
-  footer_code_font_size_pt: 11.0
-  footer_brand_font_size_pt: 6.0
-  footer_brand_gray: 0.6
   scale_bar: {enabled: false, length_deg: 10.0}

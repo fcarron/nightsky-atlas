@@ -103,20 +103,17 @@ class ChartPresentation:
 
     @property
     def title(self) -> str:
-        """Full visible page title, e.g. ``NightSky Atlas — Standard · S068``."""
+        """Full chart title, e.g. ``NightSky Atlas · Vir · D087``."""
         if not self.chart_code:
             return product_edition_title(self.edition_name, product_name=self.product_name)
-        return (
-            f"{self.product_name} \N{EM DASH} {self.edition_name} \N{MIDDLE DOT} "
-            f"{self.chart_header_code}"
-        )
+        return f"{self.product_name} \N{MIDDLE DOT} {self.chart_header_code}"
 
     @property
     def title_prefix(self) -> str:
         """Visible title without the chart code, including the separator."""
         if not self.chart_code:
             return ""
-        return f"{self.product_name} \N{EM DASH} {self.edition_name} \N{MIDDLE DOT} "
+        return f"{self.product_name} \N{MIDDLE DOT} "
 
     @property
     def title_markup(self) -> str:
@@ -128,7 +125,8 @@ class ChartPresentation:
         """
         if not self.chart_code:
             return _escape_markup(self.title)
-        return f"{_escape_markup(self.title_prefix)}{self.chart_header_markup}"
+        brand = f'<span size="small">{_escape_markup(self.product_name)}</span>'
+        return f"{brand} \N{MIDDLE DOT} {self.chart_header_markup}"
 
     @property
     def chart_header_markup(self) -> str:

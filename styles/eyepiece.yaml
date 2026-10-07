@@ -35,7 +35,7 @@ grid:
   tick_polar_ra_step_deg: 7.5
 
 furniture:
-  scale_bar: {length_deg: 1.0}
+  scale_bar: {enabled: false, length_deg: 1.0}
 
 # A hemisphere overview cannot label roughly four times as many cells at the
 # current A4 size. Navigation needs a separate design before publication.

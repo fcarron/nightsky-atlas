@@ -41,7 +41,9 @@ def test_edition_presets_load_with_expected_scale_and_codes(
     assert atlas.resolved_edition().code == code
     assert atlas.stellar_limit_magnitude == stellar_limit
     assert style.furniture.scale_bar.length_deg == scale_bar
-    assert presentation_from_edition(chart, atlas.resolved_edition()).chart_code == f"{code}001"
+    assert style.furniture.scale_bar.enabled is False
+    expected_code = f"{code}01" if edition == "pocket" else f"{code}001"
+    assert presentation_from_edition(chart, atlas.resolved_edition()).chart_code == expected_code
 
 
 def test_deep_magnitude_10_5_uses_a_smaller_printable_faint_star() -> None:

@@ -26,7 +26,6 @@ from nightsky_atlas.chart.presentation import (
     neighbour_code,
     neighbour_markup,
     presentation_for,
-    product_edition_title,
 )
 from nightsky_atlas.render.overview import locator_rect
 from nightsky_atlas.render.pdf_navigation import PdfNavigation
@@ -356,9 +355,7 @@ def build_furniture_plan(
                 code_markup,
             )
             obstacles.append(_obstacle_for_text(title, family))
-        brand_text = product_edition_title(
-            presentation.edition_name, product_name=presentation.product_name
-        )
+        brand_text = presentation.product_name
         brand_size = style.furniture.footer_brand_font_size_pt
         brand_height = TextMeasurer(family, brand_size).measure_mm(brand_text).height_mm
         brand = PlacedText(

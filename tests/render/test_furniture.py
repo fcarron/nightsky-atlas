@@ -40,7 +40,7 @@ def build_plan(neighbours: tuple[tuple[str, str], ...] = ()):
 def test_title_uses_short_code_and_footer_position() -> None:
     plan, _ = build_plan()
     assert plan.title is not None
-    assert plan.title.text == "NightSky Atlas \N{EM DASH} Standard \N{MIDDLE DOT} S068"
+    assert plan.title.text == "NightSky Atlas \N{MIDDLE DOT} S068"
     assert plan.title.align == "right"
     assert plan.title.x_mm == pytest.approx(PAGE.width_mm - PAGE.margin_mm)
     assert plan.title.y_mm > PAGE.height_mm / 2.0
@@ -50,15 +50,35 @@ def test_title_uses_short_code_and_footer_position() -> None:
     assert plan.title.y_mm + title_height <= PAGE.height_mm - 2.0
 
 
-def test_split_footer_prints_constellation_context_before_chart_code() -> None:
-    transform = make_transform()
-    pocket_style = load_style_config(REPO_ROOT / "styles" / "pocket.yaml")
-    presentation = presentation_for(
-        transform.chart, constellation_area_fractions={"Cyg": 0.48, "Cep": 0.44}
+@pytest.mark.parametrize(
+    ("edition", "chart_id", "expected"),
+    (
+        ("pocket", "pocket-035", "NightSky Atlas · Tau · P35"),
+        ("standard", "standard-035", "NightSky Atlas · Tau · S035"),
+        ("deep", "deep-035", "NightSky Atlas · Tau · D035"),
+        ("eyepiece", "eyepiece-035", "NightSky Atlas · Tau · E035"),
+    ),
+)
+def test_editions_share_the_standard_chart_footer(edition, chart_id, expected) -> None:
+    chart = ChartDefinition(
+        id=chart_id,
+        center_ra_deg=187.5,
+        center_dec_deg=12.0,
+        width_deg=27.0,
+        height_deg=18.5,
+        atlas_id=edition,
     )
-    plan = build_furniture_plan(transform, transform.chart, pocket_style, presentation)
+    transform = PageTransform(chart=chart, page=PAGE)
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    presentation = presentation_for(
+        chart, constellation_area_fractions={"Tau": 1.0}
+    )
+    plan = build_furniture_plan(transform, chart, style, presentation)
     assert plan.title is not None
-    assert plan.title.text == "Cyg/Cep \N{MIDDLE DOT} S068"
+    assert plan.title.text == expected
+    assert plan.brand is None
+    assert plan.title.font_size_pt == pytest.approx(STYLE.furniture.title_font_size_pt)
+    assert plan.scale_bar is None
 
 
 def test_navigation_sits_outside_the_chart_frame_with_short_codes() -> None:
@@ -134,7 +154,7 @@ def test_title_chart_code_is_bold_and_prefix_regular() -> None:
     assert plan.title is not None
     assert plan.title.markup is not None
     assert "<b>S068</b>" in plan.title.markup
-    assert plan.title.markup.startswith("NightSky Atlas")
+    assert plan.title.markup.startswith('<span size="small">NightSky Atlas</span>')
     assert plan.title.font_size_pt == pytest.approx(8.5)
 
 
@@ -158,22 +178,21 @@ def test_normal_chart_pages_have_no_magnitude_legend(edition: str) -> None:
     assert plan.legend is None
 
 
-def test_scale_bar_length_follows_mm_per_degree() -> None:
-    transform = make_transform()
-    style = load_style_config(REPO_ROOT / "styles" / "deep.yaml")
-    plan = build_furniture_plan(
-        transform, transform.chart, style, presentation_for(transform.chart)
-    )
-    assert plan.scale_bar is not None
-    expected = style.furniture.scale_bar.length_deg * transform.mm_per_deg
-    assert (plan.scale_bar.right_mm - plan.scale_bar.left_mm) == pytest.approx(expected)
-    assert plan.scale_bar.label.endswith("\N{DEGREE SIGN}")
-    assert "deg" not in plan.scale_bar.label
-    label_height = TextMeasurer(
-        style.label.font_family, plan.scale_bar.font_size_pt
-    ).measure_mm(plan.scale_bar.label).height_mm
-    assert plan.scale_bar.label_y_mm + label_height < plan.scale_bar.line_y_mm
-    assert plan.scale_bar.line_y_mm + style.furniture.scale_bar.tick_mm / 2.0 < PAGE.height_mm - 2.0
+@pytest.mark.parametrize(
+    "style_name",
+    (
+        "pocket",
+        "standard",
+        "deep",
+        "eyepiece",
+        "eyepiece_deep",
+        "deep_detail",
+        "deep_detail_40",
+    ),
+)
+def test_scale_bar_is_disabled_for_all_editions_and_detail_styles(style_name: str) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{style_name}.yaml")
+    assert style.furniture.scale_bar.enabled is False
 
 
 def test_standard_footer_has_no_scale_bar() -> None:

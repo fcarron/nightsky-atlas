@@ -21,7 +21,7 @@ def test_committed_fixture_loads() -> None:
     assert deneb.bayer == "α"
     assert deneb.flamsteed == "50"
     assert deneb.constellation == "Cyg"
-    assert deneb.display_text() == "Deneb"
+    assert deneb.display_text() == "Deneb α"
     assert names[10826].variable_marker is True
     assert names[14576].variable_marker is True
     assert names[97629].variable_marker is True

@@ -44,4 +44,4 @@ label:
   dso_label_magnitude_limit: null
   selection: {medium_density_budget: 0.18, low_density_budget: 0.09}
 furniture:
-  scale_bar: {enabled: true, length_deg: 2.0}
+  scale_bar: {enabled: false, length_deg: 2.0}

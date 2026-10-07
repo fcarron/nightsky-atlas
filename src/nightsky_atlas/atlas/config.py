@@ -331,10 +331,9 @@ class VisibilityConfig(_StrictModel):
 class EditionConfig(_StrictModel):
     """Visible identity of an atlas edition.
 
-    ``name`` is printed on the page footer (``Standard``) and ``code`` is the
-    short visible prefix used for chart codes and navigation (``S``).  Internal
-    identifiers keep the full lowercase edition id (``standard-068``); this block
-    only affects what the printed atlas shows.
+    ``name`` is used on edition-level pages and ``code`` is the short visible
+    prefix used for chart codes and navigation (``S``). Internal identifiers
+    keep the full lowercase edition id (``standard-068``).
     """
 
     name: str

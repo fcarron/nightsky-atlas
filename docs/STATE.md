@@ -144,8 +144,8 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   Its ordinary-galaxy label fallback is limited to the four galaxy fields,
   catalogue magnitude 12.5 or fainter, and three neighbouring galaxies within
   15 mm on the parent. The detail label must still be placed and hard-clean;
-  Messier and H400 labels remain on the parent. Printed detail scale bars fit
-  their actual magnification.
+  Messier and H400 labels remain on the parent. Chart footers use a shared
+  one-line format across editions; scale bars are omitted from chart pages.
 - A standalone local blind-review tool for label variants lives in
   `tools/label_review/`. Its curated 23-case set uses crops from assembled
   Pocket, Standard and Deep atlas pages (14 changed areas, 9 identical
