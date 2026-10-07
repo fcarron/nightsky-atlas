@@ -80,7 +80,9 @@ from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import (
     ChartPresentation,
+    constellation_context,
     presentation_from_edition,
+    scene_constellation_area_fractions,
 )
 from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.models import Label
@@ -387,7 +389,9 @@ def _build_main_chart(
     )
     if chart_overrides is not None:
         labels = apply_overrides(labels, chart_overrides)
-    presentation = presentation_from_edition(definition, shared.edition)
+    presentation = presentation_from_edition(
+        definition, shared.edition, scene=chart_context.scene
+    )
     locator: LocatorInset | None = None
     if shared.inputs.style.locator.enabled and shared.overviews:
         locator = LocatorInset(
@@ -908,6 +912,9 @@ def _build_atlas_impl(
             edition_code="SD",
             chart_index=None,
             internal_chart_id=detail.code,
+            constellation_context=constellation_context(
+                scene_constellation_area_fractions(detail_context.scene)
+            ),
         )
         detail_furniture = furniture_obstacles(
             detail_context.transform,
@@ -1249,6 +1256,9 @@ def _build_atlas_impl(
                 edition_code="SD",
                 chart_index=None,
                 internal_chart_id=detail.code,
+                constellation_context=constellation_context(
+                    scene_constellation_area_fractions(chart_context.scene)
+                ),
             )
             furniture = furniture_obstacles(
                 chart_context.transform,
@@ -1293,6 +1303,9 @@ def _build_atlas_impl(
                 edition_code="SD",
                 chart_index=None,
                 internal_chart_id=detail.code,
+                constellation_context=constellation_context(
+                    scene_constellation_area_fractions(chart_context.scene)
+                ),
             )
         page_dir = outroot / "charts" / definition.id
         render_chart(

@@ -47,6 +47,42 @@ class StarName:
     variable_marker: bool = False
     preferred_designation: str | None = None
 
+    def canonical_display_variant(self) -> tuple[str, str] | None:
+        """Return this star's edition-independent chart label and category."""
+        if self.curated_name and self.proper_name_tier in {"core", "standard"}:
+            return self.curated_name, f"proper_{self.proper_name_tier}"
+        if self.bayer and _BAYER.fullmatch(self.bayer):
+            return self.bayer, "bayer"
+        if self.flamsteed and _FLAMSTEED.fullmatch(self.flamsteed):
+            return self.flamsteed, "flamsteed"
+        variable = self.curated_variable or self.variable
+        if variable:
+            return variable, "variable"
+        return None
+
+    def display_variant_enabled(
+        self,
+        kind: str,
+        policy: StarLabelStyle,
+        magnitude: float,
+        *,
+        proper_magnitude_limit: float,
+    ) -> bool:
+        """Return whether an edition permits this canonical label category."""
+        if kind.startswith("proper_"):
+            tier = kind.removeprefix("proper_")
+            return getattr(policy.proper_names, tier, False) and magnitude <= proper_magnitude_limit
+        designation = {
+            "bayer": policy.bayer,
+            "flamsteed": policy.flamsteed,
+            "variable": policy.variables,
+        }.get(kind)
+        return (
+            designation is not None
+            and designation.enabled
+            and magnitude <= designation.max_magnitude
+        )
+
     @property
     def full_bayer_designation(self) -> str | None:
         if self.bayer and self.constellation and _BAYER.fullmatch(self.bayer):
@@ -67,82 +103,24 @@ class StarName:
         proper_magnitude_limit: float | None = None,
         ambiguous: bool = False,
     ) -> tuple[tuple[str, str], ...]:
-        """Legal text variants for this one physical star, in preferred order."""
-        variants: list[tuple[str, str]] = []
-        tier = self.proper_name_tier
-        has_proper = bool(
-            self.curated_name
-            and tier in {"core", "standard", "extended"}
-            and getattr(policy.proper_names, tier)
-            and (proper_magnitude_limit is None or magnitude <= proper_magnitude_limit)
+        """Compatibility wrapper around the canonical, edition-independent label."""
+        canonical = self.canonical_display_variant()
+        if canonical is None:
+            return ()
+        allowed = self.display_variant_enabled(
+            canonical[1],
+            policy,
+            magnitude,
+            proper_magnitude_limit=(
+                float("inf") if proper_magnitude_limit is None else proper_magnitude_limit
+            ),
         )
-        if has_proper:
-            variants.append((self.curated_name, f"proper_{tier}"))
-        bayer = (
-            self.full_bayer_designation
-            if policy.bayer.enabled and magnitude <= policy.bayer.max_magnitude
-            else None
-        )
-        flamsteed = (
-            self.full_flamsteed_designation
-            if policy.flamsteed.enabled and magnitude <= policy.flamsteed.max_magnitude
-            else None
-        )
-        selected_kind = (
-            "flamsteed"
-            if self.preferred_designation == "flamsteed" and flamsteed
-            else "bayer" if bayer else "flamsteed" if flamsteed else None
-        )
-        if selected_kind is not None:
-            full = bayer if selected_kind == "bayer" else flamsteed
-            compact = self.bayer if selected_kind == "bayer" else self.flamsteed
-            prefer_full = policy.constellation_suffix.default or (
-                ambiguous and policy.constellation_suffix.allow_ambiguity_fallback
-            )
-            systematic = full if prefer_full else compact
-            variants.append((systematic, selected_kind))
-            if has_proper and policy.combined_names:
-                variants.append((f"{self.curated_name} {systematic}", "combined"))
-            if policy.constellation_suffix.allow_ambiguity_fallback and prefer_full:
-                variants.append((compact, "compact_designation"))
-        if (
-            not has_proper
-            and selected_kind is None
-            and policy.variables.enabled
-            and magnitude <= policy.variables.max_magnitude
-            and self.curated_variable
-        ):
-            variants.append((self.curated_variable, "variable"))
-        ranks = {
-            "proper_core": 100,
-            "proper_standard": 80,
-            "proper_extended": 30,
-            "bayer": 90 if magnitude <= 3.0 else 65,
-            "flamsteed": 45,
-            "variable": 70,
-            "combined": 105 if tier in {"core", "standard"} else 10,
-            "compact_designation": 5,
-        }
-        if self.preferred_designation:
-            ranks[self.preferred_designation] = 110
-        if (
-            selected_kind is not None
-            and ambiguous
-            and policy.constellation_suffix.allow_ambiguity_fallback
-        ):
-            ranks[selected_kind] = 115
-        variants.sort(key=lambda item: -ranks[item[1]])
-        return tuple(variants)
+        return (canonical,) if allowed else ()
 
     def display_text(self) -> str | None:
-        """Return the raw legacy fallback; map labels use ``display_variants``."""
-        if self.name:
-            return self.name
-        if self.constellation:
-            for designation in (self.bayer, self.flamsteed, self.variable):
-                if designation:
-                    return f"{designation} {self.constellation}"
-        return self.bayer or self.flamsteed or self.variable or None
+        """Return the same canonical text used by chart labels."""
+        variant = self.canonical_display_variant()
+        return variant[0] if variant is not None else None
 
 
 def hip_number(hip_id: str | None) -> int | None:

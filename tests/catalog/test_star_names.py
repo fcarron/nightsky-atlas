@@ -29,10 +29,10 @@ def test_committed_fixture_loads() -> None:
 
 
 def test_display_text_precedence() -> None:
-    assert StarName(1, name="Thing", bayer="α", constellation="Cyg").display_text() == "Thing"
-    assert StarName(1, bayer="α", constellation="Cyg").display_text() == "α Cyg"
-    assert StarName(1, flamsteed="50", constellation="Cyg").display_text() == "50 Cyg"
-    assert StarName(1, variable="V", constellation="Cyg").display_text() == "V Cyg"
+    assert StarName(1, name="Thing", bayer="α", constellation="Cyg").display_text() == "α"
+    assert StarName(1, bayer="α", constellation="Cyg").display_text() == "α"
+    assert StarName(1, flamsteed="50", constellation="Cyg").display_text() == "50"
+    assert StarName(1, variable="V", constellation="Cyg").display_text() == "V"
     assert StarName(1).display_text() is None
 
 

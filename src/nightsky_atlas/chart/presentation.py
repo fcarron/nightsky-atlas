@@ -8,16 +8,20 @@ so the same conventions are never hand-written in more than one renderer.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import EditionConfig, default_edition
 from nightsky_atlas.chart.models import ChartDefinition
+from nightsky_atlas.scene.models import ChartScene
 
 __all__ = [
     "PRODUCT_NAME",
     "ChartPresentation",
     "chart_index",
     "chart_title",
+    "constellation_context",
+    "scene_constellation_area_fractions",
     "format_dec_deg",
     "format_ra_deg",
     "neighbour_code",
@@ -81,6 +85,7 @@ class ChartPresentation:
     internal_chart_id: str = ""
     product_name: str = PRODUCT_NAME
     chart_index_width: int = 3
+    constellation_context: str | None = None
 
     @property
     def chart_code(self) -> str:
@@ -90,12 +95,20 @@ class ChartPresentation:
         return f"{self.edition_code}{self.chart_index:0{self.chart_index_width}d}"
 
     @property
+    def chart_header_code(self) -> str:
+        """Printed chart code with compact visible-constellation context."""
+        if not self.constellation_context:
+            return self.chart_code
+        return f"{self.constellation_context} \N{MIDDLE DOT} {self.chart_code}"
+
+    @property
     def title(self) -> str:
         """Full visible page title, e.g. ``NightSky Atlas — Standard · S068``."""
         if not self.chart_code:
             return product_edition_title(self.edition_name, product_name=self.product_name)
         return (
-            f"{self.product_name} \N{EM DASH} {self.edition_name} \N{MIDDLE DOT} {self.chart_code}"
+            f"{self.product_name} \N{EM DASH} {self.edition_name} \N{MIDDLE DOT} "
+            f"{self.chart_header_code}"
         )
 
     @property
@@ -115,7 +128,45 @@ class ChartPresentation:
         """
         if not self.chart_code:
             return _escape_markup(self.title)
-        return f"{_escape_markup(self.title_prefix)}<b>{_escape_markup(self.chart_code)}</b>"
+        return f"{_escape_markup(self.title_prefix)}{self.chart_header_markup}"
+
+    @property
+    def chart_header_markup(self) -> str:
+        """Printed code markup, with only the page code emphasized."""
+        code_markup = f"<b>{_escape_markup(self.chart_code)}</b>"
+        if not self.constellation_context:
+            return code_markup
+        return (
+            f"{_escape_markup(self.constellation_context)} \N{MIDDLE DOT} "
+            f"{code_markup}"
+        )
+
+
+def constellation_context(area_fractions: Mapping[str, float]) -> str | None:
+    """Choose one or two IAU abbreviations from projected visible sky areas."""
+    ranked = sorted(
+        ((name, area) for name, area in area_fractions.items() if area > 0.0),
+        key=lambda item: (-item[1], item[0]),
+    )
+    if not ranked:
+        return None
+    first_name, first_area = ranked[0]
+    if len(ranked) < 2 or first_area <= 0.0:
+        return first_name
+    second_name, second_area = ranked[1]
+    if second_area >= 0.30 and second_area / first_area >= 0.75:
+        return f"{first_name}/{second_name}"
+    return first_name
+
+
+def scene_constellation_area_fractions(scene: ChartScene) -> dict[str, float]:
+    """Aggregate clipped projected constellation areas from a chart scene."""
+    fractions: dict[str, float] = {}
+    for region in scene.constellation_regions:
+        fractions[region.constellation_id] = (
+            fractions.get(region.constellation_id, 0.0) + region.visible_area_fraction
+        )
+    return fractions
 
 
 def product_edition_title(edition_name: str, *, product_name: str = PRODUCT_NAME) -> str:
@@ -129,6 +180,8 @@ def presentation_for(
     edition_name: str | None = None,
     edition_code: str | None = None,
     chart_index_width: int | None = None,
+    constellation_area_fractions: Mapping[str, float] | None = None,
+    scene: ChartScene | None = None,
 ) -> ChartPresentation:
     """Build the visible presentation for a chart definition.
 
@@ -147,11 +200,22 @@ def presentation_for(
         chart_index_width=(
             chart_index_width if chart_index_width is not None else default.chart_index_width
         ),
+        constellation_context=constellation_context(
+            constellation_area_fractions
+            if constellation_area_fractions is not None
+            else scene_constellation_area_fractions(scene)
+            if scene is not None
+            else {}
+        ),
     )
 
 
 def presentation_from_edition(
-    definition: ChartDefinition, edition: EditionConfig
+    definition: ChartDefinition,
+    edition: EditionConfig,
+    *,
+    constellation_area_fractions: Mapping[str, float] | None = None,
+    scene: ChartScene | None = None,
 ) -> ChartPresentation:
     """Build the visible presentation from an edition configuration block."""
     return presentation_for(
@@ -159,6 +223,8 @@ def presentation_from_edition(
         edition_name=edition.name,
         edition_code=edition.code,
         chart_index_width=edition.chart_index_width,
+        constellation_area_fractions=constellation_area_fractions,
+        scene=scene,
     )
 
 

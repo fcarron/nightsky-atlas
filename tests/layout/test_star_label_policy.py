@@ -17,6 +17,8 @@ from nightsky_atlas.scene.builder import build_scene
 ROOT = Path(__file__).resolve().parents[2]
 STYLE = load_style_config(ROOT / "styles/standard.yaml")
 POCKET_STYLE = load_style_config(ROOT / "styles/pocket.yaml")
+DEEP_STYLE = load_style_config(ROOT / "styles/deep.yaml")
+EYEPIECE_STYLE = load_style_config(ROOT / "styles/eyepiece.yaml")
 NAMES = load_star_names(ROOT / "data/fixtures/starnames")
 CHART = ChartDefinition(
     id="names",
@@ -48,27 +50,29 @@ def labels_for(
     return build_star_labels(build_scene(CHART, [star]), TRANSFORM, style, names or NAMES)
 
 
-def label_for(hip: int, magnitude: float, names: dict[int, StarName] | None = None):
-    labels = labels_for(hip, magnitude, names)
+def label_for(
+    hip: int,
+    magnitude: float,
+    names: dict[int, StarName] | None = None,
+    *,
+    style=STYLE,
+):
+    labels = labels_for(hip, magnitude, names, style=style)
     return labels[0] if labels else None
 
 
 def test_iconic_name_and_systematic_designation_form_one_label() -> None:
     sirius = label_for(32349, -1.46)
     deneb = label_for(102098, 1.25)
-    assert sirius is not None and sirius.text == "Sirius α"
-    assert deneb is not None and deneb.text == "Deneb α"
-    assert [
-        text for text, _ in NAMES[102098].display_variants(STYLE.label.star_labels, 1.25)[:3]
-    ] == [
-        "Deneb α",
-        "Deneb",
-        "α",
-    ]
+    assert sirius is not None and sirius.text == "Sirius"
+    assert deneb is not None and deneb.text == "Deneb"
+    assert NAMES[102098].display_variants(STYLE.label.star_labels, 1.25) == (
+        ("Deneb", "proper_core"),
+    )
     deneb_labels = labels_for(102098, 1.25)
     assert len(deneb_labels) == 1
     assert deneb_labels[0].id == "label:star:TYC 102098-1-1"
-    assert deneb_labels[0].text == "Deneb α"
+    assert deneb_labels[0].text == "Deneb"
     assert all(candidate.display_text is None for candidate in deneb_labels[0].candidates)
     assert all(candidate.variant_rank == 0 for candidate in deneb_labels[0].candidates)
     assert NAMES[102098].full_bayer_designation == "α Cyg"
@@ -89,7 +93,10 @@ def test_iconic_name_and_systematic_designation_form_one_label() -> None:
     ],
 )
 def test_standard_core_combined_names(hip: int, expected: str) -> None:
-    assert NAMES[hip].display_variants(STYLE.label.star_labels, 1.0)[0][0] == expected
+    assert NAMES[hip].canonical_display_variant() == (
+        expected.split()[0],
+        f"proper_{NAMES[hip].proper_name_tier}",
+    )
 
 
 @pytest.mark.parametrize(
@@ -101,10 +108,10 @@ def test_standard_core_combined_names(hip: int, expected: str) -> None:
         (100345, "Dabih β"),
     ],
 )
-def test_pocket_uses_proper_name_and_compact_bayer(hip: int, expected: str) -> None:
+def test_pocket_uses_same_proper_name_without_appending_bayer(hip: int, expected: str) -> None:
     labels = labels_for(hip, 2.0, style=POCKET_STYLE)
     assert len(labels) == 1
-    assert labels[0].text == expected
+    assert labels[0].text == expected.split()[0]
 
 
 def test_bayer_flamsteed_and_tycho_suppression() -> None:
@@ -145,21 +152,19 @@ def test_obscure_name_does_not_suppress_bayer() -> None:
 
 def test_variable_and_customary_flamsteed() -> None:
     assert label_for(77442, 5.9).text == "R CrB"
-    assert label_for(19849, 4.4).text == "40"
+    assert label_for(19849, 4.4).text == "ο2"
     assert NAMES[19849].full_flamsteed_designation == "40 Eri"
 
 
-def test_standard_uses_only_one_systematic_designation() -> None:
+def test_standard_uses_canonical_name_without_appended_designations() -> None:
     deneb = NAMES[102098]
     texts = [text for text, _ in deneb.display_variants(STYLE.label.star_labels, 1.25)]
-    assert "Deneb α" in texts
-    assert "α" in texts
+    assert texts == ["Deneb"]
     assert "50" not in texts
-    assert "Deneb α 50" not in texts
     assert deneb.full_flamsteed_designation == "50 Cyg"
 
 
-def test_preferred_flamsteed_override_beats_bayer() -> None:
+def test_canonical_bayer_precedes_flamsteed_even_with_preference_override() -> None:
     name = StarName(
         992,
         bayer="ο",
@@ -167,18 +172,10 @@ def test_preferred_flamsteed_override_beats_bayer() -> None:
         constellation="Eri",
         preferred_designation="flamsteed",
     )
-    assert name.display_variants(STYLE.label.star_labels, 4.0) == (("40", "flamsteed"),)
+    assert name.canonical_display_variant() == ("ο", "bayer")
 
 
-def test_ambiguity_mode_prefers_full_constellation_designation() -> None:
-    policy = STYLE.label.star_labels
-    assert NAMES[102098].display_variants(policy, 1.25, ambiguous=True)[0] == ("α Cyg", "bayer")
-    name = StarName(991, flamsteed="52", constellation="Cyg")
-    assert name.display_variants(policy, 4.5, ambiguous=True)[0] == ("52 Cyg", "flamsteed")
-    assert name.display_variants(policy, 4.5)[0] == ("52", "flamsteed")
-
-
-def test_nearby_cross_boundary_duplicates_get_full_designations() -> None:
+def test_nearby_cross_boundary_bayer_labels_stay_compact_and_distinct() -> None:
     names = {
         1: StarName(1, bayer="δ", constellation="Cyg"),
         2: StarName(2, bayer="δ", constellation="Lac"),
@@ -195,7 +192,8 @@ def test_nearby_cross_boundary_duplicates_get_full_designations() -> None:
         for number, ra in ((1, 90.0), (2, 90.8))
     ]
     labels = build_star_labels(build_scene(CHART, stars), TRANSFORM, STYLE, names)
-    assert {label.text for label in labels} == {"δ Cyg", "δ Lac"}
+    assert {label.text for label in labels} == {"δ"}
+    assert {label.semantic_key for label in labels} == {"star:bayer:δ Cyg", "star:bayer:δ Lac"}
     far_stars = [
         stars[0],
         Star(
@@ -219,6 +217,9 @@ def test_tier_filter_and_no_catalogue_ids() -> None:
             )
         }
     )
+    style = STYLE.model_copy(
+        update={"label": STYLE.label.model_copy(update={"star_labels": policy})}
+    )
     name = StarName(
         995,
         name="Rare",
@@ -227,7 +228,7 @@ def test_tier_filter_and_no_catalogue_ids() -> None:
         curated_name="Rare",
         proper_name_tier="standard",
     )
-    assert name.display_variants(policy, 4.5) == (("γ", "bayer"),)
+    assert label_for(995, 4.5, {995: name}, style=style) is None
     for hip in (32349, 102098, 77442, 19849):
         label = label_for(hip, 4.0)
         assert label is not None
@@ -245,16 +246,53 @@ def test_standard_name_and_bayer_are_one_logical_label() -> None:
     )
     labels = labels_for(994, 2.5, {994: name})
     assert len(labels) == 1
-    assert labels[0].text == "Less familiar β"
+    assert labels[0].text == "Less familiar"
     assert labels[0].semantic_key == "star:name:Less familiar"
 
 
-def test_combined_variant_can_be_disabled_by_edition_policy() -> None:
+def test_combined_name_policy_cannot_change_canonical_label_text() -> None:
     policy = STYLE.label.star_labels.model_copy(update={"combined_names": True})
     variants = NAMES[102098].display_variants(policy, 1.25)
-    assert variants[0] == ("Deneb α", "combined")
     disabled = STYLE.label.star_labels.model_copy(update={"combined_names": False})
-    assert NAMES[102098].display_variants(disabled, 1.25)[0] == ("Deneb", "proper_core")
+    assert variants == NAMES[102098].display_variants(disabled, 1.25)
+
+
+@pytest.mark.parametrize("edition_style", [POCKET_STYLE, STYLE, DEEP_STYLE, EYEPIECE_STYLE])
+def test_same_star_uses_identical_canonical_text_across_editions(edition_style) -> None:
+    star = Star(
+        id="TYC 1-1-1",
+        ra_deg=90.0,
+        dec_deg=0.0,
+        magnitude=3.5,
+        hip_id="HIP 999",
+        provenance=Provenance(catalogue="TEST", source_id="same-star"),
+    )
+    name = StarName(999, bayer="γ", flamsteed="57", constellation="And")
+    result = build_star_labels(build_scene(CHART, [star]), TRANSFORM, edition_style, {999: name})
+    assert result[0].text == "γ"
+
+
+def test_flamsteed_only_label_has_no_constellation_suffix() -> None:
+    name = StarName(998, flamsteed="61", constellation="Cyg")
+    assert label_for(998, 4.5, {998: name}).text == "61"
+
+
+def test_edition_can_hide_canonical_label_without_changing_its_text() -> None:
+    proper_names = STYLE.label.star_labels.proper_names.model_copy(
+        update={"standard": False}
+    )
+    policy = STYLE.label.star_labels.model_copy(update={"proper_names": proper_names})
+    style = STYLE.model_copy(
+        update={"label": STYLE.label.model_copy(update={"star_labels": policy})}
+    )
+    name = StarName(
+        996,
+        curated_name="Rare",
+        proper_name_tier="standard",
+        bayer="ε",
+        constellation="Lyr",
+    )
+    assert label_for(996, 4.0, {996: name}, style=style) is None
 
 
 def test_malformed_designations_do_not_render() -> None:
@@ -276,6 +314,6 @@ def test_same_hip_crossmatch_produces_one_logical_label() -> None:
     ]
     labels = build_star_labels(build_scene(CHART, stars), TRANSFORM, STYLE, NAMES)
     assert len(labels) == 1
-    assert labels[0].text == "Sirius α"
+    assert labels[0].text == "Sirius"
     assert {label.target_id for label in labels} == {"TYC 1-1-1"}
     assert build_star_labels(build_scene(CHART, stars), TRANSFORM, STYLE, NAMES) == labels

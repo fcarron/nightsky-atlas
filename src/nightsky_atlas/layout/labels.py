@@ -35,7 +35,7 @@ from nightsky_atlas.layout.scoring import star_rect_edge_distance_mm
 from nightsky_atlas.render.double_stars import printed_star_obstacles
 from nightsky_atlas.render.symbols import StarSizeModel, dso_symbol_extent
 from nightsky_atlas.render.text import TextMeasurer
-from nightsky_atlas.scene.models import ChartScene
+from nightsky_atlas.scene.models import ChartScene, SceneConstellationRegion
 
 __all__ = [
     "build_dso_labels",
@@ -43,8 +43,11 @@ __all__ = [
     "build_star_labels",
     "build_constellation_labels",
     "constellation_label_anchors",
+    "constellation_visible_area_fractions",
     "label_priority",
 ]
+
+_CONSTELLATION_LABEL_AREA_FRACTION = 0.15
 
 
 def label_priority(dso: DeepSkyObject) -> tuple[int, bool]:
@@ -233,48 +236,6 @@ def _star_semantic_key(star_name: StarName, text: str, kind: str) -> str:
     return f"star:variable:{text}"
 
 
-def _ambiguous_star_designations(
-    scene: ChartScene,
-    transform: PageTransform,
-    style: StyleConfig,
-    star_names: dict[int, StarName],
-) -> set[int]:
-    policy = style.label.star_labels
-    suffix = policy.constellation_suffix
-    if suffix.default or not suffix.allow_ambiguity_fallback:
-        return set()
-    by_compact: dict[str, list[tuple[int, str, PagePoint]]] = defaultdict(list)
-    for scene_star in scene.stars:
-        star = scene_star.star
-        if not isinstance(star, Star):
-            continue
-        number = hip_number(star.hip_id)
-        if number is None or number not in star_names:
-            continue
-        name = star_names[number]
-        variants = name.display_variants(
-            policy, star.magnitude, proper_magnitude_limit=style.star.label_magnitude_limit
-        )
-        systematic = next((text for text, kind in variants if kind in {"bayer", "flamsteed"}), None)
-        if systematic is not None and name.constellation is not None:
-            by_compact[systematic].append(
-                (number, name.constellation, transform.to_page(scene_star.chart_point))
-            )
-    ambiguous: set[int] = set()
-    radius_sq = suffix.ambiguity_radius_mm**2
-    for entries in by_compact.values():
-        for index, (left_hip, left_constellation, left_point) in enumerate(entries):
-            for right_hip, right_constellation, right_point in entries[index + 1 :]:
-                if left_hip == right_hip or left_constellation == right_constellation:
-                    continue
-                distance_sq = (left_point.x_mm - right_point.x_mm) ** 2 + (
-                    left_point.y_mm - right_point.y_mm
-                ) ** 2
-                if distance_sq <= radius_sq:
-                    ambiguous.update((left_hip, right_hip))
-    return ambiguous
-
-
 def build_star_labels(
     scene: ChartScene,
     transform: PageTransform,
@@ -299,7 +260,6 @@ def build_star_labels(
     }
     measurer = TextMeasurer(style.label.font_family, style.label.font_size_pt)
     policy = style.label.star_labels
-    ambiguous_hips = _ambiguous_star_designations(scene, transform, style, star_names)
     limit = max(
         style.star.label_magnitude_limit,
         policy.bayer.max_magnitude if policy.bayer.enabled else 0.0,
@@ -320,16 +280,18 @@ def build_star_labels(
         star_name = star_names.get(number)
         if star_name is None:
             continue
-        variants = star_name.display_variants(
+        canonical = star_name.canonical_display_variant()
+        if canonical is None:
+            continue
+        text, kind = canonical
+        if not star_name.display_variant_enabled(
+            kind,
             policy,
             star.magnitude,
             proper_magnitude_limit=style.star.label_magnitude_limit,
-            ambiguous=number in ambiguous_hips,
-        )
-        if not variants:
+        ):
             continue
         seen_hips.add(number)
-        text, kind = variants[0]
         semantic_key = _star_semantic_key(star_name, text, kind)
         label_id = f"label:star:{star.id}"
         obstacle = printed_obstacle_by_star.get(star.id)
@@ -387,19 +349,46 @@ def build_star_labels(
     return tuple(labels)
 
 
+def constellation_visible_area_fractions(scene: ChartScene) -> dict[str, float]:
+    """Return the projected sky-area fraction occupied by each constellation."""
+    fractions: dict[str, float] = {}
+    for region in scene.constellation_regions:
+        fractions[region.constellation_id] = (
+            fractions.get(region.constellation_id, 0.0) + region.visible_area_fraction
+        )
+    return fractions
+
+
+def _forced_constellation_ids(scene: ChartScene) -> set[str]:
+    fractions = constellation_visible_area_fractions(scene)
+    if not fractions:
+        return set()
+    largest = min(fractions, key=lambda item: (-fractions[item], item))
+    return {
+        constellation_id
+        for constellation_id, fraction in fractions.items()
+        if fraction >= _CONSTELLATION_LABEL_AREA_FRACTION
+    } | {largest}
+
+
 def constellation_label_anchors(
     scene: ChartScene, transform: PageTransform, style: StyleConfig
 ) -> dict[str, PagePoint]:
-    """Return deterministic printable anchors for visible constellation names.
-
-    The anchor is derived solely from the projected stick-figure geometry.  It
-    is intentionally shared by construction, selection and optimization so a
-    constellation name is one normal layout element rather than a renderer
-    decoration with separate placement rules.
-    """
+    """Return deterministic anchors for significant visible constellation regions."""
     config = style.constellation.names
     if not config.enabled:
         return {}
+    if scene.constellation_regions:
+        forced = _forced_constellation_ids(scene)
+        regions = {
+            region.constellation_id: region
+            for region in scene.constellation_regions
+            if region.constellation_id in forced
+        }
+        return {
+            f"constellation:{constellation_id}": transform.to_page(region.centroid)
+            for constellation_id, region in sorted(regions.items())
+        }
     points_by_constellation: dict[str, list[PagePoint]] = defaultdict(list)
     for segment in scene.constellation_lines:
         if segment.constellation_id:
@@ -430,6 +419,8 @@ def build_constellation_labels(
         return ()
     measurer = TextMeasurer(style.label.font_family, config.font_size_pt)
     labels: list[Label] = []
+    forced = _forced_constellation_ids(scene)
+    regions = {region.constellation_id: region for region in scene.constellation_regions}
     for target_id, anchor in constellation_label_anchors(scene, transform, style).items():
         constellation_id = target_id.removeprefix("constellation:")
         label_id = f"label:constellation:{constellation_id}"
@@ -443,19 +434,61 @@ def build_constellation_labels(
             ring_count=style.label.candidate_rings,
             ring_gap_mm=style.label.ring_gap_mm,
         )
+        region = regions.get(constellation_id)
+        if region is not None:
+            interior = tuple(
+                candidate
+                for candidate in candidates
+                if _candidate_center_inside_region(candidate.bounds.center, region, transform)
+            )
+            if interior:
+                candidates = interior
+        is_forced = constellation_id in forced
         labels.append(
             Label(
                 id=label_id,
                 target_id=target_id,
                 text=constellation_name(constellation_id).upper(),
-                priority=10,
-                mandatory=False,
+                priority=75 if is_forced else 10,
+                mandatory=is_forced,
                 candidates=candidates,
                 selected_candidate_id=candidates[0].id if candidates else None,
                 font_size_pt=config.font_size_pt,
             )
         )
     return tuple(labels)
+
+
+def _candidate_center_inside_region(
+    point: PagePoint,
+    region: SceneConstellationRegion,
+    transform: PageTransform,
+) -> bool:
+    chart_point = (
+        (transform.center_page.x_mm - point.x_mm) / transform.mm_per_deg,
+        (transform.center_page.y_mm - point.y_mm) / transform.mm_per_deg,
+    )
+    rings = [
+        tuple((vertex.xi_deg, vertex.eta_deg) for vertex in ring)
+        for ring in region.rings
+    ]
+    inside_outer = _point_in_ring(chart_point, rings[0])
+    if region.complement:
+        return not inside_outer
+    return inside_outer and not any(_point_in_ring(chart_point, ring) for ring in rings[1:])
+
+
+def _point_in_ring(point: tuple[float, float], ring: tuple[tuple[float, float], ...]) -> bool:
+    x, y = point
+    inside = False
+    previous = ring[-1]
+    for current in ring:
+        x1, y1 = previous
+        x2, y2 = current
+        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+            inside = not inside
+        previous = current
+    return inside
 
 
 def build_labels(

@@ -342,9 +342,9 @@ def build_furniture_plan(
     title: PlacedText | None = None
     brand: PlacedText | None = None
     if style.furniture.footer_layout == "split":
-        code = presentation.chart_code
+        code = presentation.chart_header_code
         if code:
-            code_markup = f"<b>{escape_markup(code)}</b>"
+            code_markup = presentation.chart_header_markup
             code_size = style.furniture.footer_code_font_size_pt
             code_height = TextMeasurer(family, code_size).measure_markup_mm(code_markup).height_mm
             title = PlacedText(

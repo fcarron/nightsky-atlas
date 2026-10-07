@@ -142,14 +142,12 @@ candidate densities above come only from its Tycho-2 store.
 |---|---:|---:|
 | Pocket | 7.5 | 8.0 |
 | Standard | 9.0 | — |
-| Deep | 10.0 | 10.5 |
+| Deep | 10.5 | — |
 | Eyepiece | 11.0 | 11.5 |
 
-The measured scaling supports the deeper choices geometrically, but preserving
-comfortable Milky Way fields and keeping official editions conservative favors
-7.5 / 9.0 / 10.0 / 11.0 as defaults. The deeper alternatives remain useful
-star-hopping modes: Pocket 8.0 gives a modest but meaningful bright-star field
-increase; Deep 10.5 nearly doubles Standard's paper loading in Sagittarius;
-Eyepiece 11.5 approaches Standard's average paper density in Sagittarius while
-remaining subject to the 90%-at-11.5 completeness caveat. Production limits
-were not changed for this calibration.
+The measured scaling supports Deep 10.5 as the selected production limit. It
+increases the paper star density substantially over Deep 10.0, especially in
+Milky Way fields; the plotted faint-end symbol diameter is reduced to keep the
+additional stars distinct. Pocket remains at 7.5, Standard at 9.0, and the
+Eyepiece figures remain research recommendations rather than production
+defaults. Eyepiece 11.5 remains subject to the 90%-at-11.5 completeness caveat.

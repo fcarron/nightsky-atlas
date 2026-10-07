@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from nightsky_atlas.catalog.constellations import ConstellationSegment
+from nightsky_atlas.catalog.constellations import (
+    ConstellationPolygon,
+    ConstellationSegment,
+    load_constellations,
+)
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.sample import load_sample_stars
@@ -15,7 +19,12 @@ from nightsky_atlas.catalog.selection import SelectionPolicy
 from nightsky_atlas.catalog.systems import MatchStatus, StarSystem
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.projection import ChartPoint, StereographicProjection
-from nightsky_atlas.scene.builder import build_scene, build_star_scene
+from nightsky_atlas.scene.builder import (
+    _project_constellation_regions,
+    _radec_ring_contains,
+    build_scene,
+    build_star_scene,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = REPO_ROOT / "data" / "fixtures" / "stars" / "test_virgo.csv"
@@ -222,6 +231,35 @@ def test_polar_constellation_line_does_not_follow_the_curved_parallel() -> None:
     assert abs(parallel_mid.eta_deg - chord_mid_eta) > 0.5
 
 
+def test_polar_constellation_rings_do_not_cover_the_antipodal_pole() -> None:
+    polygons = load_constellations().polygons
+    octans = next(item for item in polygons if item.constellation_id == "Oct")
+    ursaminor = next(item for item in polygons if item.constellation_id == "UMi")
+    assert _radec_ring_contains(0.0, -90.0, octans.rings[0])
+    assert not _radec_ring_contains(0.0, 90.0, octans.rings[0])
+    assert _radec_ring_contains(0.0, 90.0, ursaminor.rings[0])
+    assert not _radec_ring_contains(0.0, -90.0, ursaminor.rings[0])
+
+
+def test_constellation_near_projection_antipode_does_not_fill_chart() -> None:
+    phoenix = next(
+        item for item in load_constellations().polygons if item.constellation_id == "Phe"
+    )
+    definition = ChartDefinition(
+        id="antipode-test",
+        center_ra_deg=195.0,
+        center_dec_deg=40.0,
+        width_deg=27.0,
+        height_deg=18.5,
+    )
+    regions = _project_constellation_regions(
+        (phoenix,),
+        StereographicProjection(definition.center_ra_deg, definition.center_dec_deg),
+        definition,
+    )
+    assert regions == ()
+
+
 def test_constellation_boundary_is_still_densified_and_curved() -> None:
     definition = ChartDefinition(
         id="eq", center_ra_deg=30.0, center_dec_deg=0.0, width_deg=27.0, height_deg=18.5
@@ -230,6 +268,33 @@ def test_constellation_boundary_is_still_densified_and_curved() -> None:
     scene = build_scene(definition, [], [], constellation_boundaries=[boundary])
     assert scene.constellation_boundaries
     assert all(len(run.points) > 2 for run in scene.constellation_boundaries)
+
+
+def test_antipodal_constellation_does_not_fill_chart_area() -> None:
+    definition = ChartDefinition(
+        id="antipode",
+        center_ra_deg=300.0,
+        center_dec_deg=40.0,
+        width_deg=20.0,
+        height_deg=14.0,
+    )
+    opposite = ConstellationPolygon(
+        id="opposite",
+        constellation_id="Vel",
+        rings=(
+            (
+                (115.0, -50.0),
+                (135.0, -50.0),
+                (135.0, -30.0),
+                (115.0, -30.0),
+                (115.0, -50.0),
+            ),
+        ),
+    )
+
+    scene = build_scene(definition, (), constellation_polygons=(opposite,))
+
+    assert scene.constellation_regions == ()
 
 
 def make_outline(dso_id: str, points: tuple[tuple[float, float], ...]) -> NebulaOutline:

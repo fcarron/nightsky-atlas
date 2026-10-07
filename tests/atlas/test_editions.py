@@ -19,13 +19,18 @@ from nightsky_atlas.build.atlas import _style_with_star_profile
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
 from nightsky_atlas.render.detail_markers import build_detail_marker
+from nightsky_atlas.render.symbols import StarSizeModel
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize(
     ("edition", "code", "stellar_limit", "scale_bar"),
-    (("pocket", "P", 7.5, 10.0), ("standard", "S", 9.0, 5.0), ("deep", "D", 10.0, 2.0)),
+    (
+        ("pocket", "P", 7.5, 10.0),
+        ("standard", "S", 9.0, 5.0),
+        ("deep", "D", 10.5, 2.0),
+    ),
 )
 def test_edition_presets_load_with_expected_scale_and_codes(
     edition: str, code: str, stellar_limit: float, scale_bar: float
@@ -37,6 +42,14 @@ def test_edition_presets_load_with_expected_scale_and_codes(
     assert atlas.stellar_limit_magnitude == stellar_limit
     assert style.furniture.scale_bar.length_deg == scale_bar
     assert presentation_from_edition(chart, atlas.resolved_edition()).chart_code == f"{code}001"
+
+
+def test_deep_magnitude_10_5_uses_a_smaller_printable_faint_star() -> None:
+    style = load_style_config(ROOT / "styles" / "deep.yaml")
+    sizes = StarSizeModel.from_style(style.star)
+    assert style.star.faint_magnitude == 10.5
+    assert sizes.diameter_mm(10.0) == pytest.approx(0.35)
+    assert sizes.diameter_mm(10.5) == pytest.approx(0.25)
 
 
 def test_physical_print_style_is_shared_across_editions() -> None:
@@ -143,7 +156,7 @@ def test_standard_detail_maps_are_supplemental_and_doubled_scale() -> None:
         if detail.code not in {"SD053A", "SD053B", "SD089"}
     )
     assert all(detail.star_profile == "deep" for detail in details)
-    assert deep.stellar_limit_magnitude == 10.0
+    assert deep.stellar_limit_magnitude == 10.5
 
 
 def test_detail_deep_star_profile_preserves_standard_dso_styling() -> None:

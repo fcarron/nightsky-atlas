@@ -6,6 +6,7 @@ from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.presentation import (
     PRODUCT_NAME,
     chart_index,
+    constellation_context,
     neighbour_code,
     presentation_for,
 )
@@ -38,6 +39,36 @@ def test_visible_chart_code_uses_edition_code() -> None:
     presentation = presentation_for(make_definition("standard-068"))
     assert presentation.chart_code == "S068"
     assert presentation.title == f"{PRODUCT_NAME} \N{EM DASH} Standard \N{MIDDLE DOT} S068"
+
+
+def test_chart_header_includes_compact_constellation_context() -> None:
+    presentation = presentation_for(
+        make_definition("standard-042"),
+        constellation_area_fractions={"Cyg": 0.65, "Cep": 0.20, "Lac": 0.15},
+    )
+    assert presentation.chart_code == "S042"
+    assert presentation.chart_header_code == "Cyg \N{MIDDLE DOT} S042"
+
+
+def test_constellation_context_uses_two_names_only_for_shared_fields() -> None:
+    assert constellation_context({"Cyg": 0.48, "Cep": 0.44, "Lac": 0.08}) == "Cyg/Cep"
+
+
+def test_constellation_context_requires_both_shared_field_thresholds() -> None:
+    assert constellation_context({"Vir": 0.55, "Com": 0.30, "Leo": 0.15}) == "Vir"
+    assert constellation_context({"Cyg": 0.60, "Cep": 0.39, "Lac": 0.01}) == "Cyg"
+    assert constellation_context({"Cyg": 0.50, "Cep": 0.29, "Lac": 0.21}) == "Cyg"
+
+
+def test_constellation_context_is_area_ordered_and_never_shows_more_than_two() -> None:
+    assert constellation_context({"Vir": 0.32, "Com": 0.40, "Leo": 0.28}) == "Com/Vir"
+    result = constellation_context({"Ari": 0.34, "Tau": 0.32, "Per": 0.31})
+    assert result == "Ari/Tau"
+    assert result.count("/") == 1
+
+
+def test_constellation_context_without_visible_regions_is_absent() -> None:
+    assert constellation_context({}) is None
 
 
 def test_edition_name_and_code_override_registry() -> None:

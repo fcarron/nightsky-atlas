@@ -400,6 +400,7 @@ def build_chart_context(
             dsos,
             constellation_lines=constellations.lines,
             constellation_boundaries=constellations.boundaries,
+            constellation_polygons=constellations.polygons,
             nebula_outlines=outlines,
             star_systems=matched_systems,
             observing_index=build_membership_index(observing_lists, inputs.dsos),

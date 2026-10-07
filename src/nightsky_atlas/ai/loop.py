@@ -253,7 +253,7 @@ def _default_request_factory(
             transform,
             style,
             furniture=furniture_obstacles(
-                transform, scene.definition, style, presentation_for(scene.definition)
+                transform, scene.definition, style, presentation_for(scene.definition, scene=scene)
             ),
         )
         diagnostics = {

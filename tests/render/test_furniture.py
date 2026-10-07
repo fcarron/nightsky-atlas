@@ -50,6 +50,17 @@ def test_title_uses_short_code_and_footer_position() -> None:
     assert plan.title.y_mm + title_height <= PAGE.height_mm - 2.0
 
 
+def test_split_footer_prints_constellation_context_before_chart_code() -> None:
+    transform = make_transform()
+    pocket_style = load_style_config(REPO_ROOT / "styles" / "pocket.yaml")
+    presentation = presentation_for(
+        transform.chart, constellation_area_fractions={"Cyg": 0.48, "Cep": 0.44}
+    )
+    plan = build_furniture_plan(transform, transform.chart, pocket_style, presentation)
+    assert plan.title is not None
+    assert plan.title.text == "Cyg/Cep \N{MIDDLE DOT} S068"
+
+
 def test_navigation_sits_outside_the_chart_frame_with_short_codes() -> None:
     plan, transform = build_plan((("N", "standard-082"), ("S", "standard-054")))
     rect = transform.chart_rect

@@ -1097,7 +1097,9 @@ def _command_chart_render(args: argparse.Namespace) -> int:
         labels = _apply_chart_overrides(args, definition, labels)
     else:
         labels = ()
-    presentation = presentation_from_edition(definition, atlas.resolved_edition())
+    presentation = presentation_from_edition(
+        definition, atlas.resolved_edition(), scene=scene
+    )
     furniture = furniture_obstacles(transform, definition, style, presentation)
     result: OptimizationResult | None = None
     if args.optimize:
@@ -1143,7 +1145,9 @@ def _command_chart_review(args: argparse.Namespace) -> int:
     labels = build_labels(scene, transform, style, _star_names(args))
     labels = _select_labels(args, definition, labels, scene, transform, style)
     labels = _apply_chart_overrides(args, definition, labels)
-    presentation = presentation_from_edition(definition, atlas.resolved_edition())
+    presentation = presentation_from_edition(
+        definition, atlas.resolved_edition(), scene=scene
+    )
     furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style, furniture=furniture)
@@ -1245,7 +1249,9 @@ def _command_chart_validate(args: argparse.Namespace) -> int:
     labels = build_labels(scene, transform, style, _star_names(args))
     labels = _select_labels(args, definition, labels, scene, transform, style)
     labels = _apply_chart_overrides(args, definition, labels)
-    presentation = presentation_from_edition(definition, atlas.resolved_edition())
+    presentation = presentation_from_edition(
+        definition, atlas.resolved_edition(), scene=scene
+    )
     furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style, furniture=furniture)
@@ -1513,20 +1519,17 @@ def _command_star_label_report(args: argparse.Namespace) -> int:
             name = names.get(hip_number(hip_id))
             if name is None:
                 continue
-            variants = name.display_variants(
+            canonical = name.canonical_display_variant()
+            if canonical and name.display_variant_enabled(
+                canonical[1],
                 style.label.star_labels,
                 magnitude,
                 proper_magnitude_limit=style.star.label_magnitude_limit,
-            )
-            if variants:
-                kind = variants[0][1]
-                if kind == "combined" or kind.startswith("proper_"):
+            ):
+                kind = canonical[1]
+                if kind.startswith("proper_"):
                     counts["proper"] += 1
-                    tier = (
-                        name.proper_name_tier
-                        if kind == "combined"
-                        else kind.removeprefix("proper_")
-                    )
+                    tier = kind.removeprefix("proper_")
                     if tier is not None:
                         tiers[tier] += 1
                 else:

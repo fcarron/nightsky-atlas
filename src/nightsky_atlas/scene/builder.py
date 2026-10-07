@@ -10,7 +10,7 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
-from nightsky_atlas.catalog.constellations import ConstellationSegment
+from nightsky_atlas.catalog.constellations import ConstellationPolygon, ConstellationSegment
 from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.observing_lists import canonical_designation
@@ -22,6 +22,7 @@ from nightsky_atlas.projection.base import ChartPoint, ProjectionError
 from nightsky_atlas.projection.stereographic import StereographicProjection
 from nightsky_atlas.scene.models import (
     ChartScene,
+    SceneConstellationRegion,
     SceneDso,
     SceneOutline,
     SceneSegment,
@@ -62,6 +63,7 @@ def build_scene(
     dso_magnitude_limit: float | None = None,
     constellation_lines: Iterable[ConstellationSegment] = (),
     constellation_boundaries: Iterable[ConstellationSegment] = (),
+    constellation_polygons: Iterable[ConstellationPolygon] = (),
     nebula_outlines: Iterable[NebulaOutline] = (),
     star_systems: Iterable[StarSystem] = (),
     observing_index: Mapping[str, frozenset[str]] | None = None,
@@ -165,6 +167,9 @@ def build_scene(
         ),
         constellation_boundaries=_project_segments(
             constellation_boundaries, projector, definition, "boundary"
+        ),
+        constellation_regions=_project_constellation_regions(
+            constellation_polygons, projector, definition
         ),
         nebula_outlines=projected_outlines,
     )
@@ -347,6 +352,215 @@ def _project_segments(
                     )
                 )
     return tuple(segments)
+
+
+def _project_constellation_regions(
+    polygons: Iterable[ConstellationPolygon],
+    projector: StereographicProjection,
+    definition: ChartDefinition,
+) -> tuple[SceneConstellationRegion, ...]:
+    """Project complete constellation footprints, clip them, and measure area."""
+    half_width = definition.width_deg / 2.0
+    half_height = definition.height_deg / 2.0
+    regions: list[SceneConstellationRegion] = []
+    for polygon in polygons:
+        projected_rings: list[tuple[ChartPoint, ...]] = []
+        ring_areas: list[float] = []
+        outer_centroid: ChartPoint | None = None
+        for ring_index, source_ring in enumerate(polygon.rings):
+            projected: list[tuple[float, float]] = []
+            for index, (ra1, dec1) in enumerate(source_ring):
+                ra2, dec2 = source_ring[(index + 1) % len(source_ring)]
+                for ra_deg, dec_deg in _densify(ra1, dec1, ra2, dec2)[:-1]:
+                    try:
+                        point = projector.project(ra_deg % 360.0, dec_deg)
+                    except ProjectionError:
+                        projected = []
+                        break
+                    projected.append((point.xi_deg, point.eta_deg))
+                if not projected:
+                    break
+            clipped = _clip_polygon(
+                projected, -half_width, half_width, -half_height, half_height
+            )
+            area = abs(_polygon_area(clipped))
+            if area <= 1e-12:
+                continue
+            ring_points = tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in clipped)
+            projected_rings.append(ring_points)
+            ring_areas.append(area if ring_index == 0 else -area)
+            if ring_index == 0:
+                cx, cy = _polygon_centroid(clipped)
+                outer_centroid = ChartPoint(xi_deg=cx, eta_deg=cy)
+        visible_area = max(0.0, sum(ring_areas))
+        if not projected_rings or visible_area <= 1e-12 or outer_centroid is None:
+            continue
+        chart_area = definition.width_deg * definition.height_deg
+        if (
+            visible_area >= chart_area * (1.0 - 1e-9)
+            and not _radec_ring_contains(
+                definition.center_ra_deg, definition.center_dec_deg, polygon.rings[0]
+            )
+        ):
+            # A footprint close to the projection antipode can wrap around
+            # infinity and clip as a false full-chart polygon. A true full-field
+            # constellation must contain the chart centre.
+            continue
+        antipode_ra = (definition.center_ra_deg + 180.0) % 360.0
+        antipode_dec = -definition.center_dec_deg
+        complement = _radec_ring_contains(
+            antipode_ra, antipode_dec, polygon.rings[0]
+        )
+        if complement:
+            clipped_area = min(chart_area, visible_area)
+            visible_area = max(0.0, chart_area - clipped_area)
+            if visible_area <= 1e-12:
+                continue
+            cx = -outer_centroid.xi_deg * clipped_area / visible_area
+            cy = -outer_centroid.eta_deg * clipped_area / visible_area
+            outer_centroid = ChartPoint(xi_deg=cx, eta_deg=cy)
+        fraction = min(1.0, visible_area / chart_area)
+        regions.append(
+            SceneConstellationRegion(
+                constellation_id=polygon.constellation_id,
+                rings=tuple(projected_rings),
+                visible_area_fraction=fraction,
+                centroid=outer_centroid,
+                complement=complement,
+            )
+        )
+    return tuple(sorted(regions, key=lambda item: item.constellation_id))
+
+
+def _clip_polygon(
+    points: list[tuple[float, float]],
+    left: float,
+    right: float,
+    bottom: float,
+    top: float,
+) -> list[tuple[float, float]]:
+    """Clip a projected polygon to the rectangular chart field."""
+    clipped = points
+    edges = (
+        (0, left, True),
+        (0, right, False),
+        (1, bottom, True),
+        (1, top, False),
+    )
+    for axis, boundary, keep_greater in edges:
+        if not clipped:
+            break
+        output: list[tuple[float, float]] = []
+        previous = clipped[-1]
+        previous_inside = (
+            previous[axis] >= boundary if keep_greater else previous[axis] <= boundary
+        )
+        for current in clipped:
+            current_inside = (
+                current[axis] >= boundary if keep_greater else current[axis] <= boundary
+            )
+            if current_inside != previous_inside:
+                delta = current[axis] - previous[axis]
+                if delta != 0.0:
+                    ratio = (boundary - previous[axis]) / delta
+                    other_axis = 1 - axis
+                    intersection = list(previous)
+                    intersection[axis] = boundary
+                    intersection[other_axis] = previous[other_axis] + ratio * (
+                        current[other_axis] - previous[other_axis]
+                    )
+                    output.append((intersection[0], intersection[1]))
+            if current_inside:
+                output.append(current)
+            previous = current
+            previous_inside = current_inside
+        clipped = output
+    return clipped
+
+
+def _polygon_area(points: list[tuple[float, float]]) -> float:
+    if len(points) < 3:
+        return 0.0
+    return 0.5 * sum(
+        x1 * y2 - x2 * y1
+        for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1], strict=True)
+    )
+
+
+def _polygon_centroid(points: list[tuple[float, float]]) -> tuple[float, float]:
+    area = _polygon_area(points)
+    if abs(area) <= 1e-12:
+        return (
+            sum(point[0] for point in points) / len(points),
+            sum(point[1] for point in points) / len(points),
+        )
+    factor = 1.0 / (6.0 * area)
+    x = y = 0.0
+    for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1], strict=True):
+        cross = x1 * y2 - x2 * y1
+        x += (x1 + x2) * cross
+        y += (y1 + y2) * cross
+    return x * factor, y * factor
+
+
+def _radec_ring_contains(
+    ra_deg: float,
+    dec_deg: float,
+    ring: tuple[tuple[float, float], ...],
+) -> bool:
+    """Return whether a sky coordinate lies inside a spherical RA/Dec ring.
+
+    A planar RA/Dec ray test fails for rings enclosing a celestial pole because
+    the pole has no unique right ascension.  The signed spherical winding angle
+    handles those rings while the source ring orientation selects its intended
+    interior rather than its antipodal complement.
+    """
+    vertices = ring[:-1] if ring and ring[0] == ring[-1] else ring
+    if len(vertices) < 3:
+        return False
+    mean_ra = math.degrees(
+        math.atan2(
+            sum(math.sin(math.radians(ra)) for ra, _ in vertices),
+            sum(math.cos(math.radians(ra)) for ra, _ in vertices),
+        )
+    ) % 360.0
+    unwrapped = [(((ra - mean_ra + 180.0) % 360.0) - 180.0, dec) for ra, dec in vertices]
+    planar_orientation = sum(
+        x1 * y2 - x2 * y1
+        for (x1, y1), (x2, y2) in zip(
+            unwrapped, unwrapped[1:] + unwrapped[:1], strict=True
+        )
+    )
+    if abs(planar_orientation) <= 1e-12:
+        return False
+
+    def unit_vector(ra: float, dec: float) -> tuple[float, float, float]:
+        ra_rad = math.radians(ra)
+        dec_rad = math.radians(dec)
+        return (
+            math.cos(dec_rad) * math.cos(ra_rad),
+            math.cos(dec_rad) * math.sin(ra_rad),
+            math.sin(dec_rad),
+        )
+
+    query = unit_vector(ra_deg, dec_deg)
+    vectors = [unit_vector(ra, dec) for ra, dec in vertices]
+    winding = 0.0
+    for first, second in zip(vectors, vectors[1:] + vectors[:1], strict=True):
+        first_dot = sum(q * v for q, v in zip(query, first, strict=True))
+        second_dot = sum(q * v for q, v in zip(query, second, strict=True))
+        cross = (
+            first[1] * second[2] - first[2] * second[1],
+            first[2] * second[0] - first[0] * second[2],
+            first[0] * second[1] - first[1] * second[0],
+        )
+        numerator = sum(q * c for q, c in zip(query, cross, strict=True))
+        denominator = (
+            sum(a * b for a, b in zip(first, second, strict=True))
+            - first_dot * second_dot
+        )
+        winding += math.atan2(numerator, denominator)
+    return abs(winding) > math.pi and winding * planar_orientation > 0.0
 
 
 def _outline_sources(

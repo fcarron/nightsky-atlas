@@ -165,7 +165,7 @@ Deep has nine close-ups: NGC 7331 with Stephan's Quintet (`DD105`), the
 Pleiades (`DD111`), the Coma core (`DD121`), the Markarian chain (`DD174`),
 M42 (`DD223`), the Fornax core (`DD328`), 30 Doradus (`DD405A`), the LMC bar
 (`DD405B`) and NGC 346 in the SMC (`DD415`). Their dedicated star profile plots
-stars to magnitude 11.5, while Deep main charts stay at magnitude 10.0.
+stars to magnitude 11.5, while Deep main charts plot stars to magnitude 10.5.
 Deep's bold, normal and fine galaxy classes use a 0.75-arcmin minimum major
 axis at 20 mm/degree. This is the same 0.25-mm angular threshold on paper as
 Pocket's 3 arcmin at 5 mm/degree and Standard's 1.5 arcmin at 10 mm/degree.

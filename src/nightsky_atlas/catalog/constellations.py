@@ -23,6 +23,7 @@ __all__ = [
     "CONSTELLATION_NAMES",
     "VERSION",
     "ConstellationCatalogue",
+    "ConstellationPolygon",
     "ConstellationSegment",
     "constellation_name",
     "load_constellations",
@@ -174,6 +175,7 @@ class ConstellationCatalogue:
 
     lines: tuple[ConstellationSegment, ...] = ()
     boundaries: tuple[ConstellationSegment, ...] = ()
+    polygons: tuple[ConstellationPolygon, ...] = ()
 
     @property
     def line_count(self) -> int:
@@ -184,6 +186,15 @@ class ConstellationCatalogue:
     def boundary_count(self) -> int:
         """Number of deduplicated boundary segments."""
         return len(self.boundaries)
+
+
+@dataclass(frozen=True, slots=True)
+class ConstellationPolygon:
+    """One source constellation footprint with its exterior and optional holes."""
+
+    id: str
+    constellation_id: str
+    rings: tuple[tuple[tuple[float, float], ...], ...]
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -291,6 +302,29 @@ def _boundary_segments(data: dict[str, Any]) -> tuple[ConstellationSegment, ...]
     return tuple(segments)
 
 
+def _boundary_polygons(data: dict[str, Any]) -> tuple[ConstellationPolygon, ...]:
+    polygons: list[ConstellationPolygon] = []
+    for feature_index, feature in enumerate(data.get("features", ())):
+        geometry = feature.get("geometry", {})
+        if geometry.get("type") != "Polygon":
+            continue
+        constellation_id = str(feature.get("id", ""))
+        rings = tuple(
+            tuple(_vertices(ring, BOUNDARIES_FILENAME))
+            for ring in geometry.get("coordinates", ())
+        )
+        if not rings or len(rings[0]) < 4:
+            continue
+        polygons.append(
+            ConstellationPolygon(
+                id=f"constellation-polygon:{feature_index}",
+                constellation_id=constellation_id,
+                rings=rings,
+            )
+        )
+    return tuple(polygons)
+
+
 def load_constellations(
     directory: str | Path = DEFAULT_FIXTURE_DIR,
 ) -> ConstellationCatalogue:
@@ -299,5 +333,11 @@ def load_constellations(
     lines_path = root / LINES_FILENAME
     boundaries_path = root / BOUNDARIES_FILENAME
     lines = _line_segments(_load_json(lines_path)) if lines_path.exists() else ()
-    boundaries = _boundary_segments(_load_json(boundaries_path)) if boundaries_path.exists() else ()
-    return ConstellationCatalogue(lines=lines, boundaries=boundaries)
+    if boundaries_path.exists():
+        boundary_data = _load_json(boundaries_path)
+        boundaries = _boundary_segments(boundary_data)
+        polygons = _boundary_polygons(boundary_data)
+    else:
+        boundaries = ()
+        polygons = ()
+    return ConstellationCatalogue(lines=lines, boundaries=boundaries, polygons=polygons)

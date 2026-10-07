@@ -326,7 +326,7 @@ def draw_introduction(
         (
             ("Pocket", "5 mm/°", "mag 7.5", "Wide fields; selected bright targets"),
             ("Standard", "10 mm/°", "mag 9", "Balanced observing; Messier and Herschel 400"),
-            ("Deep", "20 mm/°", "mag 10", "Small fields; deeper DSO catalogue"),
+            ("Deep", "20 mm/°", "mag 10.5", "Small fields; deeper DSO catalogue"),
         )
     ):
         y = 90.0 + row * 8.0

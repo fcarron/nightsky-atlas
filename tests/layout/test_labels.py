@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from nightsky_atlas.atlas.config import load_style_config
-from nightsky_atlas.catalog.constellations import ConstellationSegment
+from nightsky_atlas.catalog.constellations import ConstellationPolygon, ConstellationSegment
 from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.outlines import NebulaOutline
@@ -18,11 +18,13 @@ from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.layout.association import dso_source_geometries, source_edge_distance
 from nightsky_atlas.layout.labels import (
+    _candidate_center_inside_region,
     build_constellation_labels,
     build_dso_labels,
     build_labels,
     build_star_labels,
     constellation_label_anchors,
+    constellation_visible_area_fractions,
     label_priority,
 )
 from nightsky_atlas.layout.selection import select_labels
@@ -243,6 +245,78 @@ def test_constellation_names_are_optional_layout_labels() -> None:
     assert transform.chart_rect.left_mm <= anchor.x_mm <= transform.chart_rect.right_mm
     assert transform.chart_rect.top_mm <= anchor.y_mm <= transform.chart_rect.bottom_mm
     assert select_labels(labels, scene, transform, STYLE) == labels
+
+
+def _constellation_box(
+    constellation_id: str, ra_left: float, ra_right: float, dec_bottom: float, dec_top: float
+) -> ConstellationPolygon:
+    return ConstellationPolygon(
+        id=f"polygon:{constellation_id}",
+        constellation_id=constellation_id,
+        rings=(
+            (
+                (ra_left, dec_bottom),
+                (ra_right, dec_bottom),
+                (ra_right, dec_top),
+                (ra_left, dec_top),
+                (ra_left, dec_bottom),
+            ),
+        ),
+    )
+
+
+def _constellation_labels_for(*polygons: ConstellationPolygon):
+    scene = build_scene(CHART, (), constellation_polygons=polygons)
+    transform = PageTransform(chart=CHART, page=PAGE)
+    return scene, build_constellation_labels(scene, transform, STYLE)
+
+
+def test_constellation_with_at_least_fifteen_percent_visible_area_is_forced() -> None:
+    scene, labels = _constellation_labels_for(_constellation_box("Ori", 182.5, 192.5, 8.0, 16.0))
+    fractions = constellation_visible_area_fractions(scene)
+
+    assert fractions["Ori"] >= 0.15
+    assert len(labels) == 1
+    assert labels[0].id == "label:constellation:Ori"
+    assert labels[0].mandatory
+    assert labels[0].priority == 75
+    assert labels[0].candidates
+    assert all(
+        _candidate_center_inside_region(candidate.bounds.center, scene.constellation_regions[0],
+                                        PageTransform(chart=CHART, page=PAGE))
+        for candidate in labels[0].candidates
+    )
+
+
+def test_tiny_constellation_boundary_sliver_is_not_labeled() -> None:
+    scene, labels = _constellation_labels_for(
+        _constellation_box("Ori", 182.0, 194.0, 7.0, 17.0),
+        _constellation_box("Lac", 197.0, 199.0, 7.0, 17.0),
+    )
+    fractions = constellation_visible_area_fractions(scene)
+
+    assert fractions["Lac"] < 0.15
+    assert "Lac" != max(fractions, key=fractions.get)
+    assert {label.target_id for label in labels} == {"constellation:Ori"}
+
+
+def test_largest_visible_constellation_is_forced_below_threshold() -> None:
+    scene, labels = _constellation_labels_for(
+        _constellation_box("Ori", 181.0, 183.0, 9.0, 11.0),
+        _constellation_box("Lac", 188.0, 193.0, 8.0, 14.0),
+    )
+    fractions = constellation_visible_area_fractions(scene)
+
+    assert fractions["Lac"] < 0.15
+    assert {label.target_id for label in labels} == {"constellation:Lac"}
+    assert labels[0].mandatory
+
+
+def test_constellation_name_is_not_duplicated_for_repeated_region_records() -> None:
+    polygon = _constellation_box("Ori", 182.5, 192.5, 8.0, 16.0)
+    _scene, labels = _constellation_labels_for(polygon, polygon)
+
+    assert [label.id for label in labels].count("label:constellation:Ori") == 1
 
 
 def test_build_dso_labels_uses_metadata_priority() -> None:

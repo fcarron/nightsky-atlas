@@ -156,7 +156,7 @@ def draw_chart_page(
     foreground_labels = tuple(label for label in label_list if label not in constellation_labels)
     bold_symbol_ids = _bold_symbol_ids(label_list)
     if presentation is None:
-        presentation = presentation_for(scene.definition)
+        presentation = presentation_for(scene.definition, scene=scene)
     plan = build_furniture_plan(transform, scene.definition, style, presentation)
     _draw_background(cr, transform.page)
     grid_lines = _draw_grid(cr, transform, scene.definition, style)

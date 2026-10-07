@@ -243,7 +243,7 @@ def apply_review_actions(
     applied: list[str] = []
     rejected: list[tuple[str, str]] = []
     furniture = furniture_obstacles(
-        transform, scene.definition, style, presentation_for(scene.definition)
+        transform, scene.definition, style, presentation_for(scene.definition, scene=scene)
     )
     baseline = _hard_issues(current, scene, transform, style, furniture)
     current_cost = layout_cost(current, scene, transform, style)[0]

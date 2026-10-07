@@ -190,10 +190,10 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   0.5-mm grid within +/-3 mm and passes the normal hard gate. Leader-line and
   display-name actions remain deliberately unavailable until their presentation
   state exists.
-- Pocket and Deep presets are implemented with physical 10-mm overlap targets,
-  P/S/D chart codes, edition-specific DSO visibility and star-size curves.
-  Pocket's complete build is available; the Pocket field test remains. Do not
-  build the complete Deep atlas yet.
+- Pocket, Standard and Deep presets use P/S/D chart codes, edition-specific DSO
+  visibility and star-size curves. Deep's stellar limit is 10.5; the complete
+  Pocket, Standard and Deep builds are in
+  `build/complete-2026-10-07/`. Field testing remains.
 - Chart pages now show subdued constellation names. Front matter records frame,
   projection and scale and has an expanded observing-symbol key.
 - `make check`: Ruff clean, 677 tests passing.

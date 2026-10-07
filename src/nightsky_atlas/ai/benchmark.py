@@ -162,7 +162,7 @@ class BenchmarkReport:
 
 def _furniture_obstacles(context: ChartContext) -> tuple:
     presentation = presentation_from_edition(
-        context.definition, context.atlas.resolved_edition()
+        context.definition, context.atlas.resolved_edition(), scene=context.scene
     )
     return furniture_obstacles(
         context.transform, context.definition, context.style, presentation

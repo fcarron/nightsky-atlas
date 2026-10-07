@@ -3,7 +3,7 @@ extends: standard.yaml
 id: deep
 edition: {name: Deep, code: D}
 mm_per_degree: 20.0
-stellar_limit_magnitude: 10.0
+stellar_limit_magnitude: 10.5
 # The explicit Standard test charts are inherited but Deep is generated from
 # its own tiling below.
 charts: []

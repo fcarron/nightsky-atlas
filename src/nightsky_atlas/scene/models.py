@@ -19,6 +19,7 @@ from nightsky_atlas.projection.base import ChartPoint
 
 __all__ = [
     "ChartScene",
+    "SceneConstellationRegion",
     "SceneDso",
     "SceneOutline",
     "SceneSegment",
@@ -107,6 +108,25 @@ class SceneOutline:
 
 
 @dataclass(frozen=True, slots=True)
+class SceneConstellationRegion:
+    """Projected visible part of one constellation footprint on a chart."""
+
+    constellation_id: str
+    rings: tuple[tuple[ChartPoint, ...], ...]
+    visible_area_fraction: float
+    centroid: ChartPoint
+    complement: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.constellation_id.strip():
+            raise ValueError("constellation_id must not be blank")
+        if not self.rings or len(self.rings[0]) < 3:
+            raise ValueError("a visible constellation region needs an exterior ring")
+        if not 0.0 <= self.visible_area_fraction <= 1.0:
+            raise ValueError("visible_area_fraction must be within [0, 1]")
+
+
+@dataclass(frozen=True, slots=True)
 class ChartScene:
     """Everything selected and projected for a single chart."""
 
@@ -116,6 +136,7 @@ class ChartScene:
     star_systems: tuple[SceneStarSystem, ...] = ()
     constellation_lines: tuple[SceneSegment, ...] = ()
     constellation_boundaries: tuple[SceneSegment, ...] = ()
+    constellation_regions: tuple[SceneConstellationRegion, ...] = ()
     nebula_outlines: tuple[SceneOutline, ...] = ()
 
     @property
