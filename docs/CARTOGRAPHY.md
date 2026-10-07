@@ -175,6 +175,32 @@ magnitude 12.5 and have three other plotted galaxies within the style's
 their main-chart labels. Deep's printed scale bar halves its angular span as
 needed to fit the higher magnification of a detail chart.
 
+## Short leaders for broad DSO labels
+
+`label.leader_lines.targeted_dso` adds a final deterministic presentation pass
+after ordinary placement. Pocket, Standard and Deep inherit the enabled rule
+from `styles/standard.yaml`; Eyepiece explicitly leaves it disabled pending
+its own review. Missing configuration defaults to disabled.
+
+The measured glyph envelope must be at least 8 mm wide and four times its
+height. A competing-owner cost of at least 1, a nonzero association corridor
+cost or an already weak ownership margin must also be present. These are
+conservative v1 settings supported by a small observer review, not optimized
+visibility thresholds. A long name alone does not add a line.
+
+Only visible, unlocked DSO labels without an existing leader are considered,
+in descending priority then stable-ID order. The existing candidate and all
+text remain unchanged. Routes use the existing symbol/text gaps, minimum
+length and collision checks, with an additional 3-mm maximum. A proposal must
+preserve every existing route and introduce no new hard violation ID.
+Existing hard violations are still reported; this pass does not repair them.
+
+Added labels carry `leader_line_reason: targeted_long_label`. Optimizer metrics
+include `targeted_dso_leaders` with stable-ID decisions and rejection counts;
+normal label diagnostics are recomputed after accepted additions. The
+source-association weight stays 20. See `docs/LEADER_LINE_EXPERIMENT.md` for the
+research evidence and the atlas-wide audit.
+
 ## Overview maps and locator
 
 The atlas opens with two whole-sky **overview pages** (after the front matter):

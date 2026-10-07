@@ -566,6 +566,14 @@ class StarLabelStyle(_StrictModel):
     )
 
 
+class TargetedDsoLeaderStyle(_StrictModel):
+    enabled: bool = False
+    min_ink_width_mm: PositiveFloat = 8.0
+    min_ink_aspect_ratio: PositiveFloat = 4.0
+    min_competing_owner_cost: PositiveFloat = 1.0
+    max_length_mm: PositiveFloat = 3.0
+
+
 class LeaderLineStyle(_StrictModel):
     """Physical drawing and eligibility rules for exceptional DSO callouts."""
 
@@ -584,6 +592,7 @@ class LeaderLineStyle(_StrictModel):
     label_gap_mm: PositiveFloat = 0.4
     width_mm: PositiveFloat = 0.12
     gray: float = Field(default=0.4, ge=0.0, le=1.0)
+    targeted_dso: TargetedDsoLeaderStyle = Field(default_factory=TargetedDsoLeaderStyle)
 
 
 class ForeignStarClearanceStyle(_StrictModel):

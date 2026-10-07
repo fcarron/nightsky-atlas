@@ -126,3 +126,308 @@ Weil Kandidatenabstand und Linienlängen-Gewicht gleichzeitig geändert wurden,
 ist selbst eine lokale Präferenz keinem Einzelparameter zuzuordnen. Vor einer
 erneuten Druckbeurteilung sollte die 50-mm-Anzeige kalibriert oder ein
 tatsächlicher Ausdruck verwendet werden.
+
+## Kalibrierte Folgerunde und Zuordnungsgewicht (06.10.2026)
+
+Die sieben Fälle der Folgerunde wurden mit 50-mm-Anzeigekalibrierung bewertet.
+In allen fünf auswertbaren Fällen waren beide Symbolklicks richtig. Bei den
+fünf geänderten Ausschnitten wurde zweimal die bisherige Fassung und einmal
+die Versuchsfassung bevorzugt; einmal waren sie gleich und einmal beide
+schlecht. Zwei Änderungen blieben wegen überlagerter Symbole ohne Klickwertung.
+Die beiden pixelgleichen Kontrollen wurden als gleich beurteilt. Die lokale
+Auswertung liegt unter `build/label-review/followup-2026-10-06/analysis.md`.
+
+Als nächste Hypothese wird ausschließlich das vorhandene Gewicht
+`label.source_association.ambiguity_weight` von 20 auf 60 erhöht. Die Regel
+bestraft konkurrierende Symbole nahe einer Beschriftung. Kandidatenabstände,
+Führungslinienkosten und Produktionskonfiguration bleiben unverändert.
+Gesamtkosten mit verschiedenen Gewichten sind kein Lesbarkeitsvergleich.
+
+`tools/label_review/make_ownership_experiment.py` erzeugt passende Teilatlanten
+mit eingefrorenen Konfigurationen und Ausschnitten aus den zusammengesetzten
+PDFs. Der neue Satz umfasst neun Änderungen von neun verschiedenen Karten und
+drei pixelgleiche Kontrollen, gleichmäßig über Pocket, Standard und Deep.
+Alle zwölf Zielsymbole sind getrennt anklickbar. Die Auswahl verlangt identische
+astronomische Symbolgeometrie und sichtbare Beschriftungen, keine neuen harten
+Befunde auf der Quellkarte und keine harten Befunde im Ausschnitt. Sie verlangt
+keine Verbesserung des Optimiererscores.
+
+Zwei Pocket-Karten des Kandidatenpools wurden wegen neuer harter Befunde
+verworfen. Der stärkere Wert ist deshalb bislang ausschließlich ein Versuch;
+die ausgesuchten gültigen Ausschnitte dürfen diese Regressionen nicht verdecken.
+Vier weitere Karten bleiben für eine spätere Gegenprobe reserviert.
+
+Manifest, eingefrorene Konfigurationen, Auswahlbefunde und spätere Antworten
+liegen unter `build/label-review/ownership-2026-10-06-v1/`. Die Bilder wurden
+visuell geprüft; Bewertung und Auswertung stehen noch aus. Start- und
+Erzeugungsbefehle sind in `tools/label_review/README.md` dokumentiert.
+
+### Ergebnis der Einparameter-Runde (07.10.2026)
+
+Ein Beobachter hat alle zwölf Fälle kalibriert bewertet (4,65 CSS-px/mm), ohne
+Skips. Bei den neun tatsächlich veränderten Ausschnitten ergibt sich:
+
+| Edition | Versuch (60) bevorzugt | Bisher (20) bevorzugt | Gleich |
+| --- | ---: | ---: | ---: |
+| Pocket | 3 | 0 | 0 |
+| Standard | 2 | 1 | 0 |
+| Deep | 1 | 1 | 1 |
+| Gesamt | 6 | 2 | 1 |
+
+Die Symbolzuordnung war in beiden Fassungen vollständig richtig (je 12/12,
+davon neun geänderte Fälle). Es ist damit ein lokaler Präferenzgewinn, kein
+nachgewiesener Gewinn der Zuordnungsgenauigkeit. Von den drei pixelgleichen
+Kontrollen wurden zwei als gleich beurteilt und eine zugunsten des Versuchs
+(S026/3067). Die einfache CLI-Summe von sieben Versuch-Präferenzen enthält
+diese Kontrollpräferenz; nur sechs betreffen wirkliche Änderungen.
+
+Alle neun Zielbeschriftungen verwenden in beiden Fassungen keine Führungslinie.
+Die Runde beurteilt direkte Labelpositionen und erlaubt keine Aussage zur
+gewünschten Führungslinienzahl. S089/1495 und D174/I3635 bevorzugen weiterhin die
+bisherige Fassung; ein geringerer gewichtbereinigter Mehrdeutigkeitsanteil reicht
+somit nicht als Lesbarkeitskriterium.
+
+Produktionsgewicht 20 bleibt bestehen. Vor einer möglichen Übernahme von 60
+sollen die neuen harten Konflikte auf P12/P25 untersucht und danach unbenutzte
+Felder geprüft werden. Das Pocket-Signal ist mit drei Fällen ermutigend, aber
+für eine editionsweite Entscheidung zu klein. Lokale Einzelbefunde und JSON:
+`build/label-review/ownership-2026-10-06-v1/analysis.{md,json}`. Die Rohantworten
+bleiben unverändert; in dieser Auswertung wurden keine Produktionsregeln geändert.
+
+### Konfliktdiagnose und Gegenprobe an weiteren Feldern (07.10.2026)
+
+Ein Forschungswerkzeug zeichnet die bestehenden Optimierungsschritte für P12
+und P25 auf (`tools/label_review/diagnose_ownership_conflicts.py`). Die vier
+finalen Layouts und Befundlisten entsprechen exakt dem ersten Versuch.
+Problematische Labels haben statisch gültige Kandidaten, aber keinen freien
+Kandidaten bei festgehaltenen Nachbarn. Die relevanten Komponenten mit 20 bzw.
+79 Labels überschreiten das Limit der gemeinsamen Suche (acht Labels); die
+anschließende Reparatur in kleinen Nachbarschaften löst die Blockade nur
+teilweise. Knoten- und Suchzahlbudgets werden nicht ausgeschöpft. Die
+gemeinsame Lösbarkeit ist nicht bewiesen; höhere Zeitbudgets allein sind
+durch diesen Befund nicht begründet. Details:
+`build/label-review/ownership-2026-10-07-diagnostics-v1/report.md`.
+
+Die Gegenprobe umfasst S083, S094, D120, D260 und acht zusätzliche Pocket-Karten.
+Bei S083/S094 und den acht Pocket-Karten entstehen keine neuen harten Befunde.
+Beide Deep-Karten erzeugen dagegen neue Konflikte:
+
+- D120: 17 → 16 Befunde, aber neue Überlagerungen I3957/NGC4854 und I3957/4854.
+- D260: 0 → 1 Befund, Labelüberlagerung 4724/4727.
+
+Diese Seiten werden nicht durch andere Deep-Karten ersetzt. Das Gewicht 60
+bleibt eine Forschungsvariante; ein allgemeiner Wechsel ist angesichts der
+Regressionen nicht gerechtfertigt. Der verbleibende Bewertungssatz umfasst
+sechs Änderungen von sechs verschiedenen Karten (vier Pocket, zwei Standard)
+und zwei pixelgleiche Kontrollen. Alle Ausschnitte und ihre Quellkarten sind
+hard-clean; die Zielsymbole sind getrennt anklickbar. Manifest und vollständiger
+Seitenaudit: `build/label-review/ownership-validation-2026-10-07/`.
+Neue Antwortdatei, Seed 20261007 und Asset-Präfix `own2` erhalten frühere Runden
+unverändert. Produktionscode, Styles und Suchregeln wurden nicht geändert.
+
+Beim Abgleich sämtlicher früherer Manifeste zeigt sich eine Einschränkung der
+Reservierung: S083/S094 waren bereits mit anderen Zielobjekten als Kontrollen
+im älteren Führungslinienversuch enthalten; D120/D260 ebenfalls mit anderen
+Zielen als Änderungen. Die sechs neuen Bewertungsausschnitte wurden dort nicht
+beurteilt; Centaurus A war allerdings als Standard-Kontrollziel enthalten.
+Alle vier zusätzlichen Pocket-Felder sind neu. Die reservierten
+Karten sind jedoch keine vollständig ungesehenen Karten für diesen Beobachter.
+Sie dürfen deshalb nicht als unabhängige Kartenstichprobe bezeichnet werden.
+
+### Bewertung der acht Gegenprobenfälle (07.10.2026)
+
+Alle acht Fälle wurden kalibriert bewertet, ohne Skips. Die sechs tatsächlichen
+Änderungen ergeben vier Präferenzen für Gewicht 60 und zwei für Gewicht 20:
+Pocket 2:2, Standard 2:0. Beide pixelgleichen Kontrollen wurden als gleich
+beurteilt. Die Symbolzuordnung ist in beiden Fassungen vollständig richtig
+(je 8/8). Die erste gemessene Falldauer enthält eine lange Unterbrechung und
+wird nicht als reine Bearbeitungszeit interpretiert.
+
+Zusammen mit der vorherigen Einparameter-Runde: 15 Änderungen, zehnmal Versuch,
+viermal bisher, einmal gleich. Das ist eine beschreibende Zusammenfassung eines
+Beobachters auf ausgewählten gültigen Ausschnitten. Wegen der bekannten neuen
+harten Konflikte bleibt Produktionsgewicht 20 bestehen.
+
+Bei ESO274-001 (S094) und Centaurus A (P37) wünscht der Beobachter ausdrücklich
+eine Führungslinie für die lange Beschriftung. Beide Zuordnungen waren bereits
+richtig; alle sechs Zielbeschriftungen sind in beiden Fassungen ohne Linie.
+Ein separater Versuch sollte kurze gültige Linien bei konkreter
+Zuordnungsmehrdeutigkeit prüfen, ohne gleichzeitig das Zuordnungsgewicht zu
+ändern. Labelbreite allein ist noch kein ausreichendes Linienkriterium.
+Lokale Auswertung: `build/label-review/ownership-validation-2026-10-07/analysis.{md,json}`.
+
+## Isolierter Linienversuch für lange Beschriftungen (07.10.2026)
+
+`build/label-review/long-label-lines-2026-10-07/` enthält vier neue Fälle:
+P37/Centaurus A und S094/ESO274-001 mit jeweils einer zusätzlichen kurzen
+Führungslinie sowie zwei pixelgleiche Kontrollen aus denselben Seiten. Seed
+`20261009`; die 50-mm-Anzeigekalibrierung ist verpflichtend.
+
+Die Vergleichsseiten verwenden unverändert Gewicht 20. Gegenüber der Baseline
+werden ausschließlich `leader_line` und `leader_line_reason` des jeweiligen
+Labels geändert; Position, Kandidat, Text, sichtbare Labels und astronomischer
+Inhalt bleiben identisch. Die Baseline reproduziert die gespeicherten Layouts
+der vorigen Runde exakt. Die Linien sind 1,394 mm und 1,545 mm lang. Alle vier
+Quellseiten haben null harte Layoutbefunde; bestehende Linienrouten bleiben
+unverändert. Ausschnitte aus den zusammengesetzten Atlas-PDFs wurden visuell
+geprüft. Produktionscode und Produktionskonfiguration bleiben unverändert.
+
+Der Forschungs-Generator `tools/label_review/make_long_label_line_experiment.py`
+ergänzt den Präsentationszustand nach der Optimierung im eigenen Prozess.
+Optimiererkosten beschreiben die ursprüngliche Platzierung; es gibt keinen
+Score-Filter. Layoutvergleich, Liniengeometrie und Bildprüfsummen sind lokal
+dokumentiert. Beide Ziele wurden bereits betrachtet. Dieser kleine Versuch
+prüft die konkreten Hinweise des Beobachters und liefert allein keinen Beleg
+für eine allgemeine Linienregel anhand der Textlänge.
+
+### Bewertung des isolierten Linienversuchs (07.10.2026)
+
+Alle vier Fälle wurden kalibriert bewertet, ohne Skips. Bei Centaurus A und
+ESO274-001 wurde jeweils die Fassung mit kurzer Linie bevorzugt; beide
+pixelgleichen Kontrollen wurden als gleich beurteilt. Alle acht Klicks waren
+korrekt (je 4/4 pro Variante). Da ausschließlich die Linie geändert wurde,
+spricht die Präferenz in diesen beiden Fällen für die Linie. Eine höhere
+Zuordnungsgenauigkeit ist nicht nachgewiesen; beide Fassungen waren bereits
+korrekt. Ein Beobachter und zwei bekannte Ziele begründen keine allgemeine
+Textlängen-Schwelle.
+
+Die Kontrollnotizen weisen auf einen zweiten, getrennten Aspekt hin: Bei
+ESO221-026 kann das Galaxiensymbol wie ein vorangestelltes O wirken; bei IC1023
+wird mehr Symbolabstand gewünscht. Das sind Hinweise auf den wahrgenommenen
+Glyphen-/Symbolabstand, keine Begründung für global größere Abstände.
+
+Nächster Forschungsschritt: eine begrenzte deterministische Linienregel für
+lange, mehrdeutig zuordenbare Beschriftungen formulieren und an weiteren
+vorab ausgewählten Fällen prüfen. Gültige kurze Route und unveränderte
+Labelposition sind zunächst die Voraussetzung. Gewicht 20 bleibt bestehen;
+die früheren Regressionen bei Gewicht 60 werden durch diese Runde nicht
+aufgehoben. Produktionsregeln bleiben unverändert. Lokale Auswertung:
+`build/label-review/long-label-lines-2026-10-07/analysis.{md,json}`.
+
+## Deterministische gezielte Linienregel als Forschungsvariante (07.10.2026)
+
+`tools/label_review/make_targeted_line_experiment.py` prüft ausschließlich
+vorhandene Positionen sichtbarer, nicht gesperrter DSO-Beschriftungen ohne
+bestehende Linie. Die sichtbare Schriftbreite muss mindestens 8 mm betragen,
+das Breite/Höhe-Verhältnis mindestens 4. Zusätzlich muss eines der vorhandenen
+Mehrdeutigkeitssignale vorliegen: `competing_owner_cost >= 1`,
+`association_corridor_cost > 0` oder `ownership_margin_weak`.
+
+Die vorhandene Linienführung muss eine gültige Route von höchstens 3 mm
+liefern. Bestehende Linienrouten bleiben erhalten; neue harte Befund-IDs
+verwerfen den Vorschlag. Reihenfolge: Priorität absteigend, stabile Label-ID
+aufsteigend. Diese Zahlen sind vor dem Versuch festgelegte Hypothesen, keine
+empirisch optimierten Produktionsschwellen. Zuordnungsgewicht bleibt 20.
+Kein Label wird verschoben, kein Text oder astronomischer Inhalt verändert.
+
+Der erste Pool umfasst Orion, Cygnus, Carina und Sagittarius in allen drei
+Editionen. Wegen zu weniger isolierter Änderungsziele wurden S081 und D314
+ergänzt, ohne die Regel zu ändern. Damit wurden 14 Hauptkartenpaare geprüft.
+Es entstehen drei zusätzliche Linien (Pocket: M27 und M6; Standard:
+ESO507-025; Deep: keine). Null neue harte Befunde, fünf unveränderte bestehende
+Befunde. Detailkarten bleiben unverändert. Diese adaptive Felderweiterung ist
+keine vollständig vorab festgelegte Validierungsstichprobe.
+
+Der eingefrorene Satz unter `build/label-review/targeted-lines-2026-10-07/`
+enthält fünf Fälle: zwei Änderungen und drei pixelgleiche Kontrollen. Beide
+Änderungen liefern nur Präferenzdaten: M27 hat ein großes Symbol,
+ESO507-025 einen nahen Stern. Die Klickwertung ist dort ausgesetzt. Die
+Kontrollen haben normale Klickwertung. Alle aufgenommenen Ausschnitte sind
+ohne harte Befunde und wurden visuell geprüft. Ziele aus früheren Manifesten
+werden ausgeschlossen; manche Quellkarten waren bereits bekannt.
+
+Seed `20261010`, Asset-Präfix `target1`, separate Antwortdatei. Produktionscode
+und Produktionskonfiguration bleiben unverändert. Regelentscheidungen,
+vollständiger Seitenvergleich und Einschränkungen stehen im lokalen
+`report.md`, `rule-audit.json`, `decisions/` und `curation.json`.
+
+### Bewertung der gezielten Regel (07.10.2026)
+
+Alle fünf Fälle wurden kalibriert bewertet, ohne Skips. Beide bewerteten
+automatisch erzeugten Linien (M27 und ESO507-025) wurden bevorzugt; die drei
+pixelgleichen Kontrollen wurden als gleich beurteilt. Die Kontrollklicks sind
+je 3/3 pro Variante korrekt. Bei beiden Änderungen war die Klickwertung
+ausgesetzt; ein Genauigkeitsgewinn ist daher nicht belegt. M6 erhielt eine
+Linie, war jedoch kein Bewertungsfall. In Deep entstanden keine zusätzlichen
+Linien; positive Deep-Linienwirkung wurde damit nicht geprüft.
+
+Zusammen mit dem vorherigen gezielten Vergleich wurden vier Linien an vier
+Objekten bevorzugt. Es bleibt ein Beobachter; nur zwei dieser Beispiele wurden
+von der allgemeinen Forschungsregel auf neuen Zielen erzeugt. Die Ergebnisse
+sind qualitativ konsistent, bestimmen jedoch keine optimalen Schwellenwerte.
+
+Empfohlener nächster Schritt ist eine vorsichtige, konfigurierbare Integration
+mit atlasweiter Prüfung und visueller Übersicht aller neuen Linien. Gewicht
+20, unveränderte Positionen, gültige kurze Routen und Erhalt bestehender
+Linien bleiben Voraussetzungen. Keine weitere Produktionsänderung wurde
+durch diese Auswertung vorgenommen. Lokal:
+`build/label-review/targeted-lines-2026-10-07/analysis.{md,json}`.
+
+### Konfigurierbare Integration und vollständige Kartenprüfung (07.10.2026)
+
+Nach Zustimmung des Beobachters ist die Forschungsregel als abschließender
+Präsentationsschritt in `layout/targeted_leaders.py` integriert. Die oben
+beschriebenen Schwellen bleiben unverändert. `label.leader_lines.targeted_dso`
+aktiviert sie in Standard und den davon abgeleiteten Pocket-/Deep-Stilen,
+einschließlich ihrer Detailkarten. Eyepiece bleibt ausdrücklich deaktiviert.
+Ohne Konfigurationsblock ist die Regel aus. Zuordnungsgewicht bleibt 20.
+
+Die Entscheidung wird mit stabiler Label-ID und Ablehnungsgrund in den
+Optimierermetriken gespeichert; akzeptierte Linien erhalten den Grund
+`targeted_long_label`. Die abschließenden Labeldiagnosen werden aktualisiert.
+Die Regel verschiebt keine Beschriftungen, verändert keine Inhalte und
+optimiert keine bestehenden Linien um.
+
+`tools/label_review/audit_targeted_leaders.py` prüft den Zustand unmittelbar
+vor und nach diesem Schritt im regulären Atlas-Build. Jede Änderung außerhalb
+der beiden Linienattribute sowie jede neue harte Befund-ID bricht die Prüfung
+ab. Alle Haupt- und Detailkarten müssen einen Auditdatensatz besitzen. Die
+Prüfung verwendet vier Prozesse je Edition und benötigt keine KI-Abfragen.
+
+```bash
+.venv/bin/python tools/label_review/audit_targeted_leaders.py build --edition pocket --jobs 4
+.venv/bin/python tools/label_review/audit_targeted_leaders.py build --edition standard --jobs 4
+.venv/bin/python tools/label_review/audit_targeted_leaders.py build --edition deep --jobs 4
+.venv/bin/python tools/label_review/audit_targeted_leaders.py summarize
+```
+
+Die lokalen Ergebnisse liegen unter `build/targeted-leaders-2026-10-07/`.
+`implementation.json` hält Quell- und Konfigurationsprüfsummen fest;
+`audit-summary.json` enthält die aggregierten Ergebnisse. `new-lines.pdf`
+zeigt jede neue Linie bei nomineller Druckgröße links ohne und rechts mit
+Linie; `new-lines.html` bietet dieselben Ausschnitte zum Vergrößern.
+Vergleichsrenderings verwenden die tatsächlichen optimierten Szenen und
+Positionen sowie die Navigation und Symbolüberlagerungen der regulären
+Atlas-Seitenrenderung. Die vollständigen Prüf-Atlas-PDFs
+enthalten reguläre Karten und Index, jedoch weder Einleitung noch Übersichten.
+Sie sind keine neuen Publikationsausgaben.
+
+Ergebnis der vollständigen Prüfung:
+
+| Edition | Hauptkarten | Detailkarten | Neue Linien | Geänderte Karten | Bestehende harte Befunde | Neue harte Befunde |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pocket | 48 | 1 | 5 | 4 | 27 | 0 |
+| Standard | 118 | 9 | 2 | 2 | 40 | 0 |
+| Deep | 430 | 9 | 2 | 2 | 119 | 0 |
+
+Keine Detailkarte erhält eine zusätzliche Linie. Pocket betrifft M57 auf
+P16, M27 auf P17, Centaurus A und Omega Centauri auf P37 sowie M6 auf P39.
+Standard betrifft ESO507-025 auf S081 und ESO274-001 auf S094. Deep betrifft
+die gemeinsame Beschriftung des Doppelsternhaufens auf D031 und IC3322A auf
+D202. Die Linien sind 1,236–2,315 mm lang. D202 hat einen unveränderten
+Labelkonflikt zwischen NGC4342 und NGC4343 außerhalb des Vergleichsziels;
+die anderen sieben geänderten Karten haben keine harten Befunde.
+
+Für die endgültigen Vergleiche wurden nur die acht geänderten Karten nochmals
+mit vollständigem Atlas-Renderkontext erzeugt. Vorher-/Nachher-Layout-Hashes
+und Entscheidungen stimmen mit dem vollständigen Lauf überein; die
+Nachher-Raster stimmen pixelgenau mit dessen Einzelkarten-PDFs überein.
+`proof-verification.json` dokumentiert diese Prüfung. Produktionsquellen und
+Stil-/Atlaskonfigurationen bleiben während der Läufe unverändert.
+
+Die vollständige Kartenprüfung belegt die geometrische Begrenzung der Regel,
+keinen atlasweiten Wahrnehmungsgewinn. M57, Omega Centauri, M6 und die beiden
+Deep-Ergänzungen sind noch nicht durch den Beobachter blind bewertet.
+Bestehende Layoutbefunde werden durch diese Änderung nicht behoben.
+`make lint` besteht; in diesem Integrationslauf wurden keine Unit-Tests ergänzt
+oder ausgeführt.

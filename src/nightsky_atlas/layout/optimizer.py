@@ -49,6 +49,7 @@ from nightsky_atlas.layout.scoring import (
     star_source_bounds,
 )
 from nightsky_atlas.layout.spatial import RectIndex
+from nightsky_atlas.layout.targeted_leaders import add_targeted_dso_leaders
 from nightsky_atlas.layout.text_geometry import (
     candidate_ink_bounds,
     label_collision_bounds,
@@ -1595,6 +1596,29 @@ def optimize_labels(
         furniture=furniture_rects,
         component_stats=component_stats,
     )
+    targeted = add_targeted_dso_leaders(
+        optimized, label_diagnostics, scene, transform, style, furniture=furniture_rects
+    )
+    if targeted.labels != optimized:
+        optimized = targeted.labels
+        label_diagnostics = _label_diagnostics(
+            optimized,
+            anchors,
+            printable,
+            final_placed_index,
+            symbols_index,
+            sources,
+            stars_index,
+            stars,
+            style,
+            weights,
+            constellation_lines,
+            scene=scene,
+            transform=transform,
+            detailed_diagnostics=detailed_diagnostics,
+            furniture=furniture_rects,
+            component_stats=component_stats,
+        )
     elapsed_s = time.perf_counter() - started_at
     dso_metrics = _dso_placement_metrics(
         optimized,
@@ -1604,6 +1628,10 @@ def optimize_labels(
         weak_margin_mm=style.label.dso_placement.ownership_margin_preferred_mm,
     )
     dso_metrics["local_repair"] = local_repair_stats
+    dso_metrics["targeted_dso_leaders"] = {
+        "counts": targeted.counts,
+        "decisions": list(targeted.decisions),
+    }
     return OptimizationResult(
         labels=optimized,
         cost_before=cost_before,

@@ -5,6 +5,16 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
 
 ## Progress
 
+- Targeted short DSO leaders (2026-10-07): the observer-reviewed rule is now
+  configurable under `label.leader_lines.targeted_dso`, enabled for Pocket,
+  Standard and Deep, including detail styles; Eyepiece remains disabled.
+  All 615 main/detail pages were audited with unchanged label positions and
+  source-association weight 20. Added lines: Pocket 5, Standard 2, Deep 2;
+  zero new hard issue IDs. Existing issues remain 27/40/119 respectively.
+  Local before/after proof and full audit are under
+  `build/targeted-leaders-2026-10-07/`; methodology and small-sample limitations
+  are in `docs/LEADER_LINE_EXPERIMENT.md`.
+
 - M0–M14 complete. M15.1–M15.4 complete. M15.5 in progress (full current
   Standard build complete; field test remains).
 - M16.1 complete (manual Stable-ID label overrides, including locked placements).

@@ -82,3 +82,100 @@ Die neuen Kartenseiten werden aus realen Katalogen und dem gespeicherten determi
 Die neuen Ausschnitte stammen von vollständigen Kartenseiten mit derselben Seite, Projektion und Druckgröße wie im Atlas. D201 und S027 haben keinen Detailkarten-Labeltransfer. Vor einer Produktionsentscheidung sollten die gewählten Änderungen trotzdem noch in einem vollständig zusammengesetzten Atlas geprüft werden.
 
 Bei S027 liegen die Symbolzentren von NGC 4618, IC 3668 und IC 3669 innerhalb von 0,3 mm. Die Variante verteilt zwei Beschriftungen und führt drei Linien zur Gruppe; eine eindeutige Klickwertung für diese drei Symbole ist auf der Standard-Hauptkarte nicht möglich. Der Fall misst ausschließlich die wahrgenommene Lesbarkeit. Auch die Katalogauswahl der beiden IC-Objekte sollte gesondert geprüft werden: Beide sind im importierten OpenNGC als `other` klassifiziert, IC 3669 mit Magnitude 19,07.
+
+## Einparameter-Versuch zur Symbolzuordnung (06.10.2026)
+
+Die kalibrierte Sieben-Fälle-Folgerunde wurde separat unter `build/label-review/followup-2026-10-06/` abgeschlossen. Alle zehn auswertbaren Klicks waren korrekt. Die fünf geänderten Fälle ergaben zweimal bisher, einmal Versuch, einmal gleich und einmal beidseits schlecht; die zwei Kontrollen wurden als gleich beurteilt. Zwei geänderte Fälle erlaubten keine Klickwertung.
+
+Der neue Versuch verändert ausschließlich `label.source_association.ambiguity_weight` von **20 auf 60**. Kandidatenabstände und Linienlängen-Gewicht bleiben unverändert. Das Gewicht bestraft Beschriftungen, deren Nähe zu anderen Symbolen die Zuordnung erschwert. Es ist keine Produktionsänderung und liefert keine automatische Empfehlung.
+
+Der eingefrorene Satz unter `build/label-review/ownership-2026-10-06-v1/` umfasst zwölf Fälle: pro Edition drei Änderungen und eine pixelgleiche Kontrolle. Alle Fälle erlauben Klickwertung. Die Bilder stammen aus den zusammengefügten Atlas-PDFs aktueller Teilbuilds, einschließlich des bestehenden Detailkarten-Labeltransfers. Baseline und Versuch enthalten dieselben Sterne, DSO-Symbole und sichtbaren Beschriftungen. Der Generator filtert überlagerte oder große Zielsymbole, mögliche Verwechslungen mit Sternen und harte Befunde innerhalb des Ausschnitts. Jede Änderung stammt von einer anderen Karte; die Auswahl erfolgt anhand bestehender Zuordnungsmehrdeutigkeit und tatsächlicher Platzierungsänderung, ohne einen besseren Versuchsscore zu verlangen. Die Ausschnitte wurden visuell geprüft.
+
+Zwei Pocket-Karten wurden wegen neuer harter Befunde in der Versuchsfassung ausgeschlossen, auch wenn deren Gesamtzahl auf einer Karte gleich blieb. Bereits vorhandene Befunde außerhalb aufgenommener Ausschnitte bleiben dokumentiert. Die geprüften Ausschnitte bilden deshalb keinen Nachweis, dass das Gewicht 60 atlasweit sicher oder besser wäre. Vier weitere Karten bleiben für eine spätere Gegenprobe unbenutzt.
+
+Start und Auswertung:
+
+```bash
+.venv/bin/python tools/label_review/server.py serve --port 8766 --manifest build/label-review/ownership-2026-10-06-v1/cases.json --responses build/label-review/ownership-2026-10-06-v1/responses.jsonl
+.venv/bin/python tools/label_review/server.py summary --responses build/label-review/ownership-2026-10-06-v1/responses.jsonl
+```
+
+Die 50-mm-Kalibrierung ist verpflichtend; die Antworten früherer Runden bleiben getrennt. Der Seed ist `20261006`. Konfigurationskopien liegen unter `config/`, Parameter und zusätzliche Pocket-Karten in `experiment.json`, Auswahlbefunde und Bildprüfsummen in `curation.json`. SHA256-Werte dokumentieren den verwendeten Arbeitsstand der Python-Dateien und gebündelten Fonts; ein Git-Commit allein erfasst vorhandene uncommittete Änderungen nicht. Für erneute Builds muss derselbe dokumentierte Arbeitsstand und Datenbestand verfügbar sein.
+
+Erzeugung eines neuen, getrennten Satzes:
+
+```bash
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-repeat prepare
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-repeat build --edition pocket
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-repeat build --edition standard
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-repeat build --edition deep
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-repeat build --edition pocket --batch pocket-extra
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-repeat curate
+```
+
+Der Generator benötigt die vorhandenen Kataloge, Cairo, die installierte Atlas-Pipeline und `pdftoppm`. Er protokolliert Layouts über temporäre Funktionswrapper nur im eigenen Prozess; Produktionsmodule und -konfigurationen werden nicht verändert. Er erzeugt keine Karten während einer Bewertung. Neue Sätze sind vor der Bewertung erneut visuell zu prüfen. Der Generator verweigert das Überschreiben vorhandener Bilder mit anderen Pixelinhalten. Die aktuelle Bildnamenskonvention ist für diesen Versuch festgelegt: vor einer Wiederholung mit veränderten Quellen neue Asset-Präfixe verwenden, damit bereits bewertete Bilder unverändert bleiben.
+
+## Gegenprobe und Konfliktdiagnose (07.10.2026)
+
+Die Konflikte von P12/P25 wurden mit `diagnose_ownership_conflicts.py` reproduziert. Das Werkzeug zeichnet Greedy-Zustand, lokale Reparatur, gemeinsame Suche, harte Reparatur und finales Layout auf. Alle vier finalen Seiten stimmen in Labelgeometrie und Befund-IDs exakt mit dem ursprünglichen Versuch überein. Die betroffenen Labels haben statisch gültige Kandidaten, aber keinen freien Kandidaten bei festgehaltenen Nachbarlabels. Große Komponenten werden nicht gemeinsam optimiert; die begrenzte lokale Reparatur löst die Blockaden nicht vollständig. Ihre Knoten- und Suchzahlbudgets werden dabei nicht ausgeschöpft. Diagnose: `build/label-review/ownership-2026-10-07-diagnostics-v1/report.md`.
+
+Die neuen Teilatlanten enthalten die vorab reservierten S083, S094, D120, D260 sowie acht weitere Pocket-Karten. Beide Deep-Gegenproben erzeugen neue harte Befund-IDs bei Gewicht 60: D120 hat 17 → 16 Befunde, aber zwei neue; D260 verschlechtert sich von null auf einen. Beide werden ausgeschlossen und bleiben im vollständigen Seitenaudit sichtbar. Gewicht 60 ist damit vorerst keine sichere allgemeine Produktionsregel.
+
+Der verbleibende eingefrorene Satz enthält **acht Fälle: vier Pocket-Änderungen, zwei Standard-Änderungen und zwei pixelgleiche Kontrollen**. Jede Änderung stammt von einer anderen Karte. Die Ausschnitte sind visuell geprüft, klickauswertbar und ohne harte Befunde; ihre Quellkarten sind ebenfalls konfliktfrei. Seed `20261007`, neues Asset-Präfix `own2`, eigener Antwortpfad. Es wurden keine anderen Gewichte oder Reparaturparameter geändert.
+
+```bash
+.venv/bin/python tools/label_review/server.py serve --port 8766 --manifest build/label-review/ownership-validation-2026-10-07/cases.json --responses build/label-review/ownership-validation-2026-10-07/responses.jsonl
+.venv/bin/python tools/label_review/server.py summary --responses build/label-review/ownership-validation-2026-10-07/responses.jsonl
+```
+
+Reproduktion in neuen Verzeichnissen:
+
+```bash
+.venv/bin/python tools/label_review/diagnose_ownership_conflicts.py --from-experiment build/label-review/ownership-2026-10-06-v1 --outdir build/label-review/ownership-diagnostic-repeat
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-validation-repeat prepare --preset validation
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-validation-repeat build --edition pocket
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-validation-repeat build --edition standard
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-validation-repeat build --edition deep
+.venv/bin/python tools/label_review/make_ownership_experiment.py --outdir build/label-review/ownership-validation-repeat curate
+```
+
+`--preset validation` legt Kartenpool, Zielquoten und Mindestzahl vor dem Build fest. Ungültige Seiten werden nicht durch andere Deep-Felder ersetzt. Selbst eine positive Bewertung der gültigen Ausschnitte hebt die bekannten Deep- und Pocket-Regressionen nicht auf.
+
+Die Reservierung der vier S/D-Karten gilt für den Einparameter-Versuch. Ein nachträglicher Abgleich mit dem älteren Führungslinienversuch zeigt: S083/S094 kamen dort bereits als Kontrollen anderer Ziele vor, D120/D260 als Änderungen anderer Ziele. Die jetzigen sechs Änderungsausschnitte wurden zuvor nicht bewertet; Centaurus A war allerdings bereits ein Standard-Kontrollziel. Alle vier Pocket-Änderungskarten sind neu. Der Satz ist somit eine Gegenprobe mit neuen Ausschnitten, keine vollständig ungesehene Kartenstichprobe für denselben Beobachter.
+
+## Kurze Linien bei langen Beschriftungen (07.10.2026)
+
+Nach den Hinweisen zu ESO274-001 und Centaurus A prüft ein separater Satz ausschließlich eine zusätzliche kurze Führungslinie. Das Zuordnungsgewicht bleibt **20**; Labelpositionen, Kandidaten, Texte und Karteninhalt bleiben identisch. Die Baselines reproduzieren die gespeicherten Baseline-Layouts der Gegenprobe exakt. Beide Ziele wurden bereits gesehen; dies ist ein gezielter Vergleich, keine ungesehene Validierungsstichprobe.
+
+`make_long_label_line_experiment.py` erzeugt zwei Änderungen und zwei pixelgleiche Kontrollen aus zusammengesetzten Atlas-PDFs. Die Linien sind 1,394 mm (P37/Centaurus A) und 1,545 mm (S094/ESO274-001) lang. Bestehende Linienrouten bleiben unverändert. Alle vier Quellseiten sind ohne harte Layoutbefunde; die Ausschnitte wurden visuell geprüft. Der Eingriff erfolgt nach der Optimierung ausschließlich im Forschungsprozess. Gespeicherte Optimiererkosten beschreiben die ursprüngliche Platzierung; sie entscheiden nicht über die Aufnahme der Linienvariante.
+
+```bash
+.venv/bin/python tools/label_review/server.py serve --port 8766 --manifest build/label-review/long-label-lines-2026-10-07/cases.json --responses build/label-review/long-label-lines-2026-10-07/responses.jsonl
+.venv/bin/python tools/label_review/server.py summary --responses build/label-review/long-label-lines-2026-10-07/responses.jsonl
+```
+
+Reproduktion mit neuem Ausgabeverzeichnis und neuem Asset-Präfix/Experiment-ID im Generator:
+
+```bash
+.venv/bin/python tools/label_review/make_long_label_line_experiment.py --outdir build/label-review/long-label-repeat prepare
+.venv/bin/python tools/label_review/make_long_label_line_experiment.py --outdir build/label-review/long-label-repeat build --edition pocket --variant baseline
+.venv/bin/python tools/label_review/make_long_label_line_experiment.py --outdir build/label-review/long-label-repeat build --edition pocket --variant trial
+.venv/bin/python tools/label_review/make_long_label_line_experiment.py --outdir build/label-review/long-label-repeat build --edition standard --variant baseline
+.venv/bin/python tools/label_review/make_long_label_line_experiment.py --outdir build/label-review/long-label-repeat build --edition standard --variant trial
+.venv/bin/python tools/label_review/make_long_label_line_experiment.py --outdir build/label-review/long-label-repeat curate
+```
+
+Identische Reproduktionen dürfen dieselben Bilddateien wiederverwenden; abweichende Pixel werden nicht überschrieben. Die 50-mm-Kalibrierung ist verpflichtend, Antworten bleiben im eigenen JSONL. Zwei bekannte Ziele können einen späteren allgemeinen Automatismus für lange Beschriftungen noch nicht begründen.
+
+## Gezielte deterministische Linienregel (07.10.2026)
+
+Die nächste Forschungsvariante liegt unter `build/label-review/targeted-lines-2026-10-07/`. `make_targeted_line_experiment.py` verwendet gemessene Schriftbreite (≥8 mm), Breite/Höhe (≥4) und vorhandene Mehrdeutigkeitssignale. Nur gültige Linien bis 3 mm werden ergänzt; bestehende Routen und alle Labelpositionen bleiben erhalten. Gewicht 20 bleibt unverändert. Das sind explorative Schwellen, keine Produktionsregel.
+
+Vier Himmelsregionen pro Edition und zwei ergänzte südliche Galaxienfelder ergeben 14 geprüfte Hauptkartenpaare. Drei zusätzliche Linien, keine neuen harten Befunde. Fünf bereits bestehende Befunde bleiben dokumentiert. Der kleine Bewertungssatz enthält zwei Änderungen und drei pixelgleiche Kontrollen. Bei den Änderungen wird wegen großem Symbol beziehungsweise nahem Stern ausschließlich die Präferenz ausgewertet. Frühere Zielobjekte werden ausgeschlossen; die adaptive Felderweiterung und bekannte Quellkarten begrenzen die Aussagekraft. Der lokale Bericht enthält sämtliche Entscheidungen und den Seitenvergleich.
+
+```bash
+.venv/bin/python tools/label_review/server.py serve --port 8766 --manifest build/label-review/targeted-lines-2026-10-07/cases.json --responses build/label-review/targeted-lines-2026-10-07/responses.jsonl
+.venv/bin/python tools/label_review/server.py summary --responses build/label-review/targeted-lines-2026-10-07/responses.jsonl
+```
+
+Reproduktion: `make_targeted_line_experiment.py --outdir <neues Verzeichnis> prepare`, dann `build --edition pocket|standard|deep --variant baseline|trial` für jede Kombination. Zusätzlich beide Varianten mit `--edition standard --batch southern-standard` und `--edition deep --batch southern-deep` bauen. Anschließend `curate`. Neue Versuche mit abweichenden Quellen benötigen neue Experiment-ID und neues Asset-Präfix. Vorhandene Bilder werden bei abweichenden Pixeln nicht überschrieben. Konfigurationen, Seed und Quellenprüfsummen werden gespeichert; Kartenbau und Bewertung bleiben getrennt.
