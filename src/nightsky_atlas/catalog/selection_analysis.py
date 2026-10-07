@@ -11,9 +11,11 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
+from nightsky_atlas.atlas.config import load_atlas_config
 from nightsky_atlas.atlas.observing_config import (
     load_observing_lists_config,
     resolve_edition,
+    resolve_edition_hierarchy,
 )
 from nightsky_atlas.catalog.dso_store import load_dso_catalog
 from nightsky_atlas.catalog.galaxy_visibility import (
@@ -30,7 +32,7 @@ from nightsky_atlas.catalog.observing_lists import (
 from nightsky_atlas.catalog.selection import SelectionPolicy, select_dso
 from nightsky_atlas.catalog.visibility import evaluate_visibility
 
-EDITIONS = ("standard", "deep", "reference")
+EDITIONS = ("pocket", "standard", "deep", "reference")
 EDITION_REASON_NAMES = {
     "below-catalogue-minimum-extent": "below the edition's catalogue minimum angular extent",
     "catalogue-not-enabled-for-edition": "source catalogue is not enabled for this edition",
@@ -50,6 +52,8 @@ EDITION_REASON_NAMES = {
     "pocket_messier": "mandatory Messier observing-list member",
     "pocket_caldwell": "mandatory Caldwell observing-list member",
     "pocket_herschel400": "mandatory Herschel 400 observing-list member",
+    "included_by_pocket_hierarchy": "included because Pocket selects the same target",
+    "included_by_standard_hierarchy": "included because Standard selects the same target",
     "catalogue_policy_inclusion": "included by a configured catalogue-specific policy",
     "curated_object_policy": "included by a configured curated-object policy",
     "reference_catalogue_complete": "included as a valid object in Reference catalogue coverage",
@@ -411,6 +415,14 @@ def explain_selection(
             "catalogue_coverage",
             EDITION_REASON_NAMES["below-catalogue-minimum-extent"],
         ),
+        "included_by_pocket_hierarchy": (
+            "edition_policy",
+            EDITION_REASON_NAMES["included_by_pocket_hierarchy"],
+        ),
+        "included_by_standard_hierarchy": (
+            "edition_policy",
+            EDITION_REASON_NAMES["included_by_standard_hierarchy"],
+        ),
     }
     for code in selected.visibility_reasons:
         if code in reason_categories:
@@ -680,6 +692,7 @@ def _selection_warnings(
             }
         )
     standard_not_deep = sorted(selected["standard"] - selected["deep"])
+    pocket_not_standard = sorted(selected["pocket"] - selected["standard"])
     deep_not_reference = sorted(selected["deep"] - selected["reference"])
     reference_not_deep = sorted(selected["reference"] - selected["deep"])
 
@@ -690,6 +703,11 @@ def _selection_warnings(
         return dict(sorted(counts.items()))
 
     for code, ids, message in (
+        (
+            "pocket_not_standard",
+            pocket_not_standard,
+            "Objects selected in Pocket but not Standard violate the expected edition hierarchy.",
+        ),
         (
             "standard_not_deep",
             standard_not_deep,
@@ -707,7 +725,11 @@ def _selection_warnings(
         ),
     ):
         if ids:
-            failed_edition = "reference" if code == "deep_not_reference" else "deep"
+            failed_edition = (
+                "standard" if code == "pocket_not_standard"
+                else "reference" if code == "deep_not_reference"
+                else "deep"
+            )
             warnings.append(
                 {
                     "code": code,
@@ -832,7 +854,20 @@ def build_selection_report(
     dsos = [obj for obj in objects if obj.object_type not in {DsoType.STAR, DsoType.DOUBLE_STAR}]
     config = load_observing_lists_config(observing_config_path)
     index = build_membership_index(load_observing_lists(observing_lists_dir), dsos)
-    policies = {edition: resolve_edition(config, edition) for edition in EDITIONS}
+    visibility_by_edition = {
+        edition: load_atlas_config(Path("atlas") / f"{edition}.yaml").visibility.to_limits()
+        for edition in ("pocket", "standard", "deep")
+    }
+    policies = {
+        edition: (
+            resolve_edition_hierarchy(
+                config, edition, visibility_by_edition=visibility_by_edition
+            )
+            if edition in visibility_by_edition
+            else resolve_edition(config, edition)
+        )
+        for edition in EDITIONS
+    }
     decisions = {
         obj.id: {
             edition: explain_selection(obj, edition=edition, policy=policies[edition], index=index)
@@ -935,7 +970,7 @@ def build_selection_report(
                 "Selection status is exactly the current selector result; report diagnostics "
                 "do not change it."
             ),
-            "Deep/Reference hierarchy notices are audit warnings, not selection rules.",
+            "Edition hierarchy notices are audit warnings, not selection rules.",
         ],
     }
     return _json_safe(report)
@@ -950,6 +985,7 @@ def write_selection_csv(report: dict[str, Any], path: str | Path) -> None:
             "canonical_id",
             "type",
             "source_catalogues",
+            "Pocket",
             "Standard",
             "Deep",
             "Reference",
@@ -982,18 +1018,18 @@ def summarize_selection_report(report: dict[str, Any]) -> str:
         f"physical DSOs: {report['physical_dso_count']}",
         f"edition totals: {report['edition_totals']}",
         "",
-        "type                              total  Standard   Deep  Reference",
+        "type                              total   Pocket  Standard   Deep  Reference",
     ]
     for row in report["type_counts"]:
         lines.append(
-            f"{row['type']:<32} {row['total']:>6} {row['standard']:>9}"
+            f"{row['type']:<32} {row['total']:>6} {row['pocket']:>9} {row['standard']:>9}"
             f" {row['deep']:>6} {row['reference']:>10}"
         )
     lines.extend(
         (
             "",
             "source                          entries  records  physical  "
-            "Standard   Deep  Reference",
+            "Pocket   Standard   Deep  Reference",
         )
     )
     for row in report["source_counts"]:
@@ -1001,6 +1037,7 @@ def summarize_selection_report(report: dict[str, Any]) -> str:
             f"{row['source']:<31} {row['catalogue_entries']:>7}"
             f" {row['normalized_catalogue_records']:>8}"
             f" {row['unique_physical_objects_contributed']:>9}"
+            f" {row['selected_unique_physical_objects']['pocket']:>7}"
             f" {row['selected_unique_physical_objects']['standard']:>9}"
             f" {row['selected_unique_physical_objects']['deep']:>6}"
             f" {row['selected_unique_physical_objects']['reference']:>10}"

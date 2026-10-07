@@ -16,6 +16,7 @@ the atlas still builds with observing lists disabled.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
@@ -36,6 +37,7 @@ from nightsky_atlas.catalog.selection import (
     TypeSelectionRule,
     VisibilityClassRule,
 )
+from nightsky_atlas.catalog.visibility import VisibilityLimits
 
 __all__ = [
     "DEFAULT_CONFIG_PATH",
@@ -47,6 +49,7 @@ __all__ = [
     "VisibilityClassPolicyConfig",
     "load_observing_lists_config",
     "resolve_edition",
+    "resolve_edition_hierarchy",
 ]
 
 DEFAULT_CONFIG_PATH = Path("config/observing_lists.yaml")
@@ -179,6 +182,7 @@ class ObservingListsConfig(_StrictModel):
     """Observing-list registry plus per-edition selection policies."""
 
     lists: dict[str, ObservingListEntry] = Field(default_factory=dict)
+    global_excluded_designations: tuple[str, ...] = ()
     editions: dict[str, EditionPolicy] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -247,7 +251,7 @@ def resolve_edition(config: ObservingListsConfig, edition_id: str) -> SelectionP
     forced_reason_codes: dict[str, str] = {}
     weights: dict[str, int] = {}
     included_catalogues: tuple[str, ...] | None = None
-    excluded_designations: list[str] = []
+    excluded_designations: list[str] = list(config.global_excluded_designations)
     forced_catalogues: list[str] = []
     catalogue_minimum_extent_arcmin: dict[str, float] = {}
     selection_rules: dict[str, dict[str, object]] = {}
@@ -308,3 +312,34 @@ def resolve_edition(config: ObservingListsConfig, edition_id: str) -> SelectionP
         ),
         edition_id=edition_id,
     )
+
+
+def resolve_edition_hierarchy(
+    config: ObservingListsConfig,
+    edition_id: str,
+    *,
+    visibility_by_edition: dict[str, VisibilityLimits] | None = None,
+) -> SelectionPolicy:
+    """Resolve a production edition with its lower-depth selection policies.
+
+    ``visibility_by_edition`` should contain the limits loaded from each
+    edition's atlas YAML. Missing entries use the normal selector defaults.
+    Parent inclusion affects only whether a target is present; the current
+    edition still supplies its own label priorities and presentation metadata.
+    """
+    hierarchy = {
+        "standard": ("pocket",),
+        "deep": ("standard", "pocket"),
+    }
+    ancestors = []
+    for ancestor_id in hierarchy.get(edition_id, ()):
+        ancestor = resolve_edition(config, ancestor_id)
+        visibility = (visibility_by_edition or {}).get(ancestor_id)
+        if visibility is not None:
+            ancestor = replace(ancestor, visibility=visibility)
+        ancestors.append(ancestor)
+    policy = resolve_edition(config, edition_id)
+    visibility = (visibility_by_edition or {}).get(edition_id)
+    if visibility is not None:
+        policy = replace(policy, visibility=visibility)
+    return replace(policy, hierarchy_policies=tuple(ancestors))

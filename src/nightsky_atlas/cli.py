@@ -8,7 +8,6 @@ import sqlite3
 import sys
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import replace
 from pathlib import Path
 
 from nightsky_atlas import __version__
@@ -1715,7 +1714,7 @@ def _command_dso_info(args: argparse.Namespace) -> int:
     if getattr(args, "observing_config", None) and getattr(args, "observing_lists", None):
         from nightsky_atlas.atlas.observing_config import (
             load_observing_lists_config,
-            resolve_edition,
+            resolve_edition_hierarchy,
         )
         from nightsky_atlas.catalog.observing_lists import (
             build_membership_index,
@@ -1725,7 +1724,15 @@ def _command_dso_info(args: argparse.Namespace) -> int:
 
         config = load_observing_lists_config(args.observing_config)
         index = build_membership_index(load_observing_lists(args.observing_lists), objects)
-        policy = resolve_edition(config, getattr(args, "edition", "deep"))
+        visibility_by_edition = {
+            edition: load_atlas_config(Path("atlas") / f"{edition}.yaml").visibility.to_limits()
+            for edition in ("pocket", "standard", "deep")
+        }
+        policy = resolve_edition_hierarchy(
+            config,
+            getattr(args, "edition", "deep"),
+            visibility_by_edition=visibility_by_edition,
+        )
         payload = []
         for obj in matches:
             selected = select_dso(obj, index=index, policy=policy)
@@ -2042,7 +2049,7 @@ def _command_pocket_selection_report(args: argparse.Namespace) -> int:
 def _command_why_object(args: argparse.Namespace) -> int:
     from nightsky_atlas.atlas.observing_config import (
         load_observing_lists_config,
-        resolve_edition,
+        resolve_edition_hierarchy,
     )
     from nightsky_atlas.catalog.common_names import curated_common_name
     from nightsky_atlas.catalog.observing_lists import (
@@ -2066,12 +2073,18 @@ def _command_why_object(args: argparse.Namespace) -> int:
         {obj.provenance.catalogue} | {record.catalogue_id for record in obj.catalogue_records}
     )
     editions = (args.edition,) if args.edition else ("pocket", "standard", "deep", "reference")
-    policies = {edition: resolve_edition(config, edition) for edition in editions}
-    if "pocket" in policies:
-        pocket_atlas = load_atlas_config(args.atlas)
-        policies["pocket"] = replace(
-            policies["pocket"], visibility=pocket_atlas.visibility.to_limits()
+    visibility_by_edition = {
+        edition: load_atlas_config(Path("atlas") / f"{edition}.yaml").visibility.to_limits()
+        for edition in ("pocket", "standard", "deep")
+    }
+    if "pocket" in editions:
+        visibility_by_edition["pocket"] = load_atlas_config(args.atlas).visibility.to_limits()
+    policies = {
+        edition: resolve_edition_hierarchy(
+            config, edition, visibility_by_edition=visibility_by_edition
         )
+        for edition in editions
+    }
     output = {
         "canonical_designation": obj.id,
         "display_designation": primary_designation(obj),

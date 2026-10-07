@@ -26,7 +26,13 @@ def test_load_shipped_config_and_resolve_standard() -> None:
     config = load_observing_lists_config(SHIPPED)
     assert "herschel400" in config.lists
     policy = resolve_edition(config, "standard")
-    assert policy.forced_lists == frozenset({"herschel400"})
+    assert policy.forced_lists == frozenset(
+        {
+            "herschel400",
+            "nightsky_curated_bright_nebulae_v1",
+            "nightsky_curated_dark_nebulae_v1",
+        }
+    )
     assert dict(policy.list_weights)["messier"] == 60
     assert dict(policy.list_weights)["herschel400"] == 50
     assert policy.included_catalogues == frozenset({"OpenNGC"})
@@ -44,7 +50,6 @@ def test_deep_inherits_standard() -> None:
             "OpenNGC",
             "VII/20",
             "VII/7A",
-            "VII/9",
             "VII/21",
             "VII/220A",
             "VII/92A:Collinder",
@@ -54,19 +59,19 @@ def test_deep_inherits_standard() -> None:
             "VII/202:Palomar",
             "VII/202:Terzan",
             "VII/213",
+            "IV/24:CuratedPN",
         }
     )
     assert policy.forced_catalogues == frozenset()
     assert dict(policy.catalogue_minimum_extent_arcmin) == {
         "VII/20": 15.0,
         "VII/7A": 15.0,
-        "VII/9": 15.0,
         "VII/21": 90.0,
         "VII/220A": 15.0,
     }
     rules = dict(policy.type_rules)
     assert rules["galaxy"].visibility_class_rules[-1].minimum_score_400 == -1.0
-    assert rules["dark_nebula"].visibility_catalogues == ("OpenNGC",)
+    assert rules["dark_nebula"].visibility_catalogues == ()
 
 
 def test_reference_policy_inherits_deep_catalogue_expansion() -> None:

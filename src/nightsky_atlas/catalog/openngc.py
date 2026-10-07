@@ -72,10 +72,12 @@ _CLUSTER_IDENTITIES = frozenset(
         "NGC1981",
         "NGC2239",
         "NGC3324",
+        "NGC3247",
         "NGC6530",
         "NGC6823",
         "NGC6997",
         "NGC7380",
+        "NGC6250",
     }
 )
 _SEMANTIC_SUBTYPES = {
@@ -165,6 +167,8 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
         object_type = DsoType.DOUBLE_STAR
 
     semantic_subtype = _SEMANTIC_SUBTYPES.get(type_code)
+    if name in {"NGC3247", "NGC6250"}:
+        semantic_subtype = "cluster with nebulosity"
     if name == "IC4715":
         semantic_subtype = "star cloud"
 

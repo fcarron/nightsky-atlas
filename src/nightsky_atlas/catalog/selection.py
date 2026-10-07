@@ -82,6 +82,7 @@ class SelectionPolicy:
     include_uncertain_catalogue_matches: bool = False
     type_rules: tuple[tuple[str, TypeSelectionRule], ...] = ()
     edition_id: str | None = None
+    hierarchy_policies: tuple[SelectionPolicy, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -593,7 +594,7 @@ def select_dso(
         render_priority = effective_policy.render_base_priority + bonus
         label_priority = base_priority + bonus
 
-    return DsoMetadata(
+    metadata = DsoMetadata(
         dso_id=dso.id,
         list_memberships=memberships,
         visual_score=assessment.score,
@@ -611,3 +612,15 @@ def select_dso(
         visibility_reasons=tuple(dict.fromkeys(visibility_reasons)),
         galaxy_contour_class=galaxy_contour_class,
     )
+    if not (metadata.visible or metadata.forced):
+        for parent_policy in effective_policy.hierarchy_policies:
+            parent = select_dso(dso, index=index, policy=parent_policy)
+            if parent.visible or parent.forced:
+                parent_edition = parent_policy.edition_id or "parent"
+                return replace(
+                    metadata,
+                    visible=True,
+                    visibility_reasons=(*metadata.visibility_reasons,
+                        f"included_by_{parent_edition}_hierarchy"),
+                )
+    return metadata

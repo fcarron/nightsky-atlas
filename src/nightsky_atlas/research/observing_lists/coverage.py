@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import csv
 from collections import Counter, defaultdict
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from nightsky_atlas.atlas.config import load_atlas_config
-from nightsky_atlas.atlas.observing_config import load_observing_lists_config, resolve_edition
+from nightsky_atlas.atlas.observing_config import (
+    load_observing_lists_config,
+    resolve_edition_hierarchy,
+)
 from nightsky_atlas.catalog.dso_store import load_dso_catalog
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType
 from nightsky_atlas.catalog.observing_lists import build_membership_index, load_observing_lists
@@ -131,9 +133,19 @@ def build_coverage_report(
     )
     config = load_observing_lists_config(observing_config_path)
     memberships = build_membership_index(load_observing_lists(observing_lists_dir), objects)
-    policies = {edition: resolve_edition(config, edition) for edition in _EDITION_IDS}
-    pocket_atlas = load_atlas_config(pocket_atlas_path)
-    policies["pocket"] = replace(policies["pocket"], visibility=pocket_atlas.visibility.to_limits())
+    visibility_by_edition = {
+        "pocket": load_atlas_config(pocket_atlas_path).visibility.to_limits(),
+        "standard": load_atlas_config("atlas/standard.yaml").visibility.to_limits(),
+        "deep": load_atlas_config("atlas/deep.yaml").visibility.to_limits(),
+    }
+    policies = {
+        edition: resolve_edition_hierarchy(
+            config, edition, visibility_by_edition=visibility_by_edition
+        )
+        if edition in visibility_by_edition
+        else resolve_edition_hierarchy(config, edition)
+        for edition in _EDITION_IDS
+    }
 
     decision_cache: dict[str, dict[str, dict[str, Any]]] = {}
     by_id = {obj.id: obj for obj in objects}

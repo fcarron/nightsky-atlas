@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 from nightsky_atlas.atlas.config import (
@@ -25,7 +25,7 @@ from nightsky_atlas.atlas.observing_config import (
 from nightsky_atlas.atlas.observing_config import (
     ObservingListsConfig,
     load_observing_lists_config,
-    resolve_edition,
+    resolve_edition_hierarchy,
 )
 from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.build.progress import Progress, null_progress
@@ -243,6 +243,7 @@ def load_chart_inputs(
         selection_policy = _selection_policy(
             atlas,
             observing_config_path if observing_config_path is not None else OBSERVING_CONFIG_PATH,
+            atlas_path,
         )
     return ChartInputs(
         atlas=atlas,
@@ -447,7 +448,9 @@ def _system_in_box(system: StarSystem, box: QueryBox) -> bool:
     return _coordinates_in_box(system.ra_deg, system.dec_deg, box)
 
 
-def _selection_policy(atlas: AtlasConfig, config_path: str | Path) -> SelectionPolicy:
+def _selection_policy(
+    atlas: AtlasConfig, config_path: str | Path, atlas_path: str | Path
+) -> SelectionPolicy:
     """Resolve the selection policy for an atlas edition.
 
     Observing-list rules come from ``config_path`` (an absent file simply yields
@@ -455,5 +458,18 @@ def _selection_policy(atlas: AtlasConfig, config_path: str | Path) -> SelectionP
     deep-sky selection is never a single global magnitude cut.
     """
     config: ObservingListsConfig = load_observing_lists_config(config_path)
-    policy = resolve_edition(config, atlas.id)
-    return replace(policy, visibility=atlas.visibility.to_limits())
+    atlas_directory = Path(atlas_path).parent
+    visibility_by_edition = {atlas.id: atlas.visibility.to_limits()}
+    if atlas.id in {"pocket", "standard", "deep"}:
+        for edition_id in ("pocket", "standard", "deep"):
+            if edition_id in visibility_by_edition:
+                continue
+            candidate = atlas_directory / f"{edition_id}.yaml"
+            if not candidate.is_file():
+                candidate = Path("atlas") / f"{edition_id}.yaml"
+            if candidate.is_file():
+                parent_atlas = load_atlas_config(candidate)
+                visibility_by_edition[edition_id] = parent_atlas.visibility.to_limits()
+    return resolve_edition_hierarchy(
+        config, atlas.id, visibility_by_edition=visibility_by_edition
+    )

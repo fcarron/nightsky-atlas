@@ -64,11 +64,11 @@ def test_observer_catalogue_examples_follow_production_policy(production_state) 
         "Cr 399": (True, True, True),
         "Pal 5": (False, True, True),
         "Ter 7": (False, True, True),
-        "Abell 39": (False, False, False),
+        "Abell 39": (False, True, True),
         "NGC 7000": (True, True, True),
         "Sh2-101": (False, True, True),
         "LDN 123": (False, False, True),
-        "B 168": (False, False, True),
+        "B 168": (True, True, True),
         "HCG 92": (False, True, True),
     }
     for designation, expected in expectations.items():
@@ -91,19 +91,18 @@ def test_production_selection_hierarchy_and_type_counts(production_state) -> Non
     rows = {row["type"]: row for row in report["type_counts"]}
     assert rows["galaxy"]["total"] >= 10522
     assert sum(row["total"] for row in rows.values()) == report["physical_dso_count"]
-    for edition in ("standard", "deep", "reference"):
+    for edition in ("pocket", "standard", "deep", "reference"):
         assert sum(row[edition] for row in rows.values()) == report["edition_totals"][edition]
     assert report["edition_totals"] == {
-        # The verified Caldwell fixture activates the already-configured
-        # Standard open-cluster membership rule for NGC 4755 and NGC 6193.
-        "standard": 2989,
-        "deep": 8245,
-        "reference": 15857,
+        "pocket": 1317,
+        "standard": 3187,
+        "deep": 10481,
+        "reference": 14867,
     }
     assert not {
         warning["code"]
         for warning in report["hierarchy_warnings"]
-        if warning["code"] in {"standard_not_deep", "deep_not_reference"}
+        if warning["code"] in {"pocket_not_standard", "standard_not_deep"}
     }
 
 
@@ -260,7 +259,9 @@ def test_pocket_caldwell_double_cluster_has_only_component_objects(production_st
     }
 
 
-def test_new_observing_list_data_does_not_change_deep_or_reference_counts(production_state) -> None:
+def test_production_selection_preserves_current_deep_and_reference_counts(production_state) -> None:
     report = build_selection_report()
-    assert report["edition_totals"]["deep"] == 8245
-    assert report["edition_totals"]["reference"] == 15857
+    assert report["edition_totals"]["pocket"] == 1317
+    assert report["edition_totals"]["standard"] == 3187
+    assert report["edition_totals"]["deep"] == 10481
+    assert report["edition_totals"]["reference"] == 14867

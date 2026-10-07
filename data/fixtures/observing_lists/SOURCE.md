@@ -75,3 +75,17 @@ an explicit source-version difference, not a coordinate or catalogue rewrite.
 - **Source and method:** Conservative visual-target review in [`docs/POCKET_DSO_AUDIT.md`](../../../docs/POCKET_DSO_AUDIT.md), normalized to existing catalogue identities.
 - **License:** Original NightSkyAtlas membership decision (MIT); no copied descriptions, ratings or photometry.
 - **Edition use:** Forced only in Pocket, with the reason `pocket_curated_visual_target`; it does not enable the full Melotte catalogue.
+
+## nightsky_curated_dark_nebulae_v1.json
+
+- **List:** 47 canonical object IDs from the included entries in `config/curated_dark_nebulae_v1.yaml`.
+- **Source and method:** NightSkyAtlas visual-target curation documented in [`docs/NEBULA_CURATION_V1.md`](../../../docs/NEBULA_CURATION_V1.md). Entries awaiting identity review are excluded.
+- **License:** Original NightSkyAtlas selection (MIT); designations only, with no copied observing notes or ratings.
+- **Edition use:** Standard and Deep. This shares the existing curated targets; it does not expand selection to all Barnard or LDN entries.
+
+## nightsky_curated_bright_nebulae_v1.json
+
+- **List:** 42 canonical object IDs from the included entries in `config/curated_bright_nebulae_v1.yaml`.
+- **Source and method:** NightSkyAtlas visual-target curation documented in [`docs/NEBULA_CURATION_V1.md`](../../../docs/NEBULA_CURATION_V1.md).
+- **License:** Original NightSkyAtlas selection (MIT); designations only, with no copied observing notes or ratings.
+- **Edition use:** Standard and Deep. This is a curated set, not a broad LBN catalogue inclusion rule.

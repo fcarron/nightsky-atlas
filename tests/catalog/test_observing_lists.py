@@ -67,7 +67,7 @@ def test_dso_memberships_matches_zero_padded_id() -> None:
 def test_dso_memberships_matches_cross_id_and_plain_ngc() -> None:
     index = build_membership_index(load_observing_lists(FIXTURE_DIR))
     dso = make_dso("M76", cross_ids=("NGC 650", "Little Dumbbell"))
-    assert dso_memberships(dso, index) == {"herschel400", "messier"}
+    assert dso_memberships(dso, index) == {"herschel400", "messier", "nightsky_curated_pn"}
 
 
 def test_observing_list_aliases_and_non_dso_entries_are_kept_separate() -> None:

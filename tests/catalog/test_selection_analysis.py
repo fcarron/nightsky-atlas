@@ -82,6 +82,7 @@ def test_hierarchy_warning_detects_standard_object_missing_from_deep() -> None:
     galaxy = _galaxy()
     decisions = {
         galaxy.id: {
+            "pocket": {"selected": False, "reasons": []},
             "standard": {"selected": True, "reasons": []},
             "deep": {
                 "selected": False,
@@ -132,12 +133,12 @@ def test_report_counts_one_physical_object_despite_multiple_aliases(tmp_path) ->
     assert sum(row["total"] for row in first["type_counts"]) == 1
     assert first["edition_totals"] == {
         edition: sum(row[edition] for row in first["type_counts"])
-        for edition in ("standard", "deep", "reference")
+        for edition in ("pocket", "standard", "deep", "reference")
     }
     assert first == second
     assert len(first["objects"]) == 1
     assert first["objects"][galaxy.id]["visibility"]["class"]
-    assert first["edition_policies"].keys() == {"standard", "deep", "reference"}
+    assert first["edition_policies"].keys() == {"pocket", "standard", "deep", "reference"}
 
     csv_path = tmp_path / "report.csv"
     write_selection_csv(first, csv_path)

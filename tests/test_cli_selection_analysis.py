@@ -34,8 +34,17 @@ def test_atlas_why_object_command_reports_all_editions(monkeypatch, capsys) -> N
 def test_selection_report_cli_exports_stable_json(monkeypatch, tmp_path, capsys) -> None:
     report = {
         "physical_dso_count": 1,
-        "edition_totals": {"standard": 1, "deep": 1, "reference": 1},
-        "type_counts": [{"type": "galaxy", "total": 1, "standard": 1, "deep": 1, "reference": 1}],
+        "edition_totals": {"pocket": 1, "standard": 1, "deep": 1, "reference": 1},
+        "type_counts": [
+            {
+                "type": "galaxy",
+                "total": 1,
+                "pocket": 1,
+                "standard": 1,
+                "deep": 1,
+                "reference": 1,
+            }
+        ],
         "source_counts": [
             {
                 "source": "OpenNGC",
@@ -43,6 +52,7 @@ def test_selection_report_cli_exports_stable_json(monkeypatch, tmp_path, capsys)
                 "normalized_catalogue_records": 1,
                 "unique_physical_objects_contributed": 1,
                 "selected_unique_physical_objects": {
+                    "pocket": 1,
                     "standard": 1,
                     "deep": 1,
                     "reference": 1,

@@ -8,9 +8,11 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from nightsky_atlas.atlas.config import load_atlas_config
 from nightsky_atlas.atlas.observing_config import (
     load_observing_lists_config,
     resolve_edition,
+    resolve_edition_hierarchy,
 )
 from nightsky_atlas.catalog.dso_store import load_dso_catalog
 from nightsky_atlas.catalog.models import DeepSkyObject
@@ -67,10 +69,18 @@ def _edition_counts(
 ) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
     config = load_observing_lists_config(observing_config_path)
     index = build_membership_index(load_observing_lists(observing_lists_dir), objects)
+    visibility_by_edition = {
+        edition: load_atlas_config(Path("atlas") / f"{edition}.yaml").visibility.to_limits()
+        for edition in ("pocket", "standard", "deep")
+    }
     per_edition: dict[str, dict[str, int]] = {}
     selected_by_edition: dict[str, set[str]] = {}
     for edition in ("standard", "deep", "reference"):
-        policy = resolve_edition(config, edition)
+        policy = (
+            resolve_edition_hierarchy(config, edition, visibility_by_edition=visibility_by_edition)
+            if edition in {"standard", "deep"}
+            else resolve_edition(config, edition)
+        )
         selected: set[str] = set()
         for obj in objects:
             metadata = select_dso(obj, index=index, policy=policy)

@@ -36,6 +36,8 @@ lists:
     name: NightSkyAtlas Pocket visual classics
   nightsky_curated_bright_nebulae_v1:
     name: NightSkyAtlas curated bright nebulae v1
+  nightsky_curated_dark_nebulae_v1:
+    name: NightSkyAtlas curated dark nebulae v1
   nightsky_confirmed_abell_pn:
     name: NightSkyAtlas confirmed Abell planetary nebulae
   bright_nebula_al:
@@ -52,6 +54,10 @@ lists:
     name: Hickson Compact Groups
   abell:
     name: Abell Galaxy Clusters
+
+global_excluded_designations:
+  - NGC1487 NED02
+  - NGC4656 NED01
 
 editions:
   pocket:
@@ -89,8 +95,6 @@ editions:
         exclusion_reason_code: pocket_below_100mm_visibility
     excluded_designations:
       - C014
-      - NGC1487 NED02
-      - NGC4656 NED01
       - PGC025886
       - PGC 30484
       - PGC 46039
@@ -109,6 +113,12 @@ editions:
       - OpenNGC
     forced_lists:
       - herschel400
+      - nightsky_curated_bright_nebulae_v1
+      - nightsky_curated_dark_nebulae_v1
+    forced_list_reason_codes:
+      herschel400: standard_herschel400
+      nightsky_curated_bright_nebulae_v1: standard_curated_bright_nebula
+      nightsky_curated_dark_nebulae_v1: standard_curated_dark_nebula
     list_weights:
       messier: 60
       herschel400: 50

@@ -5,7 +5,11 @@ import pytest
 
 from nightsky_atlas.atlas.config import EditionConfig, load_atlas_config
 from nightsky_atlas.atlas.index import build_atlas_index
-from nightsky_atlas.atlas.observing_config import load_observing_lists_config, resolve_edition
+from nightsky_atlas.atlas.observing_config import (
+    load_observing_lists_config,
+    resolve_edition,
+    resolve_edition_hierarchy,
+)
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType
 from nightsky_atlas.catalog.observing_lists import build_membership_index, load_observing_lists
 from nightsky_atlas.catalog.openngc import parse_openngc_row
@@ -96,9 +100,12 @@ def test_cluster_identities_are_open_clusters(name):
     assert index_entry(obj).object_type == "Open Cluster"
 
 
-def test_combined_source_type_does_not_globally_reclassify_orion_or_ngc3247():
+def test_cluster_nebula_identity_overrides_preserve_orion_and_recognize_open_clusters():
     assert source_object("NGC1976", "Cl+N").object_type == DsoType.BRIGHT_NEBULA
-    assert source_object("NGC3247", "HII").object_type == DsoType.BRIGHT_NEBULA
+    for name, type_code in (("NGC3247", "HII"), ("NGC6250", "Cl+N")):
+        obj = source_object(name, type_code)
+        assert obj.object_type == DsoType.OPEN_CLUSTER
+        assert obj.semantic_subtype == "cluster with nebulosity"
 
 
 def test_m24_is_star_cloud_not_open_cluster():
@@ -136,13 +143,15 @@ def pocket_policy():
 
 
 @pytest.mark.parametrize("name", ["NGC1487 NED02", "NGC4656 NED01"])
-def test_pocket_retains_parent_and_excludes_ned_component_without_merging(name):
+def test_all_editions_retain_parent_and_exclude_ned_component_without_merging(name):
     parent = source_object(name.split()[0], "GPair", MajAx="8")
     component = source_object(name, "G", **{"V-Mag": "9", "MajAx": "6", "MinAx": "2"})
     index = build_membership_index(load_observing_lists(), [parent, component])
-    decision = select_dso(component, index=index, policy=pocket_policy())
-    assert not (decision.visible or decision.forced)
-    assert "edition_designation_excluded" in decision.visibility_reasons
+    for edition in ("pocket", "standard", "deep", "reference"):
+        policy = resolve_edition(load_observing_lists_config(), edition)
+        decision = select_dso(component, index=index, policy=policy)
+        assert not (decision.visible or decision.forced)
+        assert "edition_designation_excluded" in decision.visibility_reasons
     parent_decision = select_dso(parent, index=index, policy=pocket_policy())
     assert parent_decision.visible or parent_decision.forced
     assert component.id == name
@@ -195,9 +204,66 @@ def test_classic_targets_selected_with_explicit_pocket_reason(name, code):
     assert result.visible or result.forced
     assert result.forced
     assert "pocket_curated_visual_target" in result.visibility_reasons
-    for edition in ("standard", "deep", "reference"):
+    config = load_observing_lists_config(ROOT / "config/observing_lists.yaml")
+    visibility = {
+        edition: load_atlas_config(ROOT / "atlas" / f"{edition}.yaml").visibility.to_limits()
+        for edition in ("pocket", "standard", "deep")
+    }
+    for edition in ("standard", "deep"):
         policy = resolve_edition(load_observing_lists_config(), edition)
         assert "nightsky_pocket_classics" not in policy.forced_lists
+        inherited_policy = resolve_edition_hierarchy(
+            config, edition, visibility_by_edition=visibility
+        )
+        inherited = select_dso(obj, index=index, policy=inherited_policy)
+        assert inherited.visible or inherited.forced
+
+
+def test_pocket_target_inclusion_is_inherited_by_standard_and_deep():
+    config = load_observing_lists_config(ROOT / "config/observing_lists.yaml")
+    visibility = {
+        edition: load_atlas_config(ROOT / "atlas" / f"{edition}.yaml").visibility.to_limits()
+        for edition in ("pocket", "standard", "deep")
+    }
+    policies = {
+        edition: resolve_edition_hierarchy(
+            config, edition, visibility_by_edition=visibility
+        )
+        for edition in ("pocket", "standard", "deep")
+    }
+    obj = source_object("NGC0001", "G")
+    index = {"NGC1": frozenset({"nightsky_pocket_classics"})}
+    pocket = select_dso(obj, index=index, policy=policies["pocket"])
+    standard = select_dso(obj, index=index, policy=policies["standard"])
+    deep = select_dso(obj, index=index, policy=policies["deep"])
+    assert pocket.forced
+    assert standard.visible and "included_by_pocket_hierarchy" in standard.visibility_reasons
+    assert deep.visible
+
+
+def test_curated_bright_and_dark_nebulae_are_selected_in_standard_and_deep():
+    config = load_observing_lists_config(ROOT / "config/observing_lists.yaml")
+    lists = load_observing_lists(ROOT / "data/fixtures/observing_lists")
+    bright = source_object("IC1396", "HII")
+    dark = replace(source_object("B 72", "Other"), object_type=DsoType.DARK_NEBULA)
+    index = build_membership_index(lists, [bright, dark])
+    for edition in ("standard", "deep"):
+        policy = resolve_edition(config, edition)
+        for obj, list_id in (
+            (bright, "nightsky_curated_bright_nebulae_v1"),
+            (dark, "nightsky_curated_dark_nebulae_v1"),
+        ):
+            result = select_dso(obj, index=index, policy=policy)
+            assert result.visible or result.forced
+            assert result.forced
+            assert list_id in result.list_memberships
+
+
+def test_global_component_exclusions_apply_to_every_edition():
+    config = load_observing_lists_config(ROOT / "config/observing_lists.yaml")
+    for edition in ("pocket", "standard", "deep", "reference"):
+        policy = resolve_edition(config, edition)
+        assert {"NGC1487 NED02", "NGC4656 NED01"} <= set(policy.excluded_designations)
 
 
 def test_special_galaxies_not_blanket_excluded():
