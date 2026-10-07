@@ -57,7 +57,7 @@ def draw_chart_directory_pages(
     pdf_navigation: PdfNavigation | None = None,
 ) -> int:
     """Append paginated directory pages and return the number written."""
-    family = style.label.font_family
+    family = style.typography.sans_family
     capacity_per_column = _capacity(page) // _COLUMNS
     capacity = capacity_per_column * _COLUMNS
     column_width = (page.width_mm - 2 * page.margin_mm) / _COLUMNS
@@ -70,7 +70,7 @@ def draw_chart_directory_pages(
             mm_to_pt(page.margin_mm),
             family,
             11.0,
-            "bold",
+            "semibold",
         )
         for column in range(_COLUMNS):
             x = page.margin_mm + column * column_width
@@ -82,7 +82,7 @@ def draw_chart_directory_pages(
                     mm_to_pt(page.margin_mm + 9),
                     family,
                     7.0,
-                    "bold",
+                    "semibold",
                 )
         for local, entry in enumerate(entries[offset : offset + capacity]):
             column, row = divmod(local, capacity_per_column)
@@ -91,11 +91,11 @@ def draw_chart_directory_pages(
             code_metrics = TextMeasurer(family, 7.5).measure_mm(entry.chart_code)
             code_rect = PageRect(x, y, code_metrics.width_mm, code_metrics.height_mm)
             if pdf_navigation is None:
-                draw_text(cr, entry.chart_code, mm_to_pt(x), mm_to_pt(y), family, 7.5, "bold")
+                draw_text(cr, entry.chart_code, mm_to_pt(x), mm_to_pt(y), family, 7.5, "semibold")
             else:
                 with pdf_navigation.link(cr, entry.chart_code, code_rect):
                     draw_text(
-                        cr, entry.chart_code, mm_to_pt(x), mm_to_pt(y), family, 7.5, "bold"
+                        cr, entry.chart_code, mm_to_pt(x), mm_to_pt(y), family, 7.5, "semibold"
                     )
             draw_text(
                 cr,

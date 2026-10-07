@@ -40,6 +40,15 @@ from nightsky_atlas.build.preflight import validate_atlas_output
 from nightsky_atlas.build.progress import Progress
 from nightsky_atlas.catalog.constellations import load_constellations
 from nightsky_atlas.catalog.dso_store import load_dso_catalog, write_dso_catalog
+from nightsky_atlas.catalog.faint_density import (
+    build_faint_density_report,
+    build_faint_query_performance_report,
+)
+from nightsky_atlas.catalog.faint_stars import (
+    FaintStarStore,
+    download_ucac4_zones,
+    import_ucac4_faint,
+)
 from nightsky_atlas.catalog.hipparcos import (
     CATALOGUE as HIPPARCOS_CATALOGUE,
 )
@@ -192,6 +201,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_data_commands(subparsers)
     _add_benchmark_commands(subparsers)
     _add_atlas_commands(subparsers)
+    _add_research_commands(subparsers)
     return parser
 
 
@@ -239,6 +249,18 @@ def _add_scene_arguments(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=None,
         help="faintest magnitude to render (default: atlas setting)",
+    )
+    parser.add_argument(
+        "--faint-star-store",
+        type=Path,
+        default=None,
+        help="optional UCAC4 faint-star store; disabled by default",
+    )
+    parser.add_argument(
+        "--faint-star-limit",
+        type=float,
+        default=None,
+        help="required magnitude limit when faint-star store is enabled",
     )
     parser.add_argument(
         "--dsos",
@@ -537,6 +559,52 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     reindex.add_argument("--store", type=Path, default=_DEFAULT_STORE)
     reindex.set_defaults(handler=_command_reindex_stars)
 
+    ucac_fetch = data_subparsers.add_parser(
+        "fetch-ucac4", help="download UCAC4 binary zones from CDS (all-sky is several GB)"
+    )
+    ucac_fetch.add_argument("--dest", type=Path, default=Path("data/raw/ucac4/u4b"))
+    ucac_fetch.add_argument("--zones", default="1-900", help="zones/ranges, e.g. 1-20,450,900")
+    ucac_fetch.set_defaults(handler=_command_fetch_ucac4)
+
+    ucac_import = data_subparsers.add_parser(
+        "import-ucac4-faint", help="build the separate UCAC4 faint-star store"
+    )
+    ucac_import.add_argument("--raw", type=Path, default=Path("data/raw/ucac4/u4b"))
+    ucac_import.add_argument("--primary-star-store", type=Path, default=_DEFAULT_STORE)
+    ucac_import.add_argument(
+        "--out", type=Path, default=Path("data/processed/stars/faint_stars.sqlite")
+    )
+    ucac_import.add_argument("--manifest", type=Path, default=None)
+    ucac_import.add_argument("--limit", type=float, default=14.0)
+    ucac_import.set_defaults(handler=_command_import_ucac4_faint)
+
+    faint_count = data_subparsers.add_parser(
+        "faint-star-count", help="report faint-star counts and SQLite size"
+    )
+    faint_count.add_argument(
+        "--store", type=Path, default=Path("data/processed/stars/faint_stars.sqlite")
+    )
+    faint_count.set_defaults(handler=_command_faint_star_count)
+
+    faint_density = data_subparsers.add_parser(
+        "faint-star-density-report",
+        help="compare primary plus faint-star paper density by sky region",
+    )
+    faint_density.add_argument(
+        "--store", type=Path, default=Path("data/processed/stars/faint_stars.sqlite")
+    )
+    faint_density.add_argument("--primary-star-store", type=Path, default=_DEFAULT_STORE)
+    faint_density.set_defaults(handler=_command_faint_star_density_report)
+
+    faint_perf = data_subparsers.add_parser(
+        "faint-star-performance-report",
+        help="measure faint-star chart-query time and returned-memory by region",
+    )
+    faint_perf.add_argument(
+        "--store", type=Path, default=Path("data/processed/stars/faint_stars.sqlite")
+    )
+    faint_perf.set_defaults(handler=_command_faint_star_performance_report)
+
     dso_fetch = data_subparsers.add_parser(
         "fetch-openngc", help="download raw OpenNGC CSVs (network access)"
     )
@@ -676,6 +744,89 @@ def _add_benchmark_commands(subparsers: argparse._SubParsersAction) -> None:
     run.set_defaults(handler=_command_benchmark_ai_review)
 
 
+def _add_research_commands(subparsers: argparse._SubParsersAction) -> None:
+    research = subparsers.add_parser(
+        "research", help="audit local external observing lists without changing atlas policy"
+    )
+    research_subparsers = research.add_subparsers(dest="research_command")
+    coverage = research_subparsers.add_parser(
+        "observing-list-coverage", help="measure database and edition coverage for a local list"
+    )
+    coverage.add_argument(
+        "--source",
+        choices=("astroplanner", "astronomical-league"),
+        required=True,
+        help="source adapter for user-supplied files",
+    )
+    coverage.add_argument(
+        "--input",
+        type=Path,
+        action="append",
+        required=True,
+        help="local file or directory (repeat for multiple inputs)",
+    )
+    coverage.add_argument("--list-name", default=None, help="override the report list name")
+    coverage.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    coverage.add_argument("--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG)
+    coverage.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
+    coverage.add_argument("--pocket-atlas", type=Path, default=Path("atlas/pocket.yaml"))
+    coverage.add_argument("--overrides", type=Path, default=None, help="local YAML match overrides")
+    coverage.add_argument(
+        "--coordinate-tolerance-arcmin",
+        type=float,
+        default=2.0,
+        help="maximum separation for coordinate fallback matching",
+    )
+    coverage.add_argument("--json", type=Path, default=None, help="write deterministic JSON report")
+    coverage.add_argument("--csv", type=Path, default=None, help="write per-entry CSV report")
+    coverage.set_defaults(handler=_command_observing_list_coverage)
+
+    nebula_analysis = research_subparsers.add_parser(
+        "nsog-nebula-analysis",
+        help="analyze local NSOG nebula ratings, catalogue identity and Deep coverage",
+    )
+    nebula_analysis.add_argument(
+        "--input",
+        type=Path,
+        action="append",
+        required=True,
+        help="local AstroPlanner NSOG plan file or directory (repeatable)",
+    )
+    nebula_analysis.add_argument("--list-name", default="NSOG local AstroPlanner export")
+    nebula_analysis.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    nebula_analysis.add_argument("--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG)
+    nebula_analysis.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
+    nebula_analysis.add_argument("--pocket-atlas", type=Path, default=Path("atlas/pocket.yaml"))
+    nebula_analysis.add_argument("--overrides", type=Path, default=None)
+    nebula_analysis.add_argument("--coordinate-tolerance-arcmin", type=float, default=2.0)
+    nebula_analysis.add_argument(
+        "--markdown",
+        type=Path,
+        default=Path("build/research/nsog_nebula_analysis.md"),
+        help="private human-readable output (default: build/research)",
+    )
+    nebula_analysis.add_argument(
+        "--json",
+        type=Path,
+        default=Path("build/research/nsog_nebula_analysis.json"),
+    )
+    nebula_analysis.add_argument(
+        "--csv",
+        type=Path,
+        default=Path("build/research/nsog_nebula_targets.csv"),
+        help="private per-target detail; keep this generated file local",
+    )
+    nebula_analysis.set_defaults(handler=_command_nsog_nebula_analysis)
+
+    compare = research_subparsers.add_parser(
+        "observing-list-compare", help="compare physical-object membership across coverage reports"
+    )
+    compare.add_argument("reports", nargs="+", type=Path)
+    compare.add_argument("--minimum-lists", type=int, default=1)
+    compare.add_argument("--json", type=Path, default=None, help="write comparison report")
+    compare.set_defaults(handler=_command_observing_list_compare)
+
+
 def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     atlas = subparsers.add_parser("atlas", help="tile and validate complete atlases")
     atlas_subparsers = atlas.add_subparsers(dest="atlas_command")
@@ -747,6 +898,18 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     build.add_argument("--atlas", type=Path, default=_DEFAULT_ATLAS)
     build.add_argument("--style", type=Path, default=_DEFAULT_STYLE)
     build.add_argument("--star-store", type=Path, default=_DEFAULT_STORE)
+    build.add_argument(
+        "--faint-star-store",
+        type=Path,
+        default=None,
+        help="optional UCAC4 supplement, disabled by default",
+    )
+    build.add_argument(
+        "--faint-star-limit",
+        type=float,
+        default=None,
+        help="required faint-star cutoff when supplement is enabled",
+    )
     build.add_argument("--stars", type=Path, default=_DEFAULT_STARS)
     build.add_argument("--dsos", type=Path, default=None)
     build.add_argument(
@@ -842,6 +1005,8 @@ def _chart_context(
         style_path=args.style,
         chart_id=args.chart,
         star_store=args.star_store,
+        faint_star_store=args.faint_star_store,
+        faint_star_limit=args.faint_star_limit,
         stars_csv=args.stars,
         dsos_path=args.dsos,
         constellations_dir=args.constellations,
@@ -909,6 +1074,7 @@ def _locator_inset(
         hemisphere=hemisphere_for(definition.center_dec_deg),
         constellations=constellations,
         edition=atlas.resolved_edition(),
+        equatorial_extension_deg=style.overview.equatorial_extension_deg,
     )
     return LocatorInset(
         overview=overview,
@@ -1138,6 +1304,58 @@ def _command_magnitude_scale(args: argparse.Namespace) -> int:
 def _command_fetch_stars(args: argparse.Namespace) -> int:
     paths = download_tycho2(args.dest, base_url=args.base_url)
     print(f"downloaded {len(paths)} parts -> {args.dest}")
+    return 0
+
+
+def _parse_ucac4_zones(value: str) -> list[int]:
+    zones: set[int] = set()
+    for part in value.split(","):
+        start, separator, end = part.strip().partition("-")
+        zones.update(range(int(start), int(end) + 1) if separator else (int(start),))
+    if not zones or min(zones) < 1 or max(zones) > 900:
+        raise ValueError("UCAC4 zones must be between 1 and 900")
+    return sorted(zones)
+
+
+def _command_fetch_ucac4(args: argparse.Namespace) -> int:
+    paths = download_ucac4_zones(args.dest, zones=_parse_ucac4_zones(args.zones))
+    print(f"downloaded/available {len(paths)} zones -> {args.dest}")
+    return 0
+
+
+def _command_import_ucac4_faint(args: argparse.Namespace) -> int:
+    manifest = import_ucac4_faint(
+        args.raw,
+        args.out,
+        magnitude_limit=args.limit,
+        primary_store=args.primary_star_store,
+        manifest_path=args.manifest,
+    )
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0
+
+
+def _command_faint_star_count(args: argparse.Namespace) -> int:
+    with FaintStarStore.open(args.store) as store:
+        total = store.count()
+        print(f"{total:,} faint stars in {args.store}")
+        for limit, count in store.cumulative_counts((11.5, 12.0, 12.5, 13.0, 13.5, 14.0)).items():
+            print(f"<= {limit:.1f}: {count:,}")
+        size = args.store.stat().st_size
+        print(f"SQLite size: {size:,} bytes; {size / max(1, total):.2f} bytes/star")
+        print(f"table/index storage: {json.dumps(store.storage_stats(), sort_keys=True)}")
+    return 0
+
+
+def _command_faint_star_density_report(args: argparse.Namespace) -> int:
+    report = build_faint_density_report(args.store, args.primary_star_store)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
+
+
+def _command_faint_star_performance_report(args: argparse.Namespace) -> int:
+    report = build_faint_query_performance_report(args.store)
+    print(json.dumps(report, indent=2, sort_keys=True))
     return 0
 
 
@@ -1489,10 +1707,7 @@ def _command_dso_info(args: argparse.Namespace) -> int:
         if query == obj.id.casefold()
         or any(query == alias.casefold() for alias in obj.cross_ids)
         or any(query == record.designation.casefold() for record in obj.catalogue_records)
-        or (
-            (curated := curated_common_name(obj)) is not None
-            and query == curated.name.casefold()
-        )
+        or ((curated := curated_common_name(obj)) is not None and query == curated.name.casefold())
     ]
     if getattr(args, "observing_config", None) and getattr(args, "observing_lists", None):
         from nightsky_atlas.atlas.observing_config import (
@@ -1622,6 +1837,172 @@ def _command_selection_report(args: argparse.Namespace) -> int:
     if args.csv:
         write_selection_csv(report, args.csv)
         print(f"CSV -> {args.csv}")
+    return 0
+
+
+def _command_observing_list_coverage(args: argparse.Namespace) -> int:
+    from nightsky_atlas.research.observing_lists.coverage import (
+        build_coverage_report,
+        discover_input_files,
+        load_external_list,
+        load_manual_overrides,
+        summarize_report,
+        write_csv_report,
+        write_json_report,
+    )
+
+    paths = tuple(path for input_path in args.input for path in discover_input_files(input_path))
+    external_list = load_external_list(
+        source=args.source,
+        input_path=paths,
+        list_name=args.list_name,
+    )
+    report = build_coverage_report(
+        external_list,
+        catalogue_path=args.catalogue,
+        observing_config_path=args.observing_config,
+        observing_lists_dir=args.observing_lists,
+        pocket_atlas_path=args.pocket_atlas,
+        coordinate_tolerance_arcmin=args.coordinate_tolerance_arcmin,
+        overrides=load_manual_overrides(args.overrides),
+    )
+    print(summarize_report(report))
+    print("\ncoverage by object type:")
+    for type_name, values in report.type_coverage.items():
+        selected = ", ".join(
+            f"{edition} {count}" for edition, count in values["selected_by_edition"].items()
+        )
+        print(
+            f"  {type_name}: {values['unique_external_designations']} external designations, "
+            f"{values['unique_matched_physical_targets']} matched targets; {selected}"
+        )
+    if report.nebula_source_analysis["matched_nebula_target_count"]:
+        print("\nnebula source coverage (unique matched targets):")
+        for type_name, values in report.nebula_source_analysis["by_type"].items():
+            if not values["unique_matched_external_targets"]:
+                continue
+            counts = values["catalogue_coverage_counts"]
+            counts_text = ", ".join(
+                f"{name} {counts[name]}"
+                for name in ("OpenNGC / NGC / IC", "Barnard", "Sharpless", "vdB", "LDN", "LBN")
+                if counts[name]
+            )
+            print(f"  {type_name}: {counts_text or 'no mapped source-family records'}")
+            if "dark" in type_name:
+                print(
+                    f"    without LDN: {len(values['dark_targets_without_ldn'])}; "
+                    f"LDN-only: {len(values['ldn_only_targets'])}"
+                )
+            if "bright" in type_name or "reflection" in type_name:
+                print(
+                    f"    without LBN: {len(values['bright_targets_without_lbn'])}; "
+                    f"LBN-only: {len(values['lbn_only_targets'])}"
+                )
+    if args.json:
+        write_json_report(report, args.json)
+        print(f"JSON -> {args.json}")
+    if args.csv:
+        write_csv_report(report, args.csv)
+        print(f"CSV -> {args.csv}")
+    if report.manual_review_queue:
+        print(f"manual review queue: {len(report.manual_review_queue)} entries")
+    return 0
+
+
+def _command_nsog_nebula_analysis(args: argparse.Namespace) -> int:
+    from nightsky_atlas.catalog.dso_store import load_dso_catalog
+    from nightsky_atlas.catalog.selection_analysis import build_selection_report
+    from nightsky_atlas.research.nsog_nebula_analysis import (
+        build_nsog_nebula_analysis,
+        read_nsog_annotations,
+        write_analysis_json,
+        write_markdown,
+        write_target_csv,
+    )
+    from nightsky_atlas.research.observing_lists.coverage import (
+        build_coverage_report,
+        discover_input_files,
+        load_external_list,
+        load_manual_overrides,
+    )
+
+    paths = tuple(path for input_path in args.input for path in discover_input_files(input_path))
+    external_list = load_external_list(
+        source="astroplanner",
+        input_path=paths,
+        list_name=args.list_name,
+    )
+    coverage = build_coverage_report(
+        external_list,
+        catalogue_path=args.catalogue,
+        observing_config_path=args.observing_config,
+        observing_lists_dir=args.observing_lists,
+        pocket_atlas_path=args.pocket_atlas,
+        coordinate_tolerance_arcmin=args.coordinate_tolerance_arcmin,
+        overrides=load_manual_overrides(args.overrides),
+    )
+    annotations = read_nsog_annotations(paths)
+    selection_report = build_selection_report(
+        catalogue_path=args.catalogue,
+        observing_config_path=args.observing_config,
+        observing_lists_dir=args.observing_lists,
+    )
+    analysis = build_nsog_nebula_analysis(
+        coverage,
+        annotations=annotations,
+        all_catalogue_objects=load_dso_catalog(args.catalogue),
+        selection_decisions=selection_report["objects"],
+    )
+    write_markdown(analysis, args.markdown)
+    write_analysis_json(analysis, args.json)
+    write_target_csv(analysis, args.csv)
+    summary = analysis["coverage_summary"]
+    ratings = analysis["rating_aggregation"]
+    dark = analysis["dark_nebula_catalogue_contribution"]
+    bright = analysis["bright_nebula_catalogue_contribution"]
+    nebula_count = sum(
+        item["unique_matched_targets"] for item in summary["nebula_category_summaries"].values()
+    )
+    lbn_only = next(
+        (
+            row["targets"]
+            for row in bright["by_identity_class"]
+            if row["identity_class"] == "LBN-only"
+        ),
+        0,
+    )
+    print(
+        f"NSOG nebula analysis: {nebula_count} matched nebula targets; "
+        f"dark Barnard {dark['barnard_backed_including_overlap']}, "
+        f"LDN-only {dark['ldn_only_count']}; bright LBN-only {lbn_only}"
+    )
+    print(
+        f"ratings: {ratings['unique_target_count']} unique estimated targets; "
+        f"{ratings['unrated_target_count']} unrated; "
+        f"{ratings['conflicting_target_count']} conflicts"
+    )
+    print(f"Markdown -> {args.markdown}\nJSON -> {args.json}\nCSV -> {args.csv}")
+    return 0
+
+
+def _command_observing_list_compare(args: argparse.Namespace) -> int:
+    from nightsky_atlas.research.observing_lists.coverage import compare_reports
+
+    report = compare_reports(args.reports, minimum_lists=args.minimum_lists)
+    print(
+        f"Lists: {len(report['lists'])}; union: {report['unique_physical_targets_union']}; "
+        f"intersection: {report['intersection_count']}; "
+        f"in at least {args.minimum_lists}: {len(report['targets_in_at_least_minimum_lists'])}"
+    )
+    for target in report["targets"]:
+        print(f"  {target['physical_object_id']}: {', '.join(target['lists'])}")
+    if args.json:
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        args.json.write_text(
+            json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"JSON -> {args.json}")
     return 0
 
 
@@ -1839,6 +2220,8 @@ def _command_atlas_build(args: argparse.Namespace) -> int:
         style_path=args.style,
         outdir=args.outdir,
         star_store=args.star_store,
+        faint_star_store=args.faint_star_store,
+        faint_star_limit=args.faint_star_limit,
         stars_csv=args.stars,
         dsos_path=args.dsos,
         constellations_dir=args.constellations,

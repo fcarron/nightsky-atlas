@@ -30,8 +30,14 @@ lists:
     name: Herschel II / Herschel 400 II
   planetary_nebula_al:
     name: Astronomical League Planetary Nebula Program
+  nightsky_curated_pn:
+    name: NightSkyAtlas curated planetary nebulae
+  nightsky_pocket_classics:
+    name: NightSkyAtlas Pocket visual classics
   nightsky_curated_bright_nebulae_v1:
     name: NightSkyAtlas curated bright nebulae v1
+  nightsky_confirmed_abell_pn:
+    name: NightSkyAtlas confirmed Abell planetary nebulae
   bright_nebula_al:
     name: Astronomical League Bright Nebula Program
   dark_nebula_al:
@@ -56,10 +62,12 @@ editions:
       - messier
       - caldwell
       - herschel400
+      - nightsky_pocket_classics
     forced_list_reason_codes:
       messier: pocket_messier
       caldwell: pocket_caldwell
       herschel400: pocket_herschel400
+      nightsky_pocket_classics: pocket_curated_visual_target
     selection_rules:
       globular_cluster:
         regional_allowlists:
@@ -81,6 +89,21 @@ editions:
         exclusion_reason_code: pocket_below_100mm_visibility
     excluded_designations:
       - C014
+      - NGC1487 NED02
+      - NGC4656 NED01
+      - PGC025886
+      - PGC 30484
+      - PGC 46039
+      - PGC 66669
+      - PGC 71943
+      - PGC 71948
+      - ESO208-021
+      - ESO221-026
+      - ESO383-087
+      - IC3322A
+      - IC2605
+      - IC3668
+      - IC3669
   standard:
     included_catalogues:
       - OpenNGC
@@ -165,6 +188,7 @@ editions:
       - "VII/92A:Melotte"
       - "VII/92A:Stock"
       - "IV/24:AbellPN"
+      - "IV/24:CuratedPN"
       - "VII/202:Palomar"
       - "VII/202:Terzan"
       - VII/213
@@ -186,18 +210,20 @@ editions:
       sac_beyond_ngc: 25
       hickson: 20
       abell: 15
+      nightsky_curated_pn: 10
+      nightsky_confirmed_abell_pn: 10
     selection_rules:
       galaxy:
         use_visibility: false
         visibility_class_rules:
           - contour_class: bold
-            minimum_major_axis_arcmin: 1.5
+            minimum_major_axis_arcmin: 0.75
             bright_magnitude_fallback: 10.5
           - contour_class: normal
-            minimum_major_axis_arcmin: 1.5
+            minimum_major_axis_arcmin: 0.75
             bright_magnitude_fallback: 10.5
           - contour_class: fine
-            minimum_major_axis_arcmin: 1.5
+            minimum_major_axis_arcmin: 0.75
             bright_magnitude_fallback: 10.5
           - contour_class: dotted
             minimum_major_axis_arcmin: 0.5
@@ -248,6 +274,9 @@ editions:
         catalogue_maximum_magnitude: 99
       planetary_nebula:
         use_visibility: true
+        curated_memberships:
+          - nightsky_curated_pn
+          - nightsky_confirmed_abell_pn
         maximum_magnitude: 14.5
         maximum_surface_brightness: 23.5
         selection_reason_code: planetary_nebula_deep_policy
@@ -348,6 +377,7 @@ editions:
       - "VII/92A:Melotte"
       - "VII/92A:Stock"
       - "IV/24:AbellPN"
+      - "IV/24:CuratedPN"
       - "VII/202:Palomar"
       - "VII/202:Terzan"
       - VII/213
@@ -398,3 +428,7 @@ editions:
         use_visibility: false
         include_all_valid: true
         selection_reason_code: reference_catalogue_complete
+  eyepiece:
+    inherit: deep
+  eyepieceDeep:
+    inherit: eyepiece

@@ -104,7 +104,7 @@ from nightsky_atlas.render.overview import (
     draw_overview_spread_page,
 )
 from nightsky_atlas.render.pdf_navigation import PdfNavigation
-from nightsky_atlas.render.text import draw_text
+from nightsky_atlas.render.text import draw_text, draw_tracked_text
 from nightsky_atlas.scene.models import ChartScene, SceneDso
 from nightsky_atlas.units import mm_to_pt
 
@@ -210,6 +210,8 @@ class _MainChartShared:
     atlas_path: str | Path
     style_path: str | Path
     star_store: str | Path | None
+    faint_star_store: str | Path | None
+    faint_star_limit: float | None
     stars_csv: str | Path | None
     double_stars_path: str | Path | bool | None
     inputs: ChartInputs
@@ -287,6 +289,8 @@ def _build_main_chart(
         style_path=shared.style_path,
         definition=definition,
         star_store=shared.star_store,
+        faint_star_store=shared.faint_star_store,
+        faint_star_limit=shared.faint_star_limit,
         stars_csv=shared.stars_csv,
         double_stars_path=shared.double_stars_path,
         star_systems=shared.star_systems,
@@ -307,9 +311,7 @@ def _build_main_chart(
     chart_overrides = shared.library.for_chart(definition.id) if shared.library else None
     protected_ids = (
         frozenset(
-            label_id
-            for label_id, spec in chart_overrides.labels.items()
-            if spec.hidden is not True
+            label_id for label_id, spec in chart_overrides.labels.items() if spec.hidden is not True
         )
         if chart_overrides is not None
         else frozenset()
@@ -317,17 +319,14 @@ def _build_main_chart(
     parent_galaxies = tuple(
         scene_dso
         for scene_dso in chart_context.scene.deep_sky_objects
-        if scene_dso.dso.object_type == DsoType.GALAXY
-        and scene_dso.symbol_visible
+        if scene_dso.dso.object_type == DsoType.GALAXY and scene_dso.symbol_visible
     )
     parent_ordinary_galaxies = {
         scene_dso.dso.id: scene_dso
         for scene_dso in parent_galaxies
         if messier_id(scene_dso.dso) is None
         and HERSCHEL_400
-        not in (
-            scene_dso.metadata.list_memberships if scene_dso.metadata is not None else ()
-        )
+        not in (scene_dso.metadata.list_memberships if scene_dso.metadata is not None else ())
     }
     fallback_label_ids: list[tuple[str, tuple[str, ...]]] = []
     for detail in shared.detail_charts:
@@ -578,7 +577,7 @@ def _draw_front_matter_pages(
 ) -> int:
     """Write the introduction, field guide and provenance page."""
     page = atlas.page.to_geometry()
-    family = style.label.font_family
+    family = style.typography.sans_family
     mm_per_degree = PageTransform(
         scale_chart,
         page,
@@ -590,14 +589,15 @@ def _draw_front_matter_pages(
     draw_field_guide(cr, atlas, style, chart_count, mm_per_degree)
     surface.show_page()
 
-    draw_text(
+    draw_tracked_text(
         cr,
         "DATA, CREDITS AND LICENCE",
         mm_to_pt(page.margin_mm),
         mm_to_pt(page.margin_mm),
         family,
         14.0,
-        "bold",
+        "semibold",
+        0.18,
     )
     credits = [
         "The build manifest records selected input paths and their source metadata.",
@@ -650,15 +650,12 @@ def _draw_front_matter_pages(
             "GALAXY VISIBILITY MODEL",
             "PROJECT",
         }
-        draw_text(
-            cr,
-            line,
-            mm_to_pt(page.margin_mm + 8.0),
-            mm_to_pt(page.margin_mm + 18.0 + index * 5.0),
-            family,
-            8.0 if is_heading else 7.5,
-            "bold" if is_heading else "normal",
-        )
+        x_pt = mm_to_pt(page.margin_mm + 8.0)
+        y_pt = mm_to_pt(page.margin_mm + 18.0 + index * 5.0)
+        if is_heading:
+            draw_tracked_text(cr, line, x_pt, y_pt, family, 8.0, "semibold", 0.18)
+        else:
+            draw_text(cr, line, x_pt, y_pt, family, 7.7, "normal")
     draw_text(
         cr,
         f"NightSky Atlas — {atlas.resolved_edition().name} · Data and credits",
@@ -677,6 +674,8 @@ def _build_atlas_impl(
     style_path: str | Path,
     outdir: str | Path,
     star_store: str | Path | None = None,
+    faint_star_store: str | Path | None = None,
+    faint_star_limit: float | None = None,
     stars_csv: str | Path | None = None,
     dsos_path: str | Path | None = None,
     constellations_dir: str | Path | bool | None = None,
@@ -734,17 +733,15 @@ def _build_atlas_impl(
         charts = charts[:limit]
     if not charts:
         raise ValueError("no charts selected")
-    missing_detail_parents = {
-        detail.parent_chart_id for detail in atlas.detail_charts
-    } - {chart.id for chart in all_charts}
+    missing_detail_parents = {detail.parent_chart_id for detail in atlas.detail_charts} - {
+        chart.id for chart in all_charts
+    }
     if missing_detail_parents:
         raise ValueError(
             "detail charts reference unknown parent chart(s): "
             + ", ".join(sorted(missing_detail_parents))
         )
-    main_codes = {
-        presentation_from_edition(chart, edition).chart_code for chart in all_charts
-    }
+    main_codes = {presentation_from_edition(chart, edition).chart_code for chart in all_charts}
     duplicate_detail_codes = main_codes & {detail.code for detail in atlas.detail_charts}
     if duplicate_detail_codes:
         raise ValueError(
@@ -782,6 +779,7 @@ def _build_atlas_impl(
             raise ValueError("publication requires front matter and overview maps")
     selected_sources = collect_data_sources(
         star_store=star_store,
+        faint_star_store=faint_star_store,
         stars_csv=stars_csv,
         dsos_path=dsos_path if dsos_path is not None else default_dso_path(),
         double_stars_path=(
@@ -813,6 +811,7 @@ def _build_atlas_impl(
             else None
         ),
         "star_names": geometry_inputs["star_names"],
+        "faint_star_store": faint_star_store,
         "observing_lists": (
             None
             if observing_lists_dir is False
@@ -878,6 +877,8 @@ def _build_atlas_impl(
             style_path=style_path,
             definition=definition,
             star_store=star_store,
+            faint_star_store=faint_star_store,
+            faint_star_limit=faint_star_limit,
             stars_csv=stars_csv,
             double_stars_path=double_stars_path,
             star_systems=star_systems,
@@ -966,9 +967,7 @@ def _build_atlas_impl(
             and scene_dso.symbol_visible
             and messier_id(scene_dso.dso) is None
             and HERSCHEL_400
-            not in (
-                scene_dso.metadata.list_memberships if scene_dso.metadata is not None else ()
-            )
+            not in (scene_dso.metadata.list_memberships if scene_dso.metadata is not None else ())
             and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
             and f"label:dso:{scene_dso.dso.id}" not in problematic_detail_labels
         )
@@ -1046,6 +1045,7 @@ def _build_atlas_impl(
                     constellations=inputs.constellations,
                     edition=edition,
                     bright_stars=overview_stars,
+                    equatorial_extension_deg=style.overview.equatorial_extension_deg,
                 )
     if write_overview_pages:
         with progress.step("overview pages", detail=True):
@@ -1065,8 +1065,7 @@ def _build_atlas_impl(
                         "title": "Northern and southern sky",
                         "chart_count": overviews["north"].chart_count
                         + overviews["south"].chart_count,
-                        "star_count": len(overviews["north"].stars)
-                        + len(overviews["south"].stars),
+                        "star_count": len(overviews["north"].stars) + len(overviews["south"].stars),
                     }
                 )
             else:
@@ -1098,6 +1097,8 @@ def _build_atlas_impl(
         atlas_path=atlas_path,
         style_path=style_path,
         star_store=star_store,
+        faint_star_store=faint_star_store,
+        faint_star_limit=faint_star_limit,
         stars_csv=stars_csv,
         double_stars_path=double_stars_path,
         inputs=inputs,
@@ -1130,9 +1131,7 @@ def _build_atlas_impl(
             if pool is not None
             else (_build_main_chart(definition, shared, progress) for definition in charts)
         )
-        for index, (definition, built) in enumerate(
-            zip(charts, built_pages, strict=True), start=1
-        ):
+        for index, (definition, built) in enumerate(zip(charts, built_pages, strict=True), start=1):
             progress.detail(f"[{index}/{len(charts)}] {definition.id}: compose")
             if built.applied_overrides:
                 applied_chart_ids.add(definition.id)
@@ -1212,9 +1211,7 @@ def _build_atlas_impl(
         detail_start = time.perf_counter()
         definition = detail.to_definition(atlas_id=atlas.id)
         stellar_limit_magnitude, detail_style = detail_star_profiles[detail.star_profile]
-        progress.detail(
-            f"[{detail_index}/{len(detail_charts)}] {detail.id}: detail chart start"
-        )
+        progress.detail(f"[{detail_index}/{len(detail_charts)}] {detail.id}: detail chart start")
         chart_overrides = library.for_chart(definition.id) if library is not None else None
         prepared = prepared_details.get(detail.id)
         if prepared is None:
@@ -1223,6 +1220,8 @@ def _build_atlas_impl(
                 style_path=style_path,
                 definition=definition,
                 star_store=star_store,
+                faint_star_store=faint_star_store,
+                faint_star_limit=faint_star_limit,
                 stars_csv=stars_csv,
                 double_stars_path=double_stars_path,
                 star_systems=star_systems,
@@ -1382,6 +1381,7 @@ def _build_atlas_impl(
         if (
             collect_data_sources(
                 star_store=star_store,
+                faint_star_store=faint_star_store,
                 stars_csv=stars_csv,
                 dsos_path=dsos_path if dsos_path is not None else default_dso_path(),
                 double_stars_path=(
@@ -1411,6 +1411,11 @@ def _build_atlas_impl(
             "margin_mm": page.margin_mm,
         },
         "stellar_limit_magnitude": atlas.stellar_limit_magnitude,
+        "faint_star_layer": {
+            "enabled": faint_star_store is not None,
+            "store": str(faint_star_store) if faint_star_store is not None else None,
+            "magnitude_limit": faint_star_limit,
+        },
         "visibility": atlas.visibility.model_dump(),
         "tiling": _tiling_manifest(atlas),
         "observing_lists": {
@@ -1544,6 +1549,8 @@ def build_atlas(
     style_path: str | Path,
     outdir: str | Path,
     star_store: str | Path | None = None,
+    faint_star_store: str | Path | None = None,
+    faint_star_limit: float | None = None,
     stars_csv: str | Path | None = None,
     dsos_path: str | Path | None = None,
     constellations_dir: str | Path | bool | None = None,
@@ -1570,6 +1577,8 @@ def build_atlas(
         style_path=style_path,
         outdir=outdir,
         star_store=star_store,
+        faint_star_store=faint_star_store,
+        faint_star_limit=faint_star_limit,
         stars_csv=stars_csv,
         dsos_path=dsos_path,
         constellations_dir=constellations_dir,

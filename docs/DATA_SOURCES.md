@@ -54,6 +54,14 @@ source provenance
 
 The model must not assume every field exists.
 
+The 2026-10-06 Pocket data-quality pass retains OpenNGC pair/group source
+subtypes, corrects confirmed cluster identities within `Cl+N`, represents
+M24 as a star cloud and NGC 405 as a stellar pair, and adds the modern M102
+alias to NGC 5866. Additional NGC/IC alias columns are imported only when
+they do not conflict with another surviving canonical entry. Scientific
+references, editorial Pocket exceptions and remaining ambiguities are in
+`docs/POCKET_DSO_AUDIT.md`.
+
 The OpenNGC importer applies source-specific semantic corrections while
 retaining the raw snapshot: IC 434 does not inherit the erroneous “Flame
 Nebula” common name (the Flame is NGC 2024); NGC 6334 is an H II/star-forming
@@ -463,10 +471,19 @@ tables. Arp VII/74A is an alias/system cross-reference layer only.
 | Melotte | `VII/92A/catalog`, `ClSeq=27` | Lyngå 1987, sequence code 27 | 9 | same source fields; designation `Mel n` |
 | Stock | `VII/92A/catalog`, `ClSeq=11` | Lyngå 1987, sequence code 11 | 20 | same source fields; designation `Stock n` |
 | Abell planetary nebulae | `IV/24/table1` | Kohoutek, *Catalogue of Galactic Planetary Nebulae* (2001), `2001A&A...378..843K`; Abell names originate in Abell 1966, `1966ApJ...144..259A` | 74 | parent table 1,759 rows; selected `Name=A n` rows; `PK`, `RAB1950`, `DEB1950`, `f_PK`; computed J2000 coordinates |
+| Four curated planetary nebulae | `IV/24/table1` | Same Kohoutek source and provenance as the Abell PN import | 4 | only `M 1-64`, `Jn 1`, `J 900`, `Sp 1`; PK aliases and computed J2000 coordinates; no magnitude or diameter imported |
 | Palomar globulars | `VII/202/catalog`, `ID` beginning `Pal` | Harris, AJ 112, 1487 (1996; VizieR 1997 table), `1996AJ....112.1487H` | 13 | J2000, `Vt`, `Name`, `Rh`, `Rc`, `muV`, `MVt`, `[Fe/H]` |
 | Terzan globulars | `VII/202/catalog`, `ID` beginning `Ter` | Harris 1996 / VII/202 | 11 | same fields as Palomar |
 | Hickson Compact Groups | `VII/213/groups` + `VII/213/galaxies` | Hickson, ApJ 255, 382 (1982), `1982ApJ...255..382H`, with 1989/1992 catalogue updates | 100 groups; 463 member rows | B1950 group positions with computed J2000; `AngSize`, `Totmag`, `MCount`; member `HCG`, `m_HCG`, `Names` |
 | Arp peculiar galaxies | `VII/74A/table2` | Arp, ApJS 14, 1 (1966), `1966ApJS....14....1A` | 338 | Arp number, `Name`, RA1970/DE1970 and computed ICRS; alias-only |
+
+Deep selection is narrower than the imported Abell candidate rows. The local
+`nightsky_confirmed_abell_pn.json` membership selects `f_PK`-blank Abell targets
+and independently confirmed Abell 21; rows flagged as possible PN are not
+automatically included. It contains 72 physical targets after canonical
+NGC aliases are deduplicated. Missing photometry or size does not prevent these
+targets from appearing in Deep. This membership is selection metadata, not new
+photometric or dimensional data.
 
 Exact table URLs, queries, retrieval timestamps, checksums, imported fields,
 selection filters, member-table hashes, and VizieR acknowledgement are recorded
@@ -505,3 +522,29 @@ Git-ignored (regenerate, do not commit): `data/raw/`, `data/processed/`,
 `.env`.
 
 Committed: small fixtures under `data/fixtures/` and `overrides/`.
+
+## Editorial fonts
+
+All non-chart editorial text, including the Introduction title, uses locally
+bundled Source Sans 3. Charts use locally bundled Lato Regular and Bold. The
+font files are registered from `src/nightsky_atlas/assets/fonts/` with the
+active Fontconfig instance before Pango creates layouts. System-installed Lato
+faces are excluded for the atlas process, and runtime checks ensure that the
+regular and bold chart faces resolve to the bundled files. The fonts are
+embedded by the PDF renderer. The upstream projects are [Source Sans](https://github.com/adobe-fonts/source-sans)
+and [Lato](https://github.com/latofonts/lato).
+Bundled SHA-256 checksums:
+
+| File | SHA-256 |
+| --- | --- |
+| `SourceSans3-Variable.ttf` | `042fe82cc9b933e328410d7acbd0aa6a1873dca5aef81875f4bc214b08825c7b9` |
+| `Lato-Regular.ttf` | `6f6940be0835c3ddec9199e5fc42be4cbc61ebcfd58c623fdf719366253f1780` |
+| `Lato-Bold.ttf` | `bf1b8130069b44b9148eeece35e5423bedac49777ba746615b826b8276574a7b` |
+
+Lato Regular and Bold are from the Lato project, copyright Łukasz Dziedzic,
+licensed under the SIL Open Font License 1.1. The OFL text is bundled as
+`OFL-Lato.txt` beside the font files. The repository's MIT license does not
+apply to third-party font software.
+
+The existing chart-label font configuration remains independent of these
+editorial fonts.

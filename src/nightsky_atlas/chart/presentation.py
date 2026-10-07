@@ -80,13 +80,14 @@ class ChartPresentation:
     chart_index: int | None
     internal_chart_id: str = ""
     product_name: str = PRODUCT_NAME
+    chart_index_width: int = 3
 
     @property
     def chart_code(self) -> str:
         """Short visible chart code, e.g. ``S068``."""
         if self.chart_index is None:
             return self.internal_chart_id
-        return f"{self.edition_code}{self.chart_index:03d}"
+        return f"{self.edition_code}{self.chart_index:0{self.chart_index_width}d}"
 
     @property
     def title(self) -> str:
@@ -127,6 +128,7 @@ def presentation_for(
     *,
     edition_name: str | None = None,
     edition_code: str | None = None,
+    chart_index_width: int | None = None,
 ) -> ChartPresentation:
     """Build the visible presentation for a chart definition.
 
@@ -142,6 +144,9 @@ def presentation_for(
         edition_code=resolved_code,
         chart_index=chart_index(definition.id),
         internal_chart_id=definition.id,
+        chart_index_width=(
+            chart_index_width if chart_index_width is not None else default.chart_index_width
+        ),
     )
 
 
@@ -149,24 +154,36 @@ def presentation_from_edition(
     definition: ChartDefinition, edition: EditionConfig
 ) -> ChartPresentation:
     """Build the visible presentation from an edition configuration block."""
-    return presentation_for(definition, edition_name=edition.name, edition_code=edition.code)
+    return presentation_for(
+        definition,
+        edition_name=edition.name,
+        edition_code=edition.code,
+        chart_index_width=edition.chart_index_width,
+    )
 
 
-def neighbour_code(neighbour_id: str, edition_code: str) -> str:
+def neighbour_code(
+    neighbour_id: str, edition_code: str, chart_index_width: int = 3
+) -> str:
     """Return the short visible code for a neighbouring chart."""
     index = chart_index(neighbour_id)
     if index is None:
         return neighbour_id
-    return f"{edition_code}{index:03d}"
+    return f"{edition_code}{index:0{chart_index_width}d}"
 
 
-def neighbour_markup(direction: str, neighbour_id: str, edition_code: str) -> str:
+def neighbour_markup(
+    direction: str,
+    neighbour_id: str,
+    edition_code: str,
+    chart_index_width: int = 3,
+) -> str:
     """Return a neighbour reference as Pango markup.
 
     The direction stays regular and the chart code is bold, so the code -- not
     the compass letter -- is what catches the eye while flipping pages.
     """
-    code = neighbour_code(neighbour_id, edition_code)
+    code = neighbour_code(neighbour_id, edition_code, chart_index_width)
     return f"{_escape_markup(direction)}: <b>{_escape_markup(code)}</b>"
 
 

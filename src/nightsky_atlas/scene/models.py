@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, Star
 from nightsky_atlas.catalog.selection import DsoMetadata
 from nightsky_atlas.catalog.systems import StarSystem
@@ -30,7 +31,7 @@ __all__ = [
 class SceneStar:
     """A star placed on the chart plane."""
 
-    star: Star
+    star: Star | FaintStar
     chart_point: ChartPoint
 
 

@@ -87,7 +87,11 @@ def build_pocket_selection_report(
         for list_id in POCKET_LISTS
     }
     mandatory_ids = set().union(*membership_sets.values())
-    selected_ids = {object_id for object_id, decision in decisions.items() if decision.visible}
+    selected_ids = {
+        object_id
+        for object_id, decision in decisions.items()
+        if decision.visible or decision.forced
+    }
     ordinary_ids = selected_ids - mandatory_ids
     selected_galaxies = {
         object_id for object_id in selected_ids if by_id[object_id].object_type == DsoType.GALAXY
@@ -255,7 +259,7 @@ def build_pocket_selection_report(
             "aliases": sorted(obj.cross_ids),
             "object_type": obj.object_type.value,
             "memberships": sorted(visibility.list_memberships),
-            "selected": visibility.visible,
+            "selected": visibility.visible or visibility.forced,
             "reasons": list(visibility.visibility_reasons),
             "major_axis_arcmin": obj.major_axis_arcmin,
             "magnitude": obj.magnitude,
@@ -272,7 +276,7 @@ def build_pocket_selection_report(
         (
             obj for obj in ordinary_candidates
             if obj.object_type == DsoType.PLANETARY_NEBULA
-            and decisions[obj.id].visible
+            and (decisions[obj.id].visible or decisions[obj.id].forced)
             and obj.magnitude is not None
         ),
         key=lambda obj: (obj.magnitude, obj.id),
@@ -281,7 +285,7 @@ def build_pocket_selection_report(
         (
             obj for obj in ordinary_candidates
             if obj.object_type == DsoType.OPEN_CLUSTER
-            and decisions[obj.id].visible
+            and (decisions[obj.id].visible or decisions[obj.id].forced)
             and obj.magnitude is not None
         ),
         key=lambda obj: (obj.magnitude, obj.id),
@@ -353,7 +357,7 @@ def build_pocket_selection_report(
     caldwell_display_violations = sorted(
         obj.id
         for obj in objects
-        if decisions[obj.id].visible
+        if (decisions[obj.id].visible or decisions[obj.id].forced)
         and "caldwell" in decisions[obj.id].list_memberships
         and primary_designation(obj).upper().startswith("C")
         and primary_designation(obj)[1:2].isdigit()

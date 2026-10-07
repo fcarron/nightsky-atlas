@@ -5,7 +5,7 @@ from __future__ import annotations
 import cairo
 import pytest
 
-from nightsky_atlas.render.text import TextMeasurer, measure_point_size
+from nightsky_atlas.render.text import TextMeasurer, make_layout, measure_point_size
 from nightsky_atlas.units import mm_to_pt
 
 
@@ -70,3 +70,24 @@ def test_bold_is_at_least_as_wide_as_normal() -> None:
 def test_unknown_weight_is_rejected() -> None:
     with pytest.raises(ValueError):
         TextMeasurer("DejaVu Sans", 8.0, "heavy")
+
+
+def test_bundled_source_sans_is_registered_with_semibold_face() -> None:
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 8, 8)
+    context = cairo.Context(surface)
+    families = {
+        family.get_name()
+        for family in make_layout(context, "Source Sans 3", 8)
+        .get_context()
+        .get_font_map()
+        .list_families()
+    }
+
+    assert "Source Sans 3" in families
+    assert (
+        make_layout(context, "Source Sans 3", 8, "semibold")
+        .get_font_description()
+        .get_weight()
+        .value_nick
+        == "semibold"
+    )

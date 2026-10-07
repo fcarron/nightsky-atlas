@@ -9,6 +9,7 @@ import pytest
 
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.constellations import ConstellationSegment
+from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.outlines import NebulaOutline
 from nightsky_atlas.catalog.selection import SelectionPolicy
@@ -106,8 +107,7 @@ def test_build_dso_labels() -> None:
     )
     placement = STYLE.label.dso_placement
     near_count = sum(
-        gap < placement.outer_candidate_start_gap_mm
-        for gap in placement.candidate_edge_gaps_mm
+        gap < placement.outer_candidate_start_gap_mm for gap in placement.candidate_edge_gaps_mm
     )
     outer_count = len(placement.candidate_edge_gaps_mm) - near_count
     assert len(messier.candidates) == (
@@ -187,6 +187,14 @@ def test_build_star_labels_skips_unnamed_or_faint_or_unmatched() -> None:
     scene = build_scene(CHART, stars)
     labels = build_star_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE, STAR_NAMES)
     assert labels == ()
+
+
+def test_faint_supplement_star_never_gets_a_name_or_systematic_label() -> None:
+    faint = FaintStar("UCAC4-0000000001", 187.5, 12.0, 13.0)
+    scene = build_scene(CHART, [faint])
+    labels = build_star_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE, STAR_NAMES)
+    assert labels == ()
+    assert not hasattr(faint, "hip_id")
 
 
 def test_build_labels_combines_star_and_dso() -> None:

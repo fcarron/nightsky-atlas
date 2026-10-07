@@ -20,11 +20,14 @@ exist.
 from __future__ import annotations
 
 import csv
+import re
 import urllib.request
 from collections.abc import Iterable, Iterator
+from dataclasses import replace
 from pathlib import Path
 
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
+from nightsky_atlas.catalog.observing_lists import canonical_designation
 
 __all__ = [
     "CATALOGUE",
@@ -63,6 +66,24 @@ _TYPE_MAP: dict[str, DsoType] = {
 }
 
 _SKIP_TYPES = {"", "Dup", "NonEx", "Type"}
+
+_CLUSTER_IDENTITIES = frozenset(
+    {
+        "NGC1981",
+        "NGC2239",
+        "NGC3324",
+        "NGC6530",
+        "NGC6823",
+        "NGC6997",
+        "NGC7380",
+    }
+)
+_SEMANTIC_SUBTYPES = {
+    "GPair": "galaxy pair",
+    "GTrpl": "galaxy triplet",
+    "GGroup": "galaxy group",
+    "Cl+N": "cluster with nebulosity",
+}
 
 
 def download_openngc(
@@ -103,6 +124,13 @@ def _cross_ids(row: dict[str, str], name: str) -> tuple[str, ...]:
     messier = row.get("M", "").strip()
     if messier:
         identifiers.append(f"M{int(messier)}")
+    if name == "NGC5866" and "M102" not in identifiers:
+        identifiers.append("M102")
+    for catalogue in ("NGC", "IC"):
+        for token in (row.get(catalogue, "") or "").split(","):
+            match = re.fullmatch(r"\s*0*(\d+)([A-Z]?)\s*", token)
+            if match:
+                identifiers.append(f"{catalogue}{int(match.group(1))}{match.group(2)}")
     raw = row.get("Identifiers", "") or ""
     identifiers.extend(part.strip() for part in raw.split(",") if part.strip())
     seen: list[str] = []
@@ -127,10 +155,18 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
         object_type = DsoType.OTHER
     if name == "NGC6334":
         object_type = DsoType.BRIGHT_NEBULA
-    elif name == "NGC3324":
+    elif name in _CLUSTER_IDENTITIES:
         object_type = DsoType.OPEN_CLUSTER
     elif name in {"B033", "C099"}:
         object_type = DsoType.DARK_NEBULA
+    elif name == "IC4715":
+        object_type = DsoType.OTHER
+    elif name == "NGC0405":
+        object_type = DsoType.DOUBLE_STAR
+
+    semantic_subtype = _SEMANTIC_SUBTYPES.get(type_code)
+    if name == "IC4715":
+        semantic_subtype = "star cloud"
 
     ra_text = (row.get("RA") or "").strip()
     dec_text = (row.get("Dec") or "").strip()
@@ -167,6 +203,7 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
         ra_deg=_parse_ra_hms(ra_text),
         dec_deg=_parse_dec_dms(dec_text),
         object_type=object_type,
+        semantic_subtype=semantic_subtype,
         provenance=Provenance(catalogue=CATALOGUE, source_id=name, version=None),
         magnitude=magnitude,
         magnitude_band=magnitude_band,
@@ -186,13 +223,26 @@ def parse_openngc_row(row: dict[str, str]) -> DeepSkyObject | None:
 
 def iter_openngc_objects(paths: Iterable[Path]) -> Iterator[DeepSkyObject]:
     """Yield normalized deep-sky objects from OpenNGC CSV files."""
+    objects: list[DeepSkyObject] = []
     for path in paths:
         with Path(path).open(newline="", encoding="utf-8") as handle:
             reader = csv.DictReader(handle, delimiter=";")
             for row in reader:
                 obj = parse_openngc_row(row)
                 if obj is not None:
-                    yield obj
+                    objects.append(obj)
+    canonical_ids = {canonical_designation(obj.id) for obj in objects}
+    for obj in objects:
+        own_id = canonical_designation(obj.id)
+        yield replace(
+            obj,
+            cross_ids=tuple(
+                alias
+                for alias in obj.cross_ids
+                if canonical_designation(alias) == own_id
+                or canonical_designation(alias) not in canonical_ids
+            ),
+        )
 
 
 def load_sample_dsos(path: str | Path) -> list[DeepSkyObject]:

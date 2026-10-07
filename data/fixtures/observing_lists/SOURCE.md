@@ -49,5 +49,29 @@ an explicit source-version difference, not a coordinate or catalogue rewrite.
 - **Source:** [Astronomical League Caldwell Program Object List](https://www.astroleague.org/caldwell-program-object-list/)
 - **Retrieved:** 2026-09-28
 - **License/usage:** designation membership only; coordinates, magnitudes and dimensions continue to come from NightSkyAtlas catalogues. The source page gives J2000 positions, but they are not ingested.
-- **Mapping:** C14 expands to NGC 869 and NGC 884, avoiding a third aggregate C014 plotted over the two clusters. C41 maps to the existing Melotte 25 / Hyades object. C37 maps to NGC 6882; the existing OpenNGC cross-identification and duplicate-entry reference connect the list's NGC 6885 designation to it. C50 / NGC 2244 maps to the existing NGC 2239 OpenNGC record, whose raw type is `Cl+N` and whose cross-identification includes C050; NGC 2244 and NGC 2239 are treated as alternate designations of the same Rosette cluster target. The normalized DSO model currently represents `Cl+N` with its broader bright-nebula visual type; this is retained rather than inventing a second object.
+- **Mapping:** C14 expands to NGC 869 and NGC 884, avoiding a third aggregate C014 plotted over the two clusters. C41 maps to the existing Melotte 25 / Hyades object. C37 maps to NGC 6882; the existing OpenNGC cross-identification and duplicate-entry reference connect the list's NGC 6885 designation to it. C50 / NGC 2244 maps to the existing NGC 2239 OpenNGC record, whose raw type is `Cl+N` and whose cross-identification includes C050; NGC 2244 and NGC 2239 are treated as alternate designations of the same Rosette cluster target. The 2026-10-06 source-identity correction represents this entry as an open cluster, preserves NGC 2239 internally and prefers NGC 2244 for observer-facing output; no second physical object is created.
 - **Display rule:** Caldwell is observing-list metadata only. Caldwell designations are not used for atlas labels.
+
+## nightsky_curated_pn.json
+
+- **List:** NightSkyAtlas's independently curated all-sky planetary-nebula minimum set (104 physical targets).
+- **Source and method:** [`docs/PN_DARK_CURATION.md`](../../../docs/PN_DARK_CURATION.md) and its cited independent visual-observing sources; this is an original editorial selection, not a copy of any one external list.
+- **License:** NightSkyAtlas project (MIT). The fixture stores designation membership only, with no third-party descriptions, ratings or photometry.
+- **Edition use:** Deep and inherited Reference use the membership as an additive PN selection reason. Pocket and Standard PN selection is unchanged; all their targets are already selected by their existing rules.
+- **Identity:** Four names absent from the previous normalized pool are imported individually from the existing VizieR `IV/24` source as `Jones 1`, `J 900`, `Minkowski 1-64` and `Shapley 1`. Their catalogue provenance and aliases remain in the normalized records.
+
+## nightsky_confirmed_abell_pn.json
+
+- **List:** 72 confirmed Abell planetary-nebula targets in the current normalized pool.
+- **Source and method:** Abell entries in Kohoutek's `IV/24` table without its `f_PK` possible/misclassified marker; Abell 21 is additionally included because independent observing references establish it as a visual PN target. The two NGC aliases remain represented by their canonical physical-object IDs.
+- **License/usage:** Designation membership only; no catalogue measurements, descriptions or ratings. No upstream licence is asserted for the Abell-derived identifiers; see the source citation and repository data policy.
+- **Edition use:** Deep adds these targets regardless of missing magnitude or size. Reference keeps its separate catalogue-coverage policy; Pocket and Standard are unchanged.
+- **Exclusions:** `f_PK=*` entries are only possible PN and are not added automatically; known misclassifications are not plotted as PN. Abell 21 is the explicit independently supported exception.
+
+
+## nightsky_pocket_classics.json
+
+- **List:** Three NightSkyAtlas editorial exceptions: Melotte 20, NGC 281 and NGC 2359.
+- **Source and method:** Conservative visual-target review in [`docs/POCKET_DSO_AUDIT.md`](../../../docs/POCKET_DSO_AUDIT.md), normalized to existing catalogue identities.
+- **License:** Original NightSkyAtlas membership decision (MIT); no copied descriptions, ratings or photometry.
+- **Edition use:** Forced only in Pocket, with the reason `pocket_curated_visual_target`; it does not enable the full Melotte catalogue.

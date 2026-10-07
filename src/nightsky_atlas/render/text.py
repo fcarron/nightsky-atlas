@@ -19,7 +19,10 @@ gi.require_version("PangoCairo", "1.0")
 from gi.repository import Pango, PangoCairo  # noqa: E402
 
 from nightsky_atlas.chart.page import PageRect  # noqa: E402
+from nightsky_atlas.render.fonts import register_bundled_fonts  # noqa: E402
 from nightsky_atlas.units import pt_to_mm  # noqa: E402
+
+register_bundled_fonts()
 
 __all__ = [
     "FontWeight",
@@ -30,6 +33,7 @@ __all__ = [
     "draw_markup_text",
     "draw_rotated_markup_centered_text",
     "draw_text",
+    "draw_tracked_text",
     "escape_markup",
     "make_layout",
     "make_markup_layout",
@@ -42,6 +46,7 @@ FontWeight = str
 
 _WEIGHTS: dict[str, Pango.Weight] = {
     "normal": Pango.Weight.NORMAL,
+    "semibold": Pango.Weight.SEMIBOLD,
     "bold": Pango.Weight.BOLD,
 }
 
@@ -50,7 +55,9 @@ def _pango_weight(weight: FontWeight) -> Pango.Weight:
     try:
         return _WEIGHTS[weight]
     except KeyError:
-        raise ValueError(f"unknown font weight {weight!r}; expected normal or bold") from None
+        raise ValueError(
+            f"unknown font weight {weight!r}; expected normal, semibold or bold"
+        ) from None
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +164,29 @@ def draw_text(
     """Draw text with its logical box top-left at ``(x_pt, y_pt)``."""
     layout = make_layout(cr, font_family, font_size_pt, font_weight)
     layout.set_text(text, -1)
+    cr.move_to(x_pt, y_pt)
+    PangoCairo.show_layout(cr, layout)
+
+
+def draw_tracked_text(
+    cr: cairo.Context[cairo.Surface],
+    text: str,
+    x_pt: float,
+    y_pt: float,
+    font_family: str,
+    font_size_pt: float,
+    font_weight: FontWeight = "normal",
+    letter_spacing_pt: float = 0.2,
+) -> None:
+    """Draw short editorial headings with restrained additional tracking."""
+    layout = make_layout(cr, font_family, font_size_pt, font_weight)
+    layout.set_text(text, -1)
+    spacing = Pango.attr_letter_spacing_new(int(round(letter_spacing_pt * Pango.SCALE)))
+    spacing.start_index = 0
+    spacing.end_index = len(text.encode("utf-8"))
+    attributes = Pango.AttrList()
+    attributes.insert(spacing)
+    layout.set_attributes(attributes)
     cr.move_to(x_pt, y_pt)
     PangoCairo.show_layout(cr, layout)
 

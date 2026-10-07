@@ -30,3 +30,5 @@ venv/
 /data/processed/
 /benchmarks/ai_review/generated/
 /benchmarks/ai_review/results/
+/local/research/nsog/
+/local/research/overrides/

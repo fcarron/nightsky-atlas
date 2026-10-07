@@ -43,20 +43,21 @@ grid:
   polar_ra_gray: 0.72
   polar_ra_line_width_mm: 0.12
   label_ra_step_deg: 15.0
-  label_dec_step_deg: 20.0
+  label_dec_step_deg: 10.0
   label_polar_ra_step_deg: 30.0
   tick_ra_step_deg: 3.75
   tick_dec_step_deg: 5.0
   tick_polar_ra_step_deg: 30.0
 overview:
   hemispheres_per_page: 2
+  equatorial_extension_deg: 18.0
   radius_mm: 76.0
-  code_font_size_pt: 6.4
+  code_font_size_pt: 9.0
   code_gray: 0.0
   show_grid: false
   grid_gray: 0.94
-  constellation_gray: 0.91
-  constellation_line_width_mm: 0.12
+  constellation_gray: 0.78
+  constellation_line_width_mm: 0.18
   boundary_gray: 0.93
   boundary_line_width_mm: 0.08
   show_constellation_names: false

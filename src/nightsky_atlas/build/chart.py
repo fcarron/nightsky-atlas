@@ -37,6 +37,7 @@ from nightsky_atlas.catalog.constellations import (
     load_constellations,
 )
 from nightsky_atlas.catalog.dso_store import load_dso_catalog
+from nightsky_atlas.catalog.faint_stars import FaintStarStore
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.observing_lists import (
     DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
@@ -129,6 +130,15 @@ def load_chart_stars(
     if magnitude_limit is not None:
         stars = [star for star in stars if star.magnitude <= magnitude_limit]
     return stars
+
+
+def _primary_star_query_limit(
+    primary_magnitude_limit: float, faint_star_limit: float | None
+) -> float:
+    """Keep primary-catalogue counterparts available through the faint limit."""
+    if faint_star_limit is None:
+        return primary_magnitude_limit
+    return max(primary_magnitude_limit, faint_star_limit)
 
 
 def load_dsos(dsos_path: str | Path | None = None) -> list[DeepSkyObject]:
@@ -284,6 +294,8 @@ def build_chart_context(
     chart_id: str | None = None,
     definition: ChartDefinition | None = None,
     star_store: str | Path | None = None,
+    faint_star_store: str | Path | None = None,
+    faint_star_limit: float | None = None,
     stars_csv: str | Path | None = None,
     dsos_path: str | Path | None = None,
     constellations_dir: str | Path | None = None,
@@ -322,6 +334,14 @@ def build_chart_context(
         )
     atlas = inputs.atlas
     style = inputs.style
+    if faint_star_store is not None and atlas.id not in {"eyepiece", "eyepieceDeep"}:
+        raise ValueError("the UCAC4 faint-star supplement is reserved for Eyepiece charts")
+    if faint_star_limit is not None and faint_star_store is None:
+        raise ValueError("--faint-star-limit requires --faint-star-store")
+    if faint_star_limit is not None and not 0.0 < faint_star_limit <= 14.0:
+        raise ValueError("faint-star limit must be greater than 0 and no fainter than 14.0")
+    if faint_star_store is not None and faint_star_limit is None:
+        raise ValueError("--faint-star-limit is required when --faint-star-store is enabled")
     if definition is None:
         if chart_id is None:
             raise ConfigError("either chart_id or definition is required")
@@ -329,6 +349,7 @@ def build_chart_context(
     page = atlas.page.to_geometry()
 
     star_limit = magnitude_limit if magnitude_limit is not None else atlas.stellar_limit_magnitude
+    star_limit = _primary_star_query_limit(star_limit, faint_star_limit)
     with progress.step("star query", detail=True):
         stars = load_chart_stars(
             definition,
@@ -336,6 +357,12 @@ def build_chart_context(
             stars_csv=stars_csv,
             magnitude_limit=star_limit,
         )
+        faint_stars = []
+        if faint_star_store is not None:
+            with FaintStarStore.open(faint_star_store) as store:
+                faint_stars = store.query_box(
+                    chart_query_box(definition), magnitude_limit=faint_star_limit
+                )
     # Keep outlined objects available even when their centres lie beyond the
     # field query box: their projected polygons can still cross this chart.
     dso_box = field_query_box(definition, padding_deg=2.0)
@@ -369,7 +396,7 @@ def build_chart_context(
     with progress.step("scene build", detail=True):
         scene = build_scene(
             definition,
-            stars,
+            [*stars, *faint_stars],
             dsos,
             constellation_lines=constellations.lines,
             constellation_boundaries=constellations.boundaries,

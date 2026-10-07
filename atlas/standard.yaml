@@ -5,6 +5,7 @@
 # is not implemented yet.
 
 id: standard
+chart_directory_position: back
 
 # Normative print scale; the page frame is centered around this exact map field.
 mm_per_degree: 10.0

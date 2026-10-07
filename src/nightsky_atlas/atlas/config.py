@@ -24,6 +24,7 @@ from pydantic import (
     Field,
     NonNegativeFloat,
     PositiveFloat,
+    PositiveInt,
     ValidationError,
     field_validator,
     model_validator,
@@ -68,6 +69,7 @@ __all__ = [
     "ScaleBarStyle",
     "StyleConfig",
     "TilingConfig",
+    "TypographyStyle",
     "VisibilityConfig",
     "VariableStarStyle",
     "load_atlas_config",
@@ -337,6 +339,7 @@ class EditionConfig(_StrictModel):
 
     name: str
     code: str
+    chart_index_width: PositiveInt = 3
 
     @field_validator("name", "code")
     @classmethod
@@ -347,7 +350,7 @@ class EditionConfig(_StrictModel):
 
 
 _EDITION_DEFAULTS: dict[str, EditionConfig] = {
-    "pocket": EditionConfig(name="Pocket", code="P"),
+    "pocket": EditionConfig(name="Pocket", code="P", chart_index_width=2),
     "standard": EditionConfig(name="Standard", code="S"),
     "deep": EditionConfig(name="Deep", code="D"),
 }
@@ -561,9 +564,7 @@ class StarLabelStyle(_StrictModel):
     proper_names_always_visible: bool = False
     proper_name_candidate_rings: int = Field(default=3, ge=1)
     candidate_ring_gap_mm: PositiveFloat = 1.25
-    constellation_suffix: ConstellationSuffixStyle = Field(
-        default_factory=ConstellationSuffixStyle
-    )
+    constellation_suffix: ConstellationSuffixStyle = Field(default_factory=ConstellationSuffixStyle)
 
 
 class TargetedDsoLeaderStyle(_StrictModel):
@@ -703,21 +704,15 @@ class DsoLabelPlacementStyle(_StrictModel):
 
     @field_validator("candidate_edge_gaps_mm")
     @classmethod
-    def _candidate_gaps_are_ascending(
-        cls, value: tuple[float, ...]
-    ) -> tuple[float, ...]:
-        if not value or any(
-            right <= left for left, right in zip(value, value[1:], strict=False)
-        ):
+    def _candidate_gaps_are_ascending(cls, value: tuple[float, ...]) -> tuple[float, ...]:
+        if not value or any(right <= left for left, right in zip(value, value[1:], strict=False)):
             raise ValueError("candidate_edge_gaps_mm must be strictly ascending")
         return value
 
     @model_validator(mode="after")
     def _outer_candidate_start_is_present(self) -> DsoLabelPlacementStyle:
         if self.outer_candidate_start_gap_mm not in self.candidate_edge_gaps_mm:
-            raise ValueError(
-                "outer_candidate_start_gap_mm must occur in candidate_edge_gaps_mm"
-            )
+            raise ValueError("outer_candidate_start_gap_mm must occur in candidate_edge_gaps_mm")
         return self
 
 
@@ -827,9 +822,7 @@ class GalaxyContourSet(_StrictModel):
         default_factory=lambda: GalaxyContourStyle(line_width_mm=0.071)
     )
     dotted: GalaxyContourStyle = Field(
-        default_factory=lambda: GalaxyContourStyle(
-            line_width_mm=0.088, dash_mm=0.4, gap_mm=0.35
-        )
+        default_factory=lambda: GalaxyContourStyle(line_width_mm=0.088, dash_mm=0.4, gap_mm=0.35)
     )
 
     def for_class(self, contour_class: GalaxyContourClass | None) -> GalaxyContourStyle | None:
@@ -1113,8 +1106,7 @@ class GridStyle(_StrictModel):
             ratio = line_step / tick_step
             if ratio < 1.0 or abs(ratio - round(ratio)) > 1e-6:
                 raise ValueError(
-                    f"{tick_name} ({tick_step:g}) must divide "
-                    f"{line_name} ({line_step:g})"
+                    f"{tick_name} ({tick_step:g}) must divide {line_name} ({line_step:g})"
                 )
         return self
 
@@ -1258,6 +1250,7 @@ class OverviewStyle(_StrictModel):
 
     enabled: bool = True
     hemispheres_per_page: Literal[1, 2] = 1
+    equatorial_extension_deg: NonNegativeFloat = 0.0
     radius_mm: PositiveFloat = 76.0
     title_font_size_pt: PositiveFloat = 15.0
     subtitle_font_size_pt: PositiveFloat = 9.0
@@ -1315,6 +1308,12 @@ class LocatorStyle(_StrictModel):
     current_line_width_mm: PositiveFloat = 0.35
 
 
+class TypographyStyle(_StrictModel):
+    """Font families reserved for non-chart editorial pages."""
+
+    sans_family: str = "Source Sans 3"
+
+
 class StyleConfig(_StrictModel):
     """Visual appearance configuration for one style."""
 
@@ -1330,6 +1329,7 @@ class StyleConfig(_StrictModel):
     furniture: FurnitureStyle = Field(default_factory=FurnitureStyle)
     overview: OverviewStyle = Field(default_factory=OverviewStyle)
     locator: LocatorStyle = Field(default_factory=LocatorStyle)
+    typography: TypographyStyle = Field(default_factory=TypographyStyle)
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, object]:

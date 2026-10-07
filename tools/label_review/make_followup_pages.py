@@ -12,7 +12,6 @@ from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.cairo import render_chart
 from nightsky_atlas.render.furniture import furniture_obstacles
 
-
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "build" / "leader-followup-2026-10-01"
 CHANGES = {
@@ -28,9 +27,7 @@ CHANGES = {
 
 def main() -> None:
     for (edition, chart_id), changes in CHANGES.items():
-        source = (
-            OUTPUT / f"diagnostic-{edition}" / edition / "charts" / chart_id / "chart.json"
-        )
+        source = OUTPUT / f"diagnostic-{edition}" / edition / "charts" / chart_id / "chart.json"
         layout = json.loads(source.read_text(encoding="utf-8"))
         labels = tuple(Label.from_dict(item) for item in layout["labels"])
         context = build_chart_context(
@@ -76,9 +73,10 @@ def main() -> None:
         ).issues
         if variant_issues:
             raise ValueError(f"{chart_id}: variant has {len(variant_issues)} hard issues")
-        if len(resolve_leader_lines(variant, context.scene, context.transform, context.style)) != sum(
-            label.leader_line for label in variant
-        ):
+        resolved_count = len(
+            resolve_leader_lines(variant, context.scene, context.transform, context.style)
+        )
+        if resolved_count != sum(label.leader_line for label in variant):
             raise ValueError(f"{chart_id}: one or more leader lines cannot be routed")
         target = OUTPUT / "pages" / edition / chart_id
         target.mkdir(parents=True, exist_ok=True)

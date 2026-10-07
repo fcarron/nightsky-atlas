@@ -255,7 +255,7 @@ grid:
   label_dec_step_deg: 10.0
   ticks_enabled: true
   tick_ra_step_deg: 2.5
-  tick_dec_step_deg: 1.0
+  tick_dec_step_deg: 2.5
   tick_polar_ra_step_deg: 7.5
   tick_length_mm: 0.8
   tick_major_length_mm: 1.2

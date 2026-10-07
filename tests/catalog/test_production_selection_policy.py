@@ -246,7 +246,7 @@ def test_pocket_list_alias_resolves_rossette_target_without_duplicate(production
     result = select_dso(rosette, index=index, policy=pocket)
     assert result.visible and result.forced
     assert {"caldwell", "herschel400"} <= result.list_memberships
-    assert primary_designation(rosette) == "2239"
+    assert primary_designation(rosette) == "2244"
 
 
 def test_pocket_caldwell_double_cluster_has_only_component_objects(production_state) -> None:

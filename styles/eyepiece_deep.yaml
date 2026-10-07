@@ -1,0 +1,24 @@
+# Experimental 80 mm/degree symbol profile. The 20-to-40 mm/degree scale
+# change from Deep to Eyepiece is applied again; the faint tail is extended to
+# the 13.5-mag chart limit.
+extends: eyepiece.yaml
+id: eyepieceDeep
+star:
+  faint_magnitude: 13.5
+  min_diameter_mm: 0.14
+  max_diameter_mm: 9.2
+  diameter_curve: [[0.0, 9.14], [1.0, 8.3], [2.0, 7.1], [3.0, 6.0], [4.0, 5.0], [5.0, 4.1], [6.0, 3.38], [7.0, 2.63], [8.0, 1.88], [9.0, 1.35], [10.0, 1.03], [11.0, 0.44], [11.5, 0.314], [12.0, 0.27], [13.0, 0.18], [13.5, 0.14]]
+grid:
+  ra_step_deg: 1.0
+  dec_step_deg: 0.5
+  polar_ra_step_deg: 5.0
+  label_ra_step_deg: 2.0
+  label_dec_step_deg: 1.0
+  label_polar_ra_step_deg: 30.0
+  tick_ra_step_deg: 0.25
+  tick_dec_step_deg: 0.25
+  tick_polar_ra_step_deg: 5.0
+furniture:
+  scale_bar: {length_deg: 0.5}
+overview:
+  enabled: false

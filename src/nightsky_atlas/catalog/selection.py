@@ -566,7 +566,10 @@ def select_dso(
             if rule is not None and rule.visibility_class_rules:
                 visibility_reasons.append("galaxy_visibility_below_edition_policy")
     if explicitly_excluded and not forced:
-        visibility_reasons.append("pocket_duplicate_aggregate_excluded")
+        visibility_reasons.append(
+            "pocket_duplicate_aggregate_excluded"
+            if dso.id == "C014" else "edition_designation_excluded"
+        )
     if not uncertain_match_allowed and not forced:
         visibility_reasons.append("uncertain-catalogue-match")
         visibility_reasons.append("uncertain_crossmatch_excluded")

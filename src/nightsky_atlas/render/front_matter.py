@@ -19,7 +19,7 @@ from nightsky_atlas.render.symbols import (
     compact_star_reference_magnitudes,
     dso_symbol_extent,
 )
-from nightsky_atlas.render.text import draw_text, measure_point_size
+from nightsky_atlas.render.text import draw_text, draw_tracked_text, measure_point_size
 from nightsky_atlas.render.variable_stars import draw_variable_star_ring
 from nightsky_atlas.units import mm_to_pt
 
@@ -92,9 +92,7 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
             minimum_arcmin = None
         sample_arcmin = minimum_arcmin * 2.5 if minimum_arcmin is not None else None
         minor_arcmin = (
-            sample_arcmin * 0.4
-            if object_type == DsoType.GALAXY and sample_arcmin
-            else None
+            sample_arcmin * 0.4 if object_type == DsoType.GALAXY and sample_arcmin else None
         )
 
         def make_sample(
@@ -157,17 +155,31 @@ def _text(
     *,
     bold: bool = False,
     gray: float = 0.0,
+    tracking_pt: float = 0.18,
 ) -> None:
     cr.set_source_rgb(gray, gray, gray)
-    draw_text(
-        cr,
-        text,
-        mm_to_pt(x_mm),
-        mm_to_pt(y_mm),
-        family,
-        size_pt,
-        "bold" if bold else "normal",
-    )
+    weight = "semibold" if bold else "normal"
+    if bold and text == text.upper():
+        draw_tracked_text(
+            cr,
+            text,
+            mm_to_pt(x_mm),
+            mm_to_pt(y_mm),
+            family,
+            size_pt,
+            weight,
+            tracking_pt,
+        )
+    else:
+        draw_text(
+            cr,
+            text,
+            mm_to_pt(x_mm),
+            mm_to_pt(y_mm),
+            family,
+            size_pt,
+            weight,
+        )
 
 
 def _rule(cr: cairo.Context[cairo.Surface], left_mm: float, right_mm: float, y_mm: float) -> None:
@@ -191,7 +203,7 @@ def _footer(
 ) -> None:
     text = f"NightSky Atlas — {edition} · {section}"
     width_pt, _ = measure_point_size(cr, text, family, 7.0)
-    x_pt = mm_to_pt(page.width_mm - page.margin_mm) - width_pt
+    x_pt = mm_to_pt(page.width_mm - page.margin_mm) - width_pt - mm_to_pt(0.5)
     _text(
         cr,
         text,
@@ -211,8 +223,8 @@ def _paragraph(
     width_mm: float,
     family: str,
     *,
-    size_pt: float = 8.0,
-    line_step_mm: float = 5.1,
+    size_pt: float = 8.3,
+    line_step_mm: float = 5.4,
 ) -> float:
     line = ""
     for word in words.split():
@@ -235,7 +247,7 @@ def draw_introduction(
 ) -> None:
     """Draw the short practical introduction shared by all editions."""
     page = atlas.page.to_geometry()
-    family = style.label.font_family
+    family = style.typography.sans_family
     left = page.margin_mm + 4.0
     right = page.width_mm - page.margin_mm - 4.0
     width = right - left
@@ -258,7 +270,7 @@ def draw_introduction(
         left,
         page.margin_mm + 13.0,
         family,
-        17.0,
+        19.3,
         bold=True,
     )
     _text(
@@ -272,7 +284,17 @@ def draw_introduction(
     )
     _rule(cr, left, right, page.margin_mm + 27.0)
 
-    _text(cr, "PURPOSE", left, 47.0, family, 7.2, bold=True, gray=0.38)
+    _text(
+        cr,
+        "PURPOSE",
+        left,
+        47.0,
+        family,
+        7.2,
+        bold=True,
+        gray=0.38,
+        tracking_pt=0.25,
+    )
     _paragraph(
         cr,
         "NightSky Atlas is an open-source set of printable sky charts for visual observers. "
@@ -280,11 +302,22 @@ def draw_introduction(
         "catalogue and artwork terms are listed on the credits page.",
         left,
         53.0,
-        width,
+        page.width_mm - page.margin_mm - left,
         family,
+        size_pt=8.6,
     )
 
-    _text(cr, "THREE EDITIONS", left, 73.0, family, 7.2, bold=True, gray=0.38)
+    _text(
+        cr,
+        "THREE EDITIONS",
+        left,
+        73.0,
+        family,
+        7.2,
+        bold=True,
+        gray=0.38,
+        tracking_pt=0.25,
+    )
     _text(cr, "Edition", left, 81.0, family, 7.0, bold=True)
     _text(cr, "Scale", left + 57.0, 81.0, family, 7.0, bold=True)
     _text(cr, "Stars to", left + 100.0, 81.0, family, 7.0, bold=True)
@@ -312,7 +345,17 @@ def draw_introduction(
     )
     _rule(cr, left, right, 119.0)
 
-    _text(cr, "READING A CHART", left, 128.0, family, 7.2, bold=True, gray=0.38)
+    _text(
+        cr,
+        "READING A CHART",
+        left,
+        128.0,
+        family,
+        7.2,
+        bold=True,
+        gray=0.38,
+        tracking_pt=0.25,
+    )
     _paragraph(
         cr,
         "Start with the north or south overview, then use chart codes and the object index. "
@@ -323,8 +366,19 @@ def draw_introduction(
         134.0,
         column_width,
         family,
+        size_pt=8.7,
     )
-    _text(cr, "STARS AND DOUBLE STARS", left, 169.0, family, 7.2, bold=True, gray=0.38)
+    _text(
+        cr,
+        "STARS AND DOUBLE STARS",
+        left,
+        169.0,
+        family,
+        7.2,
+        bold=True,
+        gray=0.38,
+        tracking_pt=0.25,
+    )
     _paragraph(
         cr,
         "Star disks encode magnitude; familiar names, Bayer letters and Flamsteed numbers are "
@@ -335,11 +389,21 @@ def draw_introduction(
         175.0,
         column_width,
         family,
-        size_pt=7.4,
-        line_step_mm=4.4,
+        size_pt=7.8,
+        line_step_mm=4.7,
     )
 
-    _text(cr, "DEEP-SKY OBJECTS", right_column, 128.0, family, 7.2, bold=True, gray=0.38)
+    _text(
+        cr,
+        "DEEP-SKY OBJECTS",
+        right_column,
+        128.0,
+        family,
+        7.2,
+        bold=True,
+        gray=0.38,
+        tracking_pt=0.25,
+    )
     _paragraph(
         cr,
         "Symbols distinguish galaxies, clusters and nebulae. M denotes Messier; bare numbers "
@@ -350,10 +414,20 @@ def draw_introduction(
         134.0,
         column_width,
         family,
-        size_pt=7.8,
-        line_step_mm=4.8,
+        size_pt=8.2,
+        line_step_mm=5.1,
     )
-    _text(cr, "PRINTING AND USE", right_column, 174.0, family, 7.2, bold=True, gray=0.38)
+    _text(
+        cr,
+        "PRINTING AND USE",
+        right_column,
+        174.0,
+        family,
+        7.2,
+        bold=True,
+        gray=0.38,
+        tracking_pt=0.25,
+    )
     _paragraph(
         cr,
         "Print the vector PDF on A4 landscape at 100% or actual size. Personal printing is free. "
@@ -362,8 +436,8 @@ def draw_introduction(
         180.0,
         column_width,
         family,
-        size_pt=7.4,
-        line_step_mm=4.4,
+        size_pt=7.8,
+        line_step_mm=4.7,
     )
     _footer(cr, page, atlas.resolved_edition().name, family, "Introduction")
 
@@ -525,8 +599,7 @@ def _draw_double_star_examples(
     first_diameter = size_model.diameter_mm(5.0)
     second_diameter = size_model.diameter_mm(6.5)
     separation = (
-        style.double_stars.marginal_clearance_mm + 0.2
-        + (first_diameter + second_diameter) / 2.0
+        style.double_stars.marginal_clearance_mm + 0.2 + (first_diameter + second_diameter) / 2.0
     )
     first_x = x + 72.0
     second_x = first_x + separation
@@ -544,7 +617,7 @@ def draw_field_guide(
 ) -> None:
     """Draw the compact, edition-aware atlas symbol key."""
     page = atlas.page.to_geometry()
-    family = style.label.font_family
+    family = style.typography.sans_family
     left = page.margin_mm + 4.0
     right = page.width_mm - page.margin_mm - 4.0
     width = right - left

@@ -100,18 +100,11 @@ def build_dso_labels(
         else CANDIDATE_PREFERENCE
     )
     positions_by_gap = tuple(
-        positions
-        if gap < placement_style.outer_candidate_start_gap_mm
-        else outer_positions
+        positions if gap < placement_style.outer_candidate_start_gap_mm else outer_positions
         for gap in placement_style.candidate_edge_gaps_mm
     )
-    sources = {
-        source.id: source for source in dso_source_geometries(scene, transform, style)
-    }
-    anchors = {
-        item.dso.id: transform.to_page(item.chart_point)
-        for item in scene.deep_sky_objects
-    }
+    sources = {source.id: source for source in dso_source_geometries(scene, transform, style)}
+    anchors = {item.dso.id: transform.to_page(item.chart_point) for item in scene.deep_sky_objects}
     for scene_dso in scene.deep_sky_objects:
         dso = scene_dso.dso
         always_label = dso.object_type in style.label.selection.always_label_object_types
@@ -163,12 +156,14 @@ def build_dso_labels(
         exact_edge_distance = None
         approximate_edge_distance = None
         if source is not None:
+
             def edge_distance(bounds, glyphs, geometry=source):
                 visible_bounds = _ink_envelope(glyphs, bounds)
                 return source_edge_distance(geometry, visible_bounds)
 
             exact_edge_distance = edge_distance
             if not source.outline_paths:
+
                 def approximate_distance(bounds, glyphs, geometry=source):
                     visible_bounds = _ink_envelope(glyphs, bounds)
                     return source_extent_edge_distance(geometry, visible_bounds)
@@ -180,9 +175,7 @@ def build_dso_labels(
             anchor=anchor,
             exclusion_radius_mm=_exclusion_radius_mm(dso, transform, style),
             exact_edge_gap_mm=(
-                placement_style.candidate_edge_gaps_mm[0]
-                if source is not None
-                else None
+                placement_style.candidate_edge_gaps_mm[0] if source is not None else None
             ),
             exact_edge_distance=exact_edge_distance,
             approximate_edge_distance=approximate_edge_distance,
@@ -191,6 +184,7 @@ def build_dso_labels(
             ),
             positions=positions,
             positions_by_ring=positions_by_gap if source is not None else None,
+            allowed_rect=transform.chart_rect,
             ring_count=1 if source is not None else style.label.candidate_rings,
             ring_gap_mm=style.label.ring_gap_mm,
         )
@@ -252,6 +246,8 @@ def _ambiguous_star_designations(
     by_compact: dict[str, list[tuple[int, str, PagePoint]]] = defaultdict(list)
     for scene_star in scene.stars:
         star = scene_star.star
+        if not isinstance(star, Star):
+            continue
         number = hip_number(star.hip_id)
         if number is None or number not in star_names:
             continue
@@ -314,6 +310,8 @@ def build_star_labels(
     seen_hips: set[int] = set()
     for scene_star in sorted(scene.stars, key=lambda item: (item.star.magnitude, item.star.id)):
         star = scene_star.star
+        if not isinstance(star, Star):
+            continue
         if star.magnitude > limit:
             continue
         number = hip_number(star.hip_id)
@@ -351,13 +349,16 @@ def build_star_labels(
             ),
             exact_edge_gap_mm=style.label.star_clearance.associated.preferred_min_mm,
             exact_edge_distance=(
-                lambda bounds, glyph_bounds, source=obstacle: min(
-                    star_rect_edge_distance_mm(source, rect)
-                    for rect in (glyph_bounds or (bounds,))
+                lambda bounds, glyph_bounds, source=obstacle: (
+                    min(
+                        star_rect_edge_distance_mm(source, rect)
+                        for rect in (glyph_bounds or (bounds,))
+                    )
+                    if source is not None
+                    else 0.0
                 )
-                if source is not None
-                else 0.0
             ),
+            allowed_rect=transform.chart_rect,
             ring_count=(
                 policy.proper_name_candidate_rings
                 if kind == "combined" or kind.startswith("proper_")
@@ -377,9 +378,7 @@ def build_star_labels(
                 target_id=star.id,
                 text=text,
                 priority=priority,
-                mandatory=mandatory or (
-                    has_proper_name and policy.proper_names_always_visible
-                ),
+                mandatory=mandatory or (has_proper_name and policy.proper_names_always_visible),
                 candidates=candidates,
                 selected_candidate_id=candidates[0].id if candidates else None,
                 semantic_key=semantic_key,
@@ -440,6 +439,7 @@ def build_constellation_labels(
             metrics=metrics,
             anchor=anchor,
             exclusion_radius_mm=0.0,
+            allowed_rect=transform.chart_rect,
             ring_count=style.label.candidate_rings,
             ring_gap_mm=style.label.ring_gap_mm,
         )

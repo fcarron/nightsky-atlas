@@ -171,13 +171,14 @@ def build_overview(
     edition: EditionConfig | None = None,
     bright_stars: Sequence[Star] = (),
     star_limit_magnitude: float | None = None,
+    equatorial_extension_deg: float = 0.0,
 ) -> OverviewMap:
     """Build the overview map for one hemisphere.
 
-    Equatorial charts contribute a half-cell to each overview; other charts
-    appear only in their centre's hemisphere. ``bright_stars`` are projected
-    as a quiet foreground; when ``star_limit_magnitude`` is given, fainter
-    stars are dropped.
+    Equatorial charts appear on both overview pages. ``equatorial_extension_deg``
+    extends each overview past the equator so those charts can be shown in full.
+    ``bright_stars`` are projected as a quiet foreground; when
+    ``star_limit_magnitude`` is given, fainter stars are dropped.
     """
     center_ra, center_dec = overview_centres(hemisphere)
     projector = AzimuthalEquidistantProjection(center_ra, center_dec)
@@ -194,13 +195,24 @@ def build_overview(
             chart,
             edition_name=resolved_edition.name,
             edition_code=resolved_edition.code,
+            chart_index_width=resolved_edition.chart_index_width,
         )
         hemisphere_charts.append(chart)
         codes[chart.id] = presentation.chart_code
 
-    polygons = _sector_cells(hemisphere_charts, projector, hemisphere)
     ring_decs = sorted({chart.center_dec_deg for chart in hemisphere_charts})
-    ring_bounds = _band_boundaries(ring_decs, hemisphere)
+    has_equatorial_ring = 0.0 in ring_decs
+    extension = equatorial_extension_deg if has_equatorial_ring else 0.0
+    radius_deg += extension
+    polygons = _sector_cells(
+        hemisphere_charts,
+        projector,
+        hemisphere,
+        equatorial_extension_deg=extension,
+    )
+    ring_bounds = _band_boundaries(
+        ring_decs, hemisphere, equatorial_extension_deg=extension
+    )
     equator_label_dec = None
     if 0.0 in ring_decs:
         index = ring_decs.index(0.0)
@@ -284,6 +296,8 @@ def _sector_cells(
     charts: Sequence[ChartDefinition],
     projector: AzimuthalEquidistantProjection,
     hemisphere: str,
+    *,
+    equatorial_extension_deg: float = 0.0,
 ) -> dict[str, tuple[ChartPoint, ...]]:
     """Partition the hemisphere into one trapezoidal cell per chart.
 
@@ -299,7 +313,9 @@ def _sector_cells(
     for chart in charts:
         by_dec.setdefault(chart.center_dec_deg, []).append(chart)
     decs = sorted(by_dec)
-    boundaries = _band_boundaries(decs, hemisphere)
+    boundaries = _band_boundaries(
+        decs, hemisphere, equatorial_extension_deg=equatorial_extension_deg
+    )
 
     cells: dict[str, tuple[ChartPoint, ...]] = {}
     for index, dec in enumerate(decs):
@@ -317,13 +333,32 @@ def _sector_cells(
     return cells
 
 
-def _band_boundaries(decs: list[float], hemisphere: str) -> list[float]:
+def _band_boundaries(
+    decs: list[float],
+    hemisphere: str,
+    *,
+    equatorial_extension_deg: float = 0.0,
+) -> list[float]:
     """Declination boundaries between adjacent rings plus the outer edges."""
     midpoints = [
         (decs[index] + decs[index + 1]) / 2.0 for index in range(len(decs) - 1)
     ]
     if hemisphere == NORTH:
+        if equatorial_extension_deg > 0.0 and decs and decs[0] == 0.0:
+            return [
+                -equatorial_extension_deg,
+                equatorial_extension_deg,
+                *midpoints[1:],
+                90.0,
+            ]
         return [0.0, *midpoints, 90.0]
+    if equatorial_extension_deg > 0.0 and decs and decs[-1] == 0.0:
+        return [
+            -90.0,
+            *midpoints[:-1],
+            -equatorial_extension_deg,
+            equatorial_extension_deg,
+        ]
     return [-90.0, *midpoints, 0.0]
 
 

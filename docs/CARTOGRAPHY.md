@@ -100,7 +100,7 @@ given below in time; 1 h = 15°.
 | Edition | RA grid | Dec grid | RA labels | Dec labels | Outer RA ticks | Outer Dec ticks | Polar RA grid/ticks |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Pocket | 1 h | 10° | 1 h | 20° | 15 min | 5° | 2 h |
-| Standard | 30 min | 5° | 1 h | 10° | 10 min | 1° | 30 min |
+| Standard | 30 min | 5° | 1 h | 10° | 10 min | 2.5° | 30 min |
 | Deep | 15 min | 2° | 30 min | 4° | 5 min | 1° | 15 min |
 
 At the equator, RA grid lines print about 75 mm apart in every edition; their
@@ -110,7 +110,9 @@ frame, like an axis on a graph. Ticks coinciding with a full grid line are
 slightly longer (1.2 mm instead of 0.8 mm). Ticks closer than 4 mm along an
 edge are thinned, with full-grid values retained first. On polar fields, ticks
 follow the polar meridian interval rather than adding a dense set of minor RA
-marks. Declination ticks retain the edition's usual subdivision.
+marks. Declination ticks use 5° in Pocket, 2.5° in Standard and 1° in Deep;
+these intervals keep the side marks at a similar printed spacing to the RA
+ticks above and below the frame.
 
 Coordinate labels remain separate from lines and ticks. RA values sit above and
 below the frame; declination values sit at its sides. Labels closer than 13 mm
@@ -124,7 +126,7 @@ consistent notation built centrally in `chart/presentation.py`:
 
 | Edition | Name | Code | Visible chart code |
 | --- | --- | --- | --- |
-| Pocket | Pocket | P | P001 |
+| Pocket | Pocket | P | P01 … P48 |
 | Standard | Standard | S | S001 … S118 |
 | Deep | Deep | D | D001 |
 
@@ -164,6 +166,12 @@ Pleiades (`DD111`), the Coma core (`DD121`), the Markarian chain (`DD174`),
 M42 (`DD223`), the Fornax core (`DD328`), 30 Doradus (`DD405A`), the LMC bar
 (`DD405B`) and NGC 346 in the SMC (`DD415`). Their dedicated star profile plots
 stars to magnitude 11.5, while Deep main charts stay at magnitude 10.0.
+Deep's bold, normal and fine galaxy classes use a 0.75-arcmin minimum major
+axis at 20 mm/degree. This is the same 0.25-mm angular threshold on paper as
+Pocket's 3 arcmin at 5 mm/degree and Standard's 1.5 arcmin at 10 mm/degree.
+Deep's dotted class retains its separate 0.5-arcmin and 400-mm visibility-score
+requirements. The plotted galaxy ellipse still has its cartographic minimum
+size; the selection threshold does not set the printed symbol diameter.
 DD105 at 40 mm/degree uses a separate star-diameter curve, extending the
 Standard-to-Deep size progression by one magnitude; its stellar limit remains
 11.5. The other Deep detail charts retain their existing star sizes.
@@ -203,9 +211,14 @@ research evidence and the atlas-wide audit.
 
 ## Overview maps and locator
 
-The atlas opens with two whole-sky **overview pages** (after the front matter):
-a northern and a southern hemisphere disk, each a pole-centred azimuthal
-equidistant projection of radius 90 degrees.  They show a simplified
+The atlas opens with whole-sky **overview pages** (after the front matter):
+a northern and a southern pole-centred azimuthal equidistant map. By default,
+each extends 90 degrees from its pole. Pocket extends both maps 18 degrees past
+the equator so the full height of its equatorial charts (for example P019) is
+visible on both overview maps, using a slightly larger disk at the same map
+scale. Pocket's atlas fields remain 54 x 36 degrees at 5.0 mm/degree; the
+overview extension does not change field size, chart centres, chart count or
+tiling. They show a simplified
 constellation background (stick figures and dotted boundaries drawn as straight
 chords), a light RA/Dec grid, the full name of each constellation, the bright
 stars down to the ``overview.star_limit_magnitude`` and one clean **cell** per
@@ -215,8 +228,9 @@ Charts overlap by design (star-hop overlap), so drawing every chart field
 rectangle produced a tangle of near-parallel lines.  Each chart is therefore
 represented by the declination-ring / right-ascension sector around its centre:
 declination boundaries lie midway between adjacent ring centres (and at the pole
-and equator) and RA boundaries midway between adjacent chart centres within a
-ring.  Every chart contributes exactly one **trapezoidal** cell, adjacent cells
+and equator, except for Pocket's equatorial extension) and RA boundaries midway
+between adjacent chart centres within a ring. Every chart contributes exactly
+one **trapezoidal** cell, adjacent cells
 share a single boundary, and there is no overlap; cell sides are straight
 meridians and tops/bottoms follow declination circles.  This is an index
 schematic, not a reproduction of the chart fields.  The bright stars use the
@@ -224,6 +238,10 @@ same monotonic magnitude-to-size model as the charts, limited to a small,
 deliberately quiet foreground.  RA hour labels ring the equator.  Appearance
 lives under ``overview:`` in the style; the pages are controlled by
 ``atlas build --no-overviews``.
+
+The complete chart directory is placed at the back of Pocket, Standard and
+Deep, after the chart sequence and object index. The overview maps remain in
+the front matter as the quick navigation aid.
 
 An optional **locator inset** (``locator.enabled`` in the style, default off)
 draws a compact version of the hemisphere overview inside a chart corner,

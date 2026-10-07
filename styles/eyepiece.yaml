@@ -1,0 +1,43 @@
+# Eyepiece appearance draft: shared Lato typography and Deep DSO hierarchy.
+# The star curve extends the DD105 profile to the 13-mag test limit.
+extends: deep.yaml
+id: eyepiece
+label:
+  leader_lines:
+    targeted_dso:
+      enabled: false
+star:
+  faint_magnitude: 12.25
+  min_diameter_mm: 0.14
+  max_diameter_mm: 8.0
+  diameter_curve: [[0.0, 8.0], [1.0, 7.0], [2.0, 5.9], [3.0, 4.9], [4.0, 4.0], [5.0, 3.2], [6.0, 2.5], [7.0, 1.85], [8.0, 1.3], [9.0, 0.9], [10.0, 0.6], [11.0, 0.35], [11.5, 0.28], [13.0, 0.14]]
+
+# Keep the Deep physical symbol treatment while halving the angular threshold
+# at which catalogue dimensions replace a compact fallback symbol.
+dso:
+  galaxy: {min_angular_major_axis_arcmin: 2.5}
+  globular_cluster: {min_angular_size_arcmin: 2.5}
+  open_cluster: {min_angular_size_arcmin: 2.5}
+  planetary_nebula: {min_angular_size_arcmin: 2.5}
+  galaxy_cluster: {min_angular_size_arcmin: 2.5}
+
+# Keep grid spacing similar in millimetres to Deep, with 2.5-minute RA and
+# half-degree Dec edge ticks. The polar meridians stay sparser.
+grid:
+  ra_step_deg: 1.875
+  dec_step_deg: 1.0
+  polar_ra_step_deg: 7.5
+  label_ra_step_deg: 3.75
+  label_dec_step_deg: 2.0
+  label_polar_ra_step_deg: 30.0
+  tick_ra_step_deg: 0.625
+  tick_dec_step_deg: 0.5
+  tick_polar_ra_step_deg: 7.5
+
+furniture:
+  scale_bar: {length_deg: 1.0}
+
+# A hemisphere overview cannot label roughly four times as many cells at the
+# current A4 size. Navigation needs a separate design before publication.
+overview:
+  enabled: false

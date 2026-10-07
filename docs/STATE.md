@@ -15,6 +15,14 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   `build/targeted-leaders-2026-10-07/`; methodology and small-sample limitations
   are in `docs/LEADER_LINE_EXPERIMENT.md`.
 
+- Pocket DSO quality pass (2026-10-06): 1329 to 1317 selected DSO targets,
+  counting both visibility passes and forced-list members. M102 and Rosette
+  aliases, cluster/system types, M24 and printed Serpens abbreviations are
+  corrected; 3 visual classics plus 1 recovered H400 alias target are added,
+  and 16 component/specialist/stellar entries are removed from Pocket's DSO set.
+  Seven-chart proof and full audit are in `build/research/pocket-dso-audit/`;
+  decisions and remaining ambiguities are in `docs/POCKET_DSO_AUDIT.md`.
+
 - M0–M14 complete. M15.1–M15.4 complete. M15.5 in progress (full current
   Standard build complete; field test remains).
 - M16.1 complete (manual Stable-ID label overrides, including locked placements).
@@ -45,6 +53,24 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   402 NGC designations, CC BY-SA 4.0) and never mutates `DeepSkyObject`.
   `config/observing_lists.yaml` declares forced lists and priority weights per
   edition; Standard forces the complete resolvable Herschel 400 into every chart.
+- Deep includes 72 confirmed Abell planetary-nebula targets, including objects
+  without imported magnitude/size. The selection membership takes unflagged
+  Abell rows plus the independently confirmed Abell 21 exception; possible or
+  misclassified rows are not added wholesale.
+- A source-neutral external observing-list audit is available under
+  `nightsky research observing-list-coverage`. It reads local AstroPlanner
+  CSV/TSV/text exports and normalized Astronomical League CSV/TSV/text, then
+  reports designation matches, physical-target deduplication, production
+  selection by edition, provenance families and unresolved review cases.
+  NSOG/AL list content remains user-supplied and gitignored; this is a validation
+  tool, not a production inclusion source. See
+  `docs/EXTERNAL_OBSERVING_LISTS.md`.
+- Deep's first NightSkyAtlas-owned visual-nebula curation is active: 45 dark
+  target entries (47 object IDs, including selected LDN targets) and 42 bright
+  nebula/SNR IDs. Dark targets render as position markers only; ambiguous LDN
+  534 remains excluded and LDN 93 uses the B 86 locator. See
+  `docs/NEBULA_CURATION_V1.md`; the curated memberships contain no NSOG ratings
+  or descriptions.
 - Per-type DSO visibility (M21.4): `catalog/visibility.py` evaluates each object
   type from integrated magnitude, derived mean surface brightness and angular
   size. Galaxies are surface-brightness limited, clusters use size/magnitude,

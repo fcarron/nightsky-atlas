@@ -31,6 +31,7 @@ __all__ = [
     "format_dso_label",
     "label_tier",
     "primary_designation",
+    "preferred_catalogue_designation",
 ]
 
 HERSCHEL_400_LIST = HERSCHEL_400
@@ -96,33 +97,35 @@ def format_catalog_designation(raw: str | None) -> str | None:
     return token
 
 
-def primary_designation(dso: DeepSkyObject) -> str:
-    """Choose the primary label designation: Messier, then NGC, then IC, then id."""
+def preferred_catalogue_designation(dso: DeepSkyObject) -> str:
+    """Choose the observer-facing identity without changing the canonical object ID."""
     messier = messier_id(dso)
     if messier is not None:
-        return format_catalog_designation(messier) or messier
+        return messier
     candidates = (dso.id, *dso.cross_ids)
+    if dso.id == "NGC2239" and "NGC2244" in dso.cross_ids:
+        return "NGC2244"
     for prefix in ("NGC", "IC"):
         for candidate in candidates:
             if _WHITESPACE.sub("", candidate).upper().startswith(prefix):
-                formatted = format_catalog_designation(candidate)
-                if formatted is not None:
-                    return formatted
+                return candidate
     if re.fullmatch(r"C0*\d+", dso.id, re.IGNORECASE):
         for candidate in sorted(dso.cross_ids):
             if re.fullmatch(r"(?:MEL|MELOTTE)\s*0*\d+", candidate, re.IGNORECASE):
-                formatted = format_catalog_designation(candidate)
-                if formatted is not None:
-                    return formatted
+                return candidate
         for candidate in sorted(dso.cross_ids):
             if re.fullmatch(r"C0*\d+", candidate, re.IGNORECASE):
                 continue
-            formatted = format_catalog_designation(candidate)
-            if formatted is not None:
-                return formatted
+            return candidate
         if dso.common_name:
             return dso.common_name
-    return format_catalog_designation(dso.id) or dso.id
+    return dso.id
+
+
+def primary_designation(dso: DeepSkyObject) -> str:
+    """Choose the compact chart label for the preferred catalogue identity."""
+    designation = preferred_catalogue_designation(dso)
+    return format_catalog_designation(designation) or designation
 
 
 def label_tier(dso: DeepSkyObject, memberships: frozenset[str] = frozenset()) -> DsoLabelTier:

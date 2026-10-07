@@ -1,0 +1,28 @@
+# Eyepiece edition draft. Deep supplies the current page format and visibility.
+# Its detail charts and test charts do not carry over to this all-sky tiling.
+extends: deep.yaml
+id: eyepiece
+edition: {name: Eyepiece, code: E}
+chart_directory_position: back
+mm_per_degree: 40.0
+stellar_limit_magnitude: 12.25
+charts: []
+detail_charts: []
+
+# A4 landscape: 6.75 x 4.5 degrees prints as 270 x 180 mm.
+# Ring counts are deliberately derived, not asserted before a coverage audit.
+tiling:
+  width_deg: 6.75
+  height_deg: 4.5
+  coverage_step_deg: 0.25
+  declination_centers: [-86.0, -82.0, -78.0, -74.0, -70.0, -66.0, -62.0, -58.0, -54.0, -50.0, -46.0, -42.0, -38.0, -34.0, -30.0, -26.0, -22.0, -18.0, -14.0, -10.0, -6.0, -2.0, 2.0, 6.0, 10.0, 14.0, 18.0, 22.0, 26.0, 30.0, 34.0, 38.0, 42.0, 46.0, 50.0, 54.0, 58.0, 62.0, 66.0, 70.0, 74.0, 78.0, 82.0, 86.0]
+  chart_counts: []
+  polar_caps: true
+  stagger_ra_centers: true
+  auto_adjust_counts: true
+  target_overlap:
+    vertical_deg: 0.5
+    horizontal_min_deg: 0.375
+
+# Deep's catalogue selection is inherited by the eyepiece entry in
+# config/observing_lists.yaml. Deep's visibility is inherited here.

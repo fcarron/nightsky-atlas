@@ -198,7 +198,7 @@ def _draw_headers(
     family: str,
 ) -> None:
     for text, offset in cells:
-        draw_text(cr, text, mm_to_pt(x + offset), mm_to_pt(y), family, 7.0, "bold")
+        draw_text(cr, text, mm_to_pt(x + offset), mm_to_pt(y), family, 7.0, "semibold")
 
 
 def _draw_section(
@@ -221,12 +221,12 @@ def _draw_section(
 ) -> int:
     capacity_per_column = _capacity(page, row_mm) // _COLUMNS
     capacity = capacity_per_column * _COLUMNS
-    family = style.label.font_family
+    family = style.typography.sans_family
     column_width = (page.width_mm - 2 * page.margin_mm) / _COLUMNS
     for offset in range(0, max(1, len(entries)), capacity):
         cr.set_source_rgb(0.0, 0.0, 0.0)
         draw_text(
-            cr, title, mm_to_pt(page.margin_mm), mm_to_pt(page.margin_mm), family, 11.0, "bold"
+            cr, title, mm_to_pt(page.margin_mm), mm_to_pt(page.margin_mm), family, 11.0, "semibold"
         )
         for column in range(_COLUMNS):
             _draw_headers(

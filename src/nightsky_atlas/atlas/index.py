@@ -10,11 +10,12 @@ from dataclasses import dataclass
 from nightsky_atlas.atlas.config import EditionConfig
 from nightsky_atlas.catalog.common_names import curated_common_name
 from nightsky_atlas.catalog.constellations import constellation_name
-from nightsky_atlas.catalog.models import DeepSkyObject, Star
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.priority import messier_id
 from nightsky_atlas.catalog.star_names import StarName, hip_number
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.presentation import presentation_from_edition
+from nightsky_atlas.layout.dso_labels import preferred_catalogue_designation
 from nightsky_atlas.scene.models import SceneDso
 
 __all__ = [
@@ -123,8 +124,11 @@ def is_indexable_dso(scene_dso: SceneDso) -> bool:
 def _canonical_designation(dso: DeepSkyObject) -> str:
     if (messier := messier_id(dso)) is not None:
         return messier
-    match = re.fullmatch(r"([A-Za-z]+)\s*(\d+)", dso.id)
-    return f"{match.group(1).upper()} {int(match.group(2))}" if match else dso.id
+    designation = preferred_catalogue_designation(dso)
+    match = re.fullmatch(r"([A-Za-z]+)\s*(\d+)([A-Z]?)", designation)
+    return (
+        f"{match.group(1).upper()} {int(match.group(2))}{match.group(3)}" if match else designation
+    )
 
 
 def natural_designation_key(value: str) -> tuple[int, str, int, str]:
@@ -142,7 +146,21 @@ def natural_designation_key(value: str) -> tuple[int, str, int, str]:
 
 
 def _type_name(dso: DeepSkyObject) -> str:
+    if dso.object_type == DsoType.OTHER and dso.semantic_subtype == "star cloud":
+        return "Star Cloud"
+    if dso.object_type == DsoType.GALAXY_CLUSTER:
+        subtype = (dso.semantic_subtype or "").lower()
+        if subtype == "galaxy pair":
+            return "Galaxy Pair"
+        if subtype == "galaxy triplet" or "group" in subtype:
+            return "Galaxy Group"
     return dso.object_type.value.replace("_", " ").title()
+
+
+def _constellation_abbreviation(dso: DeepSkyObject) -> str:
+    if dso.constellation in {"Se1", "Se2"}:
+        return "Ser"
+    return dso.constellation or ""
 
 
 def _angular_distance(chart: ChartDefinition, ra_deg: float, dec_deg: float) -> float:
@@ -211,7 +229,7 @@ def build_atlas_index(
                 dso.ra_deg,
                 dso.dec_deg,
                 _type_name(dso),
-                dso.constellation or "",
+                _constellation_abbreviation(dso),
                 chart_codes[0],
                 chart_codes[1:],
                 (curated.name,) if curated is not None else (),

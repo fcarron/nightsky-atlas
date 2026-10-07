@@ -108,6 +108,7 @@ def compass_candidates(
     exact_edge_gaps_mm: tuple[float, ...] | None = None,
     positions: tuple[CompassPosition, ...] | None = None,
     positions_by_ring: tuple[tuple[CompassPosition, ...], ...] | None = None,
+    allowed_rect: PageRect | None = None,
     ring_count: int = 1,
     ring_gap_mm: float = 2.5,
 ) -> tuple[LabelCandidate, ...]:
@@ -192,6 +193,13 @@ def compass_candidates(
                         width_mm=bounds.width_mm,
                         height_mm=bounds.height_mm,
                     )
+            if allowed_rect is not None and not (
+                bounds.left_mm >= allowed_rect.left_mm - 1e-9
+                and bounds.top_mm >= allowed_rect.top_mm - 1e-9
+                and bounds.right_mm <= allowed_rect.right_mm + 1e-9
+                and bounds.bottom_mm <= allowed_rect.bottom_mm + 1e-9
+            ):
+                continue
             candidate_id = (
                 f"{label_id}:{position.value}"
                 if ring == 0

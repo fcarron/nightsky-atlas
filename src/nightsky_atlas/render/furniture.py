@@ -167,9 +167,18 @@ def _navigation(
         neighbour_ids = grouped[direction]
         for position, neighbour_id in enumerate(neighbour_ids):
             along_edge = (position + 1) / (len(neighbour_ids) + 1)
-            code = neighbour_code(neighbour_id, presentation.edition_code)
+            code = neighbour_code(
+                neighbour_id,
+                presentation.edition_code,
+                presentation.chart_index_width,
+            )
             text = f"{direction}: {code}"
-            markup = neighbour_markup(direction, neighbour_id, presentation.edition_code)
+            markup = neighbour_markup(
+                direction,
+                neighbour_id,
+                presentation.edition_code,
+                presentation.chart_index_width,
+            )
             metrics = TextMeasurer(family, nav.font_size_pt).measure_markup_mm(markup)
             if direction == "N":
                 placed.append(

@@ -1,0 +1,24 @@
+# Experimental one-chart Eyepiece Deep definition at 80 mm/degree.
+extends: eyepiece.yaml
+id: eyepieceDeep
+edition: {name: Eyepiece Deep, code: ED}
+mm_per_degree: 80.0
+stellar_limit_magnitude: 13.5
+charts:
+  - id: eyepieceDeep-minkowski-1-64
+    center_ra_deg: 282.4989
+    center_dec_deg: 35.2425
+    width_deg: 3.375
+    height_deg: 2.25
+  - id: eyepieceDeep-013
+    center_ra_deg: 250.42345833333337
+    center_dec_deg: 36.46130555555556
+    width_deg: 3.375
+    height_deg: 2.25
+  - id: eyepieceDeep-105
+    center_ra_deg: 339.2667083333333
+    center_dec_deg: 34.415527777777775
+    width_deg: 3.375
+    height_deg: 2.25
+tiling: null
+detail_charts: []

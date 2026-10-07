@@ -11,6 +11,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
 from nightsky_atlas.catalog.constellations import ConstellationSegment
+from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.observing_lists import canonical_designation
 from nightsky_atlas.catalog.outlines import NebulaOutline
@@ -54,7 +55,7 @@ def _project_inside(
 
 def build_scene(
     definition: ChartDefinition,
-    stars: Iterable[Star] = (),
+    stars: Iterable[Star | FaintStar] = (),
     deep_sky_objects: Iterable[DeepSkyObject] = (),
     *,
     projection: StereographicProjection | None = None,
@@ -124,15 +125,11 @@ def build_scene(
         if primary_point is None:
             if system.ra_deg is None or system.dec_deg is None:
                 continue
-            primary_point = _project_inside(
-                projector, definition, system.ra_deg, system.dec_deg
-            )
+            primary_point = _project_inside(projector, definition, system.ra_deg, system.dec_deg)
         if primary_point is None:
             continue
         component_points = tuple(
-            star_points[star_id]
-            for star_id in system.component_star_ids
-            if star_id in star_points
+            star_points[star_id] for star_id in system.component_star_ids if star_id in star_points
         )
         scene_systems.append(
             SceneStarSystem(
@@ -343,11 +340,11 @@ def _project_segments(
         else:
             for run_index, run in enumerate(runs):
                 segments.append(
-                SceneSegment(
-                    source_id=f"{source.id}#{kind}:{run_index}",
-                    points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in run),
-                    constellation_id=source.constellation_id,
-                )
+                    SceneSegment(
+                        source_id=f"{source.id}#{kind}:{run_index}",
+                        points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in run),
+                        constellation_id=source.constellation_id,
+                    )
                 )
     return tuple(segments)
 

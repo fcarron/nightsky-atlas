@@ -464,6 +464,11 @@ def build_grid_labels(
                     ("left", rect.left_mm + pad, rect.width_mm),
                     ("right", rect.right_mm - pad - metrics.width_mm, rect.width_mm),
                 )
+            has_side_crossing = any(
+                rect.top_mm <= y <= rect.bottom_mm
+                for edge_x in (rect.left_mm, rect.right_mm)
+                for y in _scan_crossings(line.points, edge_x, "x")
+            )
             for edge, left, available in placements:
                 if outside and available < pad + metrics.width_mm - _MULTIPLE_TOL:
                     continue
@@ -486,6 +491,37 @@ def build_grid_labels(
                             rect.bottom_mm - pad - metrics.height_mm,
                         )
                     add(edge, "dec", line.value_deg, text, left, top, y)
+            if not has_side_crossing:
+                if outside:
+                    horizontal_placements = (
+                        ("top", rect.top_mm - pad - metrics.height_mm, rect.top_mm),
+                        ("bottom", rect.bottom_mm + pad, page.height_mm - rect.bottom_mm),
+                    )
+                else:
+                    horizontal_placements = (
+                        ("top", rect.top_mm + pad, rect.height_mm),
+                        ("bottom", rect.bottom_mm - pad - metrics.height_mm, rect.height_mm),
+                    )
+                for edge, top, available in horizontal_placements:
+                    if outside and available < pad + metrics.height_mm - _MULTIPLE_TOL:
+                        continue
+                    edge_y = rect.top_mm if edge == "top" else rect.bottom_mm
+                    for x in _scan_crossings(line.points, edge_y, "y"):
+                        if not rect.left_mm <= x <= rect.right_mm:
+                            continue
+                        if outside:
+                            left = _clamp(
+                                x - metrics.width_mm / 2.0,
+                                0.0,
+                                page.width_mm - metrics.width_mm,
+                            )
+                        else:
+                            left = _clamp(
+                                x - metrics.width_mm / 2.0,
+                                rect.left_mm + pad,
+                                rect.right_mm - pad - metrics.width_mm,
+                            )
+                        add(edge, "dec", line.value_deg, text, left, top, x)
 
     return _thin_labels(labels, spacing_mm=grid.label_min_spacing_mm)
 

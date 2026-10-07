@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import cairo
 
 from nightsky_atlas.atlas.config import StyleConfig
+from nightsky_atlas.catalog.models import Star
 from nightsky_atlas.catalog.star_names import hip_number
 from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.render.symbols import StarSizeModel
@@ -40,6 +41,8 @@ def resolve_variable_star_marks(
         return ()
     marks = []
     for scene_star in scene.stars:
+        if not isinstance(scene_star.star, Star):
+            continue
         if scene_star.star.id in suppressed_star_ids:
             continue
         hip = hip_number(scene_star.star.hip_id)

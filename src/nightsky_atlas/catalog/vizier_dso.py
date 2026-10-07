@@ -254,6 +254,25 @@ VIZIER_CATALOGUES: tuple[VizierCatalogueSpec, ...] = (
         row_filter_values=("", "*"),
     ),
     VizierCatalogueSpec(
+        "IV/24:CuratedPN",
+        "IV/24/table1",
+        "Four individually curated planetary nebulae in Kohoutek CGPN",
+        "2001A&A...378..843K",
+        "FK4, equinox/epoch B1950.0; ICRS computed by VizieR",
+        "Name",
+        "RAB1950",
+        "DEB1950",
+        "_RAJ2000",
+        "_DEJ2000",
+        DsoType.PLANETARY_NEBULA,
+        "planetary nebula",
+        raw_alias_fields=("PK",),
+        vizier_id="IV/24",
+        designation_pattern=r"^(?:M\s*1-64|Jn\s*1|J\s*900|Sp\s*1)$",
+        row_filter_field="f_PK",
+        row_filter_values=("", "*"),
+    ),
+    VizierCatalogueSpec(
         "VII/202:Palomar",
         "VII/202/catalog",
         "Palomar globular clusters (Harris catalogue)",
@@ -423,6 +442,17 @@ def format_vizier_designation(catalogue_id: str, value: str) -> str:
     token = value.strip()
     if not token:
         raise ValueError(f"empty designation for {catalogue_id}")
+    if catalogue_id == "IV/24:CuratedPN":
+        names = {
+            "M1-64": "Minkowski 1-64",
+            "JN1": "Jones 1",
+            "J900": "J 900",
+            "SP1": "Shapley 1",
+        }
+        normalized = re.sub(r"\s+", "", token).upper()
+        if normalized not in names:
+            raise ValueError(f"unexpected curated PN designation: {value!r}")
+        return names[normalized]
     if catalogue_id == "VII/155":
         pgc = re.fullmatch(r"PGC\s*0*(\d+)", token, flags=re.IGNORECASE)
         if pgc is not None:
@@ -462,7 +492,10 @@ def _aliases(
             found.extend(
                 f"B {match.group(0).lstrip('B').strip()}" for match in _BARNARD_IDS.finditer(value)
             )
-        elif field_name == "PK" and spec.catalogue_id == "IV/24:AbellPN":
+        elif field_name == "PK" and spec.catalogue_id in {
+            "IV/24:AbellPN",
+            "IV/24:CuratedPN",
+        }:
             found.append(f"PK {value.strip()}")
         elif field_name == "OCL":
             found.append(f"OCL {value.strip()}")

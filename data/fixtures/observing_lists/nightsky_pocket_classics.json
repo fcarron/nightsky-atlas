@@ -1,0 +1,7 @@
+{
+  "id": "nightsky_pocket_classics",
+  "name": "NightSkyAtlas Pocket visual classics",
+  "source": "NightSkyAtlas editorial selection; docs/POCKET_DSO_AUDIT.md",
+  "license": "MIT",
+  "objects": ["Mel 20", "NGC 281", "NGC 2359"]
+}

@@ -32,12 +32,11 @@ def collect_build_inputs(
             continue
         path = Path(selected)
         if path.is_file():
-            fingerprints[name] = {
-                "path": str(path), "kind": "file", "sha256": file_sha256(path)
-            }
+            fingerprints[name] = {"path": str(path), "kind": "file", "sha256": file_sha256(path)}
         elif path.is_dir():
             files = sorted(
-                item for item in path.rglob("*")
+                item
+                for item in path.rglob("*")
                 if item.is_file() and "__pycache__" not in item.parts and item.suffix != ".pyc"
             )
             digest = hashlib.sha256()
@@ -48,7 +47,9 @@ def collect_build_inputs(
                 digest.update(file_sha256(item).encode("ascii"))
                 digest.update(b"\0")
             fingerprints[name] = {
-                "path": str(path), "kind": "directory", "sha256": digest.hexdigest(),
+                "path": str(path),
+                "kind": "directory",
+                "sha256": digest.hexdigest(),
                 "file_count": len(files),
             }
         else:
@@ -59,6 +60,7 @@ def collect_build_inputs(
 def collect_data_sources(
     *,
     star_store: str | Path | None,
+    faint_star_store: str | Path | None = None,
     stars_csv: str | Path | None,
     dsos_path: str | Path,
     double_stars_path: str | Path | bool | None,
@@ -66,6 +68,7 @@ def collect_data_sources(
     """Record only the catalogue files actually selected for this build."""
     selected = (
         ("stars", star_store if star_store is not None else stars_csv),
+        ("faint_stars", faint_star_store),
         ("deep_sky", dsos_path),
         ("double_stars", double_stars_path if double_stars_path is not False else None),
     )
@@ -137,6 +140,8 @@ def validate_publication_inputs(
             issues.append(f"processed catalogue checksum does not match {source['path']}")
         if not manifest.get("source") or not manifest.get("license"):
             issues.append(f"incomplete source or license metadata for {source['path']}")
+        if source["kind"] == "faint_stars" and manifest.get("all_sky_complete") is not True:
+            issues.append("publication faint-star supplement does not contain all UCAC4 sky zones")
     if issues:
         raise ValueError("publication preflight failed: " + "; ".join(issues))
 

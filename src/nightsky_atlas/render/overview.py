@@ -265,7 +265,7 @@ def draw_overview_spread_page(
 
     title_y = page.margin_mm + config.title_font_size_pt * 0.3528 + 2.5
     heading_y = title_y + config.subtitle_font_size_pt * 0.3528 + 3.5
-    radius_mm = min(config.radius_mm * 0.72, 54.0)
+    radius_mm = min(config.radius_mm * 0.72 * north.radius_deg / 90.0, 65.0)
     center_y = (heading_y + 6.0 + page.height_mm - page.margin_mm) / 2.0
     centers_x = (page.width_mm * 0.27, page.width_mm * 0.73)
     cr.set_source_rgb(0.1, 0.1, 0.1)
