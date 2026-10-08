@@ -222,9 +222,10 @@ def test_decorative_symbol_reach_stays_within_extent() -> None:
         (DsoType.OPEN_CLUSTER, DsoShape.DASHED_CIRCLE),
         (DsoType.GLOBULAR_CLUSTER, DsoShape.CIRCLE_CROSS),
         (DsoType.PLANETARY_NEBULA, DsoShape.SPOKED_CIRCLE),
-        (DsoType.BRIGHT_NEBULA, DsoShape.DASHED_SQUARE),
+        (DsoType.BRIGHT_NEBULA, DsoShape.SQUARE),
         (DsoType.SUPERNOVA_REMNANT, DsoShape.DASHED_SQUARE),
-        (DsoType.GALAXY_CLUSTER, DsoShape.SQUARE),
+        (DsoType.DARK_NEBULA, DsoShape.DASHED_SQUARE),
+        (DsoType.GALAXY_CLUSTER, DsoShape.DASHED_CIRCLE),
     ],
 )
 def test_dso_shape_mapping(object_type: DsoType, expected: DsoShape) -> None:

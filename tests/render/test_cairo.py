@@ -311,7 +311,7 @@ def test_star_overlapping_large_nebula_symbol_is_redrawn_in_foreground() -> None
     )
 
 
-def test_contour_suppresses_only_matching_dashed_square_fallback(monkeypatch) -> None:
+def test_bright_nebula_contour_preserves_contour_and_solid_square_fallback(monkeypatch) -> None:
     nebula = DeepSkyObject(
         id="NGC7000",
         ra_deg=187.5,
@@ -339,7 +339,39 @@ def test_contour_suppresses_only_matching_dashed_square_fallback(monkeypatch) ->
     draw_chart_page(cairo.Context(surface), outlined_scene, transform, STYLE)
     assert drawn_shapes == []
     draw_chart_page(cairo.Context(surface), fallback_scene, transform, STYLE)
-    assert drawn_shapes == [DsoShape.DASHED_SQUARE]
+    assert drawn_shapes == [DsoShape.SQUARE]
+
+
+@pytest.mark.parametrize(
+    ("object_type", "expected_shape"),
+    (
+        (DsoType.BRIGHT_NEBULA, DsoShape.SQUARE),
+        (DsoType.DARK_NEBULA, DsoShape.DASHED_SQUARE),
+        (DsoType.GALAXY_CLUSTER, DsoShape.DASHED_CIRCLE),
+    ),
+)
+def test_dso_fallback_renderer_uses_requested_symbol(
+    monkeypatch, object_type: DsoType, expected_shape: DsoShape
+) -> None:
+    dso = DeepSkyObject(
+        id="TEST-DSO",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=object_type,
+        provenance=Provenance("TEST", "TEST-DSO"),
+    )
+    scene = build_scene(CHART, (), (dso,))
+    drawn_shapes = []
+    monkeypatch.setattr(
+        "nightsky_atlas.render.cairo.draw_dso_symbol",
+        lambda _cr, _x, _y, extent, _dash: drawn_shapes.append(extent.shape),
+    )
+    transform = PageTransform(chart=CHART, page=PAGE)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
+
+    draw_chart_page(cairo.Context(surface), scene, transform, STYLE)
+
+    assert drawn_shapes == [expected_shape]
 
 
 def test_supernova_remnant_contours_are_solid(monkeypatch) -> None:
