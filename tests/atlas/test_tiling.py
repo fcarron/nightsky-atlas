@@ -176,17 +176,20 @@ def test_neighbours_reference_existing_charts() -> None:
     assert {"N", "S"} <= directions_seen
 
 
-def test_polar_caps_have_no_east_west_neighbour() -> None:
+def test_polar_caps_navigate_to_surrounding_charts_on_all_edges() -> None:
     charts = with_neighbours(tile_sky("standard", standard_spec()))
     for chart in charts:
         if abs(chart.center_dec_deg) >= 89.0:
             directions = {direction for direction, _ in chart.neighbours}
-            assert directions in ({"N"}, {"S"})
+            assert directions == {"N", "E", "S", "W"}
+            assert len({neighbour for _, neighbour in chart.neighbours}) >= 3
 
 
 def test_east_west_neighbours_are_symmetric() -> None:
     charts = {chart.id: chart for chart in with_neighbours(tile_sky("standard", standard_spec()))}
     for chart in charts.values():
+        if abs(chart.center_dec_deg) >= 89.0:
+            continue
         neighbours = dict(chart.neighbours)
         if "E" not in neighbours:
             continue

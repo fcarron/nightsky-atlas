@@ -19,7 +19,12 @@ from nightsky_atlas.render.symbols import (
     compact_star_reference_magnitudes,
     dso_symbol_extent,
 )
-from nightsky_atlas.render.text import draw_text, draw_tracked_text, measure_point_size
+from nightsky_atlas.render.text import (
+    draw_centered_text,
+    draw_text,
+    draw_tracked_text,
+    measure_point_size,
+)
 from nightsky_atlas.render.variable_stars import draw_variable_star_ring
 from nightsky_atlas.units import mm_to_pt
 
@@ -40,6 +45,7 @@ class LegendSymbol:
     extent: SymbolExtent
     minimum_extent: SymbolExtent | None = None
     minimum_label: str | None = None
+    size_classes: tuple[tuple[str, SymbolExtent], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,15 +66,19 @@ def galaxy_visibility_examples(style: StyleConfig) -> tuple[GalaxyVisibilityExam
     )
 
 
-def dso_size_legend_text(style: StyleConfig) -> str:
-    """Describe edition angular floors for DSO sizes and galaxy axes."""
-    minimum = style.dso.galaxy.min_angular_major_axis_arcmin
-    if minimum is None:
-        return "Angular extents follow catalogue sizes."
-    value = f"{minimum:g}′"
+def planetary_nebula_size_ranges(threshold_arcmin: float) -> tuple[str, ...]:
+    """Return edition-specific printed size ranges for the PN legend samples."""
+
+    def format_arcmin(value: float) -> str:
+        return f"{value:.3f}".rstrip("0").rstrip(".")
+
+    large_min = threshold_arcmin * 0.25
+    medium_min = threshold_arcmin * 0.10
     return (
-        f"First mark: to scale · second: <{value}, drawn at {value} minimum. "
-        f"Print floors may exceed it; galaxy limit is major axis. Other: fixed."
+        f"≥{format_arcmin(threshold_arcmin)}′",
+        f"{format_arcmin(large_min)}–<{format_arcmin(threshold_arcmin)}′",
+        f"{format_arcmin(medium_min)}–<{format_arcmin(large_min)}′",
+        f"<{format_arcmin(medium_min)}′",
     )
 
 
@@ -97,6 +107,8 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
         if not extent_style.use_angular_size or minimum_arcmin is None:
             minimum_arcmin = None
         sample_arcmin = minimum_arcmin * 2.5 if minimum_arcmin is not None else None
+        if object_type == DsoType.PLANETARY_NEBULA and minimum_arcmin is not None:
+            sample_arcmin = minimum_arcmin
         minor_arcmin = (
             sample_arcmin * 0.4 if object_type == DsoType.GALAXY and sample_arcmin else None
         )
@@ -123,6 +135,7 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
         )
         minimum_extent = None
         minimum_label = None
+        size_classes: tuple[tuple[str, SymbolExtent], ...] = ()
         if minimum_arcmin is not None:
             below_minimum = minimum_arcmin * 0.5
             below_minor = below_minimum * 0.4 if object_type == DsoType.GALAXY else None
@@ -138,6 +151,28 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
                 style=style,
             )
             minimum_label = f"<{minimum_arcmin:g}′"
+            if object_type == DsoType.PLANETARY_NEBULA:
+                class_samples = (
+                    ("large", minimum_arcmin * 0.5),
+                    ("medium", minimum_arcmin * 0.15),
+                    ("small", minimum_arcmin * 0.05),
+                )
+                size_classes = tuple(
+                    (
+                        label,
+                        dso_symbol_extent(
+                            make_sample(
+                                f"legend:{object_type.value}:{label}",
+                                object_type,
+                                size_arcmin,
+                                None,
+                            ),
+                            mm_per_deg=mm_per_degree,
+                            style=style,
+                        ),
+                    )
+                    for label, size_arcmin in class_samples
+                )
         symbols.append(
             LegendSymbol(
                 name,
@@ -146,6 +181,7 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
                 dso_symbol_extent(sample, mm_per_deg=mm_per_degree, style=style),
                 minimum_extent,
                 minimum_label,
+                size_classes,
             )
         )
     return tuple(symbols)
@@ -896,22 +932,41 @@ def draw_field_guide(
     _draw_telrad(cr, telrad_center_x, telrad_center_y, mm_per_degree, family)
 
     _text(cr, "DEEP-SKY OBJECTS", left, 114.0, family, 7.0, bold=True, gray=0.38)
-    _text(
-        cr,
-        "Shape = type · " + dso_size_legend_text(style),
-        left,
-        119.0,
-        family,
-        6.4,
-        gray=0.35,
-    )
     for index, symbol in enumerate(legend_symbols(style, mm_per_degree)):
         column, row = index % 2, index // 2
         x = left + column * 67.0
-        y = 122.0 + row * 8.0
+        y = 118.0 + row * 8.0
         _text(cr, symbol.name, x + 1.5, y + 1.5, family, 5.8, bold=True)
         cr.set_source_rgb(0.0, 0.0, 0.0)
         cr.set_line_width(mm_to_pt(style.dso.line_width_mm))
+        if symbol.size_classes:
+            ranges = planetary_nebula_size_ranges(symbol.angular_size_arcmin or 0.0)
+            samples = (
+                ("scale", symbol.extent),
+                *symbol.size_classes,
+            )
+            for sample_index, (_, extent) in enumerate(samples):
+                center_x = x + 27.0 + sample_index * 10.0
+                cr.set_source_rgb(0.0, 0.0, 0.0)
+                cr.new_path()
+                draw_dso_symbol(
+                    cr,
+                    mm_to_pt(center_x),
+                    mm_to_pt(y + 4.1),
+                    extent,
+                    style.dso.dash_mm,
+                )
+                cr.set_source_rgb(0.25, 0.25, 0.25)
+                draw_centered_text(
+                    cr,
+                    ranges[sample_index],
+                    mm_to_pt(center_x),
+                    mm_to_pt(y + 7.5),
+                    family,
+                    4.4,
+                    "normal",
+                )
+            continue
         cr.new_path()
         draw_dso_symbol(
             cr,

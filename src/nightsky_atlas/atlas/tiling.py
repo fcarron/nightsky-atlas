@@ -539,13 +539,14 @@ def neighbour_overlap_report(
 def with_neighbours(
     charts: tuple[ChartDefinition, ...], tolerance_deg: float = 0.0
 ) -> tuple[ChartDefinition, ...]:
-    """Assign up to three useful N/S references and one E/W reference.
+    """Assign useful neighbouring charts to the edges of each page.
 
     East is increasing right ascension.  Charts are grouped by declination band
     and connected within a band by RA order.  Across bands, references are
     selected from charts that cover a meaningful part of the source chart's
-    corresponding projected edge.  Single-chart rings have no east/west
-    neighbour.
+    corresponding projected edge. Polar caps use all four page edges to point
+    to surrounding charts in the adjacent declination ring. Single-chart rings
+    have no same-ring east/west neighbour.
     """
     bands = sorted({chart.center_dec_deg for chart in charts})
     band_index = {center: index for index, center in enumerate(bands)}
@@ -574,12 +575,24 @@ def with_neighbours(
         direction: str,
     ) -> tuple[ChartDefinition, ...]:
         projection = StereographicProjection(source.center_ra_deg, source.center_dec_deg)
-        eta = source.height_deg / 2.0 if direction == "N" else -source.height_deg / 2.0
+        if direction in {"N", "S"}:
+            eta = source.height_deg / 2.0 if direction == "N" else -source.height_deg / 2.0
+        else:
+            eta = None
         samples = tuple(
             projection.inverse(
-                -source.width_deg / 2.0
-                + source.width_deg * index / (_EDGE_SAMPLE_COUNT - 1),
-                eta,
+                (
+                    -source.width_deg / 2.0
+                    + source.width_deg * index / (_EDGE_SAMPLE_COUNT - 1)
+                    if direction in {"N", "S"}
+                    else (source.width_deg / 2.0 if direction == "E" else -source.width_deg / 2.0)
+                ),
+                (
+                    eta
+                    if eta is not None
+                    else source.height_deg / 2.0
+                    - source.height_deg * index / (_EDGE_SAMPLE_COUNT - 1)
+                ),
             )
             for index in range(_EDGE_SAMPLE_COUNT)
         )
@@ -649,12 +662,19 @@ def with_neighbours(
             neighbours.append(("E", arc[(position + 1) % len(arc)].id))
             neighbours.append(("W", arc[(position - 1) % len(arc)].id))
         index = band_index[chart.center_dec_deg]
-        if index + 1 < len(bands):
+        if abs(chart.center_dec_deg) >= 89.0:
+            adjacent_band = bands[-2] if chart.center_dec_deg > 0.0 else bands[1]
+            for direction in ("N", "E", "S", "W"):
+                neighbours.extend(
+                    (direction, neighbour.id)
+                    for neighbour in edge_neighbours(chart, by_band[adjacent_band], direction)
+                )
+        elif index + 1 < len(bands):
             neighbours.extend(
                 ("N", neighbour.id)
                 for neighbour in edge_neighbours(chart, by_band[bands[index + 1]], "N")
             )
-        if index - 1 >= 0:
+        if abs(chart.center_dec_deg) < 89.0 and index - 1 >= 0:
             neighbours.extend(
                 ("S", neighbour.id)
                 for neighbour in edge_neighbours(chart, by_band[bands[index - 1]], "S")

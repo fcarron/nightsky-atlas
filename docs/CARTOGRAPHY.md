@@ -74,8 +74,9 @@ above, which are already the equal north/south minimum.
   overlap 1..4, 259,200 samples.
 - Every declared N/S/E/W neighbour pair shares covered sky
   (`neighbour_overlap_report`): 629 pairs, 0 missing.
-- The two polar caps have no east/west neighbour; the remaining rings are
-  complete circles.
+- The two polar caps link to surrounding charts along all four page edges;
+  other single-chart rings have no same-ring east/west neighbour. The remaining
+  multi-chart rings are complete circles.
 
 ## Build
 

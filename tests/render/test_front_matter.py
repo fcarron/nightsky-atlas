@@ -9,9 +9,9 @@ from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.render import front_matter
 from nightsky_atlas.render.front_matter import (
     draw_field_guide,
-    dso_size_legend_text,
     galaxy_visibility_examples,
     legend_symbols,
+    planetary_nebula_size_ranges,
     telrad_ring_diameters_mm,
 )
 from nightsky_atlas.render.symbols import compact_star_reference_magnitudes
@@ -40,6 +40,8 @@ def _configured_mm_per_degree(edition: str) -> float:
         ("pocket", 5.0, 20.0, 50.0),
         ("standard", 10.0, 10.0, 25.0),
         ("deep", 20.0, 5.0, 12.5),
+        ("eyepiece", 40.0, 2.5, 6.25),
+        ("eyepiece_deep", 80.0, 2.5, 6.25),
     ),
 )
 def test_legend_uses_edition_dso_geometry(
@@ -66,27 +68,43 @@ def test_legend_uses_edition_dso_geometry(
     assert globular.minimum_extent is not None
     assert symbols["Open cluster"].minimum_extent is not None
     assert symbols["Planetary nebula"].minimum_extent is not None
-    if edition == "deep":
+    planetary = symbols["Planetary nebula"]
+    assert planetary.angular_size_arcmin == pytest.approx(minimum)
+    assert tuple(label for label, _ in planetary.size_classes) == (
+        "large",
+        "medium",
+        "small",
+    )
+    pn_widths = tuple(extent.width_mm for _, extent in planetary.size_classes)
+    assert pn_widths[0] > pn_widths[1] > pn_widths[2]
+    if edition in {"deep", "eyepiece", "eyepiece_deep"}:
         assert symbols["Bright nebula / SNR"].minimum_extent is None
         assert symbols["Dark nebula"].minimum_extent is None
     else:
         assert symbols["Bright nebula / SNR"].minimum_extent is not None
         assert symbols["Dark nebula"].minimum_extent is not None
     assert symbols["Galaxy cluster"].minimum_extent is not None
-    assert symbols["Planetary nebula"].extent.width_mm > mm_per_degree * 6.0 / 60.0
+    assert planetary.extent.width_mm == pytest.approx(
+        minimum / 60.0 * mm_per_degree * 1.85
+    )
+    assert symbols["Other / unknown"].size_classes == ()
     assert symbols["Other / unknown"].angular_size_arcmin is None
     assert symbols["Other / unknown"].minimum_extent is None
 
 
-@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
-def test_dso_legend_marks_large_example_to_scale_and_subminimum_sample(edition: str) -> None:
-    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
-    note = dso_size_legend_text(style)
-
-    assert "First mark: to scale" in note
-    assert "second: <" in note
-    assert "drawn at" in note
-    assert "Other: fixed" in note
+@pytest.mark.parametrize(
+    ("threshold", "expected"),
+    (
+        (20.0, ("≥20′", "5–<20′", "2–<5′", "<2′")),
+        (10.0, ("≥10′", "2.5–<10′", "1–<2.5′", "<1′")),
+        (5.0, ("≥5′", "1.25–<5′", "0.5–<1.25′", "<0.5′")),
+        (2.5, ("≥2.5′", "0.625–<2.5′", "0.25–<0.625′", "<0.25′")),
+    ),
+)
+def test_planetary_nebula_legend_prints_edition_specific_size_ranges(
+    threshold: float, expected: tuple[str, ...]
+) -> None:
+    assert planetary_nebula_size_ranges(threshold) == expected
 
 
 @pytest.mark.parametrize(
@@ -129,18 +147,6 @@ def test_galaxy_visibility_key_uses_all_configured_contour_styles(edition: str) 
         style.dso.galaxy_contours.fine,
         style.dso.galaxy_contours.dotted,
     )
-
-
-@pytest.mark.parametrize(
-    ("edition", "minimum"), (("pocket", "20′"), ("standard", "10′"), ("deep", "5′"))
-)
-def test_dso_size_legend_explains_edition_minimum(edition: str, minimum: str) -> None:
-    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
-    note = dso_size_legend_text(style)
-    assert f"second: <{minimum}" in note
-    assert f"drawn at {minimum} minimum" in note
-    assert "Print floors may exceed it" in note
-    assert "galaxy limit is major axis" in note
 
 
 def test_standard_design_scale_is_exact_and_chart_frame_follows_it() -> None:
