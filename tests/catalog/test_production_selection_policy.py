@@ -61,7 +61,7 @@ def test_observer_catalogue_examples_follow_production_policy(production_state) 
         "NGC 7331": (True, True, True),
         "NGC 6207": (True, True, True),
         "IC 4617": (False, True, True),
-        "Cr 399": (True, True, True),
+        "Cr 399": (False, True, True),
         "Pal 5": (False, True, True),
         "Ter 7": (False, True, True),
         "Abell 39": (False, True, True),
@@ -91,18 +91,35 @@ def test_production_selection_hierarchy_and_type_counts(production_state) -> Non
     rows = {row["type"]: row for row in report["type_counts"]}
     assert rows["galaxy"]["total"] >= 10522
     assert sum(row["total"] for row in rows.values()) == report["physical_dso_count"]
-    for edition in ("pocket", "standard", "deep", "reference"):
+    for edition in ("pocket", "standard", "deep", "eyepiece", "reference"):
         assert sum(row[edition] for row in rows.values()) == report["edition_totals"][edition]
+    decisions = {
+        edition: {
+            object_id
+            for object_id, entry in report["objects"].items()
+            if entry["decisions"][edition]["selected"]
+        }
+        for edition in ("pocket", "standard", "deep", "eyepiece")
+    }
+    assert decisions["pocket"] <= decisions["standard"] <= decisions["deep"]
+    assert decisions["deep"] == decisions["eyepiece"]
     assert report["edition_totals"] == {
-        "pocket": 1317,
-        "standard": 3187,
-        "deep": 10481,
-        "reference": 14867,
+        "pocket": 1111,
+        "standard": 2999,
+        "deep": 10480,
+        "eyepiece": 10480,
+        "reference": 14866,
     }
     assert not {
         warning["code"]
         for warning in report["hierarchy_warnings"]
-        if warning["code"] in {"pocket_not_standard", "standard_not_deep"}
+        if warning["code"]
+        in {
+            "pocket_not_standard",
+            "standard_not_deep",
+            "deep_not_eyepiece",
+            "eyepiece_not_deep",
+        }
     }
 
 
@@ -259,9 +276,87 @@ def test_pocket_caldwell_double_cluster_has_only_component_objects(production_st
     }
 
 
-def test_production_selection_preserves_current_deep_and_reference_counts(production_state) -> None:
+def test_production_selection_matches_alpha_and_reference_counts(production_state) -> None:
     report = build_selection_report()
-    assert report["edition_totals"]["pocket"] == 1317
-    assert report["edition_totals"]["standard"] == 3187
-    assert report["edition_totals"]["deep"] == 10481
-    assert report["edition_totals"]["reference"] == 14867
+    assert report["edition_totals"]["pocket"] == 1111
+    assert report["edition_totals"]["standard"] == 2999
+    assert report["edition_totals"]["deep"] == 10480
+    assert report["edition_totals"]["eyepiece"] == 10480
+    assert report["edition_totals"]["reference"] == 14866
+
+
+def test_open_cluster_alpha_selection_and_double_cluster_aggregate(production_state) -> None:
+    objects, index, _ = production_state
+    report = build_selection_report()
+    oc_counts = next(row for row in report["type_counts"] if row["type"] == "open cluster")
+    simulated_counts = {
+        edition: oc_counts[edition] for edition in ("pocket", "standard", "deep", "eyepiece")
+    }
+    assert simulated_counts == {
+        "pocket": 272,
+        "standard": 303,
+        "deep": 812,
+        "eyepiece": 812,
+    }
+    selected = {
+        edition: {
+            object_id
+            for object_id, item in report["objects"].items()
+            if item["type"] == "open cluster" and item["decisions"][edition]["selected"]
+        }
+        for edition in ("pocket", "standard", "deep", "eyepiece")
+    }
+    assert selected["pocket"] <= selected["standard"] <= selected["deep"]
+    assert selected["deep"] == selected["eyepiece"]
+    assert all("C014" not in ids for ids in selected.values())
+
+    aggregate = find_object(objects, "C014")
+    assert aggregate is not None
+    assert aggregate.common_name and "Double Cluster" in aggregate.common_name
+    assert "C014" in report["objects"]
+    assert all(
+        not report["objects"]["C014"]["decisions"][edition]["selected"]
+        for edition in ("pocket", "standard", "deep", "eyepiece", "reference")
+    )
+
+    for designation in (
+        "M45",
+        "Mel 20",
+        "Mel 111",
+        "NGC 2451",
+        "NGC 2112",
+        "NGC 869",
+        "NGC 884",
+        "NGC 2244",
+        "Cr 399",
+    ):
+        obj = find_object(objects, designation)
+        assert obj is not None, designation
+        assert obj.id in selected["pocket"], designation
+        assert obj.id in selected["standard"], designation
+        assert obj.id in selected["deep"], designation
+
+    for designation in ("NGC 869", "NGC 884"):
+        obj = find_object(objects, designation)
+        assert obj is not None
+        assert (
+            "caldwell"
+            in select_dso(
+                obj, index=index, policy=resolve_edition(load_observing_lists_config(), "pocket")
+            ).list_memberships
+        )
+
+    hyades = find_object(objects, "C041")
+    assert hyades is not None
+    assert hyades.id in selected["pocket"]
+
+
+def test_magellanic_clusters_have_no_new_editorial_override(production_state) -> None:
+    objects, index, _ = production_state
+    config = load_observing_lists_config()
+    pocket = resolve_edition(config, "pocket")
+    for designation in ("NGC 346", "NGC 371"):
+        obj = find_object(objects, designation)
+        assert obj is not None
+        decision = select_dso(obj, index=index, policy=pocket)
+        assert not decision.forced

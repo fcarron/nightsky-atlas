@@ -10,7 +10,7 @@ from nightsky_atlas.atlas.observing_config import (
     resolve_edition,
     resolve_edition_hierarchy,
 )
-from nightsky_atlas.catalog.models import DeepSkyObject, DsoType
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
 from nightsky_atlas.catalog.observing_lists import build_membership_index, load_observing_lists
 from nightsky_atlas.catalog.openngc import parse_openngc_row
 from nightsky_atlas.catalog.selection import select_dso
@@ -207,9 +207,9 @@ def test_classic_targets_selected_with_explicit_pocket_reason(name, code):
     config = load_observing_lists_config(ROOT / "config/observing_lists.yaml")
     visibility = {
         edition: load_atlas_config(ROOT / "atlas" / f"{edition}.yaml").visibility.to_limits()
-        for edition in ("pocket", "standard", "deep")
+        for edition in ("pocket", "standard", "deep", "eyepiece")
     }
-    for edition in ("standard", "deep"):
+    for edition in ("standard", "deep", "eyepiece"):
         policy = resolve_edition(load_observing_lists_config(), edition)
         assert "nightsky_pocket_classics" not in policy.forced_lists
         inherited_policy = resolve_edition_hierarchy(
@@ -223,22 +223,35 @@ def test_pocket_target_inclusion_is_inherited_by_standard_and_deep():
     config = load_observing_lists_config(ROOT / "config/observing_lists.yaml")
     visibility = {
         edition: load_atlas_config(ROOT / "atlas" / f"{edition}.yaml").visibility.to_limits()
-        for edition in ("pocket", "standard", "deep")
+        for edition in ("pocket", "standard", "deep", "eyepiece")
     }
     policies = {
         edition: resolve_edition_hierarchy(
             config, edition, visibility_by_edition=visibility
         )
-        for edition in ("pocket", "standard", "deep")
+        for edition in ("pocket", "standard", "deep", "eyepiece")
     }
-    obj = source_object("NGC0001", "G")
-    index = {"NGC1": frozenset({"nightsky_pocket_classics"})}
+    obj = DeepSkyObject(
+        id="TEST-POCKET-ONLY",
+        ra_deg=75.0,
+        dec_deg=20.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance(catalogue="TEST", source_id="TEST-POCKET-ONLY"),
+    )
+    index = {"TEST-POCKET-ONLY": frozenset({"nightsky_pocket_classics"})}
     pocket = select_dso(obj, index=index, policy=policies["pocket"])
+    native_standard = select_dso(obj, index=index, policy=resolve_edition(config, "standard"))
+    native_deep = select_dso(obj, index=index, policy=resolve_edition(config, "deep"))
     standard = select_dso(obj, index=index, policy=policies["standard"])
     deep = select_dso(obj, index=index, policy=policies["deep"])
+    eyepiece = select_dso(obj, index=index, policy=policies["eyepiece"])
     assert pocket.forced
+    assert not (native_standard.visible or native_standard.forced)
+    assert not (native_deep.visible or native_deep.forced)
     assert standard.visible and "included_by_pocket_hierarchy" in standard.visibility_reasons
-    assert deep.visible
+    assert "pocket_curated_visual_target" in standard.visibility_reasons
+    assert deep.visible and "included_by_pocket_hierarchy" in deep.visibility_reasons
+    assert eyepiece.visible and eyepiece.visibility_reasons == deep.visibility_reasons
 
 
 def test_curated_bright_and_dark_nebulae_are_selected_in_standard_and_deep():

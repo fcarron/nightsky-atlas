@@ -842,13 +842,15 @@ def _add_atlas_commands(subparsers: argparse._SubParsersAction) -> None:
     atlas_object.set_defaults(handler=_command_dso_info)
 
     why_object = atlas_subparsers.add_parser(
-        "why-object", help="explain current Standard, Deep and Reference selection for an object"
+        "why-object", help="explain current edition selection for an object"
     )
     why_object.add_argument("--catalogue", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
     why_object.add_argument("--observing-config", type=Path, default=_DEFAULT_OBSERVING_CONFIG)
     why_object.add_argument("--observing-lists", type=Path, default=_DEFAULT_OBSERVING_LISTS)
     why_object.add_argument(
-        "--edition", choices=("pocket", "standard", "deep", "reference"), default=None
+        "--edition",
+        choices=("pocket", "standard", "deep", "eyepiece", "reference"),
+        default=None,
     )
     why_object.add_argument("--atlas", type=Path, default=Path("atlas/pocket.yaml"))
     why_object.add_argument("designation", help="canonical designation or known alias")
@@ -2072,10 +2074,12 @@ def _command_why_object(args: argparse.Namespace) -> int:
     sources = sorted(
         {obj.provenance.catalogue} | {record.catalogue_id for record in obj.catalogue_records}
     )
-    editions = (args.edition,) if args.edition else ("pocket", "standard", "deep", "reference")
+    editions = (args.edition,) if args.edition else (
+        "pocket", "standard", "deep", "eyepiece", "reference"
+    )
     visibility_by_edition = {
         edition: load_atlas_config(Path("atlas") / f"{edition}.yaml").visibility.to_limits()
-        for edition in ("pocket", "standard", "deep")
+        for edition in ("pocket", "standard", "deep", "eyepiece")
     }
     if "pocket" in editions:
         visibility_by_edition["pocket"] = load_atlas_config(args.atlas).visibility.to_limits()

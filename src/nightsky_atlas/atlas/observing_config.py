@@ -99,6 +99,9 @@ class TypeSelectionPolicyConfig(_StrictModel):
     minimum_visibility_score_400: float | None = None
     minimum_visibility_score_by_aperture: dict[int, float] = Field(default_factory=dict)
     minimum_major_axis_arcmin: float | None = None
+    magnitude_size_gate_maximum_magnitude: float | None = None
+    magnitude_size_gate_minimum_major_axis_arcmin: float | None = None
+    automatic_designation_prefixes: tuple[str, ...] = ()
     bright_magnitude_fallback: float | None = None
     maximum_magnitude: float | None = None
     maximum_surface_brightness: float | None = None
@@ -121,6 +124,7 @@ class TypeSelectionPolicyConfig(_StrictModel):
     def _validate_thresholds(self) -> TypeSelectionPolicyConfig:
         for key in (
             "minimum_major_axis_arcmin",
+            "magnitude_size_gate_minimum_major_axis_arcmin",
             "catalogue_minimum_major_axis_arcmin",
         ):
             value = getattr(self, key)
@@ -131,6 +135,10 @@ class TypeSelectionPolicyConfig(_StrictModel):
                 raise ValueError("visibility class minimum size must be >= 0")
         if self.minimum_member_count is not None and self.minimum_member_count < 0:
             raise ValueError("minimum_member_count must be >= 0")
+        if (self.magnitude_size_gate_maximum_magnitude is None) != (
+            self.magnitude_size_gate_minimum_major_axis_arcmin is None
+        ):
+            raise ValueError("magnitude-size gates require both magnitude and size limits")
         return self
 
 
@@ -324,22 +332,23 @@ def resolve_edition_hierarchy(
 
     ``visibility_by_edition`` should contain the limits loaded from each
     edition's atlas YAML. Missing entries use the normal selector defaults.
-    Parent inclusion affects only whether a target is present; the current
-    edition still supplies its own label priorities and presentation metadata.
+    Parent inclusion affects only whether a target is present. Eyepiece resolves
+    the complete Deep policy because both editions share the same DSO target set.
     """
+    resolved_edition_id = "deep" if edition_id == "eyepiece" else edition_id
     hierarchy = {
         "standard": ("pocket",),
         "deep": ("standard", "pocket"),
     }
     ancestors = []
-    for ancestor_id in hierarchy.get(edition_id, ()):
+    for ancestor_id in hierarchy.get(resolved_edition_id, ()):
         ancestor = resolve_edition(config, ancestor_id)
         visibility = (visibility_by_edition or {}).get(ancestor_id)
         if visibility is not None:
             ancestor = replace(ancestor, visibility=visibility)
         ancestors.append(ancestor)
-    policy = resolve_edition(config, edition_id)
-    visibility = (visibility_by_edition or {}).get(edition_id)
+    policy = resolve_edition(config, resolved_edition_id)
+    visibility = (visibility_by_edition or {}).get(resolved_edition_id)
     if visibility is not None:
         policy = replace(policy, visibility=visibility)
     return replace(policy, hierarchy_policies=tuple(ancestors))

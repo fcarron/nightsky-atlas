@@ -88,6 +88,7 @@ def test_hierarchy_warning_detects_standard_object_missing_from_deep() -> None:
                 "selected": False,
                 "reasons": [{"code": "catalogue_not_enabled"}],
             },
+            "eyepiece": {"selected": False, "reasons": []},
             "reference": {"selected": True, "reasons": []},
         }
     }
@@ -133,13 +134,44 @@ def test_report_counts_one_physical_object_despite_multiple_aliases(tmp_path) ->
     assert sum(row["total"] for row in first["type_counts"]) == 1
     assert first["edition_totals"] == {
         edition: sum(row[edition] for row in first["type_counts"])
-        for edition in ("pocket", "standard", "deep", "reference")
+        for edition in ("pocket", "standard", "deep", "eyepiece", "reference")
     }
     assert first == second
     assert len(first["objects"]) == 1
     assert first["objects"][galaxy.id]["visibility"]["class"]
-    assert first["edition_policies"].keys() == {"pocket", "standard", "deep", "reference"}
+    assert first["edition_policies"].keys() == {
+        "pocket", "standard", "deep", "eyepiece", "reference"
+    }
+    assert first["edition_totals"]["eyepiece"] == first["edition_totals"]["deep"]
 
     csv_path = tmp_path / "report.csv"
     write_selection_csv(first, csv_path)
     assert csv_path.read_text(encoding="utf-8").count("NGC0891") == 1
+
+
+def test_standard_native_selection_is_inherited_by_deep() -> None:
+    galaxy = _galaxy()
+    memberships = {"ARP23": frozenset({"standard_only"})}
+    pocket = SelectionPolicy(
+        edition_id="pocket",
+        included_catalogues=frozenset(),
+    )
+    standard = SelectionPolicy(
+        edition_id="standard",
+        forced_lists=frozenset({"standard_only"}),
+    )
+    deep = SelectionPolicy(
+        edition_id="deep",
+        included_catalogues=frozenset(),
+        hierarchy_policies=(standard, pocket),
+    )
+
+    pocket_result = select_dso(galaxy, index=memberships, policy=pocket)
+    standard_result = select_dso(galaxy, index=memberships, policy=standard)
+    deep_result = select_dso(galaxy, index=memberships, policy=deep)
+
+    assert not (pocket_result.visible or pocket_result.forced)
+    assert standard_result.forced
+    assert deep_result.visible
+    assert "included_by_standard_hierarchy" in deep_result.visibility_reasons
+    assert "observing_list_override" in deep_result.visibility_reasons

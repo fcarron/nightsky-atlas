@@ -470,8 +470,8 @@ def _selection_policy(
     config: ObservingListsConfig = load_observing_lists_config(config_path)
     atlas_directory = Path(atlas_path).parent
     visibility_by_edition = {atlas.id: atlas.visibility.to_limits()}
-    if atlas.id in {"pocket", "standard", "deep"}:
-        for edition_id in ("pocket", "standard", "deep"):
+    if atlas.id in {"pocket", "standard", "deep", "eyepiece"}:
+        for edition_id in ("pocket", "standard", "deep", "eyepiece"):
             if edition_id in visibility_by_edition:
                 continue
             candidate = atlas_directory / f"{edition_id}.yaml"

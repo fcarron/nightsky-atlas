@@ -115,6 +115,9 @@ class TypeSelectionRule:
     minimum_visibility_score_400: float | None = None
     minimum_visibility_score_by_aperture: tuple[tuple[int, float], ...] = ()
     minimum_major_axis_arcmin: float | None = None
+    magnitude_size_gate_maximum_magnitude: float | None = None
+    magnitude_size_gate_minimum_major_axis_arcmin: float | None = None
+    automatic_designation_prefixes: tuple[str, ...] = ()
     bright_magnitude_fallback: float | None = None
     maximum_magnitude: float | None = None
     maximum_surface_brightness: float | None = None
@@ -341,6 +344,20 @@ def _rule_inclusion(
     if rule.qualifying_memberships and memberships.intersection(rule.qualifying_memberships):
         return True, "curated_catalogue_policy"
 
+    if (
+        rule.magnitude_size_gate_maximum_magnitude is not None
+        and rule.magnitude_size_gate_minimum_major_axis_arcmin is not None
+        and dso.magnitude is not None
+        and dso.magnitude <= rule.magnitude_size_gate_maximum_magnitude
+        and dso.major_axis_arcmin is not None
+        and dso.major_axis_arcmin >= rule.magnitude_size_gate_minimum_major_axis_arcmin
+        and (
+            not rule.automatic_designation_prefixes
+            or dso.id.startswith(rule.automatic_designation_prefixes)
+        )
+    ):
+        return True, "size_magnitude_policy"
+
     if rule.qualifying_catalogues and sources.intersection(rule.qualifying_catalogues):
         catalogue_metadata_ok = (
             not rule.catalogue_require_major_axis or dso.major_axis_arcmin is not None
@@ -387,7 +404,10 @@ def _rule_inclusion(
         ):
             return False, "below_minimum_size"
 
-    if _size_or_brightness(
+    if (
+        not rule.automatic_designation_prefixes
+        or dso.id.startswith(rule.automatic_designation_prefixes)
+    ) and _size_or_brightness(
         dso,
         minimum_size=rule.minimum_major_axis_arcmin,
         maximum_magnitude=rule.maximum_magnitude,
@@ -452,7 +472,9 @@ def select_dso(
     )
     explicitly_excluded = dso.id in effective_policy.excluded_designations
     catalogue_forced = bool(source_catalogues & effective_policy.forced_catalogues)
-    forced = bool(memberships & effective_policy.forced_lists) or catalogue_forced
+    forced = not explicitly_excluded and (
+        bool(memberships & effective_policy.forced_lists) or catalogue_forced
+    )
     bonus = _membership_bonus(memberships, effective_policy)
     primary_is_openngc = dso.provenance.catalogue == "OpenNGC"
     if effective_policy.visibility.include_all and not primary_is_openngc:
@@ -568,8 +590,7 @@ def select_dso(
                 visibility_reasons.append("galaxy_visibility_below_edition_policy")
     if explicitly_excluded and not forced:
         visibility_reasons.append(
-            "pocket_duplicate_aggregate_excluded"
-            if dso.id == "C014" else "edition_designation_excluded"
+            "duplicate_aggregate_excluded" if dso.id == "C014" else "edition_designation_excluded"
         )
     if not uncertain_match_allowed and not forced:
         visibility_reasons.append("uncertain-catalogue-match")
@@ -620,7 +641,14 @@ def select_dso(
                 return replace(
                     metadata,
                     visible=True,
-                    visibility_reasons=(*metadata.visibility_reasons,
-                        f"included_by_{parent_edition}_hierarchy"),
+                    visibility_reasons=tuple(
+                        dict.fromkeys(
+                            (
+                                *metadata.visibility_reasons,
+                                f"included_by_{parent_edition}_hierarchy",
+                                *parent.visibility_reasons,
+                            )
+                        )
+                    ),
                 )
     return metadata

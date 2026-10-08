@@ -38,7 +38,7 @@ _SOURCES = {
     "al": astronomical_league.parse,
 }
 _NON_DSO = {DsoType.STAR, DsoType.DOUBLE_STAR}
-_EDITION_IDS = ("pocket", "standard", "deep", "reference")
+_EDITION_IDS = ("pocket", "standard", "deep", "eyepiece", "reference")
 _CATALOGUE_FAMILIES = {
     "OpenNGC": "OpenNGC / NGC / IC",
     "VII/7A": "LDN",
@@ -137,6 +137,7 @@ def build_coverage_report(
         "pocket": load_atlas_config(pocket_atlas_path).visibility.to_limits(),
         "standard": load_atlas_config("atlas/standard.yaml").visibility.to_limits(),
         "deep": load_atlas_config("atlas/deep.yaml").visibility.to_limits(),
+        "eyepiece": load_atlas_config("atlas/eyepiece.yaml").visibility.to_limits(),
     }
     policies = {
         edition: resolve_edition_hierarchy(

@@ -32,7 +32,7 @@ from nightsky_atlas.catalog.observing_lists import (
 from nightsky_atlas.catalog.selection import SelectionPolicy, select_dso
 from nightsky_atlas.catalog.visibility import evaluate_visibility
 
-EDITIONS = ("pocket", "standard", "deep", "reference")
+EDITIONS = ("pocket", "standard", "deep", "eyepiece", "reference")
 EDITION_REASON_NAMES = {
     "below-catalogue-minimum-extent": "below the edition's catalogue minimum angular extent",
     "catalogue-not-enabled-for-edition": "source catalogue is not enabled for this edition",
@@ -54,6 +54,7 @@ EDITION_REASON_NAMES = {
     "pocket_herschel400": "mandatory Herschel 400 observing-list member",
     "included_by_pocket_hierarchy": "included because Pocket selects the same target",
     "included_by_standard_hierarchy": "included because Standard selects the same target",
+    "included_by_deep_hierarchy": "included because Deep selects the same target",
     "catalogue_policy_inclusion": "included by a configured catalogue-specific policy",
     "curated_object_policy": "included by a configured curated-object policy",
     "reference_catalogue_complete": "included as a valid object in Reference catalogue coverage",
@@ -315,7 +316,7 @@ def explain_selection(
         "pocket_messier": ("semantic_importance", EDITION_REASON_NAMES["pocket_messier"]),
         "pocket_caldwell": ("semantic_importance", EDITION_REASON_NAMES["pocket_caldwell"]),
         "pocket_herschel400": ("semantic_importance", EDITION_REASON_NAMES["pocket_herschel400"]),
-        "pocket_duplicate_aggregate_excluded": (
+        "duplicate_aggregate_excluded": (
             "catalogue_coverage",
             "aggregate catalogue row duplicates its separately represented cluster components",
         ),
@@ -364,7 +365,15 @@ def explain_selection(
         "group_deep_policy": ("catalogue_coverage", "included by the Deep group-level policy"),
         "open_cluster_standard_policy": (
             "physical_detectability",
-            "included by the Standard prominence, size, magnitude or curated-list rule",
+            "included by the Standard size/magnitude gate or an existing observing list",
+        ),
+        "open_cluster_pocket_policy": (
+            "physical_detectability",
+            "included by the Pocket size/magnitude gate",
+        ),
+        "open_cluster_pocket_policy_excluded": (
+            "physical_detectability",
+            "does not meet the Pocket open-cluster size/magnitude gates",
         ),
         "open_cluster_deep_policy": (
             "catalogue_coverage",
@@ -693,6 +702,8 @@ def _selection_warnings(
         )
     standard_not_deep = sorted(selected["standard"] - selected["deep"])
     pocket_not_standard = sorted(selected["pocket"] - selected["standard"])
+    deep_not_eyepiece = sorted(selected["deep"] - selected["eyepiece"])
+    eyepiece_not_deep = sorted(selected["eyepiece"] - selected["deep"])
     deep_not_reference = sorted(selected["deep"] - selected["reference"])
     reference_not_deep = sorted(selected["reference"] - selected["deep"])
 
@@ -714,6 +725,16 @@ def _selection_warnings(
             "Objects selected in Standard but not Deep violate the expected edition hierarchy.",
         ),
         (
+            "deep_not_eyepiece",
+            deep_not_eyepiece,
+            "Objects selected in Deep but not Eyepiece violate the expected edition hierarchy.",
+        ),
+        (
+            "eyepiece_not_deep",
+            eyepiece_not_deep,
+            "Objects selected in Eyepiece but not Deep violate the expected edition hierarchy.",
+        ),
+        (
             "deep_not_reference",
             deep_not_reference,
             "Objects selected in Deep but not Reference violate the expected edition hierarchy.",
@@ -725,11 +746,14 @@ def _selection_warnings(
         ),
     ):
         if ids:
-            failed_edition = (
-                "standard" if code == "pocket_not_standard"
-                else "reference" if code == "deep_not_reference"
-                else "deep"
-            )
+            failed_edition = {
+                "pocket_not_standard": "standard",
+                "standard_not_deep": "deep",
+                "deep_not_eyepiece": "eyepiece",
+                "eyepiece_not_deep": "deep",
+                "deep_not_reference": "reference",
+                "reference_not_deep": "deep",
+            }[code]
             warnings.append(
                 {
                     "code": code,
@@ -856,13 +880,11 @@ def build_selection_report(
     index = build_membership_index(load_observing_lists(observing_lists_dir), dsos)
     visibility_by_edition = {
         edition: load_atlas_config(Path("atlas") / f"{edition}.yaml").visibility.to_limits()
-        for edition in ("pocket", "standard", "deep")
+        for edition in ("pocket", "standard", "deep", "eyepiece")
     }
     policies = {
         edition: (
-            resolve_edition_hierarchy(
-                config, edition, visibility_by_edition=visibility_by_edition
-            )
+            resolve_edition_hierarchy(config, edition, visibility_by_edition=visibility_by_edition)
             if edition in visibility_by_edition
             else resolve_edition(config, edition)
         )
@@ -988,6 +1010,7 @@ def write_selection_csv(report: dict[str, Any], path: str | Path) -> None:
             "Pocket",
             "Standard",
             "Deep",
+            "Eyepiece",
             "Reference",
             "selection_reasons_json",
         )
@@ -1018,18 +1041,18 @@ def summarize_selection_report(report: dict[str, Any]) -> str:
         f"physical DSOs: {report['physical_dso_count']}",
         f"edition totals: {report['edition_totals']}",
         "",
-        "type                              total   Pocket  Standard   Deep  Reference",
+        "type                              total   Pocket  Standard   Deep  Eyepiece  Reference",
     ]
     for row in report["type_counts"]:
         lines.append(
             f"{row['type']:<32} {row['total']:>6} {row['pocket']:>9} {row['standard']:>9}"
-            f" {row['deep']:>6} {row['reference']:>10}"
+            f" {row['deep']:>6} {row['eyepiece']:>9} {row['reference']:>10}"
         )
     lines.extend(
         (
             "",
             "source                          entries  records  physical  "
-            "Pocket   Standard   Deep  Reference",
+            "Pocket   Standard   Deep  Eyepiece  Reference",
         )
     )
     for row in report["source_counts"]:

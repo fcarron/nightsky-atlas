@@ -58,6 +58,7 @@ lists:
 global_excluded_designations:
   - NGC1487 NED02
   - NGC4656 NED01
+  - C014
 
 editions:
   pocket:
@@ -75,6 +76,13 @@ editions:
       herschel400: pocket_herschel400
       nightsky_pocket_classics: pocket_curated_visual_target
     selection_rules:
+      open_cluster:
+        use_visibility: false
+        minimum_major_axis_arcmin: 20
+        magnitude_size_gate_maximum_magnitude: 9.0
+        magnitude_size_gate_minimum_major_axis_arcmin: 3.0
+        selection_reason_code: open_cluster_pocket_policy
+        exclusion_reason_code: open_cluster_pocket_policy_excluded
       globular_cluster:
         regional_allowlists:
           - id: lmc
@@ -94,7 +102,6 @@ editions:
         selection_reason_code: pocket_galaxy_visibility_100mm
         exclusion_reason_code: pocket_below_100mm_visibility
     excluded_designations:
-      - C014
       - PGC025886
       - PGC 30484
       - PGC 46039
@@ -147,7 +154,9 @@ editions:
         use_visibility: false
         selection_reason_code: open_cluster_standard_policy
         minimum_major_axis_arcmin: 10
-        maximum_magnitude: 10.5
+        magnitude_size_gate_maximum_magnitude: 10.0
+        magnitude_size_gate_minimum_major_axis_arcmin: 3.0
+        automatic_designation_prefixes: [NGC, IC]
         qualifying_memberships:
           - messier
           - caldwell
@@ -250,6 +259,11 @@ editions:
         visibility_catalogues:
           - OpenNGC
         selection_reason_code: open_cluster_deep_policy
+        minimum_major_axis_arcmin: 10
+        maximum_magnitude: 10.5
+        magnitude_size_gate_maximum_magnitude: null
+        magnitude_size_gate_minimum_major_axis_arcmin: null
+        automatic_designation_prefixes: []
         qualifying_catalogues:
           - VII/92A:Collinder
           - VII/92A:Melotte

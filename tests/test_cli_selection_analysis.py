@@ -27,14 +27,22 @@ def test_atlas_why_object_command_reports_all_editions(monkeypatch, capsys) -> N
     payload = json.loads(capsys.readouterr().out)
     assert payload["canonical_designation"] == "HCG 92"
     assert payload["metadata"]["member_count"] == 5
-    assert set(payload["selection"]) == {"pocket", "standard", "deep", "reference"}
+    assert set(payload["selection"]) == {
+        "pocket", "standard", "deep", "eyepiece", "reference"
+    }
     assert "reasons" in payload["selection"]["deep"]
 
 
 def test_selection_report_cli_exports_stable_json(monkeypatch, tmp_path, capsys) -> None:
     report = {
         "physical_dso_count": 1,
-        "edition_totals": {"pocket": 1, "standard": 1, "deep": 1, "reference": 1},
+        "edition_totals": {
+            "pocket": 1,
+            "standard": 1,
+            "deep": 1,
+            "eyepiece": 1,
+            "reference": 1,
+        },
         "type_counts": [
             {
                 "type": "galaxy",
@@ -42,6 +50,7 @@ def test_selection_report_cli_exports_stable_json(monkeypatch, tmp_path, capsys)
                 "pocket": 1,
                 "standard": 1,
                 "deep": 1,
+                "eyepiece": 1,
                 "reference": 1,
             }
         ],
@@ -55,6 +64,7 @@ def test_selection_report_cli_exports_stable_json(monkeypatch, tmp_path, capsys)
                     "pocket": 1,
                     "standard": 1,
                     "deep": 1,
+                    "eyepiece": 1,
                     "reference": 1,
                 },
             }
