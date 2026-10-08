@@ -45,7 +45,6 @@ __all__ = [
     "ConstellationStyle",
     "DoubleStarStyle",
     "DoubleStarPairLimit",
-    "DoubleStarDeltaMagnitudeLimit",
     "DsoExtentStyle",
     "DsoLabelPlacementStyle",
     "DsoLabelStyle",
@@ -956,20 +955,8 @@ class DsoStyle(_StrictModel):
 
 
 class DoubleStarPairLimit(_StrictModel):
-    min_sep_arcsec: NonNegativeFloat | None = None
     max_sep_arcsec: PositiveFloat
     max_secondary_mag: float
-
-    @model_validator(mode="after")
-    def _validate_separation_range(self) -> DoubleStarPairLimit:
-        if self.min_sep_arcsec is not None and self.min_sep_arcsec >= self.max_sep_arcsec:
-            raise ValueError("min_sep_arcsec must be lower than max_sep_arcsec")
-        return self
-
-
-class DoubleStarDeltaMagnitudeLimit(_StrictModel):
-    max_sep_arcsec: PositiveFloat
-    max_delta_mag: NonNegativeFloat
 
 
 class DoubleStarStyle(_StrictModel):
@@ -981,10 +968,7 @@ class DoubleStarStyle(_StrictModel):
         DoubleStarPairLimit(max_sep_arcsec=120.0, max_secondary_mag=10.0),
         DoubleStarPairLimit(max_sep_arcsec=200.0, max_secondary_mag=9.0),
     )
-    delta_mag_limits: tuple[DoubleStarDeltaMagnitudeLimit, ...] = (
-        DoubleStarDeltaMagnitudeLimit(max_sep_arcsec=2.0, max_delta_mag=3.0),
-        DoubleStarDeltaMagnitudeLimit(max_sep_arcsec=5.0, max_delta_mag=5.0),
-    )
+    minimum_separation_arcsec: NonNegativeFloat = 0.5
     unresolved_clearance_mm: NonNegativeFloat = 0.15
     marginal_clearance_mm: PositiveFloat = 0.8
     marker_length_factor: PositiveFloat = 1.8
@@ -998,12 +982,6 @@ class DoubleStarStyle(_StrictModel):
             right <= left for left, right in zip(separations, separations[1:], strict=False)
         ):
             raise ValueError("double-star limits must have strictly ascending separation bounds")
-        delta_separations = [float(limit.max_sep_arcsec) for limit in self.delta_mag_limits]
-        if any(
-            right <= left
-            for left, right in zip(delta_separations, delta_separations[1:], strict=False)
-        ):
-            raise ValueError("double-star delta-mag separation bounds must ascend")
         if self.marginal_clearance_mm <= self.unresolved_clearance_mm:
             raise ValueError("marginal_clearance_mm must exceed unresolved_clearance_mm")
         return self

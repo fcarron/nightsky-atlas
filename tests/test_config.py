@@ -393,7 +393,8 @@ def test_shipped_style_declares_double_star_marker() -> None:
         (item.max_sep_arcsec, item.max_secondary_mag)
         for item in config.double_stars.limits
     ]
-    assert actual_limits == [(30.0, 11.5), (120.0, 10.0), (200.0, 9.0)]
+    assert actual_limits == [(30.0, 11.5), (120.0, 9.5), (200.0, 9.0)]
+    assert config.double_stars.minimum_separation_arcsec == pytest.approx(0.5)
     assert config.double_stars.unresolved_clearance_mm == pytest.approx(0.15)
     assert config.double_stars.marginal_clearance_mm == pytest.approx(0.8)
     assert config.double_stars.marker_length_factor == pytest.approx(1.8)
@@ -407,36 +408,27 @@ def test_shipped_style_declares_double_star_marker() -> None:
 @pytest.mark.parametrize(
     ("edition", "expected"),
     [
-        ("pocket", ((1.0, 200.0, 10.5),)),
-        ("standard", ((30.0, 11.5), (120.0, 10.0), (200.0, 9.0))),
-        ("deep", ((30.0, 13.0), (120.0, 11.5), (300.0, 10.0))),
+        ("pocket", ((30.0, 10.5), (120.0, 8.5), (200.0, 8.5))),
+        ("standard", ((30.0, 11.5), (120.0, 9.5), (200.0, 9.0))),
+        ("deep", ((30.0, 12.5), (120.0, 10.5), (200.0, 10.0), (300.0, 9.0))),
+        ("eyepiece", ((30.0, 12.5), (120.0, 10.5), (200.0, 10.0), (300.0, 9.0))),
+        ("eyepiece_deep", ((30.0, 12.5), (120.0, 10.5), (200.0, 10.0), (300.0, 9.0))),
     ],
 )
 def test_double_star_profile_limits_are_configured(edition: str, expected: tuple) -> None:
     config = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     actual = tuple(
-        (
-            limit.min_sep_arcsec,
-            limit.max_sep_arcsec,
-            limit.max_secondary_mag,
-        )
+        (limit.max_sep_arcsec, limit.max_secondary_mag)
         for limit in config.double_stars.limits
     )
-    if edition == "pocket":
-        assert actual == expected
-    else:
-        assert tuple((maximum, magnitude) for _, maximum, magnitude in actual) == expected
+    assert actual == expected
+    assert config.double_stars.minimum_separation_arcsec == pytest.approx(0.5)
 
 
 def test_deep_double_star_marker_is_finer_than_pocket() -> None:
     pocket = load_style_config(REPO_ROOT / "styles" / "pocket.yaml").double_stars
     deep = load_style_config(REPO_ROOT / "styles" / "deep.yaml").double_stars
     assert deep.marker_line_width_mm < pocket.marker_line_width_mm
-
-
-def test_pocket_double_star_profile_has_no_delta_magnitude_cut() -> None:
-    pocket = load_style_config(REPO_ROOT / "styles" / "pocket.yaml").double_stars
-    assert pocket.delta_mag_limits == ()
 
 
 def test_double_star_style_defaults_when_omitted(tmp_path: Path) -> None:

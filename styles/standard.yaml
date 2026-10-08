@@ -194,13 +194,11 @@ dso:
 # projected component centres and rendered stellar symbol radii.
 double_stars:
   enabled: true
+  minimum_separation_arcsec: 0.5
   limits:
     - {max_sep_arcsec: 30, max_secondary_mag: 11.5}
-    - {max_sep_arcsec: 120, max_secondary_mag: 10.0}
+    - {max_sep_arcsec: 120, max_secondary_mag: 9.5}
     - {max_sep_arcsec: 200, max_secondary_mag: 9.0}
-  delta_mag_limits:
-    - {max_sep_arcsec: 2, max_delta_mag: 3}
-    - {max_sep_arcsec: 5, max_delta_mag: 5}
   unresolved_clearance_mm: 0.15
   marginal_clearance_mm: 0.8
   marker_length_factor: 1.8

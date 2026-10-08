@@ -215,8 +215,8 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
   mark is bold wherever its label is. The renderer derives the set of bold
   targets from the labels' `font_weight`; it never re-derives catalogue facts.
 - WDS remains an overlay on the normal star catalogue. Profile-specific
-  separation/secondary-magnitude limits and a separate close-pair Δmag filter
-  select astronomical relationships before map representation. The projected
+  separation/secondary-magnitude limits and a shared minimum separation of
+  0.5 arcsec select pairs; no Δmag filter is applied. The projected
   page separation minus the two real rendered star radii classifies a selected
   pair as unresolved, marginal, or clearly resolved. Only an unresolved pair
   adds a short horizontal bar to its rendered primary; base stars, positions,

@@ -97,9 +97,9 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   `data/processed/double_stars/wds.json`). `StarSystem` retains WDS pair and
   component designations, magnitudes, separation and position angle; only
   `exact`/`positional` matches influence the chart. Pocket/Standard/Deep
-  secondary-magnitude and separation rules plus the optional Δmag sanity filter
-  are configured in each style. The projected pair clearance is measured from
-  the two rendered symbol radii. An unresolved pair receives one horizontal
+  select by separation bands and companion magnitude, with a shared 0.5-arcsec
+  minimum; no Δmag cut is applied. The projected pair clearance is measured
+  from the two rendered symbol radii. An unresolved pair receives one horizontal
   marker on its real rendered primary; marginal and clearly resolved pairs do
   not receive a marker merely for being listed as a pair. WDS never inserts,
   moves, combines, or changes the magnitude of a base-catalogue star.
