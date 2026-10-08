@@ -8,7 +8,7 @@ PY := $(BIN)/python
 setup: $(VENV)/bin/activate
 
 $(VENV)/bin/activate: pyproject.toml
-	$(PYTHON) -m venv $(VENV)
+	$(PYTHON) -m venv --system-site-packages $(VENV)
 	$(PY) -m pip install --upgrade pip
 	$(PY) -m pip install -e ".[dev]"
 	@touch $(VENV)/bin/activate

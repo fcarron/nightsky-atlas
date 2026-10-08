@@ -1,44 +1,73 @@
 # NightSky Atlas
 
-NightSky Atlas generates publication-quality printable star atlases for visual
-deep-sky observing, especially Dobsonian star-hopping.
+NightSky Atlas creates printable, publication-quality star charts and atlases
+for visual deep-sky observing and Dobsonian star-hopping. Its main output is a
+vector PDF; chart previews are also written as PNG files. The atlas includes
+stars, deep-sky objects, constellation figures and boundaries, coordinate grids
+and navigation between charts.
 
-The primary output is vector PDF. Secondary outputs include SVG, PNG previews,
-annotated review PNGs and a machine-readable layout JSON document.
+The main editions are Pocket (5 mm/°), Standard (10 mm/°) and Deep (20 mm/°).
+Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental.
 
-See `AGENTS.md` for the condensed engineering contract, and `docs/` for the
-product, architecture, plan, cartography, AI-review and data-source details.
+## What is NightSky Atlas?
 
-The main editions are Pocket (5 mm/°), Standard (10 mm/°) and Deep
-(20 mm/°). Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental.
+NightSky Atlas creates printable, publication-quality star charts and atlases
+for visual deep-sky observing and Dobsonian star-hopping. Its main output is a
+vector PDF; chart previews are also written as PNG files. Charts combine stars,
+deep-sky objects, constellation geometry, coordinate grids and navigation.
 
-## Development
+## Requirements: Ubuntu 24.04 and WSL
+
+The supported setup described here is Ubuntu 24.04, including Ubuntu running
+under WSL. Ubuntu 24.04 provides Python 3.12 as `/usr/bin/python3`. Native
+Windows and macOS have not been tested.
+
+Rendering uses Cairo and Pango through PyGObject. Install their Ubuntu packages
+before making the virtual environment. The `--system-site-packages` option is
+needed so that the environment can import Ubuntu's `gi` bindings; a default
+isolated virtual environment cannot see them.
+
+## Install
+
+Clone the repository and enter its directory:
 
 ```bash
-make setup   # create .venv and install the package with dev tools
-make test    # run the test suite
-make lint    # run Ruff
-make check   # lint + test (standard pre-commit verification)
+git clone https://github.com/fcarron/nightsky-atlas.git
+cd nightsky-atlas
 ```
 
-Lato and Source Sans 3 are bundled and registered from the repository, so no
-manual font installation is needed. On Debian or Ubuntu, install the system
-libraries used by Cairo and Pango before creating the virtual environment:
+Install the system libraries and Python bindings:
 
 ```bash
-sudo apt-get install python3-venv python3-gi python3-gi-cairo gir1.2-pango-1.0 \
+sudo apt update
+sudo apt install -y \
+    python3-venv python3-gi python3-gi-cairo gir1.2-pango-1.0 \
     libcairo2-dev libfontconfig1 pkg-config
+```
+
+Create a Python 3.12 virtual environment that can use those system bindings,
+then install NightSky Atlas and its development tools:
+
+```bash
 /usr/bin/python3 -m venv --system-site-packages .venv
+.venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e ".[dev]"
 ```
 
-Run the command-line interface:
+Confirm that the CLI and Pango bindings are available:
 
 ```bash
-.venv/bin/python -m nightsky_atlas --help
+.venv/bin/nightsky --help
+.venv/bin/python -c "import gi; gi.require_version('Pango', '1.0'); gi.require_version('PangoCairo', '1.0'); from gi.repository import Pango, PangoCairo; print('Pango OK')"
 ```
 
-Render the first development chart (Virgo) to a PDF and PNG preview:
+No API key is needed to install or create charts. The Lato and Source Sans 3
+fonts used by the renderer are bundled with the repository.
+
+## Quickstart: create a test chart
+
+The repository includes a small Virgo star fixture, so this first render does
+not download astronomical catalogues:
 
 ```bash
 .venv/bin/nightsky chart render \
@@ -49,133 +78,175 @@ Render the first development chart (Virgo) to a PDF and PNG preview:
     --outdir build
 ```
 
-Artifacts are written to `build/standard/charts/test-virgo/chart.pdf` and
-`preview.png`. Render a star magnitude diagnostic page with:
+The command writes both files here:
 
-```bash
-.venv/bin/nightsky chart magnitude-scale --outdir build
+```text
+build/standard/charts/test-virgo/chart.pdf
+build/standard/charts/test-virgo/preview.png
 ```
 
-For a 100%-print A4 comparison of the Pocket, Standard and Deep star-symbol
-curves, use:
+The PDF is vector output. The PNG is a 150 dpi preview by default. This fixture
+is deliberately small and is for checking the installation and renderer; it is
+not a sample of the full catalogue or a complete atlas.
+
+## Prepare astronomical catalogues
+
+Raw downloads and processed catalogues are kept under `data/raw/` and
+`data/processed/`; they are generated locally and are not committed. The first
+real atlas needs a stellar store and a deep-sky catalogue. The following
+commands are the CLI's fetch and import steps:
+
+```bash
+# Tycho-2: 20 compressed parts, about 159 MB total
+.venv/bin/nightsky data fetch-stars
+
+# Hipparcos main catalogue: about 53 MB; supplies bright stars missing in Tycho-2
+.venv/bin/nightsky data fetch-hipparcos
+
+# Merge Tycho-2 and Hipparcos into the indexed SQLite star store
+.venv/bin/nightsky data import-stars
+
+# OpenNGC deep-sky objects (the download is small compared with the star catalogues)
+.venv/bin/nightsky data fetch-openngc
+.venv/bin/nightsky data import-openngc
+```
+
+The default paths are:
+
+```text
+data/raw/tycho2/                         Tycho-2 download parts
+data/raw/hipparcos/                      Hipparcos main catalogue
+data/processed/stars/tycho2.sqlite      merged star store (about 364 MB)
+data/processed/stars/tycho2.manifest.json
+data/raw/openngc/                        OpenNGC CSV source files
+data/processed/dso/openngc.json          normalized deep-sky catalogue
+data/processed/dso/openngc.manifest.json
+```
+
+The repository already contains the small constellation, star-name, observing
+list and schematic nebula-outline fixtures used by the renderer. They do not
+need to be fetched separately.
+
+### Optional catalogues
+
+The Washington Double Star Catalog (WDS) adds a double/multiple-star overlay.
+Charts can be built without it. The current CLI commands and default paths are:
+
+```bash
+.venv/bin/nightsky data fetch-wds
+.venv/bin/nightsky data import-wds
+```
+
+The raw WDS download is about 6.5 MB; the processed overlay is about 57 MB.
+When `data/processed/double_stars/wds.json` exists, atlas builds use it by
+default. Use `--no-double-stars` to omit it.
+
+UCAC4 is a separate, optional faint-star supplement intended for experimental
+Eyepiece work. The complete source is about 8.5 GiB before its local SQLite
+store; it is not needed for Pocket, Standard or Deep:
+
+```bash
+.venv/bin/nightsky data fetch-ucac4
+.venv/bin/nightsky data import-ucac4-faint
+```
+
+Selected VizieR deep-sky catalogues can extend OpenNGC coverage. They are not
+needed for the initial Standard atlas. To fetch the configured sources and
+merge them with OpenNGC, run:
+
+```bash
+.venv/bin/nightsky data fetch-vizier-dsos
+.venv/bin/nightsky data import-vizier-dsos
+```
+
+The merged catalogue is written to `data/processed/dso/catalogue.json`; pass
+that path to `atlas build --dsos` when you want to use it. VizieR sources have
+source-specific terms, so review them before redistribution. See
+[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for provenance and licensing.
+
+## Generate a full atlas
+
+Build the complete Standard chart set with the star and OpenNGC catalogues:
+
+```bash
+.venv/bin/nightsky atlas build --edition standard \
+    --star-store data/processed/stars/tycho2.sqlite \
+    --dsos data/processed/dso/openngc.json
+```
+
+Standard contains 118 sky charts plus detail charts. The default build uses two
+workers and also creates per-chart PNG previews. Use `--jobs 1` to build
+serially, `--jobs 4` if several GiB of memory are available, or `--no-png` to
+skip preview images. A full build can take substantially longer than the
+single-chart quickstart.
+
+For a strict release build, add `--publication`. It checks complete sky
+coverage, nonempty processed star and DSO catalogues, and source manifests with
+matching checksums. If a processed catalogue predates checksummed manifests,
+import it again before this check:
+
+```bash
+.venv/bin/nightsky atlas build --edition standard \
+    --star-store data/processed/stars/tycho2.sqlite \
+    --dsos data/processed/dso/openngc.json \
+    --publication
+.venv/bin/nightsky atlas validate --edition standard --publication
+```
+
+To build Pocket or Deep instead, change `--edition standard` to `pocket` or
+`deep`. Explicit configuration paths are also accepted with `--atlas` and
+`--style`; for example, the experimental Eyepiece configuration is
+`atlas/eyepiece.yaml` with `styles/eyepiece.yaml`.
+
+## Find and print the PDFs
+
+The combined atlas is written to:
+
+```text
+build/standard/atlas.pdf
+```
+
+Individual chart PDFs and previews are under
+`build/standard/charts/<chart-id>/`. Open the combined PDF in a PDF viewer and
+print at **100% / actual size** so the edition's printed scale is preserved.
+Disable “fit to page” or equivalent scaling in the print dialog. The atlas
+pages are A4 landscape.
+
+## Editions
+
+Pocket is the compact 5 mm/° edition, Standard is 10 mm/°, and Deep is 20 mm/°.
+Their chart scale and object selection differ. Use `--edition pocket`,
+`--edition standard` or `--edition deep` with `nightsky atlas build`.
+Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental and currently
+require explicit atlas and style files. A 100%-print comparison sheet for the
+three main editions can be rendered with:
 
 ```bash
 .venv/bin/nightsky chart magnitude-scale --edition-comparison --outdir build
 ```
 
-The `--edition` preset currently accepts `pocket`, `standard` and `deep`.
-Experimental editions use explicit configuration paths, for example:
+## Development and tests
+
+The same Ubuntu system packages and `--system-site-packages` virtual
+environment described above are needed for development. Run the checks with:
 
 ```bash
-.venv/bin/nightsky atlas build --atlas atlas/eyepiece.yaml \
-    --style styles/eyepiece.yaml
-# Eyepiece Deep: atlas/eyepiece_deep.yaml and styles/eyepiece_deep.yaml
+make test
+make lint
+make check
 ```
 
-Explicit `--atlas` and `--style` paths are also available for custom
-definitions. Optional layers can be omitted explicitly, for example
-`--no-constellations` or `--no-outlines`.
+The tests use committed small fixtures and do not download full catalogues.
+On Ubuntu, install the system packages above before running `make setup`; the
+target creates the virtual environment with access to Ubuntu's `gi` bindings.
 
-### Real star catalogue (Tycho-2)
+## License and data sources
 
-```bash
-.venv/bin/nightsky data fetch-stars       # download raw Tycho-2 parts into data/raw/
-.venv/bin/nightsky data fetch-hipparcos   # download the bright-star supplement
-.venv/bin/nightsky data import-stars      # build data/processed/stars/tycho2.sqlite
-.venv/bin/nightsky chart render --chart test-cygnus \
-    --star-store data/processed/stars/tycho2.sqlite --magnitude-limit 9.0
-```
-
-The store merges Tycho-2 with the Hipparcos main catalogue because Tycho-2 omits
-the brightest stars (Deneb, Vega, Altair, Sirius, ...). See
-`docs/DATA_SOURCES.md` for provenance and licensing.
-
-Standard follows the field-readability philosophy of *Sky Atlas 2000.0*
-without copying its label selection. Star labels are observer-oriented, not
-exhaustive: curated familiar names, Bayer designations, selective Flamsteed
-numbers, then relevant variable/special designations. Important names may
-appear as `Deneb α`; Bayer labels are normally Greek letters alone and
-Flamsteed labels numbers alone. Constellation suffixes are omitted on the map
-in normal cases, and a star normally shows Bayer *or* Flamsteed, not both.
-Shorter or unambiguous longer variants remain available to the deterministic
-layout. Obscure official names and HIP/HD/TYC IDs are not normally printed.
-Full designations, aliases and catalogue identities remain separate from the
-edition-configurable display text; imported cross-ID provenance is tracked in
-`docs/DATA_SOURCES.md`. To count eligible labels before chart placement, run:
-
-```bash
-.venv/bin/nightsky data star-label-report --edition standard
-```
-
-### Double/multiple stars (WDS overlay)
-
-```bash
-.venv/bin/nightsky data fetch-wds        # download the raw WDS into data/raw/
-.venv/bin/nightsky data import-wds       # build data/processed/double_stars/wds.json
-```
-
-Tycho-2 remains the source of truth for single-star positions and magnitudes.
-The Washington Double Star Catalog is a separate overlay for visual double and
-multiple systems; systems are linked to stars per chart, and only safe matches
-influence the printed chart. A pair that cannot be separated on the page is
-drawn as one symbol with a horizontal marker; a separable pair is drawn as two
-real positions. See `docs/ARCHITECTURE.md` and `docs/DATA_SOURCES.md`.
-
-Raw and processed catalogue data are build inputs and are not committed. See
-`docs/PERFORMANCE.md` for benchmark numbers and licensing notes.
-
-### Full atlas with overview pages
-
-```bash
-.venv/bin/nightsky atlas build --star-store data/processed/stars/tycho2.sqlite
-```
-
-Atlas builds use two chart workers by default. Use `--jobs 4` with several GiB
-of free memory, or `--jobs 1` for a serial build. Chart pages are
-assembled into the atlas PDF in chart order regardless of worker count.
-
-Add `--publication` for a strict release build. It requires the complete chart
-set, full-sky coverage, nonempty processed star and DSO catalogues, and matching
-source manifests with a `processed_sha256` checksum. Re-import older processed
-catalogues once to create checksummed manifests. The build records fingerprints
-of code, configuration and geometry inputs, then publishes from a staging
-directory only after validation. An earlier publication is retained as
-`build/.standard-previous` (or a numbered variant). Development subsets remain
-available without this flag.
-
-After building, verify the files and recorded inputs without rendering again:
-
-```bash
-.venv/bin/nightsky atlas validate --edition standard --publication
-```
-
-The combined `build/standard/atlas.pdf` opens with front matter and two
-whole-sky overview pages (northern and southern hemispheres) showing the
-constellation background, the bright stars and one trapezoidal cell per chart
-with its printed chart code. Use `--no-overviews` to omit them. An optional
-per-chart locator inset is enabled with `locator.enabled: true` in the style.
-See `docs/CARTOGRAPHY.md`.
-
-## Status
-
-Alpha preparation. Pocket, Standard and Deep are the main editions; the two
-Eyepiece configurations are experimental. See `docs/DEVELOPMENT_PLAN.md` and
-the current snapshot in `docs/STATE.md`.
-
-## License and data attribution
-
-The atlas generator is licensed under the [MIT License](LICENSE). Original
-NightSky Atlas cartographic design is CC BY 4.0 where identified. Official PDFs
-are free for non-commercial sharing, subject to third-party rights. The MIT
-licence does not automatically apply to generated atlases. Source-specific
-terms are documented in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) and
-[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
-Constellation stick figures follow the Sky & Telescope tradition via
-Stellarium's Western (Sky & Telescope) sky culture. They are conventional
-figures, separate from official IAU boundaries. Their HIP-referenced primary
-and supplementary strokes retain bold/normal/thin hierarchy, with physical
-widths configurable by style. The figure data is CC BY-SA 2.0; the IAU boundary
-polygons are BSD-3-Clause. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
-for attribution and terms that generated atlases must retain.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks and contribution rules.
+The generator is licensed under the [MIT License](LICENSE). Generated atlases
+also include third-party fonts, constellation geometry and catalogue data with
+their own terms; the MIT license does not automatically cover generated PDFs.
+Tycho-2 and Hipparcos are marked CC-BY-NC-3.0 IGO, OpenNGC is CC-BY-SA-4.0,
+and WDS is public domain with an acknowledgement requested. Review
+[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) and
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) before sharing or
+redistributing outputs.
