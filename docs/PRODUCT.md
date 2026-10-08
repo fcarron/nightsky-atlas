@@ -19,26 +19,28 @@ NightSky Atlas must not copy the visual design, page layout or copyrighted
 creative expression of any existing atlas. These atlases are references for
 functional quality and information density only.
 
-The eventual product family, all built from the same engine:
+The main editions, all built from the same engine:
 
-1. **NightSky Pocket** — compact and fast to use at the telescope.
-2. **NightSky Atlas** — the primary general-purpose Dobsonian atlas.
-3. **NightSky Deep** — high-density deep-sky atlas approaching
+1. **Pocket** — compact and fast to use at the telescope.
+2. **Standard** — the primary general-purpose Dobsonian atlas.
+3. **Deep** — high-density deep-sky atlas approaching
    Uranometria-class depth.
 
-### Tentative edition targets
+Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental configurations;
+Eyepiece Deep currently contains test fields rather than a full-sky atlas.
 
-These are goals, not frozen specifications; final limits, page counts and
-fields of view are chosen from printed prototypes rather than by matching
-historic atlases.
+### Edition roles and current main-chart settings
 
-- **Pocket:** Pocket-Sky-Atlas-class density; stellar limit about mag 7.5–8;
+These settings come from the current configurations, not from matching historic
+atlases. Publication acceptance still requires printed and telescope review.
+
+- **Pocket:** 5 mm/°; stellar limit mag 7.5;
   selected visually relevant DSO set; large fields; very low label clutter;
   A4/A5-oriented print use.
-- **Atlas (first to implement fully):** Sky-Atlas-2000.0-class stellar density;
-  stellar limit about mag 8.5–9; richer DSO content; A4 landscape pages;
+- **Standard:** 10 mm/°; stellar limit mag 9.0;
+  richer DSO content; A4 landscape pages;
   focused on 8–16 inch Dobsonian star-hopping.
-- **Deep:** stellar limit about mag 9.75–10 or deeper where justified; much
+- **Deep:** 20 mm/°; stellar limit mag 10.5; much
   larger DSO catalogue; more precise galaxy geometry; large nebula outlines;
   higher chart count; Uranometria-like depth without copying its design.
 
@@ -104,7 +106,7 @@ Two publication-intent A4 test charts (Virgo/Coma and Cygnus), each with:
 - vector PDF, preview PNG, review PNG, serialized layout JSON;
 - hard validation with zero unresolved violations.
 
-AI review is planned from the start but is **not** required for the basic MVP.
+AI review is implemented but is **not** required for the basic MVP.
 **AI-MVP** is reached when a cheap OpenRouter vision model can review those
 pages, return schema-valid issue/action data, and produce some demonstrably
 useful automatic label improvements without corrupting geometry.
@@ -136,13 +138,14 @@ The strongest technical success criterion:
 
 Intentionally deferred until the core atlas is proven:
 
-- constellation artwork;
-- colour-rich artistic Milky Way rendering;
-- eyepiece orientation modes;
+- illustrative constellation artwork (stick figures are implemented);
+- colour-rich artistic Milky Way rendering (grayscale contours are implemented);
+- eyepiece mirror/orientation modes (separate from the experimental editions);
 - interactive web viewer;
 - desktop GUI;
 - user-specific custom atlas wizard;
-- automatic observing-list integration;
+- automatic production inclusion of arbitrary external observing lists
+  (explicit curated/forced memberships and local coverage audits are implemented);
 - finder-circle / telescope-FOV overlays;
 - variable-star specialist charts;
 - photographic plate overlays;

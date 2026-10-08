@@ -2,11 +2,9 @@
 
 > **Purpose:** Generate publication-quality printable star atlases for visual
 > deep-sky observing, especially Dobsonian star-hopping.
-> **Output:** vector PDF (primary); SVG, PNG preview, annotated review PNG,
-> serialized layout JSON.
-> **Language:** Python 3.12+. **Editions:** Pocket (5 mm/°), Standard
-> (10 mm/°) and Deep (20 mm/°); Eyepiece (40 mm/°) and Eyepiece Deep
-> (80 mm/°) are experimental. Standard alpha field review remains in progress.
+> **Output:** vector PDF, PNG preview, annotated review PNG, optional layout JSON.
+> **Language:** Python 3.12+. Main and experimental editions: see §10.
+> Standard alpha field review remains in progress.
 > Authoritative engineering contract for coding agents; keep it lean,
 > push detail to `docs/`.
 
@@ -16,7 +14,7 @@
 | --- | --- |
 | `docs/PRODUCT.md` | Vision, non-goals, user, quality bar, MVP/RC, deferred features |
 | `docs/ARCHITECTURE.md` | Full domain model, subsystem design, conventions, Python rules |
-| `docs/DEVELOPMENT_PLAN.md` | Milestones M0–M20, acceptance criteria, human checkpoints |
+| `docs/DEVELOPMENT_PLAN.md` | Milestones, acceptance criteria, human checkpoints |
 | `docs/STATE.md` | Current progress, frozen geometry, artifacts, open issues |
 | `docs/DATA_SOURCES.md` | Catalogue strategy, storage, licensing, provenance |
 | `docs/GALAXY_VISIBILITY.md` | Crumey-based galaxy visibility model, heuristics, contour classes |
@@ -30,15 +28,18 @@
 
 Read this file before changing code; it is the authoritative contract.
 
-**0.1 One task per agent run.** Unless told otherwise:
+**0.1 Follow the user's task.** When the user provides an explicit task, follow
+that task. Do not independently select another milestone from the development
+plan. Only use the next unfinished milestone as the default when no specific
+task has been provided; its dependencies must be complete.
 
-1. Find the **first unfinished task whose dependencies are complete** in
-   `docs/DEVELOPMENT_PLAN.md`.
-2. Implement **only that task**; run its checks and fix task-caused failures.
-3. Update only that task's status in the plan.
-4. Summarize files changed, checks executed and unresolved issues. Stop.
+Implement only the agreed scope, run relevant checks and fix task-caused
+failures. Update relevant documentation and milestone status only when supported
+by evidence. Summarize files changed, checks and unresolved issues.
 
-Do not opportunistically implement later milestones.
+For implemented behavior, code, validated configuration and tests take precedence
+over historical documentation. `docs/STATE.md` includes older snapshots. Report
+conflicts; do not change production behavior merely to match stale documentation.
 
 **0.2 Do not silently redesign the architecture.** If a task seems to require
 violating a rule here, explain the conflict, propose the smallest architecture
@@ -55,8 +56,9 @@ must be identical. Any stochastic algorithm must accept and record an explicit
 seed.
 
 **0.5 Change hygiene.** Do not commit unless explicitly asked. Never commit
-secrets. Prefer repository commands (`make check`) over invented checks. Do not
-add code comments unless asked.
+secrets or large generated catalogues. Preserve existing unrelated worktree
+changes. Prefer repository commands (`make check`) and checks appropriate to the
+task. Do not add code comments unless asked.
 
 ## 1. Product vision
 
@@ -85,7 +87,7 @@ robustness. A correct but cluttered chart is a failure. Details:
 ```text
 catalogues → normalised store → chart definition → scene builder
   → projected scene → initial layout → deterministic optimizer → layout document
-       ├─ vector renderer ─► PDF / SVG
+       ├─ chart renderer ─► vector PDF / PNG
        ─ review renderer ► PNG + annotated PNG → AI reviewer
             → permitted actions → layout action engine → revised layout → loop
 ```
@@ -112,8 +114,8 @@ decorative elements. AI must never directly mutate astronomical objects.
 
 ## 6. Core domain model
 
-- Sky objects (`Star`, `DeepSkyObject`, `ConstellationBoundary`,
-  `ConstellationLine`, `NebulaOutline`, `MilkyWayFeature`): no page coordinates.
+- Sky data (`Star`, `DeepSkyObject`, `ConstellationSegment`,
+  `ConstellationPolygon`, `NebulaOutline`, `MilkyWayContour`): no page coordinates.
 - `StarSystem` (double/multiple overlay; WDS): catalogue identity, components,
   separation, position angle, component magnitudes and a match status. It links
   to `Star` objects by stable ID and never mutates them.
@@ -121,10 +123,11 @@ decorative elements. AI must never directly mutate astronomical objects.
   `projection`, `rotation_deg`, `atlas_id`, `neighbours`); geometry only.
 - `ChartScene`: projected content (stars, DSOs, star systems, boundaries, lines,
   outlines); chart-plane coordinates, no typesetting decisions.
-- `ChartLayout`: complete serializable page description (symbols, labels,
-  selected candidate, text metrics, grid, borders, title, neighbours, optional
-  legend, diagnostics, optimizer metadata). Serialized layout JSON is a
-  first-class build artifact.
+- Layout state: `Label`/`LabelCandidate`, resolved presentation, transform/style
+  and optimizer results. `ChartLayout` is an architectural concept, not an
+  implemented Python class; the renderer receives these existing structures.
+  `chart render --write-layout` writes `chart.json` for diagnostics/replay.
+  Serialized layout state remains a first-class build artifact.
 
 Full model: `docs/ARCHITECTURE.md`.
 
@@ -147,8 +150,10 @@ Page coordinates are physical millimetres/points, never screen pixels alone.
 
 Ingestion is isolated from rendering and retains provenance; source-specific
 column semantics never leave their importer. Stars: Tycho-2 (preferred),
-supplemented by Hipparcos for the bright stars Tycho-2 omits. DSOs:
-OpenNGC. Visual double/multiple stars: the Washington Double Star Catalog (WDS)
+supplemented by Hipparcos for the bright stars Tycho-2 omits. Optional UCAC4 faint
+stars live in a separate SQLite store and are unlabeled; keep them separate from
+the primary named-star store. DSOs use OpenNGC plus imported catalogue
+supplements. Visual double/multiple stars: the Washington Double Star Catalog (WDS)
 is a semantic **overlay** on the star base, never a source of single-star
 positions; it is linked per chart and never overwrites Tycho-2. Additional
 catalogues require license decision, provenance, field mapping, duplicate
@@ -170,6 +175,22 @@ licenses, storage: `docs/DATA_SOURCES.md`.
 Edition/content/tiling is `atlas/*.yaml`; appearance is `styles/*.yaml`.
 Configuration, not separate engines. Do not mix those concerns.
 
+| Edition | Scale | Atlas/style preset stem | Status |
+| --- | --- | --- | --- |
+| Pocket | 5 mm/° | `pocket` | Main |
+| Standard | 10 mm/° | `standard` | Main |
+| Deep | 20 mm/° | `deep` | Main |
+| Eyepiece | 40 mm/° | `eyepiece` | Experimental |
+| Eyepiece Deep | 80 mm/° | `eyepiece_deep` | Experimental test charts |
+
+The scale refers to main charts; detail charts can override it. Eyepiece Deep
+currently has explicit test charts, not a full-sky tiling. The `--edition`
+shortcut supports only `pocket`, `standard`, `deep`; experimental presets use
+explicit `--atlas` and `--style` paths.
+DSO policy composition lives in `config/observing_lists.yaml` and
+`catalog/selection.py`: preserve Pocket ⊆ Standard ⊆ Deep = Eyepiece using
+canonical physical identities, not display names.
+
 ## 11. Atlas tiling
 
 Overlapping chart definitions covering every supported declination: sufficient
@@ -179,29 +200,33 @@ geometry/tiling: `docs/CARTOGRAPHY.md`.
 
 ## 12. Symbol rendering
 
-Symbols are semantic (`star`, `open_cluster`, `globular_cluster`, `galaxy`,
-`planetary_nebula`, `bright_nebula`, `dark_nebula`, `galaxy_cluster`), not draw
-commands. Star size is a configurable monotonic function of magnitude, stable
-across PDF/PNG. Extended deep-sky symbols use the catalogue angular extent where
-it is sufficiently reliable (galaxies, globular clusters, open clusters; more
-classes only after review). The semantic shape represents the object type; the
-printed extent represents angular size. Missing or unreliable sizes fall back to
-the class-specific `fallback_diameter_mm`, floored by `min_diameter_mm` for
-printability and capped by `max_diameter_mm` where genuinely required; large
-objects must not be shrunk back to a fixed size. Galaxies use major/minor axis
-and position angle where available, preserving orientation; their diameter
-fields act on the major axis. All DSO symbol geometry is centralised in
-`render/symbols.py:dso_symbol_extent`, and rendering, label exclusion and
-collision detection must consume that same `SymbolExtent`. Large nebula
-outlines (later) are true vector paths. Emphasized objects (Messier, Herschel
-400) use a heavier configurable stroke, so the symbol is bold wherever its label
-is; the renderer takes that emphasis from the layout's bold labels rather than
-re-deriving catalogue facts. Visual double/multiple stars use three cases decided
-by the printed separation, never a fixed angular separation: ordinary star (no
-marker); unseparable pair (one symbol with combined magnitude plus a short
-horizontal marker); separable pair (two real positions). The marker is a
-cartographic symbol only, not the real position angle. Configurable under
-`double_stars:` in the style.
+Symbols are semantic; type controls shape and style controls size. Star size is
+monotonic with magnitude and stable across PDF/PNG. Extended DSO symbols use
+reliable catalogue sizes when `use_angular_size` is enabled. Preserve galaxy
+axis ratio and position angle; galaxy diameter limits act on the major axis.
+Missing/unreliable sizes use `fallback_diameter_mm`, floored by
+`min_diameter_mm` and capped by `max_diameter_mm` where configured; do not shrink
+large objects to fixed sizes. The detailed rules live in `docs/ARCHITECTURE.md`.
+All DSO geometry must use `render/symbols.py:dso_symbol_extent` and its
+`SymbolExtent`, including rendering, label exclusion and collision detection.
+PN size classes derive from the configured angular floor in that same path.
+Schematic nebula outlines are implemented as projected/clipped vector paths.
+Milky Way brightness contours from the vendored d3-celestial data are an
+unlabeled background layer, controlled by `milky_way` in the style; keep them
+separate from DSO geometry and label collision obstacles.
+Emphasized objects (Messier, Herschel 400) use the configured heavier stroke.
+The renderer takes emphasis from resolved bold labels, not catalogue queries.
+
+WDS pair selection uses configured separation/companion-magnitude bands with a
+0.5-arcsec minimum and no Δmag filter (`catalog/wds_selection.py`). Printed
+clearance between the two symbol edges then classifies pairs as unresolved,
+marginal or resolved (`render/double_stars.py`). For unresolved pairs, the current
+renderer suppresses linked component disks and draws one disk sized by combined
+magnitude at the real primary position, plus a horizontal marker. Marginal and
+resolved pairs keep their plotted base stars without a marker from that pair.
+WDS does not add star positions or mutate stored stars; combined magnitude is
+presentation state. The marker does not encode position angle. Keep selection
+and representation separate; settings live under `double_stars:` in the style.
 
 ## 13. Typography
 
@@ -209,7 +234,9 @@ Cairo for vector graphics; Pango/PangoCairo for shaping and exact metrics.
 Never place labels with approximate character widths; renderer and collision
 system share the same metrics. Style config controls family, size, weight,
 category, priority, spacing and halo strategy. Fonts must have
-redistribution/embedding rights.
+redistribution/embedding rights. Bundled Lato is used for charts; bundled Source
+Sans 3 for editorial/index pages. Register package assets through
+`render/fonts.py`; do not depend on system-installed copies.
 
 ## 14. Label system
 
@@ -217,7 +244,8 @@ redistribution/embedding rights.
   `label:constellation:VIR`; required for diffs, AI references, tests,
   overrides and reproducible optimization.
 - **14.2 Candidates** — compass positions `N NE E SE S SW W NW`, offset from
-  the anchor exclusion zone. Later: radial, along-path, leader-line candidates.
+  the anchor exclusion zone, on concentric rings. DSO leader-line routes are
+  implemented in `layout/leader_lines.py`; do not invent routes in the renderer.
 - **14.3 Priorities** — category weights plus local relevance: major/common
   name, Messier, bright NGC/IC, prominent named star, ordinary NGC/IC, fainter
   optional DSO, minor star designation. The single numeric scale lives in
@@ -263,11 +291,11 @@ never required for a valid page.
 
 ## 16. Renderer architecture
 
-The renderer is intentionally boring: it accepts a `ChartLayout` and draws
-exactly what it specifies. It must not query catalogues, invent or move labels,
-make content-selection decisions or change atlas geometry. Outputs: vector PDF
-(text/lines retained), SVG, PNG preview, annotated review PNG. Reason in
-physical page units.
+The renderer draws the supplied scene and resolved labels using their transform,
+style and presentation. It must not query catalogues, invent or move labels,
+make content-selection decisions or change atlas geometry. Current outputs are
+vector PDF and PNG; annotated PNG uses the review renderer. SVG is not currently
+exposed. Reason in physical page units.
 
 ## 17. Review rendering
 
@@ -289,29 +317,22 @@ AI is first-class but optional; the atlas always builds with AI disabled.
   `max_iterations`, `max_cost_per_chart_usd`.
 - **18.3 Structured output only** — validated schema; never parse prose. All
   responses pass schema validation before affecting layout.
-- **18.4 Allowed actions** — whitelist only: `select_candidate`, `move_label`
-  (direction/distance intent), `fine_adjust_label` (bounded local intent),
-  `show_optional_label`, `hide_optional_label` and `request_line_knockout`.
-  Leader-line and display-name actions may only be advertised once their state
-  exists in the layout document; unknown actions are rejected.
+- **18.4 Allowed actions** — use the schema whitelist and actions actually
+  advertised by `review/build.py`, enforced by `ai/actions.py`. Bounded label
+  moves, optional visibility and DSO leader enable/remove actions are available.
+  Display-name variant actions remain unadvertised. Never advertise an action
+  without serializable presentation state and deterministic validation.
 - **18.5 AI cannot approve invalid geometry** — apply permitted actions to a
   copied layout, run deterministic validation, compute cost, reject changes that
   add hard violations, re-render only if accepted. AI is advisory.
 
 ## 19. AI optimization loop
 
-```text
-layout_0 = deterministic_layout(scene); validate; render
-repeat up to max_iterations:
-    review = reviewer.review(rendered_page, metadata)
-    if no significant issues: break
-    proposal = apply_allowed_actions(layout, review)
-    reject proposal if it adds hard violations
-    if accepted: layout = proposal; render(layout); else stop
-```
-
-Terminate on: no significant issues; minimum score; no accepted changes;
-iteration limit; cost budget; repeated layout hash. Infinite loops forbidden.
+Start from a deterministic layout. Review, apply permitted actions to a copy,
+validate and render accepted changes; reject new hard violations and worsening
+soft cost. Terminate on no significant issues, target score, no accepted changes,
+iteration/cost limits or repeated layout hash. Infinite loops are forbidden.
+Loop and replay details: `docs/AI_REVIEW.md`.
 
 ## 20. AI cost control
 
@@ -322,11 +343,9 @@ strong-on-hard-pages policy is later, after reviewer benchmarking. Details:
 
 ## 21. AI benchmark suite
 
-Empirical model choice against difficult fields (Virgo/Coma, Cygnus Milky Way,
-Sagittarius, Orion, M31, Pleiades, sparse high-latitude, chart-edge-heavy):
-true detections, false positives, valid references, action usefulness, schema
-compliance, repeatability, cost. Prefer the cheapest model meeting quality.
-Fixtures and results: `docs/AI_REVIEW.md`.
+Choose models empirically on difficult and sparse fields, measuring useful
+detections/actions, false positives, schema compliance, repeatability and cost.
+Prefer the cheapest model meeting quality. Fixtures/results: `docs/AI_REVIEW.md`.
 
 ## 22. Manual overrides
 
@@ -349,8 +368,15 @@ Rendering is not publishability.
   candidates, page dimensions, required elements present.
 - **Geometry:** printable bounds, hard collisions, symbol dimensions, text
   metrics, grid clipping, neighbour references.
-- **Atlas-level (later):** complete coverage, no gaps, expected overlaps, unique
-  numbering, consistent neighbours, index completeness, all pages generated.
+- **Atlas-level:** sampled sky coverage and neighbour-overlap checks exist in
+  `atlas/tiling.py`; `atlas/report.py` reports coverage/density/navigation.
+  `atlas validate` checks manifest consistency and artifact checksums; ordinary
+  validation can pass with recorded hard layout issues.
+- **Publication:** `atlas build --publication` and `atlas validate --publication`
+  additionally require complete chart sets, sampled coverage, traceable catalogue
+  checksums, current input fingerprints and zero hard layout issues. Builds are
+  staged and the prior publication is retained. See `build/preflight.py`.
+  These checks do not establish field usability or legal redistribution rights.
 
 ## 24. Testing strategy
 
@@ -369,8 +395,9 @@ Deterministic geometry over coverage.
 ## 25. Performance targets
 
 One standard-density A4 chart builds interactively; deterministic layout in
-seconds, not minutes. Do not parallelize before single-page behavior is correct
-and measured. Benchmarks: `docs/PERFORMANCE.md`.
+seconds, not minutes. Existing atlas builds support per-page workers; preserve
+deterministic output order and measure before further parallelization.
+Benchmarks: `docs/PERFORMANCE.md`.
 
 ## 26. Caching
 
@@ -387,23 +414,23 @@ object IDs. Design diagnostics early.
 
 ## 28. Command-line interface
 
-`argparse` is sufficient; do not build the whole final CLI at once.
+Keep the existing `argparse` CLI. Use `--help` to check current options.
 
 ```bash
-nightsky data fetch-stars | import-stars | star-count
-nightsky data fetch-openngc | import-openngc
-nightsky chart render | validate | review | magnitude-scale
-nightsky atlas tile | coverage | build
-nightsky benchmark ai-review
+nightsky data star-count --help
+nightsky data selection-report --help
+nightsky chart render --chart test-virgo --edition standard
+nightsky atlas coverage --edition standard
+nightsky atlas build --edition standard
+nightsky atlas validate --edition standard --publication
+nightsky benchmark ai-review --help
 ```
 
 `chart render|validate|review` and `atlas build` accept `--overrides PATH`
-(file or directory), `--constellations DIR` (default
-`data/fixtures/constellations`; empty to omit), `--outlines DIR` (default
-`data/fixtures/outlines`; empty to omit), `--star-names DIR` (default
-`data/fixtures/starnames`; empty to omit), `--observing-lists DIR` (default
-`data/fixtures/observing_lists`; empty to omit) and `--observing-config PATH`
-(default `config/observing_lists.yaml`).
+(file or directory) and custom input directories. Use explicit
+`--no-constellations`, `--no-outlines`, `--no-star-names`,
+`--no-observing-lists`, `--no-double-stars` to omit layers; empty paths do not
+disable them. Observing policy defaults to `config/observing_lists.yaml`.
 
 ## 29. Configuration principles
 
@@ -414,21 +441,9 @@ strict models (`extra="forbid"`); see `docs/ARCHITECTURE.md`.
 
 ## 30. Repository structure
 
-```text
-nightsky-atlas/
-├── AGENTS.md  README.md  pyproject.toml  Makefile  ai.yaml
-├── src/nightsky_atlas/
-│   ├── cli.py
-│   ├── catalog/ astronomy/ projection/ chart/ atlas/ scene/
-│   ├── layout/   # models, labels, candidates, collision, scoring,
-│   │             # optimizer, overrides, validation
-│   ├── render/   # cairo, symbols, text, grid, review
-│   ├── review/   # models, schema, build
-│   ├── ai/       # base, actions/schema, openrouter, recorded, loop,
-│   │             # benchmark, config, credentials
-│   └── build/    # chart, atlas
-├── atlas/  styles/  data/  benchmarks/  overrides/  tests/  docs/  build/
-```
+Python modules live under `src/nightsky_atlas/`; configuration under `atlas/`,
+`styles/` and `config/`; tests under `tests/`; generated outputs under ignored
+`build/`. The module/directory map is in `docs/ARCHITECTURE.md`.
 
 ## 31. Python engineering rules
 
@@ -437,8 +452,8 @@ nightsky-atlas/
 - Standard dataclasses for internal domain models; a schema-validation library
   only for external configuration and AI JSON.
 - Tooling: **ruff**, **pytest**; add a type checker once interfaces stabilize.
-- Justify every runtime dependency (numpy, astropy, pycairo, Pango bindings,
-  PyYAML, httpx are likely justified). No large stacks for convenience.
+- Justify every new runtime dependency; check `pyproject.toml` and the README's
+  Linux prerequisites first. No large stacks for convenience.
 
 ## 32. Build/repository commands
 
@@ -468,73 +483,64 @@ Level C publication quality (long term). Definitions: `docs/PRODUCT.md`.
 
 - **Virgo/Coma** — many galaxies, dense DSO labels, ambiguous associations,
   leader-line stress.
-- **Cygnus** — high stellar density, Milky Way context, extended nebulae later,
+- **Cygnus** — high stellar density, Milky Way contours, schematic nebula outlines,
   faint-label legibility stress.
 
-Exact centers/FOV are committed with the first chart prototype.
+Committed test fields live in `atlas/standard.yaml`.
 
 ## 36. Development philosophy
 
-Proceed vertically: small real catalogue → correct projection → one ugly but
-correct page → real typography → real labels → deterministic optimization →
-beautiful test page → AI review → multiple pages → whole atlas. Details:
-`docs/DEVELOPMENT_PLAN.md`.
+Develop through usable end-to-end charts before expanding infrastructure.
+The original vertical development sequence is in `docs/DEVELOPMENT_PLAN.md`.
 
 ## 37. Development plan
 
-Full plan, acceptance criteria and checkpoints: `docs/DEVELOPMENT_PLAN.md`.
+Milestone criteria live in `docs/DEVELOPMENT_PLAN.md`; artifact evidence and
+open issues in `docs/STATE.md`. Avoid duplicating their checkbox status here.
+Implemented features include the core pipeline, all three main-edition tilings,
+DSO selection/inheritance, WDS, outlines, Milky Way contours, atlas reporting and
+publication preflight. Additional catalogue/legal review and issue-report work
+remain partial.
 
-- [x] M0–M14 (skeleton, projection, stars, PDF, catalogue import, DSOs, labels,
-  collisions, optimizer, furniture, review artifacts, AI reviewer, AI loop,
-  AI benchmark, tiling).
-- [~] M15 Standard atlas build: M15.1–M15.4 done; **M15.5 alpha/field test in
-  progress**.
-- [x] M16.1 overrides; [ ] M16.2 atlas-wide issue report; [x] M16.3 publication
-  preflight; [~] M16.4 data-source/license documentation.
-- [x] M21.1–M21.4 observing-list-driven DSO selection (separate render/label
-  priorities; Herschel 400 forced into Standard; per-type visibility evaluators
-  decide which objects are drawn); [ ] M21.5 further observing lists.
-- [~] M17 Pocket: preset/style and full build generated; formal tiling and
-  field test remain. [~] M18 Deep: preset/style and full build generated; data
-  expansion remains. M19 extended structures and M20 Deep atlas work remain.
-
-Artifacts, frozen geometry and open issues: `docs/STATE.md`.
+Full Pocket, Standard and Deep build artifacts exist. Ordinary output validation
+passes for the recorded 2026-10-07 builds, which still contain hard layout issues
+and were not publication builds. This does not validate them against later input
+changes. Track feature completion, full-build success, validation mode, visual
+review, telescope field testing and release approval separately. M15.5 field
+acceptance remains pending; a PDF or a passing test suite is not release approval.
 
 ## 38. Explicit deferred features
 
-Constellation artwork; artistic colour Milky Way; eyepiece orientation modes;
-web viewer; GUI; custom atlas wizard; finder/FOV
-overlays; variable-star charts; photographic overlays; translated editions;
-print-on-demand. Do not implement because they seem useful. List:
+Illustrative constellation artwork (stick figures are implemented); artistic
+colour Milky Way (grayscale contours are implemented); eyepiece mirror/orientation
+modes (distinct from the experimental editions); web viewer; GUI; custom atlas
+wizard; finder/FOV overlays; variable-star charts; photographic overlays;
+translated editions; print-on-demand. Do not implement because they seem useful. List:
 `docs/PRODUCT.md`.
 
 ## 39. Human decision checkpoints
 
-Stop for explicit human evaluation at M3.3, M4.3, M8.4, M9.4, M11.4, M13.3,
-M14.1, M15.5; before adopting each external catalogue; before final Pocket/Deep
-specifications. Do not substitute coding-agent preference for product decisions.
-Details: `docs/DEVELOPMENT_PLAN.md`.
+Respect recorded decisions at M3.3, M4.3, M8.4, M9.4, M11.4, M13.3 and M14.1;
+do not request them again for routine work already authorized. Explicit human
+evaluation remains necessary for M15.5 field acceptance, new catalogue adoption
+and final Pocket/Deep publication specifications. Revisit an accepted decision
+when the task changes its scope, not merely because its historical checkpoint
+appears in the plan. Details: `docs/DEVELOPMENT_PLAN.md`.
 
 ## 40. Definition of MVP
 
-Two publication-intent A4 test charts (Virgo/Coma, Cygnus): real stars, OpenNGC
-DSOs, stereographic projection, magnitude sizing, semantic symbols, Pango
-labels, deterministic optimization, furniture, vector PDF, preview/review PNG,
-layout JSON, zero hard violations. AI review is not required for basic MVP.
-Details: `docs/PRODUCT.md`.
+The MVP criteria are in `docs/PRODUCT.md`: real-data Virgo/Coma and Cygnus pages
+with deterministic layout, vector/review artifacts and zero hard violations.
+AI review is not required for the basic MVP.
 
 ## 41. Definition of first release candidate
 
-Complete coverage, stable numbering, final provenance docs, reproducible clean
-build, no hard validation errors, recorded AI review/skip policy per page,
-deterministic replay of accepted AI decisions, atlas-wide PDF, field testing,
-all high-severity issues fixed or explicitly accepted. Details:
-`docs/PRODUCT.md`.
+Release criteria live in `docs/PRODUCT.md`: reproducible complete coverage,
+stable navigation, final provenance, zero hard errors, recorded AI review/skip
+policy and replay, field testing and accepted/fixed high-severity issues.
 
 ## 42. What success looks like
 
-An observer can take the atlas to a Dobsonian and use it as a real observing
-tool. The strongest criterion: a complete atlas can be regenerated from source
-data and configuration with little or no manual label cleanup while staying
-beautiful, readable and reliable at the telescope. Judge architecture against
-this standard.
+The atlas must be useful at a Dobsonian and reproducible from source data and
+configuration with little manual label cleanup. Judge changes against field
+readability and reliability; see `docs/PRODUCT.md`.

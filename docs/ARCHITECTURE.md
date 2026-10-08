@@ -32,7 +32,7 @@ deterministic layout optimizer
       ▼
 layout document
       │
-      ├──────────────► vector renderer ─────► PDF / SVG
+      ├──────────────► chart renderer ──────► vector PDF / PNG
       │
       └──────────────► review renderer ─────► PNG + annotated PNG
                                                 │
@@ -95,8 +95,8 @@ AI output must never directly mutate astronomical objects.
 
 ## Core domain model
 
-- `Star`, `DeepSkyObject`, `ConstellationBoundary`, `ConstellationLine`,
-  `NebulaOutline`, `MilkyWayFeature` — normalized sky data with no page
+- `Star`, `DeepSkyObject`, `ConstellationSegment`, `ConstellationPolygon`,
+  `NebulaOutline`, `MilkyWayContour` — normalized sky data with no page
   coordinates.
 - `StarSystem` — a catalogued visual double/multiple system (WDS overlay):
   `primary_star_id`, `component_star_ids`, `is_multiple`, `separation_arcsec`,
@@ -109,7 +109,8 @@ AI output must never directly mutate astronomical objects.
   `projection`, `rotation_deg`, `atlas_id`, `neighbours`.
 - `ChartScene` — astronomical content selected after projection:
   `definition`, `stars`, `deep_sky_objects`, `star_systems`,
-  `constellation_boundaries`, `constellation_lines`, `nebula_outlines`.
+  `constellation_boundaries`, `constellation_lines`, `constellation_regions`,
+  `nebula_outlines`, `milky_way_contours`.
   Contains chart-plane coordinates but no final typesetting decisions.
   Constellation stick figures are **symbolic** connections, not physical great
   circles: the builder projects only their two endpoints and the renderer draws
@@ -123,30 +124,34 @@ AI output must never directly mutate astronomical objects.
   `label_priority`, `forced`, `visible`, `visibility_reasons`. Observing-list
   membership and priorities are atlas metadata, so they never mutate
   `DeepSkyObject`.
-- `ChartLayout` — complete machine-readable page description: symbol positions
+- `ChartLayout` — architectural concept for a complete machine-readable page
+  description: symbol positions
   and visual properties; label objects; selected candidate; text metrics; grid
   paths; borders; title; neighbour references; optional legend; diagnostics;
   optimizer metadata. Must be serializable; the serialized layout is a
-  first-class build artifact.
+  first-class build artifact. There is currently no `ChartLayout` Python class:
+  layout state is carried by `Label`/`LabelCandidate`, optimizer results,
+  `ChartPresentation`, `PageTransform` and `StyleConfig`, alongside `ChartScene`.
+  `chart render --write-layout` serializes chart/label/optimizer diagnostics.
 
 Whether a deep-sky object is *rendered* and whether it is *labelled* are
-separate decisions. The scene builder keeps an object when its per-type
-`VisibilityEvaluator` (`catalog/visibility.py`) calls it visible or it is on an
-edition's forced observing list; star/double-star catalogue entries are excluded
-from the DSO layer. Each evaluator combines integrated magnitude, mean surface
-brightness and angular size with type-specific rules and returns a deterministic
+separate decisions. The scene builder consumes `select_dso`
+(`catalog/selection.py`), combining per-type visibility, catalogue/curation rules,
+forced lists and canonical-target edition inheritance. Preserve
+Pocket ⊆ Standard ⊆ Deep = Eyepiece. Star/double-star catalogue entries are
+excluded from the DSO layer. Visibility evaluators return deterministic
 `VisibilityAssessment` (`visible`, 0-100 `score`, reasons). The label builder
 then uses `label_priority` (observing-list bonus plus the catalogue ordering in
 section 14.3) and lets the optimizer hide optional labels.
 
 
-Build artifact layout:
+Chart CLI artifact layout (JSON/review files are opt-in; atlas builds always
+write per-chart PDFs and optionally previews):
 
 ```text
-build/standard/charts/042/
+build/standard/charts/standard-042/
     chart.json
     chart.pdf
-    chart.svg
     preview.png
     review.png
     review.json
@@ -209,8 +214,10 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
   computation is permitted. Per-class fallback/min/max rules live in the style
   (`dso.galaxy`, `dso.globular_cluster`, `dso.open_cluster`, ...) under
   `use_angular_size`, so a class is only switched to true scale after review.
-- Large nebula outlines (later) must use true vector paths from source geometry,
-  never raster backgrounds.
+- Schematic nebula outlines are implemented as projected/clipped vector paths
+  from RA/Dec source geometry, never raster backgrounds. Milky Way contours use
+  `catalog/milky_way.py` and `data/third_party/d3-celestial/mw.json`; the style's
+  `milky_way` settings control the unlabeled background layer.
 - Emphasized symbols (Messier, Herschel 400) use `dso.bold_line_width_mm` so the
   mark is bold wherever its label is. The renderer derives the set of bold
   targets from the labels' `font_weight`; it never re-derives catalogue facts.
@@ -219,8 +226,11 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
   0.5 arcsec select pairs; no Δmag filter is applied. The projected
   page separation minus the two real rendered star radii classifies a selected
   pair as unresolved, marginal, or clearly resolved. Only an unresolved pair
-  adds a short horizontal bar to its rendered primary; base stars, positions,
-  and magnitudes are never replaced, and the bar does not encode position angle.
+  produces a combined-magnitude disk at the real primary position plus a short
+  horizontal bar; linked component disks are suppressed for that representation.
+  Marginal and resolved pairs keep their plotted base-star disks without a marker
+  from that pair. Stored base-star positions and magnitudes are never mutated,
+  WDS inserts no new star positions, and the bar does not encode position angle.
   Selection lives in `catalog/wds_selection.py`; page-scale classification and
   marker aggregation live in `render/double_stars.py`.
 
@@ -241,9 +251,9 @@ Symbols are semantic, not arbitrary draw calls: `star`, `open_cluster`,
   issue references, regression tests, manual overrides and reproducible
   optimization.
 - Candidate placement uses standard compass positions `N NE E SE S SW W NW`,
-  with explicit offsets from the anchor's exclusion zone. Later: custom radial
-  candidates, along-path constellation labels, leader-line candidates and
-  object-specific candidates.
+  with explicit offsets from the anchor's exclusion zone and concentric rings.
+  DSO leader-line candidates/routes are implemented in `layout/leader_lines.py`.
+  Other custom/along-path candidates remain potential extensions.
 - Priority is explicit, using understandable category weights plus local
   relevance (not a giant global magic-number list): major/common name, Messier,
   bright NGC/IC, prominent named star, ordinary NGC/IC, fainter optional DSO,
@@ -286,12 +296,13 @@ layout; it must not be required to make an otherwise broken page valid.
 
 ## Renderer
 
-The renderer is intentionally boring. It accepts a `ChartLayout` and draws
-exactly what it specifies. It must not query catalogues, invent or move labels,
+The renderer is intentionally boring. It accepts the scene, resolved labels,
+transform, style and presentation, and draws their specified state. It must not
+query catalogues, invent or move labels,
 make content-selection decisions or change atlas geometry.
 
-- Outputs: vector PDF (retaining vector text/lines), SVG, PNG preview,
-  annotated review PNG.
+- Current outputs: vector PDF (retaining vector text/lines), PNG preview and
+  annotated review PNG. SVG is not exposed by the current chart renderer.
 - Reasons in physical page units (mm/points), never screen pixels alone.
 
 ## Manual overrides
@@ -320,9 +331,15 @@ A chart is not publishable because it rendered successfully.
   valid candidate selections, page dimensions, no missing required elements.
 - **Geometry:** printable bounds, hard collisions, symbol dimensions, text
   metrics, grid clipping, neighbour references.
-- **Atlas-level (later):** complete sky coverage, no unintended gaps, expected
-  overlaps, unique chart numbering, consistent neighbour links, index
-  completeness, all PDF pages generated.
+- **Atlas-level:** sampled coverage and neighbour-overlap checks are implemented
+  in `atlas/tiling.py`; `atlas/report.py` reports coverage/density/navigation.
+  `atlas validate` checks manifest/chart-list consistency and recorded artifact
+  checksums. Ordinary validation may pass with recorded hard layout issues.
+- **Publication preflight:** `build/preflight.py` and `atlas build/validate
+  --publication` check complete chart sets, sampled coverage, catalogue/source
+  checksums, current input fingerprints and zero hard layout issues. Builds use
+  staging and retain the previous publication. Neither field acceptance nor
+  legal redistribution permission is established by these checks.
 
 ## Testing strategy
 
@@ -387,8 +404,9 @@ nightsky-atlas/
 │   ├── ai/                # base, schema/actions, openrouter, recorded, loop,
 │   │                      # benchmark, config, credentials
 │   └── build/             # chart, atlas
-├── atlas/                 # standard.yaml (pocket/deep later)
-├── styles/                # standard.yaml (pocket/deep later)
+├── atlas/                 # main and experimental edition definitions
+├── styles/                # matching edition/detail styles
+├── config/                # observing policy and curated memberships
 ├── data/                  # raw/, processed/, fixtures/  (raw+processed ignored)
 ├── benchmarks/ai_review/
 ├── overrides/

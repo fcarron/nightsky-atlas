@@ -14,7 +14,7 @@ v0.3 (mirror-symmetric ring counts for regular navigation).
 | Scale | 10 mm per degree |
 | Projection | stereographic, north up / east left |
 | Stellar limit | magnitude 9.0 |
-| DSO limit | magnitude 12.0 (objects with no magnitude are kept) |
+| DSO selection | per-type visibility, catalogue/curation rules and edition inheritance |
 | Charts (tiled) | 118 |
 
 This sits between Sky Atlas 2000.0 (26 charts, ~10 mm/deg, mag 8.5) and
@@ -99,7 +99,7 @@ given below in time; 1 h = 15°.
 
 | Edition | RA grid | Dec grid | RA labels | Dec labels | Outer RA ticks | Outer Dec ticks | Polar RA grid/ticks |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Pocket | 1 h | 10° | 1 h | 20° | 15 min | 5° | 2 h |
+| Pocket | 1 h | 10° | 1 h | 10° | 15 min | 5° | 2 h |
 | Standard | 30 min | 5° | 1 h | 10° | 10 min | 2.5° | 30 min |
 | Deep | 15 min | 2° | 30 min | 4° | 5 min | 1° | 15 min |
 
@@ -128,11 +128,11 @@ consistent notation built centrally in `chart/presentation.py`:
 | --- | --- | --- | --- |
 | Pocket | Pocket | P | P01 … P48 |
 | Standard | Standard | S | S001 … S118 |
-| Deep | Deep | D | D001 |
+| Deep | Deep | D | D001 … D430 |
 
 The edition name and code come from the atlas `edition:` block and fall back to
-this registry when omitted.  The footer title is
-`NightSky Atlas — Standard · S068`; navigation references neighbouring charts as
+this registry when omitted. The footer title uses compact visible-constellation
+context, for example `NightSky Atlas · Cyg · S068`; navigation references neighbouring charts as
 `N: S082`, never with the internal id.
 
 Furniture sits outside the chart frame and is deliberately quiet
@@ -156,10 +156,11 @@ for that field, an ordinary galaxy number is omitted from the parent only when
 the same stable DSO ID has a placed detail label and that label has no hard
 layout violation. The galaxy symbol remains on both pages. Messier and Herschel
 400 labels are never transferred. It is enabled for Standard Virgo core
-(`SD053A`), southern Virgo (`SD053B`) and Fornax (`SD089`), and for the same
-three fields in Pocket (`PD025A`, `PD025B`, `PD032`). Pocket parent maps use
-the compact detail code as the frame tag; the detail page carries the full
-region name.
+(`SD053A`), southern Virgo (`SD053B`) and Fornax (`SD089`). Pocket now retains
+just Virgo core (`PD025A`), at
+10 mm/° with stars to mag 9.0 and the parent's DSO selection; the other former
+Pocket detail fields use ordinary labels on the main maps. Pocket uses the
+compact detail code as its frame tag; the detail page carries the region name.
 
 Deep has nine close-ups: NGC 7331 with Stephan's Quintet (`DD105`), the
 Pleiades (`DD111`), the Coma core (`DD121`), the Markarian chain (`DD174`),
@@ -253,7 +254,8 @@ so no chart label is placed under it.
 
 - Residual hard violations on dense pages (Milky Way / Virgo-Coma fields,
   Large Magellanic Cloud); the reference MVP charts validate cleanly.  DSO and
-  star label prioritisation in dense fields is the next work package.
+  star label prioritisation/selection is implemented; residual dense-page
+  conflicts still require review.
 - Polar charts are stereographic like every other chart; local distortion at the
   pole is larger and the meridian fan can be dense, especially in Deep. Each
   edition uses `grid.polar_ra_step_deg` for its polar meridians and labels them

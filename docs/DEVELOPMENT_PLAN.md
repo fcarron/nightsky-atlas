@@ -1,7 +1,8 @@
 # Development plan
 
-The authoritative, granular plan. `AGENTS.md` links here so a coding agent can
-find the first unfinished task with complete dependencies. Status markers:
+The granular roadmap and acceptance criteria. An explicit user task takes
+precedence; use the next unfinished task with complete dependencies only when
+no specific task has been given. Status markers:
 
 ```text
 [ ] not started
@@ -32,18 +33,19 @@ page is visible.
 
 ## Current position
 
-- M0–M14 complete. M15.1–M15.4 complete. **M15.5 in progress** (alpha built and
-  a Standard v0.1 full-sky tiling draft generated, field test pending).
-- M16.1 complete. M16.2 partially implemented as `atlas report`
-  (coverage/density/neighbour/region review). M16.3–M16.4 not started (M16.4
-  document now seeded).
+- M0–M14 complete. M15.1–M15.4 complete. **M15.5 in progress** (full Standard
+  build generated, field acceptance pending).
+- M16.1 and M16.3 implemented. M16.2 is partial as `atlas report`
+  (coverage/density/neighbour/region review); M16.4 documentation exists, with
+  unresolved source-rights review.
 - M21.1–M21.4 complete (observing-list-driven DSO selection with per-type
-  visibility; Herschel 400 forced into Standard). M21.5 not started.
+  visibility; Herschel 400 forced into Standard). M21.5 is partial.
 - M11.4 and M13.3 complete (live OpenRouter review and model selection).
 - Deterministic index pages, constellation-line label avoidance/knockouts,
   edition-specific symbol curves and bounded AI move/fine-adjust intents are
-  complete. Pocket and Deep presets exist and have representative renders, but
-  neither complete edition has yet been field-tested.
+  complete. Pocket, Standard and Deep have full build artifacts; their recorded
+  2026-10-07 outputs pass ordinary artifact validation but contain hard layout
+  issues and were not publication builds. Field acceptance remains pending.
 - Live snapshot of progress, artifacts and open issues: `docs/STATE.md`.
 
 ## M0 — Repository and executable skeleton
@@ -193,7 +195,7 @@ page is visible.
   copied state, then deterministic validation; reject invalid actions
   individually where practical.
 - [x] **M11.4 One-step AI review command** — `nightsky chart review
-  test-virgo --model MODEL`; review JSON only, no iteration yet.
+  --chart test-virgo --model MODEL`; review JSON only, no iteration yet.
   **Human checkpoint:** inspect whether the cheap vision model identifies
   genuinely bad label placements.
 
@@ -245,8 +247,9 @@ page is visible.
 - [~] **M15.5 Standard alpha atlas** — generate the complete atlas.
   **Major human checkpoint:** print/use representative pages at a telescope.
   Evaluate star-hop usability, faint star visibility, page density, typography
-  under red light, object-label ambiguity and page navigation. Do not begin
-  Pocket/Deep merely because a full PDF exists; Standard must first be useful.
+  under red light, object-label ambiguity and page navigation. Pocket/Deep work
+  has since been explicitly authorized and full builds exist; this does not
+  close Standard's field-acceptance checkpoint or approve any edition for release.
 
 ## M16 — Manual override workflow and publication hardening
 
@@ -272,25 +275,30 @@ Only begin after Standard is stable.
 
 - [x] **M17.1 Pocket atlas configuration** — reduce stellar depth, DSO density
   and label density; increase field size/usability.
-- [ ] **M17.2 Pocket tiling** — may differ substantially from Standard.
+- [x] **M17.2 Pocket tiling** — 48 main charts in `atlas/pocket.yaml`;
+  coverage and neighbour overlap tested in `tests/atlas/test_editions.py`.
 - [x] **M17.3 Pocket style** — prioritize quick recognition and uncluttered
   navigation.
-- [ ] **M17.4 Build and field-test Pocket alpha**.
+- [~] **M17.4 Build and field-test Pocket alpha** — full build exists under
+  `build/complete-2026-10-07/pocket/`; field acceptance remains pending.
 
 ## M18 — Deep edition data expansion
 
 Only begin after Standard/Pocket architecture proves stable.
 
 - [~] **M18.1 Deep data requirements** — a provisional Deep preset (20 mm/deg,
-  magnitude 10.0, denser labels) exists; which additional catalogues materially
+  magnitude 10.5, denser labels) exists; which additional catalogues materially
   improve visual observing.
 - [ ] **M18.2 License review per proposed dataset** — no ingestion before a
   license/provenance decision.
-- [ ] **M18.3 Additional catalogue importers** — keep source-specific logic
-  isolated.
-- [ ] **M18.4 Duplicate/cross-ID resolution** — deterministic and documented.
-- [ ] **M18.5 Raise stellar limit and profile performance** — optimize only based
-  on measured bottlenecks.
+- [~] **M18.3 Additional catalogue importers** — source-specific importers
+  exist in `catalog/vizier_dso.py`, with synthetic regression tests; future
+  catalogue additions still require review.
+- [~] **M18.4 Duplicate/cross-ID resolution** — canonicalization and merging
+  exist in `catalog/merge.py`; uncertain region relationships remain separate
+  from exact aliases.
+- [~] **M18.5 Raise stellar limit and profile performance** — Deep main charts
+  use 10.5; catalogue-density tools exist. Optimize only from measured bottlenecks.
 
 ## M19 — Extended structures
 
@@ -298,22 +306,25 @@ Only begin after Standard/Pocket architecture proves stable.
   Pipeline done (project-authored schematic RA/Dec outlines -> projected/clipped
   vector paths -> dashed stroke, `data/fixtures/outlines/`); first Cygnus set only,
   coverage to be expanded.
-- [ ] **M19.2 Milky Way representation** — print-friendly, from legal source
-  data.
-- [ ] **M19.3 Dark nebula representation** — contours/symbols designed for field
-  usefulness, not decoration.
+- [~] **M19.2 Milky Way representation** — d3-celestial contour loading,
+  projection/clipping and per-edition levels are implemented and tested. Original
+  Vieira source rights remain unresolved; see `docs/DATA_SOURCES.md`.
+- [~] **M19.3 Dark nebula representation** — curated targets and fallback
+  symbols are implemented; contour quality and field acceptance remain partial.
 - [ ] **M19.4 Revisit AI review for extended structures** — expand schema only if
   needed.
 
 ## M20 — Deep atlas
 
-- [ ] **M20.1 Deep page geometry and tiling** — likely larger page count / smaller
-  FOV.
+- [x] **M20.1 Deep page geometry and tiling** — 20 mm/°, 430 main charts in
+  `atlas/deep.yaml`; scale and coverage tested in `tests/atlas/test_editions.py`.
 - [ ] **M20.2 High-density label optimization** — stronger algorithms only if
   evidence justifies them.
 - [ ] **M20.3 Benchmark AI escalation policy** — cheap-first / strong-model-on-hard
   pages.
-- [ ] **M20.4 Generate Deep alpha**.
+- [x] **M20.4 Generate Deep alpha** — full 430-main/9-detail build recorded at
+  `build/complete-2026-10-07/deep/`. Ordinary output validation passes; hard
+  layout issues and publication/field acceptance are separate outstanding work.
 - [ ] **M20.5 Telescope field testing** — difficult galaxy fields and dense Milky
   Way regions.
 
@@ -346,9 +357,10 @@ atlas metadata and never modify the astronomical model (`AGENTS.md` section 5).
   (`layout/selection.py`, `catalog/priority.py`): high-tier labels are always
   kept, medium/low labels are thinned by printed label area within a local
   neighbourhood, and semantic duplicates are collapsed before placement.
-- [ ] **M21.5 Additional lists** — Messier, Caldwell, RASC, SAC, ASSA, Bennett and
-  (licensing permitting) NSOG; Deep adds Herschel II and the Astronomical League
-  programs.  Each needs a license/provenance decision before ingestion.
+- [~] **M21.5 Additional lists** — Messier, Caldwell and NightSkyAtlas-owned
+  curated memberships are implemented. Other registered sources still require
+  data and licence/provenance review. NSOG/AL research inputs remain local;
+  their coverage framework is not an automatic production-inclusion rule.
 
 ## M22 — Visual double/multiple stars (WDS overlay)
 
@@ -367,12 +379,12 @@ chart.
   records, J2000 positions, latest-epoch separation/PA, sentinel handling),
   `nightsky data fetch-wds` / `import-wds`, provenance manifest and a committed
   nine-record fixture with `SOURCE.md`.
-- [x] **M22.3 Double-star symbol** — `render/double_stars.py` resolves the
-  printed separation: ordinary star, collapsed symbol + horizontal marker with
-  combined magnitude, or two real component positions. The marker scales with
-  the printed star (`marker_length_factor`, floored at `min_marker_length_mm`)
-  and is only drawn when the companion is plotted or catalogued bright enough to
-  observe (`companion_magnitude_limit`), keeping dense charts selective.
+- [x] **M22.3 Double-star symbol** — `render/double_stars.py` classifies printed
+  clearance as unresolved, marginal or resolved after WDS profile selection.
+  Unresolved pairs use one combined-magnitude disk at the real primary position
+  plus a horizontal marker, suppressing linked component disks; other pairs
+  keep their plotted base stars. The marker scales with the printed symbol
+  (`marker_length_factor`, floored at `min_marker_length_mm`).
   Configurable `double_stars:` style block; `SceneStarSystem` carries the
   overlay into the scene; the renderer only draws the resolved decision.
 - [ ] **M22.4 Visual priority and chart-density control** — curated

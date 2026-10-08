@@ -9,6 +9,10 @@ experimental presets. The Standard alpha build is complete; printed field
 review remains pending. Full local Pocket, Standard and Deep builds were
 regenerated on 2026-10-07 under `build/complete-2026-10-07/`; older artifact
 notes below refer to earlier snapshots unless stated otherwise.
+Ordinary output validation was rerun on 2026-10-08: the recorded Pocket,
+Standard and Deep artifacts pass checksum/manifest checks, with 28, 74 and 375
+hard layout issues respectively. They were not publication builds; this does
+not check their inputs against subsequent code/configuration changes.
 
 ## Progress
 
@@ -36,8 +40,9 @@ notes below refer to earlier snapshots unless stated otherwise.
 - M11.4 and M13.3 complete (live AI review through OpenRouter).
 - Grid coordinate edge labels added (RA along top/bottom, Dec along left/right),
   configurable and independent of grid line spacing.
-- Constellation stick figures (solid) and dotted IAU boundaries added, from a
-  vendored BSD-3-Clause fixture. Stick figures are drawn as straight segments
+- Constellation stick figures (solid, Stellarium CC BY-SA 2.0) and dotted IAU
+  boundaries (d3-celestial BSD-3-Clause) use separate vendored sources. Stick
+  figures are drawn as straight segments
   between the projected endpoint stars (no spherical interpolation), with a
   small gap at each star symbol; boundaries remain densified and curved.
 - Bright-star gap fixed: the star store now merges Tycho-2 with the Hipparcos
@@ -106,10 +111,12 @@ notes below refer to earlier snapshots unless stated otherwise.
   `exact`/`positional` matches influence the chart. Pocket/Standard/Deep
   select by separation bands and companion magnitude, with a shared 0.5-arcsec
   minimum; no Δmag cut is applied. The projected pair clearance is measured
-  from the two rendered symbol radii. An unresolved pair receives one horizontal
-  marker on its real rendered primary; marginal and clearly resolved pairs do
-  not receive a marker merely for being listed as a pair. WDS never inserts,
-  moves, combines, or changes the magnitude of a base-catalogue star.
+  from the two rendered symbol radii. For an unresolved pair the renderer draws
+  one combined-magnitude disk at the real primary position plus a horizontal
+  marker, suppressing linked component disks. Marginal and clearly resolved
+  pairs keep their plotted base stars without a marker from that pair. WDS
+  inserts no positions and never mutates stored base stars; combined magnitude
+  belongs to presentation state (`render/double_stars.py`).
 - Central DSO symbol extent: `render/symbols.py:dso_symbol_extent` is now the
   single source of DSO symbol geometry, returning a `SymbolExtent`
   (width/height/radii/rotation/collision radius). Globular and open clusters use
@@ -194,9 +201,9 @@ notes below refer to earlier snapshots unless stated otherwise.
 - AI review now receives candidate directions, distance steps, local fine-adjust
   radius and constellation-line conflict metadata. `move_label` expresses
   direction/distance intent; `fine_adjust_label` snaps to a deterministic
-  0.5-mm grid within +/-3 mm and passes the normal hard gate. Leader-line and
-  display-name actions remain deliberately unavailable until their presentation
-  state exists.
+  0.5-mm grid within +/-3 mm and passes the normal hard gate. Display-name
+  variant actions remain deliberately unadvertised. DSO leader
+  enable/remove actions are advertised and pass deterministic route validation.
 - Pocket, Standard and Deep presets use P/S/D chart codes, edition-specific DSO
   visibility and star-size curves. Deep's stellar limit is 10.5; the complete
   Pocket, Standard and Deep builds are in
@@ -215,6 +222,9 @@ notes below refer to earlier snapshots unless stated otherwise.
   without overlap.  Tiling code: `atlas/tiling.py`; draft report: `atlas/report.py`.
 
 ## Frozen Standard geometry (M14.1)
+
+Historical early settings follow; current atlas/style YAML and tests govern
+implemented scale, symbols, grid and selection behavior.
 
 - Page A4 landscape 297 x 210 mm, margin 12 mm (printable 273 x 186 mm).
 - Field 27 x 18.5 deg, ~10.05 mm/deg, stereographic, north up / east left.
@@ -253,7 +263,7 @@ notes below refer to earlier snapshots unless stated otherwise.
   `data/fixtures/constellations/{constellations.lines,constellations.bounds}.json`
   with `LICENSE`, `SOURCE.md` and a line-data manifest. 88 stick figures + 785
   deduplicated boundary segments.
-- Schematic nebula outlines: project-authored (proprietary), vendored as
+- Schematic nebula outlines: project-authored (CC BY 4.0), vendored as
   `data/fixtures/outlines/nebulae.json` with `SOURCE.md`. 5 Cygnus-region outlines;
   stable IDs `outline:dso:<dso_id>`.
 - Star names: d3-celestial, **BSD-3-Clause**, vendored as
@@ -331,10 +341,9 @@ notes below refer to earlier snapshots unless stated otherwise.
 
 ## Open issues
 
-- The complete current 118-chart Standard build is at
-  `build/complete-2026-09-29/standard/`; its 42 hard layout issues are recorded
-  per page in the manifest. `standard-035` and the LMC pages remain the largest
-  known problem areas.
+- Full builds are recorded under `build/complete-2026-10-07/`; Standard has
+  118 main and 9 detail charts, with 74 hard layout issues in that manifest.
+  Older snapshot counts below do not describe the latest generated artifacts.
 - M15.5 remains a human checkpoint: print Orion, Cygnus, Virgo/Coma,
   Sagittarius and polar pages at 100% and use them under red light / at the
   telescope before treating Standard as publication-ready.
@@ -344,16 +353,18 @@ notes below refer to earlier snapshots unless stated otherwise.
   checked again after rendering. Publication is staged, and a previous output
   is retained on success or left untouched on failure. `atlas validate
   --publication` independently checks the finished manifest, inputs, chart set,
-  hard-issue totals and output file checksums. The current complete Standard
-  build passes ordinary atlas validation; the M15.5 field test remains.
+  hard-issue totals and output file checksums. The recorded full builds pass
+  ordinary artifact validation, which permits recorded hard issues. Publication
+  validation and the M15.5 field test remain outstanding.
 
 - Older alpha artifacts predate the Hipparcos bright-star supplement; the
   2026-10-07 full builds supersede those files. The regenerated `test-cygnus`
   test page also includes Deneb.
 - Label prioritisation/selection in dense fields is implemented (see Progress),
-  but dense-page conflicts remain in the full builds. Pocket reports 32 hard
-  issues, including 14 on `pocket-026` and 7 on `pocket-025`. Standard reports
-  42, including 11 on `standard-035`, 7 each on `standard-110` and `standard-111`,
+  but dense-page conflicts remain in the full builds. The 2026-09-29 snapshot
+  reported 32 Pocket hard issues, including 14 on `pocket-026` and 7 on
+  `pocket-025`, and 42 Standard issues, including 11 on `standard-035`, 7 each
+  on `standard-110` and `standard-111`,
   and 4 on the Pleiades detail page. Per-page diagnostics are in the respective
   manifests; the earlier alpha's 14 issues belong to superseded geometry.
 - The 118-chart count is geometry-driven: a coverage sweep at 0.25 deg fixed the
@@ -388,15 +399,18 @@ notes below refer to earlier snapshots unless stated otherwise.
 
 `chart render|validate|review` and `atlas build` accept `--overrides PATH`
 (a single override file or a directory of them), `--constellations DIR`
-(default `data/fixtures/constellations`; point elsewhere or leave empty to omit)
-and `--outlines DIR` (default `data/fixtures/outlines`; empty to omit) and
-`--star-names DIR` (default `data/fixtures/starnames`; empty to omit). DSO
+(default `data/fixtures/constellations`),
+`--outlines DIR` (default `data/fixtures/outlines`) and
+`--star-names DIR` (default `data/fixtures/starnames`). DSO
 selection additionally accepts `--observing-lists DIR` (default
-`data/fixtures/observing_lists`; empty to omit) and `--observing-config PATH`
+`data/fixtures/observing_lists`) and `--observing-config PATH`
 (default `config/observing_lists.yaml`). Double stars accept
 `--double-stars PATH` (default `data/processed/double_stars/wds.json` when
 present) and `--double-star-match-tolerance-arcsec` (default 2.0 primary
 tolerance; the companion tolerance is 3.0 arcsec inside the builder).
+Use `--no-constellations`, `--no-outlines`, `--no-star-names`,
+`--no-observing-lists` and `--no-double-stars` to omit optional layers;
+empty paths do not disable them.
 
 ## Manual overrides (M16.1)
 
