@@ -164,6 +164,9 @@ Counts near V=11.5 are observed catalogue counts and are not completeness-correc
 The non-commercial restriction must be reviewed before any public or commercial
 distribution of a generated atlas. Tycho-2 is the primary catalogue; the
 Hipparcos supplement below adds the bright stars it omits.
+The catalogue source terms are recorded as CC BY-NC 3.0 IGO; the ESA licence is
+available at <https://creativecommons.org/licenses/by-nc/3.0/igo/>. This is a
+data-source condition and does not alter the MIT licence on the generator.
 
 ### Hipparcos (bright-star supplement)
 
@@ -189,6 +192,22 @@ Hipparcos supplement below adds the bright stars it omits.
 | License | **CC-BY-SA-4.0** |
 | Transformations | sexagesimal RA/Dec to degrees; V-Mag preferred, B-Mag fallback; `B-Mag`, `V-Mag`, `SurfBr`, `Hubble` and `Sources` retained for the galaxy visibility model |
 | Import | `nightsky data fetch-openngc` then `nightsky data import-openngc` |
+
+OpenNGC attribution and share-alike terms apply to OpenNGC-derived catalogue
+material. The project does not apply them to unrelated source code or
+third-party data.
+
+### UCAC4 faint-star supplement and APASS photometry
+
+The optional local faint-star store uses UCAC4 positions and photometry, with
+valid APASS Johnson V preferred where present. Other records use the empirical
+UCAC4 fallback described in [`docs/FAINT_STAR_SUPPLEMENT.md`](FAINT_STAR_SUPPLEMENT.md).
+The source is Zacharias et al. (2013), USNO, CDS I/322A. UCAC4 metadata describe
+it as U.S. government work, but the NightSkyAtlas import manifest records that
+it did not identify an explicit redistribution licence. APASS photometry is
+incorporated in UCAC4; separate usage terms for that photometry have not been
+established here. Do not treat either statement as blanket permission to
+redistribute the faint-star store or products containing those records.
 
 ### Galaxy visibility model (derived, not a catalogue)
 
@@ -233,6 +252,11 @@ Washington Double Star Catalog maintained at the U.S. Naval Observatory."*
 Linkage is positional (default 2 arcsec primary / 3 arcsec companion tolerance)
 and per chart, so the overlay scales with the atlas edition instead of baking a
 fixed angular separation into the data.
+
+The USNO acknowledgement is: *“This research has made use of the Washington
+Double Star Catalog maintained at the U.S. Naval Observatory.”* See the
+[USNO WDS page](https://crf.usno.navy.mil/wds). The source is not a source of
+single-star chart positions.
 
 ### Observing-list membership (atlas metadata)
 
@@ -286,7 +310,7 @@ the label formatter does not use Caldwell designations as chart labels.
 | Source | authored for NightSky Atlas (project-authored schematic tracing) |
 | Files | `data/fixtures/outlines/nebulae.json` |
 | Companion | `SOURCE.md` in the same directory |
-| License | proprietary, covered by the project license (no third-party data) |
+| License | CC BY 4.0 for this project-authored schematic artwork |
 | Content | coarse closed RA/Dec outlines for extended objects where an ellipse would mislead (Veil, North America, Pelican, ...) |
 | Stable IDs | `outline:dso:<dso_id>` (e.g. `outline:dso:NGC7000`) |
 | Transformations | edges densified along RA/Dec, projected with the chart projection, clipped to the chart field |
@@ -329,6 +353,9 @@ Attribution; version unspecified in the snapshot); see
 `data/fixtures/starnames/SOURCE.md` for the IAU citation and snapshot URL.
 The source list is retained independently as d3-celestial BSD-3-Clause data;
 uncurated names remain available as aliases but are not automatically printed.
+The IAU snapshot is identified by its source as Creative Commons Attribution;
+the snapshot does not specify a version. This does not establish terms for
+later IAU catalogue releases.
 
 `curated.yaml` also identifies a small set of conspicuous visual variable
 stars by HIP number for a printed open-ring finding symbol. Selection was
@@ -532,6 +559,23 @@ When citing use the catalogue references above and the requested service
 acknowledgement: *“This research has made use of the VizieR catalogue access
 tool, CDS, Strasbourg, France (DOI: 10.26093/cds/vizier).”*
 
+## Alpha open-cluster selection
+
+Pocket retains its forced Messier, Caldwell, Herschel 400 and NightSkyAtlas
+Pocket Classics targets. Other open clusters from Pocket-enabled catalogues are
+selected when integrated magnitude is known and at most 9.0 with a major axis
+of at least 3 arcmin, or when the major axis is at least 20 arcmin regardless
+of magnitude. Standard inherits Pocket and adds eligible OpenNGC NGC/IC open
+clusters with magnitude at most 10.0 and size at least 3 arcmin, or size at
+least 10 arcmin regardless of magnitude. Its existing list memberships remain
+eligible. This does not select every NGC/IC cluster. Deep retains its existing
+open-cluster rules; Eyepiece uses the Deep target set.
+
+These are catalogue-selection thresholds. They do not change the separate
+symbol sizing thresholds used for printing (Pocket 20′, Standard 10′, Deep 5′,
+Eyepiece 2.5′). C014 remains in catalogue metadata but is excluded from plotted
+targets in every edition because NGC 869 and NGC 884 are represented separately.
+
 ## Committed versus ignored
 
 Git-ignored (regenerate, do not commit): `data/raw/`, `data/processed/`,
@@ -559,9 +603,19 @@ Bundled SHA-256 checksums:
 | `Lato-Bold.ttf` | `bf1b8130069b44b9148eeece35e5423bedac49777ba746615b826b8276574a7b` |
 
 Lato Regular and Bold are from the Lato project, copyright Łukasz Dziedzic,
-licensed under the SIL Open Font License 1.1. The OFL text is bundled as
-`OFL-Lato.txt` beside the font files. The repository's MIT license does not
-apply to third-party font software.
+licensed under the SIL Open Font License 1.1. Source Sans 3 is copyright Adobe
+and is also licensed under OFL 1.1. The full notices are bundled as
+`OFL-Lato.txt` and `OFL-SourceSans3.txt` beside the font files. The repository's
+MIT licence does not apply to third-party font software.
 
 The existing chart-label font configuration remains independent of these
 editorial fonts.
+
+## Project-authored cartography
+
+Original NightSky Atlas cartographic design, page layout and explicitly marked
+project-authored artwork are licensed under CC BY 4.0 where identified. This
+includes the schematic nebula outlines in
+`data/fixtures/outlines/nebulae.json`. Third-party figures, boundaries,
+contours, fonts and catalogue data retain their own terms. Generated PDFs are
+not automatically MIT-licensed merely because the generator is MIT-licensed.

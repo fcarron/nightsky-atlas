@@ -145,9 +145,12 @@ current snapshot in `docs/STATE.md`.
 
 ## License and data attribution
 
-The NightSky Atlas source code is licensed under the [MIT License](LICENSE).
-This does not relicense the included fixtures or downloaded catalogues: they
-remain under their own terms, recorded in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+The atlas generator is licensed under the [MIT License](LICENSE). Original
+NightSky Atlas cartographic design is CC BY 4.0 where identified. Official PDFs
+are free for non-commercial sharing, subject to third-party rights. The MIT
+licence does not automatically apply to generated atlases. Source-specific
+terms are documented in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) and
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 Constellation stick figures follow the Sky & Telescope tradition via
 Stellarium's Western (Sky & Telescope) sky culture. They are conventional
 figures, separate from official IAU boundaries. Their HIP-referenced primary

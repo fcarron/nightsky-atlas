@@ -23,7 +23,13 @@ from nightsky_atlas.render.text import draw_text, draw_tracked_text, measure_poi
 from nightsky_atlas.render.variable_stars import draw_variable_star_ring
 from nightsky_atlas.units import mm_to_pt
 
-__all__ = ["LegendSymbol", "draw_field_guide", "draw_introduction", "legend_symbols"]
+__all__ = [
+    "LegendSymbol",
+    "draw_credits_page",
+    "draw_field_guide",
+    "draw_introduction",
+    "legend_symbols",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,21 +231,145 @@ def _paragraph(
     *,
     size_pt: float = 8.3,
     line_step_mm: float = 5.4,
+    gray: float = 0.0,
 ) -> float:
     line = ""
     for word in words.split():
         candidate = f"{line} {word}" if line else word
         candidate_width_pt, _ = measure_point_size(cr, candidate, family, size_pt)
         if line and candidate_width_pt > mm_to_pt(width_mm):
-            _text(cr, line, x_mm, y_mm, family, size_pt)
+            _text(cr, line, x_mm, y_mm, family, size_pt, gray=gray)
             y_mm += line_step_mm
             line = word
         else:
             line = candidate
     if line:
-        _text(cr, line, x_mm, y_mm, family, size_pt)
+        _text(cr, line, x_mm, y_mm, family, size_pt, gray=gray)
         y_mm += line_step_mm
     return y_mm
+
+
+def _draw_credit_column(
+    cr: cairo.Context[cairo.Surface],
+    sections: tuple[tuple[str, tuple[str, ...]], ...],
+    x_mm: float,
+    y_mm: float,
+    width_mm: float,
+    family: str,
+) -> None:
+    y = y_mm
+    for heading, entries in sections:
+        if not entries:
+            continue
+        _text(cr, heading.upper(), x_mm, y, family, 8.0, bold=True, gray=0.34)
+        y += 5.2
+        for entry in entries:
+            y = _paragraph(
+                cr,
+                entry,
+                x_mm,
+                y,
+                width_mm,
+                family,
+                size_pt=8.5,
+                line_step_mm=4.1,
+                gray=0.08,
+            )
+            y += 0.6
+        y += 2.0
+
+
+def draw_credits_page(
+    cr: cairo.Context[cairo.Surface],
+    page: PageGeometry,
+    family: str,
+    left_sections: tuple[tuple[str, tuple[str, ...]], ...],
+    right_sections: tuple[tuple[str, tuple[str, ...]], ...],
+) -> None:
+    """Draw the source acknowledgements and concise licence summary."""
+    left = page.margin_mm + 4.0
+    right = page.width_mm - page.margin_mm - 4.0
+    gap = 12.0
+    column_width = (right - left - gap) / 2.0
+    right_column = left + column_width + gap
+
+    _text(cr, "Data Sources & Acknowledgements", left, page.margin_mm, family, 15.0, bold=True)
+    y = page.margin_mm + 10.0
+    y = _paragraph(
+        cr,
+        "NightSky Atlas builds upon the work of astronomers, researchers and open-source "
+        "contributors who have made astronomical data and tools available.",
+        left,
+        y,
+        right - left,
+        family,
+        size_pt=8.6,
+        line_step_mm=4.2,
+        gray=0.12,
+    )
+    y = _paragraph(
+        cr,
+        "The following sources and projects have contributed to the atlas.",
+        left,
+        y + 0.2,
+        right - left,
+        family,
+        size_pt=8.6,
+        line_step_mm=4.2,
+        gray=0.12,
+    )
+    source_y = max(page.margin_mm + 29.0, y + 2.0)
+    _draw_credit_column(cr, left_sections, left, source_y, column_width, family)
+    _draw_credit_column(cr, right_sections, right_column, source_y, column_width, family)
+
+    licence_y = page.height_mm - 59.0
+    _rule(cr, left, right, licence_y - 5.0)
+    _text(cr, "LICENCE & USAGE", left, licence_y, family, 8.0, bold=True, gray=0.34)
+    left_text = (
+        "Source code and atlas generator: MIT License.",
+        "Original cartographic design and project-authored artwork: CC BY 4.0, where identified.",
+    )
+    right_text = (
+        "Official atlas PDFs are free to download, print and share for non-commercial purposes, "
+        "subject to applicable third-party licences. Retain credits and notices.",
+        "Third-party material keeps its own terms. The MIT License applies to the generator, "
+        "not automatically to generated atlases.",
+    )
+    for entries, x in ((left_text, left), (right_text, right_column)):
+        for row, text in enumerate(entries):
+            _paragraph(
+                cr,
+                text,
+                x,
+                licence_y + 7.0 + row * 8.2,
+                column_width,
+                family,
+                size_pt=7.8,
+                line_step_mm=3.8,
+                gray=0.1,
+            )
+
+    _text(
+        cr,
+        "Full references, source URLs and licence details are in docs/DATA_SOURCES.md "
+        "and THIRD_PARTY_LICENSES.md.",
+        left,
+        page.height_mm - page.margin_mm - 8.0,
+        family,
+        7.2,
+        gray=0.38,
+    )
+    footer = "NightSky Atlas · Created and maintained by Frédéric Carron"
+    width_pt, _ = measure_point_size(cr, footer, family, 7.2)
+    _text(
+        cr,
+        footer,
+        (mm_to_pt(page.width_mm - page.margin_mm) - width_pt) * 25.4 / 72.0,
+        page.height_mm - page.margin_mm,
+        family,
+        7.2,
+        gray=0.42,
+    )
 
 
 def draw_introduction(
@@ -557,9 +687,7 @@ def _draw_telrad(
     cr.stroke()
     cr.restore()
     label_x = center_x + diameters[-1] / 2.0 + 2.0
-    for label, label_offset_mm in zip(
-        ("0.5°", "2°", "4°"), (-5.0, 0.0, 5.0), strict=True
-    ):
+    for label, label_offset_mm in zip(("0.5°", "2°", "4°"), (-5.0, 0.0, 5.0), strict=True):
         _text(
             cr,
             label,

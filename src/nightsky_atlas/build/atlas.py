@@ -61,12 +61,12 @@ from nightsky_atlas.build.preflight import (
 )
 from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.manifest import file_sha256
-from nightsky_atlas.catalog.models import DsoType, Star
-from nightsky_atlas.catalog.observing_lists import (
-    DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
-)
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
+from nightsky_atlas.catalog.observing_lists import DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR
+from nightsky_atlas.catalog.observing_lists import build_membership_index
 from nightsky_atlas.catalog.priority import HERSCHEL_400, messier_id
 from nightsky_atlas.catalog.sample import load_sample_stars
+from nightsky_atlas.catalog.selection import select_dso
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
 )
@@ -98,7 +98,11 @@ from nightsky_atlas.render.atlas_index import draw_atlas_index_pages
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
 from nightsky_atlas.render.chart_directory import draw_chart_directory_pages
 from nightsky_atlas.render.detail_markers import DetailMapMarker, build_detail_marker
-from nightsky_atlas.render.front_matter import draw_field_guide, draw_introduction
+from nightsky_atlas.render.front_matter import (
+    draw_credits_page,
+    draw_field_guide,
+    draw_introduction,
+)
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.overview import (
     LocatorInset,
@@ -106,7 +110,6 @@ from nightsky_atlas.render.overview import (
     draw_overview_spread_page,
 )
 from nightsky_atlas.render.pdf_navigation import PdfNavigation
-from nightsky_atlas.render.text import draw_text, draw_tracked_text
 from nightsky_atlas.scene.models import ChartScene, SceneDso
 from nightsky_atlas.units import mm_to_pt
 
@@ -578,6 +581,8 @@ def _draw_front_matter_pages(
     data_sources: list[dict[str, Any]],
     geometry_inputs: dict[str, str | None],
     geometry_catalogues: dict[str, list[str]],
+    inputs: ChartInputs,
+    star_names: dict[int, StarName],
 ) -> int:
     """Write the introduction, field guide and provenance page."""
     page = atlas.page.to_geometry()
@@ -593,88 +598,221 @@ def _draw_front_matter_pages(
     draw_field_guide(cr, atlas, style, chart_count, mm_per_degree)
     surface.show_page()
 
-    draw_tracked_text(
+    selected_dsos = _selected_dsos(inputs)
+    left_sections, right_sections = _credits_columns(
+        data_sources=data_sources,
+        geometry_catalogues=geometry_catalogues,
+        used_dso_catalogues=frozenset(
+            catalogue
+            for dso in selected_dsos
+            for catalogue in (
+                dso.provenance.catalogue,
+                *(record.catalogue_id for record in dso.catalogue_records),
+            )
+        ),
+        star_name_source=geometry_inputs["star_names"] if star_names else None,
+        has_iau_star_names=any(name.curated_name for name in star_names.values()),
+        has_galaxies=any(dso.object_type == DsoType.GALAXY for dso in selected_dsos),
+    )
+    draw_credits_page(
         cr,
-        "DATA, CREDITS AND LICENCE",
-        mm_to_pt(page.margin_mm),
-        mm_to_pt(page.margin_mm),
+        page,
         family,
-        14.0,
-        "semibold",
-        0.18,
-    )
-    credits = [
-        "The build manifest records selected input paths and their source metadata.",
-        "CATALOGUES USED",
-    ]
-    for source in data_sources:
-        metadata = source["manifest"] or {}
-        name = metadata.get("source") or metadata.get("catalogue") or "source unverified"
-        license_name = metadata.get("license") or "license unverified"
-        credits.append(f"{source['kind'].replace('_', ' ').title()}: {name}; {license_name}.")
-    credits.append("CONSTELLATIONS AND NAMES")
-    if geometry_inputs["constellations"] == "data/fixtures/constellations":
-        credits.append(
-            "Stellarium Western (Sky & Telescope) figures: Paul Krizak, Jonathan E. "
-            "Piskor and Stellarium Team; CC BY-SA 2.0."
-        )
-        credits.append("IAU boundaries: d3-celestial / Olaf Frohn; BSD-3-Clause.")
-    elif geometry_inputs["constellations"]:
-        credits.append(f"Constellation geometry: {geometry_inputs['constellations']}.")
-    if geometry_inputs["star_names"] == "data/fixtures/starnames":
-        credits.append("Star names: d3-celestial / Olaf Frohn; BSD-3-Clause.")
-    elif geometry_inputs["star_names"]:
-        credits.append(f"Star names: {geometry_inputs['star_names']}.")
-    if geometry_inputs["milky_way"]:
-        credits.append(
-            "Milky Way outlines: José R. Vieira, via d3-celestial / Olaf Frohn; "
-            "GeoJSON distributed under BSD-3-Clause."
-        )
-    if geometry_catalogues["outlines"]:
-        credits.append(f"Nebula outlines: {', '.join(geometry_catalogues['outlines'])}.")
-    credits.append("GALAXY VISIBILITY MODEL")
-    credits.append(
-        "Galaxy contour weight after A. Crumey, MNRAS 442, 2600 (2014) "
-        "(contrast threshold for extended objects)."
-    )
-    credits.append(
-        "Reference conditions: sky 21.5 mag/arcsec^2, transmission 0.75, eye pupil 7 mm; "
-        "100/200/400 mm apertures."
-    )
-    credits.append(
-        "The contour class is an atlas aid for integrated light, not a guarantee of a "
-        "visual detection."
-    )
-    credits.extend(
-        (
-            "PROJECT",
-            "NightSky Atlas source code and project-authored artwork: MIT License.",
-            "Third-party terms remain in force; see docs/DATA_SOURCES.md and source manifests.",
-        )
-    )
-    for index, line in enumerate(credits):
-        is_heading = line in {
-            "CATALOGUES USED",
-            "CONSTELLATIONS AND NAMES",
-            "GALAXY VISIBILITY MODEL",
-            "PROJECT",
-        }
-        x_pt = mm_to_pt(page.margin_mm + 8.0)
-        y_pt = mm_to_pt(page.margin_mm + 18.0 + index * 5.0)
-        if is_heading:
-            draw_tracked_text(cr, line, x_pt, y_pt, family, 8.0, "semibold", 0.18)
-        else:
-            draw_text(cr, line, x_pt, y_pt, family, 7.7, "normal")
-    draw_text(
-        cr,
-        f"NightSky Atlas — {atlas.resolved_edition().name} · Data and credits",
-        mm_to_pt(page.margin_mm),
-        mm_to_pt(page.height_mm - page.margin_mm + 2.5),
-        family,
-        7.0,
+        left_sections,
+        right_sections,
     )
     surface.show_page()
     return 3
+
+
+def _selected_dsos(inputs: ChartInputs) -> tuple[DeepSkyObject, ...]:
+    """Return physical targets selected by the edition policy for attribution."""
+    membership_index = build_membership_index(inputs.observing_lists, inputs.dsos)
+    if inputs.selection_policy is None:
+        return inputs.dsos
+    selected = []
+    for dso in inputs.dsos:
+        decision = select_dso(
+            dso,
+            index=membership_index,
+            policy=inputs.selection_policy,
+        )
+        if decision.visible or decision.forced:
+            selected.append(dso)
+    return tuple(selected)
+
+
+def _credits_columns(
+    *,
+    data_sources: list[dict[str, Any]],
+    geometry_catalogues: dict[str, list[str]],
+    used_dso_catalogues: frozenset[str],
+    star_name_source: str | None,
+    has_iau_star_names: bool,
+    has_galaxies: bool,
+) -> tuple[
+    tuple[tuple[str, tuple[str, ...]], ...],
+    tuple[tuple[str, tuple[str, ...]], ...],
+]:
+    """Prepare concise, build-specific source credits from the input manifests."""
+    by_kind = {item["kind"]: item for item in data_sources}
+    left: list[tuple[str, tuple[str, ...]]] = []
+    right: list[tuple[str, tuple[str, ...]]] = []
+
+    star_entries: list[str] = []
+    star_source = by_kind.get("stars", {}).get("manifest") or {}
+    if star_source.get("catalogue") == "TYC2":
+        star_entries.append("Tycho-2 — Høg et al. (2000), ESA")
+        supplement = star_source.get("bright_star_supplement") or {}
+        if supplement.get("catalogue") == "HIP":
+            star_entries.append("Hipparcos — ESA (1997)")
+    elif star_source.get("source"):
+        star_entries.append(f"Stars — {star_source['source']}")
+    faint_source = by_kind.get("faint_stars", {}).get("manifest") or {}
+    if faint_source.get("catalogue") == "UCAC4":
+        star_entries.append("UCAC4 — Zacharias et al. (2013), USNO; APASS V where available")
+    elif faint_source.get("source"):
+        star_entries.append(f"Faint-star supplement — {faint_source['source']}")
+    if star_entries:
+        left.append(("Star catalogues", tuple(star_entries)))
+
+    dso_source = by_kind.get("deep_sky", {}).get("manifest") or {}
+    manifest_sources = {
+        str(item.get("catalogue_id")): item
+        for item in dso_source.get("sources", ())
+        if isinstance(item, dict) and item.get("catalogue_id")
+    }
+    active_ids = set(used_dso_catalogues)
+    dso_entries: list[str] = []
+    if "OpenNGC" in active_ids:
+        dso_entries.append("OpenNGC — Mattia Verga & contributors")
+
+    group_specs = (
+        (
+            ("VII/20", "VII/7A", "VII/9", "VII/21", "VII/220A"),
+            {
+                "VII/20": "Sharpless (1959)",
+                "VII/7A": "Lynds LDN (1962)",
+                "VII/9": "Lynds LBN (1965)",
+                "VII/21": "van den Bergh (1966)",
+                "VII/220A": "Barnard (1927)",
+            },
+            "Nebula catalogues",
+        ),
+        (
+            ("VII/92A:Collinder", "VII/92A:Melotte", "VII/92A:Stock"),
+            {
+                "VII/92A:Collinder": "Collinder",
+                "VII/92A:Melotte": "Melotte",
+                "VII/92A:Stock": "Stock",
+            },
+            "Open clusters — Lyngå",
+        ),
+        (
+            ("IV/24:AbellPN", "IV/24:CuratedPN"),
+            {
+                "IV/24:AbellPN": "Kohoutek (2001)",
+                "IV/24:CuratedPN": "Kohoutek (2001)",
+            },
+            "Planetary nebulae",
+        ),
+        (
+            ("VII/202:Palomar", "VII/202:Terzan"),
+            {"VII/202:Palomar": "Palomar", "VII/202:Terzan": "Terzan"},
+            "Globular clusters — Harris",
+        ),
+        (
+            ("VII/213", "VII/74A", "VII/155"),
+            {
+                "VII/213": "Hickson (1982)",
+                "VII/74A": "Arp (1966)",
+                "VII/155": "de Vaucouleurs et al. (1991)",
+            },
+            "Galaxy catalogues",
+        ),
+    )
+    grouped_ids: set[str] = set()
+    for ids, labels, heading in group_specs:
+        grouped_ids.update(ids)
+        included = [labels[item] for item in ids if item in active_ids]
+        if included:
+            citation = "; ".join(included)
+            if " — " in heading:
+                citation = f"{', '.join(included)} — {heading.split(' — ')[-1]}"
+            dso_entries.append(citation)
+    for catalogue_id in sorted(active_ids - grouped_ids - {"OpenNGC"}):
+        metadata = manifest_sources.get(catalogue_id, {})
+        name = metadata.get("name") or catalogue_id
+        dso_entries.append(str(name))
+    if not dso_entries and dso_source.get("source"):
+        dso_entries.append(f"Deep-sky catalogue — {dso_source['source']}")
+    if has_galaxies:
+        dso_entries.append("Galaxy visibility method — Crumey (2014)")
+    if dso_entries:
+        left.append(("Deep-sky catalogues", tuple(dso_entries)))
+
+    wds = by_kind.get("double_stars", {}).get("manifest") or {}
+    if wds:
+        left.append(
+            (
+                "Double stars",
+                (
+                    "Washington Double Star Catalog — Mason et al., USNO",
+                    "This research has made use of the Washington Double Star Catalog "
+                    "maintained at the U.S. Naval Observatory.",
+                ),
+            )
+        )
+
+    line_sources = set(geometry_catalogues.get("constellation_lines", ()))
+    boundary_sources = set(geometry_catalogues.get("constellation_boundaries", ()))
+    outline_sources = set(geometry_catalogues.get("outlines", ()))
+    milky_way_sources = set(geometry_catalogues.get("milky_way", ()))
+    cartography: list[str] = []
+    if "Stellarium Western (Sky & Telescope)" in line_sources:
+        cartography.append(
+            "Constellation figures — Stellarium Western (Sky & Telescope); "
+            "Krizak, Piskor & Stellarium Team"
+        )
+    elif line_sources:
+        cartography.extend(f"Constellation figures — {item}" for item in sorted(line_sources))
+    if "d3-celestial" in boundary_sources:
+        cartography.append("Constellation boundaries — d3-celestial, Olaf Frohn")
+    elif boundary_sources:
+        cartography.extend(
+            f"Constellation boundaries — {item}" for item in sorted(boundary_sources)
+        )
+    if "nightsky-atlas-authored" in outline_sources:
+        cartography.append("Schematic nebula outlines — NightSky Atlas")
+    if milky_way_sources:
+        cartography.append("Milky Way contours — José R. Vieira, via d3-celestial")
+    if cartography:
+        right.append(("Constellations & cartography", tuple(cartography)))
+
+    if (
+        star_name_source is not None
+        and Path(star_name_source).resolve() == STAR_NAMES_FIXTURE_DIR.resolve()
+    ):
+        name_sources = ["d3-celestial"]
+        if has_iau_star_names:
+            name_sources.append("IAU Catalog of Star Names")
+        right.append(("Star names", ("; ".join(name_sources),)))
+    elif star_name_source:
+        right.append(("Star names", (f"Star-name input — {Path(star_name_source).name}",)))
+
+    service_entries: list[str] = []
+    if manifest_sources and active_ids.intersection(manifest_sources):
+        source_url = dso_source.get("acknowledgement")
+        service_entries.append("VizieR — CDS, Strasbourg, France")
+        if source_url:
+            service_entries.append(
+                "This research has made use of the VizieR catalogue access tool, "
+                "CDS, Strasbourg, France."
+            )
+    if service_entries:
+        right.append(("Catalogue services", tuple(service_entries)))
+
+    return tuple(left), tuple(right)
 
 
 def _build_atlas_impl(
@@ -1025,6 +1163,8 @@ def _build_atlas_impl(
                 selected_sources,
                 geometry_inputs,
                 geometry_catalogues,
+                inputs,
+                star_names,
             )
 
     chart_directory = ()

@@ -6,8 +6,9 @@ deep-sky objects whose shape is not captured by an ellipse (major/minor axis).
 - **Origin:** authored for NightSky Atlas on 2026-09-16. The vertices are a
   deliberately coarse, schematic tracing of each object's bright extent, not a
   survey-derived boundary.
-- **License:** proprietary, covered by the project license. No third-party
-  catalogue data is reproduced here.
+- **License:** [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+  This covers only the project-authored schematic artwork, not third-party
+  catalogue data or coordinates.
 - **Coordinates:** `[ra_deg, dec_deg]` J2000/ICRS, RA increasing eastward. Rings
   are implicitly closed; the first vertex is not repeated.
 - **Stable IDs:** each outline is addressed as `outline:dso:<dso_id>`, matching
