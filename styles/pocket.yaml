@@ -84,3 +84,5 @@ label:
   selection: {medium_density_budget: 0.08, low_density_budget: 0.025}
 furniture:
   scale_bar: {enabled: false, length_deg: 10.0}
+milky_way:
+  levels: [1]

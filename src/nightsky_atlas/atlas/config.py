@@ -62,6 +62,7 @@ __all__ = [
     "LabelStyle",
     "LocatorStyle",
     "MagnitudeLegendStyle",
+    "MilkyWayStyle",
     "NavigationStyle",
     "OverlapTargetConfig",
     "OverviewStyle",
@@ -1120,6 +1121,41 @@ class EclipticStyle(_StrictModel):
     gap_mm: PositiveFloat = 0.8
 
 
+class MilkyWayStyle(_StrictModel):
+    """Subtle stroke-only brightness contours from the Milky Way outline data."""
+
+    enabled: bool = False
+    levels: tuple[Literal[1, 2, 3, 4, 5], ...] = ()
+    line_width_mm: PositiveFloat = 0.07
+    level_gray: dict[int, float] = Field(
+        default_factory=lambda: {1: 0.85, 2: 0.83, 3: 0.82, 4: 0.80, 5: 0.79}
+    )
+
+    @field_validator("levels")
+    @classmethod
+    def _levels_are_unique_and_ordered(
+        cls, value: tuple[int, ...]
+    ) -> tuple[int, ...]:
+        if value != tuple(sorted(set(value))):
+            raise ValueError("Milky Way levels must be unique and sorted ascending")
+        return value
+
+    @field_validator("level_gray")
+    @classmethod
+    def _level_gray_values_are_valid(cls, value: dict[int, float]) -> dict[int, float]:
+        if any(level not in range(1, 6) for level in value):
+            raise ValueError("Milky Way gray keys must be levels 1 through 5")
+        if any(not math.isfinite(gray) or not 0.0 <= gray <= 1.0 for gray in value.values()):
+            raise ValueError("Milky Way gray values must be within [0, 1]")
+        return value
+
+    @model_validator(mode="after")
+    def _enabled_levels_have_gray_values(self) -> MilkyWayStyle:
+        if self.enabled and not set(self.levels).issubset(self.level_gray):
+            raise ValueError("each selected Milky Way level needs a gray value")
+        return self
+
+
 class ConstellationLineStyle(_StrictModel):
     """Stick-figure constellation line appearance.
 
@@ -1324,6 +1360,7 @@ class StyleConfig(_StrictModel):
     variable_stars: VariableStarStyle = Field(default_factory=VariableStarStyle)
     grid: GridStyle = Field(default_factory=GridStyle)
     ecliptic: EclipticStyle = Field(default_factory=EclipticStyle)
+    milky_way: MilkyWayStyle = Field(default_factory=MilkyWayStyle)
     constellation: ConstellationStyle = Field(default_factory=ConstellationStyle)
     furniture: FurnitureStyle = Field(default_factory=FurnitureStyle)
     overview: OverviewStyle = Field(default_factory=OverviewStyle)

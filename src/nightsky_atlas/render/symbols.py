@@ -164,6 +164,9 @@ def galaxy_ellipse(
 # Beyond this an angular extent is treated as a catalogue error and the
 # type-specific fallback is used instead (60 deg).
 _MAX_PLAUSIBLE_EXTENT_ARCMIN = 3600.0
+_PN_LARGE_SYMBOL_FACTOR = 1.0
+_PN_MEDIUM_SYMBOL_FACTOR = 0.75
+_PN_SMALL_SYMBOL_FACTOR = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,6 +268,25 @@ def dso_symbol_extent(
     extent = style.dso.extent_style(dso.object_type)
 
     if extent.use_angular_size:
+        axis_arcmin = _usable_axis_arcmin(dso)
+        if (
+            dso.object_type == DsoType.PLANETARY_NEBULA
+            and axis_arcmin is not None
+            and extent.min_angular_size_arcmin is not None
+            and axis_arcmin < extent.min_angular_size_arcmin
+        ):
+            threshold_mm = extent.min_angular_size_arcmin / 60.0 * mm_per_deg
+            ratio = axis_arcmin / extent.min_angular_size_arcmin
+            if ratio >= 0.25:
+                factor = _PN_LARGE_SYMBOL_FACTOR
+            elif ratio >= 0.10:
+                factor = _PN_MEDIUM_SYMBOL_FACTOR
+            else:
+                factor = _PN_SMALL_SYMBOL_FACTOR
+            diameter_mm = threshold_mm * factor
+            if extent.max_diameter_mm is not None:
+                diameter_mm = min(diameter_mm, extent.max_diameter_mm)
+            return _symbol_extent(shape, diameter_mm, diameter_mm)
         if dso.object_type == DsoType.GALAXY:
             ellipse = galaxy_ellipse(
                 dso,
@@ -282,7 +304,6 @@ def dso_symbol_extent(
                     uses_angular_size=True,
                 )
         else:
-            axis_arcmin = _usable_axis_arcmin(dso)
             if axis_arcmin is not None:
                 diameter_mm = _clamped_diameter_mm(
                     axis_arcmin / 60.0 * mm_per_deg,

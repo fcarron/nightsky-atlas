@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from itertools import pairwise
-from math import hypot, pi
+from math import hypot, nextafter, pi
 from pathlib import Path
 
 import pytest
@@ -323,6 +323,76 @@ def test_planetary_nebula_uses_angular_diameter_and_includes_outer_spokes() -> N
     assert extent.width_mm == pytest.approx(30.0 / 60.0 * 10.0 * SPOKED_CIRCLE_OUTER_FACTOR)
 
 
+@pytest.mark.parametrize(
+    ("edition", "mm_per_deg", "threshold_arcmin"),
+    (("standard", 10.0, 10.0), ("deep", 20.0, 5.0)),
+)
+@pytest.mark.parametrize(
+    ("size_fraction", "symbol_factor", "uses_angular_size"),
+    (
+        (1.0, 1.0, True),
+        (nextafter(1.0, 0.0), 1.0, False),
+        (0.25, 1.0, False),
+        (nextafter(0.25, 0.0), 0.75, False),
+        (0.10, 0.75, False),
+        (nextafter(0.10, 0.0), 0.5, False),
+    ),
+)
+def test_planetary_nebula_subscale_classes_follow_edition_threshold(
+    edition: str,
+    mm_per_deg: float,
+    threshold_arcmin: float,
+    size_fraction: float,
+    symbol_factor: float,
+    uses_angular_size: bool,
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    threshold = style.dso.planetary_nebula.min_angular_size_arcmin
+    assert threshold == pytest.approx(threshold_arcmin)
+    size_arcmin = threshold * size_fraction
+    extent = dso_symbol_extent(
+        make_dso(DsoType.PLANETARY_NEBULA, major_axis_arcmin=size_arcmin),
+        mm_per_deg=mm_per_deg,
+        style=style,
+    )
+    expected_base_mm = threshold / 60.0 * mm_per_deg * symbol_factor
+    assert extent.uses_angular_size is uses_angular_size
+    assert extent.width_mm == pytest.approx(expected_base_mm * SPOKED_CIRCLE_OUTER_FACTOR)
+
+
+def test_planetary_nebula_without_size_keeps_existing_fallback() -> None:
+    style = load_style_config(REPO_ROOT / "styles" / "standard.yaml")
+    extent = dso_symbol_extent(
+        make_dso(DsoType.PLANETARY_NEBULA), mm_per_deg=10.0, style=style
+    )
+    assert extent.uses_angular_size is False
+    assert extent.width_mm == pytest.approx(
+        style.dso.planetary_nebula.fallback_diameter_mm * SPOKED_CIRCLE_OUTER_FACTOR
+    )
+
+
+@pytest.mark.parametrize(("edition", "mm_per_deg"), (("standard", 10.0), ("deep", 20.0)))
+def test_planetary_nebula_subscale_classes_have_three_distinct_sizes(
+    edition: str, mm_per_deg: float
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    threshold = style.dso.planetary_nebula.min_angular_size_arcmin
+    sizes = (
+        0.5 * threshold,
+        0.2 * threshold,
+        0.05 * threshold,
+    )
+    printed_widths = {
+        dso_symbol_extent(
+            make_dso(DsoType.PLANETARY_NEBULA, major_axis_arcmin=size),
+            mm_per_deg=mm_per_deg,
+            style=style,
+        ).width_mm
+        for size in sizes
+    }
+    assert len(printed_widths) == 3
+
+
 def test_galaxy_extent_matches_true_scale() -> None:
     galaxy = make_galaxy(major_axis_arcmin=24.0, minor_axis_arcmin=10.0)
     extent = extent_for(galaxy, mm_per_deg=60.0)
@@ -470,7 +540,6 @@ def test_galaxy_larger_than_edition_floor_stays_to_scale(edition: str, mm_per_de
     (
         DsoType.GLOBULAR_CLUSTER,
         DsoType.OPEN_CLUSTER,
-        DsoType.PLANETARY_NEBULA,
         DsoType.BRIGHT_NEBULA,
         DsoType.DARK_NEBULA,
         DsoType.GALAXY_CLUSTER,
@@ -490,8 +559,6 @@ def test_other_size_aware_dso_classes_use_edition_angular_floor(
         minimum_arcmin / 60.0 * mm_per_deg,
         extent_style.min_diameter_mm,
     )
-    if object_type == DsoType.PLANETARY_NEBULA:
-        diameter_mm *= SPOKED_CIRCLE_OUTER_FACTOR
     assert extent.width_mm == pytest.approx(diameter_mm)
     assert extent.height_mm == pytest.approx(diameter_mm)
 

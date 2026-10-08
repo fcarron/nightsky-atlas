@@ -625,6 +625,11 @@ def _draw_front_matter_pages(
         credits.append("Star names: d3-celestial / Olaf Frohn; BSD-3-Clause.")
     elif geometry_inputs["star_names"]:
         credits.append(f"Star names: {geometry_inputs['star_names']}.")
+    if geometry_inputs["milky_way"]:
+        credits.append(
+            "Milky Way outlines: José R. Vieira, via d3-celestial / Olaf Frohn; "
+            "GeoJSON distributed under BSD-3-Clause."
+        )
     if geometry_catalogues["outlines"]:
         credits.append(f"Nebula outlines: {', '.join(geometry_catalogues['outlines'])}.")
     credits.append("GALAXY VISIBILITY MODEL")
@@ -802,6 +807,9 @@ def _build_atlas_impl(
         "star_names": (
             None if star_names_dir is False else str(star_names_dir or STAR_NAMES_FIXTURE_DIR)
         ),
+        "milky_way": (
+            "data/third_party/d3-celestial/mw.json" if style.milky_way.enabled else None
+        ),
     }
     input_paths = {
         "atlas_config": atlas_path,
@@ -815,6 +823,7 @@ def _build_atlas_impl(
             else None
         ),
         "star_names": geometry_inputs["star_names"],
+        "milky_way": geometry_inputs["milky_way"],
         "faint_star_store": faint_star_store,
         "observing_lists": (
             None
@@ -840,6 +849,7 @@ def _build_atlas_impl(
             {item.provenance.catalogue for item in inputs.constellations.boundaries}
         ),
         "outlines": sorted({item.provenance.catalogue for item in inputs.outlines}),
+        "milky_way": ["d3-celestial"] if inputs.milky_way_contours else [],
     }
     if publication:
         validate_publication_inputs(

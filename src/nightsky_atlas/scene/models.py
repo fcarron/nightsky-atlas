@@ -22,6 +22,7 @@ __all__ = [
     "SceneConstellationRegion",
     "SceneDso",
     "SceneOutline",
+    "SceneMilkyWayContour",
     "SceneSegment",
     "SceneStar",
     "SceneStarSystem",
@@ -108,6 +109,23 @@ class SceneOutline:
 
 
 @dataclass(frozen=True, slots=True)
+class SceneMilkyWayContour:
+    """A clipped, projected Milky Way brightness-contour path."""
+
+    contour_id: str
+    level: int
+    points: tuple[ChartPoint, ...]
+
+    def __post_init__(self) -> None:
+        if not self.contour_id.strip():
+            raise ValueError("contour_id must not be blank")
+        if self.level not in range(1, 6):
+            raise ValueError("Milky Way contour level must be between 1 and 5")
+        if len(self.points) < 2:
+            raise ValueError("a scene Milky Way contour needs at least two points")
+
+
+@dataclass(frozen=True, slots=True)
 class SceneConstellationRegion:
     """Projected visible part of one constellation footprint on a chart."""
 
@@ -138,6 +156,7 @@ class ChartScene:
     constellation_boundaries: tuple[SceneSegment, ...] = ()
     constellation_regions: tuple[SceneConstellationRegion, ...] = ()
     nebula_outlines: tuple[SceneOutline, ...] = ()
+    milky_way_contours: tuple[SceneMilkyWayContour, ...] = ()
 
     @property
     def star_count(self) -> int:

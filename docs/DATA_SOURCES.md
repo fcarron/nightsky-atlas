@@ -292,6 +292,23 @@ the label formatter does not use Caldwell designations as chart labels.
 | Transformations | edges densified along RA/Dec, projected with the chart projection, clipped to the chart field |
 | Committed | yes; build must be reproducible offline |
 
+### Milky Way brightness contours
+
+| Field | Value |
+| --- | --- |
+| Source project | d3-celestial by Olaf Frohn |
+| Original outline source cited upstream | José R. Vieira, *Milky Way Outline Catalog* |
+| File | `data/third_party/d3-celestial/mw.json` |
+| Upstream revision | `7e720a3de062059d4c5400a379146a601d9010e0` |
+| Upstream URL | <https://github.com/ofrohn/d3-celestial/blob/7e720a3de062059d4c5400a379146a601d9010e0/data/mw.json> |
+| License | BSD-3-Clause for the GeoJSON as distributed by d3-celestial; adjacent `LICENSE` and `SOURCE.md` retain the notice. This does not claim Vieira released the original catalogue under BSD. |
+| Geometry | Five GeoJSON MultiPolygon outline levels, `ol1`–`ol5`, at J2000 |
+| Transformation | GeoJSON longitude is converted back to RA; paths are projected with the chart stereographic projection and clipped. Source geometry is not regenerated or edited. |
+| SHA-256 | `aee221a7a0e879418e685de00c3e68fbdfac5667c0a8aab74929ef9cf4aab4fb` |
+
+Edition styles select levels 1 for Pocket, 1+3 for Standard and Eyepiece,
+and 1+3+5 for Deep. Rendering is stroke-only; levels 2 and 4 are not selected.
+
 ### Star names and designations
 
 | Field | Value |

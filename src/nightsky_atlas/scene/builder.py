@@ -12,6 +12,7 @@ from dataclasses import replace
 
 from nightsky_atlas.catalog.constellations import ConstellationPolygon, ConstellationSegment
 from nightsky_atlas.catalog.faint_stars import FaintStar
+from nightsky_atlas.catalog.milky_way import MilkyWayContour
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.observing_lists import canonical_designation
 from nightsky_atlas.catalog.outlines import NebulaOutline
@@ -24,6 +25,7 @@ from nightsky_atlas.scene.models import (
     ChartScene,
     SceneConstellationRegion,
     SceneDso,
+    SceneMilkyWayContour,
     SceneOutline,
     SceneSegment,
     SceneStar,
@@ -65,6 +67,8 @@ def build_scene(
     constellation_boundaries: Iterable[ConstellationSegment] = (),
     constellation_polygons: Iterable[ConstellationPolygon] = (),
     nebula_outlines: Iterable[NebulaOutline] = (),
+    milky_way_contours: Iterable[MilkyWayContour] = (),
+    milky_way_levels: Iterable[int] = (),
     star_systems: Iterable[StarSystem] = (),
     observing_index: Mapping[str, frozenset[str]] | None = None,
     selection_policy: SelectionPolicy | None = None,
@@ -144,6 +148,9 @@ def build_scene(
     projected_outlines = _project_outlines(
         _outline_sources(nebula_outlines, selected_dsos), projector, definition
     )
+    projected_milky_way = _project_milky_way(
+        milky_way_contours, frozenset(milky_way_levels), projector, definition
+    )
     outlined_ids = {outline.dso_id for outline in projected_outlines}
     scene_dsos = [
         replace(
@@ -172,6 +179,7 @@ def build_scene(
             constellation_polygons, projector, definition
         ),
         nebula_outlines=projected_outlines,
+        milky_way_contours=projected_milky_way,
     )
 
 
@@ -618,6 +626,78 @@ def _project_outlines(
                 )
             )
     return tuple(outlines)
+
+
+def _unit_vector(ra_deg: float, dec_deg: float) -> tuple[float, float, float]:
+    ra = math.radians(ra_deg)
+    dec = math.radians(dec_deg)
+    cos_dec = math.cos(dec)
+    return cos_dec * math.cos(ra), cos_dec * math.sin(ra), math.sin(dec)
+
+
+def _project_milky_way(
+    contours: Iterable[MilkyWayContour],
+    levels: frozenset[int],
+    projector: StereographicProjection,
+    definition: ChartDefinition,
+) -> tuple[SceneMilkyWayContour, ...]:
+    """Project selected outline rings and clip them to the chart viewport."""
+    if not levels:
+        return ()
+    selected = tuple(contour for contour in contours if contour.level in levels)
+    if not selected:
+        return ()
+
+    half_width = definition.width_deg / 2.0
+    half_height = definition.height_deg / 2.0
+    plane_radius_rad = math.radians(math.hypot(half_width, half_height))
+    chart_radius_deg = math.degrees(2.0 * math.atan(plane_radius_rad / 2.0))
+    maximum_half_angle = max(contour.max_edge_half_angle_deg for contour in selected)
+    candidate_cosine = math.cos(math.radians(chart_radius_deg + maximum_half_angle + 0.02))
+    center = _unit_vector(definition.center_ra_deg, definition.center_dec_deg)
+    results: list[SceneMilkyWayContour] = []
+
+    def append_runs(contour: MilkyWayContour, projected: list[tuple[float, float]]) -> None:
+        for run_index, run in enumerate(_polyline_runs(projected, half_width, half_height)):
+            results.append(
+                SceneMilkyWayContour(
+                    contour_id=f"{contour.id}#{run_index}",
+                    level=contour.level,
+                    points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in run),
+                )
+            )
+
+    for contour in selected:
+        current: list[tuple[float, float]] = []
+
+        def flush(source: MilkyWayContour) -> None:
+            nonlocal current
+            if len(current) >= 2:
+                append_runs(source, current)
+            current = []
+
+        for index, ((ra1, dec1), (ra2, dec2)) in enumerate(
+            zip(contour.points, contour.points[1:], strict=False)
+        ):
+            midpoint = contour.edge_midpoint_vectors[index]
+            if sum(a * b for a, b in zip(center, midpoint, strict=True)) < candidate_cosine:
+                flush(contour)
+                continue
+            projected: list[tuple[float, float]] = []
+            try:
+                for ra_deg, dec_deg in _densify(ra1, dec1, ra2, dec2):
+                    point = projector.project(ra_deg % 360.0, dec_deg)
+                    projected.append((point.xi_deg, point.eta_deg))
+            except ProjectionError:
+                flush(contour)
+                continue
+            if current and current[-1] == projected[0]:
+                current.extend(projected[1:])
+            else:
+                flush(contour)
+                current = projected
+        flush(contour)
+    return tuple(results)
 
 
 def build_star_scene(

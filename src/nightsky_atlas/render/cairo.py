@@ -159,6 +159,7 @@ def draw_chart_page(
         presentation = presentation_for(scene.definition, scene=scene)
     plan = build_furniture_plan(transform, scene.definition, style, presentation)
     _draw_background(cr, transform.page)
+    _draw_milky_way_contours(cr, transform, scene, style)
     grid_lines = _draw_grid(cr, transform, scene.definition, style)
     draw_detail_markers(
         cr,
@@ -1252,6 +1253,43 @@ def _draw_outlines(
             line_width_mm=style.dso.outline_line_width_mm,
             dash_mm=None,
         )
+
+
+def _draw_milky_way_contours(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    scene: ChartScene,
+    style: StyleConfig,
+) -> None:
+    milky_way = style.milky_way
+    if not milky_way.enabled or not milky_way.levels or not scene.milky_way_contours:
+        return
+    rect = transform.chart_rect
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
+    cr.set_line_width(mm_to_pt(milky_way.line_width_mm))
+    cr.set_line_cap(cairo.LINE_CAP_ROUND)
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    for level in milky_way.levels:
+        gray = milky_way.level_gray[level]
+        cr.set_source_rgb(gray, gray, gray)
+        for contour in scene.milky_way_contours:
+            if contour.level != level:
+                continue
+            for index, chart_point in enumerate(contour.points):
+                point = transform.to_page(chart_point)
+                if index == 0:
+                    cr.move_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+                else:
+                    cr.line_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+            cr.stroke()
+    cr.restore()
 
 
 def _draw_segments(
