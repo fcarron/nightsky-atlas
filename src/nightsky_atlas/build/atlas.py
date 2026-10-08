@@ -62,7 +62,9 @@ from nightsky_atlas.build.preflight import (
 from nightsky_atlas.build.progress import Progress, null_progress
 from nightsky_atlas.catalog.manifest import file_sha256
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
-from nightsky_atlas.catalog.observing_lists import DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR
+from nightsky_atlas.catalog.observing_lists import (
+    DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
+)
 from nightsky_atlas.catalog.observing_lists import build_membership_index
 from nightsky_atlas.catalog.priority import HERSCHEL_400, messier_id
 from nightsky_atlas.catalog.sample import load_sample_stars
