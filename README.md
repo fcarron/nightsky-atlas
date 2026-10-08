@@ -1,20 +1,13 @@
 # NightSky Atlas
 
-NightSky Atlas creates printable, publication-quality star charts and atlases
-for visual deep-sky observing and Dobsonian star-hopping. Its main output is a
-vector PDF; chart previews are also written as PNG files. The atlas includes
-stars, deep-sky objects, constellation figures and boundaries, coordinate grids
-and navigation between charts.
-
-The main editions are Pocket (5 mm/°), Standard (10 mm/°) and Deep (20 mm/°).
-Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental.
-
 ## What is NightSky Atlas?
 
 NightSky Atlas creates printable, publication-quality star charts and atlases
 for visual deep-sky observing and Dobsonian star-hopping. Its main output is a
 vector PDF; chart previews are also written as PNG files. Charts combine stars,
 deep-sky objects, constellation geometry, coordinate grids and navigation.
+The main editions are Pocket (5 mm/°), Standard (10 mm/°) and Deep (20 mm/°).
+Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental.
 
 ## Requirements: Ubuntu 24.04 and WSL
 
@@ -106,7 +99,7 @@ commands are the CLI's fetch and import steps:
 # Merge Tycho-2 and Hipparcos into the indexed SQLite star store
 .venv/bin/nightsky data import-stars
 
-# OpenNGC deep-sky objects (the download is small compared with the star catalogues)
+# OpenNGC deep-sky objects
 .venv/bin/nightsky data fetch-openngc
 .venv/bin/nightsky data import-openngc
 ```
