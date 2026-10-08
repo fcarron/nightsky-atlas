@@ -232,19 +232,46 @@ def _paragraph(
     size_pt: float = 8.3,
     line_step_mm: float = 5.4,
     gray: float = 0.0,
+    max_y_mm: float | None = None,
 ) -> float:
     line = ""
-    for word in words.split():
+
+    def draw_line(value: str, baseline_y: float) -> None:
+        if max_y_mm is not None and baseline_y > max_y_mm:
+            raise ValueError("credits text exceeds its available page area")
+        _text(cr, value, x_mm, baseline_y, family, size_pt, gray=gray)
+
+    def split_long_word(word: str) -> list[str]:
+        chunks: list[str] = []
+        chunk = ""
+        for character in word:
+            candidate = chunk + character
+            width_pt, _ = measure_point_size(cr, candidate, family, size_pt)
+            if chunk and width_pt > mm_to_pt(width_mm):
+                chunks.append(chunk)
+                chunk = character
+            else:
+                chunk = candidate
+        if chunk:
+            chunks.append(chunk)
+        return chunks
+
+    words_to_place = [
+        chunk
+        for word in words.split()
+        for chunk in split_long_word(word)
+    ]
+    for word in words_to_place:
         candidate = f"{line} {word}" if line else word
         candidate_width_pt, _ = measure_point_size(cr, candidate, family, size_pt)
         if line and candidate_width_pt > mm_to_pt(width_mm):
-            _text(cr, line, x_mm, y_mm, family, size_pt, gray=gray)
+            draw_line(line, y_mm)
             y_mm += line_step_mm
             line = word
         else:
             line = candidate
     if line:
-        _text(cr, line, x_mm, y_mm, family, size_pt, gray=gray)
+        draw_line(line, y_mm)
         y_mm += line_step_mm
     return y_mm
 
@@ -256,11 +283,15 @@ def _draw_credit_column(
     y_mm: float,
     width_mm: float,
     family: str,
-) -> None:
+    *,
+    max_y_mm: float,
+) -> float:
     y = y_mm
     for heading, entries in sections:
         if not entries:
             continue
+        if y > max_y_mm:
+            raise ValueError("credits section heading exceeds its available page area")
         _text(cr, heading.upper(), x_mm, y, family, 8.0, bold=True, gray=0.34)
         y += 5.2
         for entry in entries:
@@ -274,9 +305,11 @@ def _draw_credit_column(
                 size_pt=8.5,
                 line_step_mm=4.1,
                 gray=0.08,
+                max_y_mm=max_y_mm,
             )
             y += 0.6
         y += 2.0
+    return y
 
 
 def draw_credits_page(
@@ -292,6 +325,8 @@ def draw_credits_page(
     gap = 12.0
     column_width = (right - left - gap) / 2.0
     right_column = left + column_width + gap
+    licence_y = page.height_mm - 59.0
+    source_bottom = licence_y - 12.0
 
     _text(cr, "Data Sources & Acknowledgements", left, page.margin_mm, family, 15.0, bold=True)
     y = page.margin_mm + 10.0
@@ -319,10 +354,25 @@ def draw_credits_page(
         gray=0.12,
     )
     source_y = max(page.margin_mm + 29.0, y + 2.0)
-    _draw_credit_column(cr, left_sections, left, source_y, column_width, family)
-    _draw_credit_column(cr, right_sections, right_column, source_y, column_width, family)
+    _draw_credit_column(
+        cr,
+        left_sections,
+        left,
+        source_y,
+        column_width,
+        family,
+        max_y_mm=source_bottom,
+    )
+    _draw_credit_column(
+        cr,
+        right_sections,
+        right_column,
+        source_y,
+        column_width,
+        family,
+        max_y_mm=source_bottom,
+    )
 
-    licence_y = page.height_mm - 59.0
     _rule(cr, left, right, licence_y - 5.0)
     _text(cr, "LICENCE & USAGE", left, licence_y, family, 8.0, bold=True, gray=0.34)
     left_text = (
@@ -335,26 +385,31 @@ def draw_credits_page(
         "Third-party material keeps its own terms. The MIT License applies to the generator, "
         "not automatically to generated atlases.",
     )
+    documentation_y = page.height_mm - page.margin_mm - 8.0
+    licence_bottom = documentation_y - 6.0
     for entries, x in ((left_text, left), (right_text, right_column)):
-        for row, text in enumerate(entries):
-            _paragraph(
+        y = licence_y + 7.0
+        for text in entries:
+            y = _paragraph(
                 cr,
                 text,
                 x,
-                licence_y + 7.0 + row * 8.2,
+                y,
                 column_width,
                 family,
                 size_pt=7.8,
                 line_step_mm=3.8,
                 gray=0.1,
+                max_y_mm=licence_bottom,
             )
+            y += 1.8
 
     _text(
         cr,
         "Full references, source URLs and licence details are in docs/DATA_SOURCES.md "
         "and THIRD_PARTY_LICENSES.md.",
         left,
-        page.height_mm - page.margin_mm - 8.0,
+        documentation_y,
         family,
         7.2,
         gray=0.38,
@@ -365,7 +420,7 @@ def draw_credits_page(
         cr,
         footer,
         (mm_to_pt(page.width_mm - page.margin_mm) - width_pt) * 25.4 / 72.0,
-        page.height_mm - page.margin_mm,
+        page.height_mm - page.margin_mm - 2.0,
         family,
         7.2,
         gray=0.42,

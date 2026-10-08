@@ -60,8 +60,6 @@ acknowledgement requested for VizieR is:
 > This research has made use of the VizieR catalogue access tool, CDS,
 > Strasbourg, France (DOI: 10.26093/cds/vizier).
 
-## Constellation figures
-
 ## Stellarium Western (Sky & Telescope) constellation figures
 
 - **Source project:** [Stellarium Sky Cultures](https://github.com/Stellarium/stellarium-skycultures).

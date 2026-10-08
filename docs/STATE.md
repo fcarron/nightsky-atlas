@@ -3,6 +3,13 @@
 Handoff snapshot. The authoritative contract remains `AGENTS.md`; the granular
 plan is `docs/DEVELOPMENT_PLAN.md`.
 
+Current edition configuration (2026-10-08): Pocket is 5 mm/°, Standard 10
+mm/°, and Deep 20 mm/°. Eyepiece at 40 mm/° and Eyepiece Deep at 80 mm/° are
+experimental presets. The Standard alpha build is complete; printed field
+review remains pending. Full local Pocket, Standard and Deep builds were
+regenerated on 2026-10-07 under `build/complete-2026-10-07/`; older artifact
+notes below refer to earlier snapshots unless stated otherwise.
+
 ## Progress
 
 - Targeted short DSO leaders (2026-10-07): the observer-reviewed rule is now
@@ -340,9 +347,9 @@ plan is `docs/DEVELOPMENT_PLAN.md`.
   hard-issue totals and output file checksums. The current complete Standard
   build passes ordinary atlas validation; the M15.5 field test remains.
 
-- The alpha artifacts predate the Hipparcos bright-star supplement and must be
-  rebuilt before the M15.5 field test; the regenerated `test-cygnus` test page
-  already includes Deneb.
+- Older alpha artifacts predate the Hipparcos bright-star supplement; the
+  2026-10-07 full builds supersede those files. The regenerated `test-cygnus`
+  test page also includes Deneb.
 - Label prioritisation/selection in dense fields is implemented (see Progress),
   but dense-page conflicts remain in the full builds. Pocket reports 32 hard
   issues, including 14 on `pocket-026` and 7 on `pocket-025`. Standard reports

@@ -60,7 +60,7 @@ def test_from_style_matches_configuration() -> None:
 
 @pytest.mark.parametrize(
     ("edition", "magnitude_limit", "mag_six_diameter_mm"),
-    (("pocket", 7.5, 0.65), ("standard", 9.0, 1.10), ("deep", 10.0, 1.85)),
+    (("pocket", 7.5, 0.65), ("standard", 9.0, 1.10), ("deep", 10.5, 1.85)),
 )
 def test_edition_star_curves_are_calibrated(
     edition: str, magnitude_limit: float, mag_six_diameter_mm: float
@@ -495,9 +495,11 @@ def test_edition_dso_print_minima(
         DsoType.DARK_NEBULA,
         DsoType.GALAXY_CLUSTER,
     ):
-        assert style.dso.extent_style(object_type).min_angular_size_arcmin == pytest.approx(
-            dso_min_arcmin
-        )
+        extent_style = style.dso.extent_style(object_type)
+        if edition == "deep" and object_type in {DsoType.BRIGHT_NEBULA, DsoType.DARK_NEBULA}:
+            assert extent_style.use_angular_size is False
+        else:
+            assert extent_style.min_angular_size_arcmin == pytest.approx(dso_min_arcmin)
 
 
 @pytest.mark.parametrize(
@@ -556,10 +558,14 @@ def test_other_size_aware_dso_classes_use_edition_angular_floor(
         style=style,
     )
     extent_style = style.dso.extent_style(object_type)
-    diameter_mm = max(
-        minimum_arcmin / 60.0 * mm_per_deg,
-        extent_style.min_diameter_mm,
-    )
+    if edition == "deep" and object_type in {DsoType.BRIGHT_NEBULA, DsoType.DARK_NEBULA}:
+        assert extent_style.use_angular_size is False
+        diameter_mm = extent_style.fallback_diameter_mm
+    else:
+        diameter_mm = max(
+            minimum_arcmin / 60.0 * mm_per_deg,
+            extent_style.min_diameter_mm,
+        )
     assert extent.width_mm == pytest.approx(diameter_mm)
     assert extent.height_mm == pytest.approx(diameter_mm)
 

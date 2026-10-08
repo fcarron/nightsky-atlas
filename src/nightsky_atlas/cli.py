@@ -1528,10 +1528,14 @@ def _command_star_label_report(args: argparse.Namespace) -> int:
                 proper_magnitude_limit=style.star.label_magnitude_limit,
             ):
                 kind = canonical[1]
-                if kind.startswith("proper_"):
+                if kind == "combined" or kind.startswith("proper_"):
                     counts["proper"] += 1
-                    tier = kind.removeprefix("proper_")
-                    if tier is not None:
+                    tier = (
+                        name.proper_name_tier
+                        if kind == "combined"
+                        else kind.removeprefix("proper_")
+                    )
+                    if tier:
                         tiers[tier] += 1
                 else:
                     counts[kind] += 1

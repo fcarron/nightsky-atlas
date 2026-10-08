@@ -66,8 +66,12 @@ def test_legend_uses_edition_dso_geometry(
     assert globular.minimum_extent is not None
     assert symbols["Open cluster"].minimum_extent is not None
     assert symbols["Planetary nebula"].minimum_extent is not None
-    assert symbols["Bright nebula / SNR"].minimum_extent is not None
-    assert symbols["Dark nebula"].minimum_extent is not None
+    if edition == "deep":
+        assert symbols["Bright nebula / SNR"].minimum_extent is None
+        assert symbols["Dark nebula"].minimum_extent is None
+    else:
+        assert symbols["Bright nebula / SNR"].minimum_extent is not None
+        assert symbols["Dark nebula"].minimum_extent is not None
     assert symbols["Galaxy cluster"].minimum_extent is not None
     assert symbols["Planetary nebula"].extent.width_mm > mm_per_degree * 6.0 / 60.0
     assert symbols["Other / unknown"].angular_size_arcmin is None
@@ -173,7 +177,7 @@ def test_standard_star_scale_and_telrad_sizes_are_exact() -> None:
     assert telrad_ring_diameters_mm(atlas.mm_per_degree) == pytest.approx((5.0, 20.0, 40.0))
     for edition in ("pocket", "deep"):
         other = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
-        assert other.mm_per_degree is None
+        assert other.mm_per_degree == pytest.approx(5.0 if edition == "pocket" else 20.0)
 
 
 def test_field_guide_double_star_example_uses_production_renderer(monkeypatch) -> None:

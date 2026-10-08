@@ -4,8 +4,10 @@
 > deep-sky observing, especially Dobsonian star-hopping.
 > **Output:** vector PDF (primary); SVG, PNG preview, annotated review PNG,
 > serialized layout JSON.
-> **Language:** Python 3.12+. **Status:** M0–M14 done, Standard alpha in
-> progress. Authoritative engineering contract for coding agents; keep it lean,
+> **Language:** Python 3.12+. **Editions:** Pocket (5 mm/°), Standard
+> (10 mm/°) and Deep (20 mm/°); Eyepiece (40 mm/°) and Eyepiece Deep
+> (80 mm/°) are experimental. Standard alpha field review remains in progress.
+> Authoritative engineering contract for coding agents; keep it lean,
 > push detail to `docs/`.
 
 ## Documentation map
@@ -60,8 +62,9 @@ add code comments unless asked.
 
 Beautiful, practical paper charts for use at a telescope. Functional quality
 inspired by Pocket Sky Atlas / Sky Atlas 2000.0 / Uranometria 2000.0; visual
-design must not copy any existing atlas. Same engine, three editions:
-**Pocket**, **Atlas** (primary, first), **Deep**. See `docs/PRODUCT.md`.
+design must not copy any existing atlas. The main editions are **Pocket**,
+**Standard** and **Deep**. **Eyepiece** and **Eyepiece Deep** are experimental
+presets, not release editions. See `docs/PRODUCT.md`.
 
 ## 2. Non-goals
 
@@ -491,10 +494,9 @@ Full plan, acceptance criteria and checkpoints: `docs/DEVELOPMENT_PLAN.md`.
 - [x] M21.1–M21.4 observing-list-driven DSO selection (separate render/label
   priorities; Herschel 400 forced into Standard; per-type visibility evaluators
   decide which objects are drawn); [ ] M21.5 further observing lists.
-- [~] M17 Pocket: preset/style and representative renders done; complete Pocket
-  build and field test remain. [~] M18 Deep: preset/style and representative
-  renders done; data expansion remains. M19 extended structures and M20 Deep
-  atlas remain.
+- [~] M17 Pocket: preset/style and full build generated; formal tiling and
+  field test remain. [~] M18 Deep: preset/style and full build generated; data
+  expansion remains. M19 extended structures and M20 Deep atlas work remain.
 
 Artifacts, frozen geometry and open issues: `docs/STATE.md`.
 

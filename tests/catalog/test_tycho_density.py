@@ -84,4 +84,4 @@ def test_production_edition_limits_unchanged():
     root = Path(__file__).resolve().parents[2]
     assert "stellar_limit_magnitude: 9.0" in (root / "atlas/standard.yaml").read_text()
     assert "stellar_limit_magnitude: 7.5" in (root / "atlas/pocket.yaml").read_text()
-    assert "stellar_limit_magnitude: 10.0" in (root / "atlas/deep.yaml").read_text()
+    assert "stellar_limit_magnitude: 10.5" in (root / "atlas/deep.yaml").read_text()

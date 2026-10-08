@@ -98,7 +98,10 @@ def test_pocket_constellation_boundaries_are_distinct_from_grid_and_figures() ->
     assert boundary.gray == pytest.approx(0.68)
     assert boundary.gray < pocket.grid.gray
     assert boundary.gray > pocket.constellation.lines.gray
-    assert pocket.constellation.lines == standard.constellation.lines
+    assert pocket.constellation.lines.gray == pytest.approx(0.64)
+    assert pocket.constellation.lines.bold_width_mm == pytest.approx(0.18)
+    assert pocket.constellation.lines.normal_width_mm == pytest.approx(0.12)
+    assert pocket.constellation.lines.thin_width_mm == pytest.approx(0.08)
     assert pocket.grid.gray == standard.grid.gray
     assert pocket.grid.line_width_mm == standard.grid.line_width_mm
 

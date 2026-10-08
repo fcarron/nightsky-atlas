@@ -126,23 +126,31 @@ def test_grid_values_follow_step() -> None:
 
 
 @pytest.mark.parametrize(
-    ("edition", "ra_step_deg", "dec_step_deg", "label_ra_step_deg", "label_dec_step_deg"),
     (
-        ("pocket", 15.0, 10.0, 15.0, 20.0),
-        ("standard", 7.5, 5.0, 15.0, 10.0),
-        ("deep", 3.75, 2.0, 7.5, 4.0),
+        "edition",
+        "ra_step_deg",
+        "polar_ra_step_deg",
+        "dec_step_deg",
+        "label_ra_step_deg",
+        "label_dec_step_deg",
+    ),
+    (
+        ("pocket", 15.0, 30.0, 10.0, 15.0, 10.0),
+        ("standard", 7.5, 7.5, 5.0, 15.0, 10.0),
+        ("deep", 3.75, 3.75, 2.0, 7.5, 4.0),
     ),
 )
 def test_edition_coordinate_grid_intervals(
     edition: str,
     ra_step_deg: float,
+    polar_ra_step_deg: float,
     dec_step_deg: float,
     label_ra_step_deg: float,
     label_dec_step_deg: float,
 ) -> None:
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     assert style.grid.ra_step_deg == pytest.approx(ra_step_deg)
-    assert style.grid.polar_ra_step_deg == pytest.approx(ra_step_deg)
+    assert style.grid.polar_ra_step_deg == pytest.approx(polar_ra_step_deg)
     assert style.grid.dec_step_deg == pytest.approx(dec_step_deg)
     assert style.grid.label_ra_step_deg == pytest.approx(label_ra_step_deg)
     assert style.grid.label_dec_step_deg == pytest.approx(label_dec_step_deg)

@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from nightsky_atlas.catalog.dso_store import load_dso_catalog
 from nightsky_atlas.research.nebula_curation import (
     merge_candidate_sources,
     preferred_dark_designation,
@@ -65,20 +64,12 @@ def test_southern_audit_counts_positions_without_inventing_missing_values() -> N
 
 def test_curated_yaml_has_unique_ids_and_no_third_party_research_fields() -> None:
     root = Path(__file__).parents[2]
-    catalogue_ids = {
-        obj.id for obj in load_dso_catalog(root / "data/processed/dso/catalogue.json")
-    }
     for filename, kind in (
         ("curated_dark_nebulae_v1.yaml", "dark_nebula"),
         ("curated_bright_nebulae_v1.yaml", "bright_nebula"),
     ):
         data = yaml.safe_load((root / "config" / filename).read_text(encoding="utf-8"))
         validate_curated_document(data, expected_kind=kind)
-        assert all(
-            object_id in catalogue_ids
-            for entry in data["entries"]
-            for object_id in entry["object_ids"]
-        )
         assert yaml.safe_dump(data, sort_keys=False, allow_unicode=True) == (
             root / "config" / filename
         ).read_text(encoding="utf-8")

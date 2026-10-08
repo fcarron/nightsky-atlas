@@ -9,6 +9,9 @@ annotated review PNGs and a machine-readable layout JSON document.
 See `AGENTS.md` for the condensed engineering contract, and `docs/` for the
 product, architecture, plan, cartography, AI-review and data-source details.
 
+The main editions are Pocket (5 mm/°), Standard (10 mm/°) and Deep
+(20 mm/°). Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental.
+
 ## Development
 
 ```bash
@@ -18,8 +21,16 @@ make lint    # run Ruff
 make check   # lint + test (standard pre-commit verification)
 ```
 
-The Standard style uses the Lato font family. Install Lato Regular and Bold on
-the build machine so Pango measures and renders the intended typeface.
+Lato and Source Sans 3 are bundled and registered from the repository, so no
+manual font installation is needed. On Debian or Ubuntu, install the system
+libraries used by Cairo and Pango before creating the virtual environment:
+
+```bash
+sudo apt-get install python3-venv python3-gi python3-gi-cairo gir1.2-pango-1.0 \
+    libcairo2-dev libfontconfig1 pkg-config
+/usr/bin/python3 -m venv --system-site-packages .venv
+.venv/bin/python -m pip install -e ".[dev]"
+```
 
 Run the command-line interface:
 
@@ -52,11 +63,18 @@ curves, use:
 .venv/bin/nightsky chart magnitude-scale --edition-comparison --outdir build
 ```
 
-All chart and atlas commands accept `--edition pocket`, `--edition standard`,
-or `--edition deep` to select matching atlas and style presets. Explicit
-`--atlas` and `--style` paths remain available for custom definitions. Optional
-layers can be omitted explicitly, for example `--no-constellations` or
-`--no-outlines`.
+The `--edition` preset currently accepts `pocket`, `standard` and `deep`.
+Experimental editions use explicit configuration paths, for example:
+
+```bash
+.venv/bin/nightsky atlas build --atlas atlas/eyepiece.yaml \
+    --style styles/eyepiece.yaml
+# Eyepiece Deep: atlas/eyepiece_deep.yaml and styles/eyepiece_deep.yaml
+```
+
+Explicit `--atlas` and `--style` paths are also available for custom
+definitions. Optional layers can be omitted explicitly, for example
+`--no-constellations` or `--no-outlines`.
 
 ### Real star catalogue (Tycho-2)
 
@@ -140,8 +158,9 @@ See `docs/CARTOGRAPHY.md`.
 
 ## Status
 
-Early development. See the development plan in `docs/DEVELOPMENT_PLAN.md` and the
-current snapshot in `docs/STATE.md`.
+Alpha preparation. Pocket, Standard and Deep are the main editions; the two
+Eyepiece configurations are experimental. See `docs/DEVELOPMENT_PLAN.md` and
+the current snapshot in `docs/STATE.md`.
 
 ## License and data attribution
 

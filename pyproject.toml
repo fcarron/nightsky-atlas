@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nightsky-atlas"
-version = "0.0.0"
+version = "0.1.0a1"
 description = "Generate publication-quality printable star atlases for visual deep-sky observing."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "NightSky Atlas maintainers" }]
+authors = [{ name = "Frédéric Carron" }]
 dependencies = [
     "httpx>=0.27",
     "numpy>=1.26",
