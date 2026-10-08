@@ -21,4 +21,4 @@ jobs:
           sudo apt-get install -y libcairo2-dev pkg-config
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
-      - run: make check
+      - run: make check PY=python
