@@ -126,7 +126,7 @@ consistent notation built centrally in `chart/presentation.py`:
 
 | Edition | Name | Code | Visible chart code |
 | --- | --- | --- | --- |
-| Pocket | Pocket | P | P01 … P48 |
+| Pocket | Pocket | P | P01 … P39 |
 | Standard | Standard | S | S001 … S118 |
 | Deep | Deep | D | D001 … D430 |
 
@@ -157,7 +157,7 @@ the same stable DSO ID has a placed detail label and that label has no hard
 layout violation. The galaxy symbol remains on both pages. Messier and Herschel
 400 labels are never transferred. It is enabled for Standard Virgo core
 (`SD053A`), southern Virgo (`SD053B`) and Fornax (`SD089`). Pocket now retains
-just Virgo core (`PD025A`), at
+just Virgo core (`PD021A`, parent `P21`), at
 10 mm/° with stars to mag 9.0 and the parent's DSO selection; the other former
 Pocket detail fields use ordinary labels on the main maps. Pocket uses the
 compact detail code as its frame tag; the detail page carries the region name.

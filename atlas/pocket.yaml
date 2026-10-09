@@ -7,9 +7,9 @@ mm_per_degree: 5.0
 stellar_limit_magnitude: 7.5
 detail_charts:
   - id: pocket-detail-virgo-core
-    code: PD025A
+    code: PD021A
     name: Virgo core
-    parent_chart_id: pocket-025
+    parent_chart_id: pocket-021
     center_ra_deg: 186.75
     center_dec_deg: 13.0
     width_deg: 27.0
@@ -23,12 +23,12 @@ tiling:
   height_deg: 36.0
   target_overlap_mm: 10.0
   mm_per_degree: 5.0
-  coverage_step_deg: 1.0
-  declination_centers: [-67.0, -33.0, 0.0, 33.0, 67.0]
-  chart_counts: [5, 12, 12, 12, 5]
+  coverage_step_deg: 0.25
+  declination_centers: [-62.0, -33.0, 0.0, 33.0, 62.0]
+  chart_counts: [5, 9, 9, 9, 5]
   polar_caps: true
-  stagger_ra_centers: true
-  auto_adjust_counts: true
+  stagger_ra_centers: false
+  auto_adjust_counts: false
 visibility:
   integrated_magnitude_limit: 11.5
   surface_brightness_limit: 22.5
