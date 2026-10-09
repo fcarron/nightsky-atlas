@@ -11,6 +11,7 @@ from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
+from nightsky_atlas.layout.collision import IssueType, find_hard_violations
 from nightsky_atlas.layout.geometry import segments_intersect
 from nightsky_atlas.layout.leader_lines import (
     leader_line_for,
@@ -97,6 +98,19 @@ def test_prepared_leader_geometry_matches_uncached_routes() -> None:
     assert resolve_leader_lines(
         (enabled,), SCENE, TRANSFORM, STYLE, context=context
     ) == resolve_leader_lines((enabled,), SCENE, TRANSFORM, STYLE)
+
+
+def test_validation_reports_an_enabled_leader_line_without_a_route(monkeypatch) -> None:
+    import nightsky_atlas.layout.collision as collision
+
+    label = replace(make_label(), leader_line=True)
+    monkeypatch.setattr(collision, "resolve_leader_lines", lambda *args: ())
+
+    issues = find_hard_violations((label,), SCENE, TRANSFORM, STYLE)
+
+    route_issues = [item for item in issues if item.issue_type == IssueType.INVALID_LEADER_LINE]
+    assert len(route_issues) == 1
+    assert route_issues[0].element_ids == (label.id,)
 
 
 def test_optimizer_does_not_add_an_excessively_long_dso_leader() -> None:

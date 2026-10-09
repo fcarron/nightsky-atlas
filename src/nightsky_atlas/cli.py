@@ -197,6 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
     _add_chart_commands(subparsers)
+    _add_review_commands(subparsers)
     _add_data_commands(subparsers)
     _add_benchmark_commands(subparsers)
     _add_atlas_commands(subparsers)
@@ -477,6 +478,28 @@ def _add_chart_commands(subparsers: argparse._SubParsersAction) -> None:
         help="render Pocket, Standard and Deep star curves on one A4 test sheet",
     )
     scale.set_defaults(handler=_command_magnitude_scale)
+
+
+def _add_review_commands(subparsers: argparse._SubParsersAction) -> None:
+    review = subparsers.add_parser("review", help="review and edit chart layouts")
+    review_subparsers = review.add_subparsers(dest="review_command")
+    editor = review_subparsers.add_parser(
+        "editor", help="open a local browser-based label editor for one chart"
+    )
+    editor.add_argument("--edition", choices=("pocket", "standard", "deep"), default="pocket")
+    editor.add_argument("--atlas", type=Path, default=Path("atlas/pocket.yaml"))
+    editor.add_argument("--style", type=Path, default=Path("styles/pocket.yaml"))
+    editor.add_argument("--chart", required=True, help="chart code or ID, e.g. P26 or pocket-026")
+    editor.add_argument("--star-store", type=Path, default=_DEFAULT_STORE)
+    editor.add_argument("--dsos", type=Path, default=None)
+    editor.add_argument(
+        "--overrides", type=Path, default=None, help="existing override file or directory"
+    )
+    editor.add_argument("--outdir", type=Path, default=None, help="editor state directory")
+    editor.add_argument("--ai-config", type=Path, default=Path("ai.yaml"))
+    editor.add_argument("--port", type=int, default=8765)
+    editor.add_argument("--png-dpi", type=float, default=150.0)
+    editor.set_defaults(handler=_command_review_editor)
 
 
 def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -1098,9 +1121,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
         labels = _apply_chart_overrides(args, definition, labels)
     else:
         labels = ()
-    presentation = presentation_from_edition(
-        definition, atlas.resolved_edition(), scene=scene
-    )
+    presentation = presentation_from_edition(definition, atlas.resolved_edition(), scene=scene)
     furniture = furniture_obstacles(transform, definition, style, presentation)
     result: OptimizationResult | None = None
     if args.optimize:
@@ -1146,9 +1167,7 @@ def _command_chart_review(args: argparse.Namespace) -> int:
     labels = build_labels(scene, transform, style, _star_names(args))
     labels = _select_labels(args, definition, labels, scene, transform, style)
     labels = _apply_chart_overrides(args, definition, labels)
-    presentation = presentation_from_edition(
-        definition, atlas.resolved_edition(), scene=scene
-    )
+    presentation = presentation_from_edition(definition, atlas.resolved_edition(), scene=scene)
     furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style, furniture=furniture)
@@ -1186,6 +1205,50 @@ def _command_chart_review(args: argparse.Namespace) -> int:
 
     if args.model is not None:
         _run_one_step_review(args, request, outdir)
+    return 0
+
+
+def _command_review_editor(args: argparse.Namespace) -> int:
+    from nightsky_atlas.review.editor import EditorSession, serve_editor
+
+    if not args.star_store.is_file():
+        raise SystemExit(
+            f"star store not found: {args.star_store}; build it with `nightsky data import-stars` "
+            "or pass --star-store PATH"
+        )
+    atlas = load_atlas_config(args.atlas)
+    chart_id = args.chart
+    if chart_id not in {item.id for item in atlas.detail_charts}:
+        from nightsky_atlas.atlas.tiling import chart_definitions
+        from nightsky_atlas.chart.presentation import presentation_from_edition
+
+        matched = next(
+            (
+                item
+                for item in chart_definitions(atlas)
+                if chart_id
+                in {
+                    item.id,
+                    presentation_from_edition(item, atlas.resolved_edition()).chart_code,
+                }
+            ),
+            None,
+        )
+        if matched is not None:
+            chart_id = matched.id
+    output = args.outdir or (Path("build/label-editor") / args.edition / chart_id)
+    session = EditorSession(
+        atlas_path=args.atlas,
+        style_path=args.style,
+        chart_id=chart_id,
+        outdir=output,
+        star_store=args.star_store,
+        dsos_path=args.dsos,
+        overrides_path=args.overrides,
+        ai_config_path=args.ai_config,
+        png_dpi=args.png_dpi,
+    )
+    serve_editor(session, port=args.port)
     return 0
 
 
@@ -1250,9 +1313,7 @@ def _command_chart_validate(args: argparse.Namespace) -> int:
     labels = build_labels(scene, transform, style, _star_names(args))
     labels = _select_labels(args, definition, labels, scene, transform, style)
     labels = _apply_chart_overrides(args, definition, labels)
-    presentation = presentation_from_edition(
-        definition, atlas.resolved_edition(), scene=scene
-    )
+    presentation = presentation_from_edition(definition, atlas.resolved_edition(), scene=scene)
     furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style, furniture=furniture)
@@ -2078,8 +2139,8 @@ def _command_why_object(args: argparse.Namespace) -> int:
     sources = sorted(
         {obj.provenance.catalogue} | {record.catalogue_id for record in obj.catalogue_records}
     )
-    editions = (args.edition,) if args.edition else (
-        "pocket", "standard", "deep", "eyepiece", "reference"
+    editions = (
+        (args.edition,) if args.edition else ("pocket", "standard", "deep", "eyepiece", "reference")
     )
     visibility_by_edition = {
         edition: load_atlas_config(Path("atlas") / f"{edition}.yaml").visibility.to_limits()

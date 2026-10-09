@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -36,9 +37,7 @@ def make_candidate(
     label_id: str, position: CompassPosition, left: float, top: float, *, ring: int = 0
 ) -> LabelCandidate:
     candidate_id = (
-        f"{label_id}:{position.value}"
-        if ring == 0
-        else f"{label_id}:{position.value}:{ring}"
+        f"{label_id}:{position.value}" if ring == 0 else f"{label_id}:{position.value}:{ring}"
     )
     return LabelCandidate(
         id=candidate_id,
@@ -92,6 +91,64 @@ def test_load_single_override(tmp_path: Path) -> None:
     assert spec.candidate == "SW"
     assert spec.locked is True
     assert spec.hidden is None
+
+
+def test_free_offset_and_leader_line_override_translates_all_measured_bounds(
+    tmp_path: Path,
+) -> None:
+    label = make_label()
+    original = label.candidates[0]
+    original = replace(
+        original,
+        glyph_bounds=(PageRect(100.5, 100.4, 3.0, 1.2),),
+        whitespace_bounds=(PageRect(100.0, 100.0, 8.0, 2.5),),
+    )
+    label = replace(label, candidates=(original, *label.candidates[1:]))
+    path = write_override(
+        tmp_path,
+        {
+            "chart": "c1",
+            "labels": {
+                "label:dso:M87": {
+                    "candidate": "N",
+                    "offset_mm": {"x": -1.0, "y": 1.5},
+                    "leader_line": True,
+                    "locked": True,
+                }
+            },
+        },
+    )
+
+    edited = apply_overrides((label,), load_overrides(path))[0]
+    candidate = edited.effective_candidate()
+    assert candidate is not None
+    assert edited.leader_line is True
+    assert edited.locked is True
+    assert candidate.bounds.left_mm == pytest.approx(99.0)
+    assert candidate.bounds.top_mm == pytest.approx(101.5)
+    assert candidate.glyph_bounds == (PageRect(99.5, 101.9, 3.0, 1.2),)
+    assert candidate.whitespace_bounds == (PageRect(99.0, 101.5, 8.0, 2.5),)
+
+
+def test_offset_override_requires_candidate_and_finite_values(tmp_path: Path) -> None:
+    path = write_override(
+        tmp_path,
+        {"chart": "c1", "labels": {"label:dso:M87": {"offset_mm": {"x": 0, "y": 1}}}},
+    )
+    with pytest.raises(OverrideError, match="offset_mm requires"):
+        load_overrides(path)
+
+    path = write_override(
+        tmp_path,
+        {
+            "chart": "c1",
+            "labels": {
+                "label:dso:M87": {"candidate": "N", "offset_mm": {"x": float("nan"), "y": 0}}
+            },
+        },
+    )
+    with pytest.raises(OverrideError):
+        load_overrides(path)
 
 
 def test_unknown_label_key_rejected(tmp_path: Path) -> None:
@@ -226,12 +283,8 @@ def test_optimizer_respects_locked_placement(tmp_path: Path) -> None:
 
 
 def test_load_overrides_dir(tmp_path: Path) -> None:
-    write_override(
-        tmp_path, {"chart": "c1", "labels": {}}, name="a.yaml"
-    )
-    write_override(
-        tmp_path, {"chart": "c2", "labels": {}}, name="b.yaml"
-    )
+    write_override(tmp_path, {"chart": "c1", "labels": {}}, name="a.yaml")
+    write_override(tmp_path, {"chart": "c2", "labels": {}}, name="b.yaml")
     library = load_overrides_dir(tmp_path)
     assert library.chart_ids() == ("c1", "c2")
     assert library.for_chart("c2") is not None

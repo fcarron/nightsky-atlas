@@ -95,8 +95,14 @@ def _element_lines(request: ReviewRequest) -> str:
 
 
 def _user_prompt(request: ReviewRequest) -> str:
+    instruction = (
+        f"User instruction and edit scope: {request.user_instruction}\n\n"
+        if request.user_instruction
+        else ""
+    )
     return (
         f"Page: {request.page_id}\n"
+        f"{instruction}"
         f"Permitted actions: {', '.join(request.permitted_actions)}\n"
         "Issue types: ambiguous_association, overlapping_labels, unreadable_label, "
         "wrong_position, missing_label, constellation_line_overlap, "

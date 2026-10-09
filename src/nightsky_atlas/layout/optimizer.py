@@ -757,19 +757,20 @@ def _joint_dso_optimize(
         "joint_search_nodes": 0,
     }
     for component in components:
-        if len(component) < 2:
+        movable = tuple(label_id for label_id in component if not labels_by_id[label_id].locked)
+        if len(movable) < 2:
             continue
-        if len(component) > style.label.dso_placement.joint_max_component_labels:
+        if len(movable) > style.label.dso_placement.joint_max_component_labels:
             stats["components_using_local_fallback"] += 1
             stats["fallback_components"].append({
                 "component_index": len(stats["fallback_components"]),
-                "size": len(component),
-                "label_ids": list(component),
+                "size": len(movable),
+                "label_ids": list(movable),
                 "reason": "component_too_large",
             })
             continue
         result, visited = _joint_component_search(
-            component,
+            movable,
             labels_by_id,
             placements,
             anchors,
@@ -788,11 +789,11 @@ def _joint_dso_optimize(
         if result is None:
             stats["component_search_budget_hits"] += 1
             stats["components_using_local_fallback"] += 1
-            stats["search_budget_hit_components"].append(list(component))
+            stats["search_budget_hit_components"].append(list(movable))
             stats["fallback_components"].append({
                 "component_index": len(stats["fallback_components"]),
-                "size": len(component),
-                "label_ids": list(component),
+                "size": len(movable),
+                "label_ids": list(movable),
                 "reason": "search_budget_reached",
             })
             continue
@@ -994,7 +995,11 @@ def _repair_dso_hard_conflicts(
                     and _labels_overlap(first, first_candidate, second, second_candidate, style)
                 ):
                     seeds.add(tuple(sorted((first.id, second.id))))
-        return sorted(seeds)
+        movable_seeds = {
+            tuple(label_id for label_id in seed if not labels_by_id[label_id].locked)
+            for seed in seeds
+        }
+        return sorted(seed for seed in movable_seeds if seed)
 
     def expand_neighborhood(seed: tuple[str, ...]) -> tuple[str, ...]:
         neighborhood = set(seed)

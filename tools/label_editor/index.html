@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NightSky Atlas · Label Editor</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <div class="brand-line"><strong>NightSky Atlas</strong><span id="chart-title">Loading chart…</span><span id="save-state" class="save-state">Loading status…</span></div>
+    <div class="toolbar">
+      <label>Mode <select id="mode"><option value="as_is">As is</option><option value="ai_only">AI only</option><option value="human_only" selected>Human only</option><option value="ai_human">AI + Human</option></select></label>
+      <button id="undo" disabled title="Ctrl/Cmd+Z">Undo</button><button id="redo" disabled title="Ctrl/Cmd+Shift+Z">Redo</button><button id="reset">Reset</button>
+      <button id="as-is">Accept as is</button><button id="save" class="primary" disabled>Save corrections</button><button id="export">Export PDF</button>
+    </div>
+  </header>
+  <main>
+    <section class="workspace">
+      <div class="canvas-toolbar"><button id="zoom-out" title="Zoom out">−</button><span id="zoom">100%</span><button id="zoom-in" title="Zoom in">+</button><label title="Show editable text bounds"><input type="checkbox" id="boxes"> Label boxes</label><label title="Show all object anchors"><input type="checkbox" id="symbols"> Object anchors</label><span id="help">Drag to move · Right-click actions · Arrows nudge · Ctrl/Cmd+Z undo</span></div>
+      <div id="viewport"><div id="stage"><img id="preview" alt="Rendered chart"><canvas id="drag-glyphs" aria-hidden="true"></canvas><svg id="overlay" aria-label="Label placement overlay"></svg></div></div>
+      <div id="proposal" hidden><div class="proposal-head"><strong>AI proposal · compare before accepting</strong><span id="ai-summary"></span><button id="accept-ai" class="primary">Accept proposal</button><button id="reject-ai">Discard</button></div><div class="proposal-images"><figure><figcaption>Current</figcaption><img src="/preview.png" alt="Current layout"></figure><figure><figcaption>Suggested</figcaption><img id="ai-preview" alt="Suggested layout"></figure></div></div>
+    </section>
+    <aside>
+      <h2>Selection</h2><p id="selection-hint">Select one or more labels on the chart.</p><p class="muted interaction-help">Click a label to select it. Shift-click adds or removes labels. Drag a selected label or group to move it. Drag empty sky for a selection box; hold Space or use the middle mouse button to pan.</p><div id="selection-list"></div><button id="select-all">Select all labels</button><button id="clear-selection">Clear selection</button>
+      <div id="draft-banner" role="status" hidden></div>
+      <p id="override-source-warning" class="muted" hidden>External overrides are loaded. To accept the unchanged baseline, restart the editor without --overrides; the source file is left untouched.</p>
+      <div id="editor-controls" hidden>
+        <label>Label <strong id="label-name"></strong></label>
+        <p id="label-id" class="muted"></p>
+        <p id="label-state" class="muted"></p>
+        <label>Placement candidate <select id="candidate"></select></label>
+        <div class="offsets"><label>X offset (mm)<input id="offset-x" type="number" step="0.1"></label><label>Y offset (mm)<input id="offset-y" type="number" step="0.1"></label><button id="apply-offset">Apply</button></div>
+        <label><input type="checkbox" id="leader"> Use leader line</label>
+        <label><input type="checkbox" id="locked"> Lock label</label>
+        <button id="restore">Restore automatic position</button>
+        <p class="muted">The selected object is highlighted in orange. Lock protects placement from automatic and AI changes; manual editing still works. Right-click for quick actions.</p>
+      </div>
+      <hr>
+      <h2>Validation <span id="issue-count" class="muted"></span></h2><div id="validation"></div>
+      <hr>
+      <h2>AI review</h2><p class="muted">Only selected, unlocked labels may change. Other labels remain fixed obstacles. Suggestions are sent to the configured provider only when you request them.</p>
+      <textarea id="instruction" rows="4" placeholder="Optional request, e.g. find a coordinated placement with short leader lines."></textarea>
+      <button id="ask-ai">Suggest with AI</button>
+      <div id="status" role="status"></div>
+    </aside>
+  </main>
+  <div id="context-menu" role="menu" hidden>
+    <button type="button" role="menuitem" data-action="toggle-leader"></button>
+    <button type="button" role="menuitem" data-action="toggle-lock"></button>
+    <button type="button" role="menuitem" data-action="restore">Restore automatic position</button>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -90,9 +90,7 @@ def test_candidate_cache_reuses_static_score_for_changed_neighbors(monkeypatch) 
         (),
     )
     clear_cost = cache.cost(label, candidate, ())
-    occupied_cost = cache.cost(
-        label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),)
-    )
+    occupied_cost = cache.cost(label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),))
 
     assert calls == 1
     assert occupied_cost > clear_cost
@@ -234,9 +232,7 @@ def test_optimizer_preserves_canonical_dso_text() -> None:
 
 
 def test_valid_leader_resolves_ownership_ambiguity_but_keeps_raw_diagnostic() -> None:
-    candidate = make_candidate(
-        "label:dso:NGC1", CompassPosition.E, 100.0, 100.0
-    )
+    candidate = make_candidate("label:dso:NGC1", CompassPosition.E, 100.0, 100.0)
     label = replace(
         make_label("label:dso:NGC1", (candidate,)),
         target_id="NGC1",
@@ -373,6 +369,37 @@ def test_dso_conflict_component_is_optimized_jointly_without_culling() -> None:
     )
 
 
+def test_joint_dso_optimization_preserves_locked_override_placement() -> None:
+    locked = replace(
+        make_label(
+            "label:dso:A",
+            (
+                make_candidate("label:dso:A", CompassPosition.N, 100.0, 100.0),
+                make_candidate("label:dso:A", CompassPosition.E, 120.0, 100.0),
+            ),
+        ),
+        target_id="A",
+        locked=True,
+        selected_candidate_id="label:dso:A:N",
+    )
+    other = replace(
+        make_label(
+            "label:dso:B",
+            (
+                make_candidate("label:dso:B", CompassPosition.N, 100.0, 100.0),
+                make_candidate("label:dso:B", CompassPosition.W, 130.0, 100.0),
+            ),
+        ),
+        target_id="B",
+    )
+
+    result = optimize_labels((locked, other), EMPTY_SCENE, TRANSFORM, STYLE)
+    by_id = {label.id: label for label in result.labels}
+
+    assert by_id["label:dso:A"].selected_candidate_id == "label:dso:A:N"
+    assert by_id["label:dso:A"].locked is True
+
+
 def test_optimization_is_deterministic() -> None:
     labels = tuple(
         make_label(
@@ -404,9 +431,7 @@ def test_per_label_ownership_diagnostics_are_exposed() -> None:
         "label:dso:X",
         (make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0),),
     )
-    result = optimize_labels(
-        (label,), EMPTY_SCENE, TRANSFORM, STYLE, detailed_diagnostics=True
-    )
+    result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE, detailed_diagnostics=True)
     diagnostic = result.label_diagnostics[label.id]
     assert "source_facing_edge_distance_mm" in diagnostic
     assert "glyph_proximity_cost" in diagnostic
@@ -423,12 +448,8 @@ def test_pair_conflict_repair_reassigns_labels_jointly() -> None:
     first_alt = make_candidate("label:dso:NGC1", CompassPosition.N, 100.0, 90.0)
     second_current = make_candidate("label:dso:NGC2", CompassPosition.W, 102.0, 100.0)
     second_alt = make_candidate("label:dso:NGC2", CompassPosition.E, 110.0, 100.0)
-    first = replace(
-        make_label("label:dso:NGC1", (first_current, first_alt)), target_id="NGC1"
-    )
-    second = replace(
-        make_label("label:dso:NGC2", (second_current, second_alt)), target_id="NGC2"
-    )
+    first = replace(make_label("label:dso:NGC1", (first_current, first_alt)), target_id="NGC1")
+    second = replace(make_label("label:dso:NGC2", (second_current, second_alt)), target_id="NGC2")
     labels = (first, second)
     placements, stats = _repair_dso_hard_conflicts(
         labels,
