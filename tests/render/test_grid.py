@@ -6,9 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from nightsky_atlas.atlas.config import load_style_config
+from nightsky_atlas.atlas.config import load_atlas_config, load_style_config
+from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.presentation import presentation_from_edition
+from nightsky_atlas.render.furniture import build_furniture_plan
 from nightsky_atlas.render.grid import (
     build_grid,
     build_grid_labels,
@@ -197,6 +200,106 @@ def test_grid_labels_cover_both_kinds() -> None:
             assert label.text.endswith("\u00b0")
 
 
+@pytest.mark.parametrize("chart_number", (45, 50, 55, 60, 65, 70, 75, 80, 85))
+def test_standard_whole_hour_charts_keep_ra_labels_clear_of_furniture(
+    chart_number: int,
+) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / "standard.yaml")
+    edition_style = load_style_config(REPO_ROOT / "styles" / "standard.yaml")
+    chart = next(
+        item for item in chart_definitions(atlas) if item.id == f"standard-{chart_number:03d}"
+    )
+    transform = PageTransform(
+        chart=chart,
+        page=atlas.page.to_geometry(),
+        scale_mm_per_degree=atlas.mm_per_degree,
+    )
+    presentation = presentation_from_edition(chart, atlas.resolved_edition())
+    furniture = build_furniture_plan(transform, chart, edition_style, presentation)
+    lines = build_grid(chart, transform, edition_style)
+    labels = build_grid_labels(
+        chart, transform, edition_style, lines=lines, avoid=furniture.obstacles
+    )
+    ra_labels = [label for label in labels if label.kind == "ra"]
+
+    assert ra_labels, f"{chart.id} has no accepted RA edge labels"
+    assert {label.text for label in ra_labels} == {format_ra_deg(chart.center_ra_deg)}
+    assert len({(label.value_deg, label.id.rsplit(":", 1)[-1]) for label in ra_labels}) == len(
+        ra_labels
+    ), f"{chart.id} has duplicate RA labels on an edge"
+    for label in ra_labels:
+        assert abs(label.bounds.center.x_mm - transform.center_page.x_mm) <= 12.5, (
+            chart.id,
+            label.text,
+            label.bounds,
+        )
+        assert 0.0 <= label.bounds.left_mm
+        assert label.bounds.right_mm <= transform.page.width_mm
+        assert 0.0 <= label.bounds.top_mm
+        assert label.bounds.bottom_mm <= transform.page.height_mm
+        assert not any(
+            _rectangles_overlap(label.bounds, obstacle, margin=0.5)
+            for obstacle in furniture.obstacles
+        ), f"{chart.id} RA label overlaps chart furniture: {label.text}"
+
+
+def _rectangles_overlap(first, second, *, margin: float = 0.0) -> bool:
+    return not (
+        first.right_mm + margin <= second.left_mm
+        or second.right_mm + margin <= first.left_mm
+        or first.bottom_mm + margin <= second.top_mm
+        or second.bottom_mm + margin <= first.top_mm
+    )
+
+
+@pytest.mark.parametrize(
+    ("chart_id", "center_ra", "center_dec", "width", "height", "scale"),
+    (
+        ("ra-wrap", 359.999999, 0.0, 27.0, 18.5, 10.0),
+        ("near-whole-hour", 15.000001, 0.0, 27.0, 18.5, 10.0),
+        ("between-grid-hours", 74.2, 15.0, 27.0, 18.5, 10.0),
+        ("north-ring", 180.0, 75.0, 27.0, 18.5, 10.0),
+        ("south-ring", 180.0, -75.0, 27.0, 18.5, 10.0),
+        ("pocket-scale", 0.1, 0.0, 54.0, 36.0, 5.0),
+        ("deep-scale", 0.1, 0.0, 13.5, 9.0, 20.0),
+        ("eyepiece-scale", 359.9, -15.0, 6.75, 4.5, 40.0),
+        ("eyepiece-deep-scale", 359.9, 15.0, 3.375, 2.25, 80.0),
+    ),
+)
+def test_ra_grid_labels_handle_wrap_declination_and_map_scales(
+    chart_id: str,
+    center_ra: float,
+    center_dec: float,
+    width: float,
+    height: float,
+    scale: float,
+) -> None:
+    chart = ChartDefinition(
+        id=chart_id,
+        center_ra_deg=center_ra,
+        center_dec_deg=center_dec,
+        width_deg=width,
+        height_deg=height,
+    )
+    transform = PageTransform(chart=chart, page=PAGE, scale_mm_per_degree=scale)
+    labels = build_grid_labels(chart, transform, STYLE, lines=build_grid(chart, transform, STYLE))
+    ra_labels = [label for label in labels if label.kind == "ra"]
+
+    assert ra_labels, f"{chart_id} has no RA label despite meridians crossing the frame"
+    assert all(label.text == format_ra_deg(label.value_deg) for label in ra_labels)
+    assert all(0.0 <= label.value_deg < 360.0 for label in ra_labels)
+    assert len({(label.text, label.id.rsplit(":", 1)[-1]) for label in ra_labels}) == len(
+        ra_labels
+    )
+    assert all(
+        0.0 <= label.bounds.left_mm
+        and label.bounds.right_mm <= PAGE.width_mm
+        and 0.0 <= label.bounds.top_mm
+        and label.bounds.bottom_mm <= PAGE.height_mm
+        for label in ra_labels
+    )
+
+
 def test_grid_labels_stay_inside_chart_rect() -> None:
     style = STYLE.model_copy(
         update={"grid": STYLE.grid.model_copy(update={"label_placement": "inside"})}
@@ -251,7 +354,7 @@ def test_grid_labels_do_not_overlap() -> None:
                 assert not overlaps(first.bounds, second.bounds)
 
 
-def test_avoid_rect_drops_overlapping_labels() -> None:
+def test_avoid_rect_relocates_or_drops_overlapping_labels() -> None:
     style = STYLE.model_copy(
         update={"grid": STYLE.grid.model_copy(update={"label_placement": "outside"})}
     )
@@ -259,16 +362,14 @@ def test_avoid_rect_drops_overlapping_labels() -> None:
     assert labels
     obstacle = labels[0].bounds
     remaining = build_grid_labels(CHART, TRANSFORM, style, avoid=(obstacle,))
-    assert len(remaining) < len(labels)
+    original_by_id = {label.id: label.bounds for label in labels}
+    assert len(remaining) <= len(labels)
+    assert any(
+        label.id not in original_by_id or label.bounds != original_by_id[label.id]
+        for label in remaining
+    )
     for label in remaining:
-        bounds = label.bounds
-        overlaps = (
-            bounds.left_mm < obstacle.right_mm
-            and obstacle.left_mm < bounds.right_mm
-            and bounds.top_mm < obstacle.bottom_mm
-            and obstacle.top_mm < bounds.bottom_mm
-        )
-        assert not overlaps
+        assert not _rectangles_overlap(label.bounds, obstacle)
 
 
 def test_label_step_reduces_label_count() -> None:

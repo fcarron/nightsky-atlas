@@ -42,6 +42,7 @@ _MULTIPLE_TOL = 1e-6
 _OBSTACLE_CLEARANCE_MM = 0.5
 _POLAR_DEC_TOLERANCE_DEG = 1.0
 _RECT_HIT_TOLERANCE_MM = 0.5
+_RA_LABEL_MAX_SHIFT_MM = 12.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,7 +188,9 @@ def build_grid(
         if len(points) >= 2 and (
             not polar or _polyline_hits_rect(tuple(points), rect, _RECT_HIT_TOLERANCE_MM)
         ):
-            lines.append(GridLine(kind="ra", value_deg=ra, points=tuple(points), polar=polar))
+            lines.append(
+                GridLine(kind="ra", value_deg=ra % 360.0, points=tuple(points), polar=polar)
+            )
         ra += ra_step
 
     dec_step = dec_step_deg or grid.dec_step_deg
@@ -227,6 +230,28 @@ def _clamp(value: float, low: float, high: float) -> float:
     if high < low:
         return low
     return min(max(value, low), high)
+
+
+def _ra_label_left_positions(
+    crossing_x: float,
+    label_width: float,
+    *,
+    low: float,
+    high: float,
+) -> tuple[float, ...]:
+    """Return progressively shifted positions close to an RA edge crossing."""
+    centered = _clamp(crossing_x - label_width / 2.0, low, high)
+    positions = [centered]
+    max_shift = min(_RA_LABEL_MAX_SHIFT_MM, max(high - low, 0.0))
+    shift_steps = int(math.ceil(max_shift))
+    for shift in range(1, shift_steps + 1):
+        distance = float(shift)
+        for candidate in (centered - distance, centered + distance):
+            if candidate < low or candidate > high:
+                continue
+            if not any(math.isclose(candidate, item, abs_tol=1e-9) for item in positions):
+                positions.append(candidate)
+    return tuple(positions)
 
 
 def _overlaps(first: PageRect, second: PageRect, margin_mm: float = 0.0) -> bool:
@@ -381,10 +406,10 @@ def build_grid_labels(
         left: float,
         top: float,
         along: float,
-    ) -> None:
+    ) -> bool:
         label_id = f"grid:{kind}:{value_deg:g}:{edge}"
         if label_id in seen_ids:
-            return
+            return False
         metrics = measurer.measure_mm(text)
         bounds = PageRect(
             left_mm=left,
@@ -395,7 +420,7 @@ def build_grid_labels(
         if any(
             _overlaps(bounds, obstacle, margin_mm=_OBSTACLE_CLEARANCE_MM) for obstacle in obstacles
         ):
-            return
+            return False
         seen_ids.add(label_id)
         labels.append(
             (
@@ -410,6 +435,7 @@ def build_grid_labels(
                 ),
             )
         )
+        return True
 
     for line in lines:
         if line.kind == "ra":
@@ -437,18 +463,16 @@ def build_grid_labels(
                     if not rect.left_mm <= x <= rect.right_mm:
                         continue
                     if outside:
-                        left = _clamp(
-                            x - metrics.width_mm / 2.0,
-                            0.0,
-                            page.width_mm - metrics.width_mm,
-                        )
+                        low = 0.0
+                        high = page.width_mm - metrics.width_mm
                     else:
-                        left = _clamp(
-                            x - metrics.width_mm / 2.0,
-                            rect.left_mm + pad,
-                            rect.right_mm - pad - metrics.width_mm,
-                        )
-                    add(edge, "ra", line.value_deg, text, left, top, x)
+                        low = rect.left_mm + pad
+                        high = rect.right_mm - pad - metrics.width_mm
+                    for left in _ra_label_left_positions(
+                        x, metrics.width_mm, low=low, high=high
+                    ):
+                        if add(edge, "ra", line.value_deg, text, left, top, x):
+                            break
         else:
             if not _is_multiple(line.value_deg, dec_step):
                 continue
