@@ -205,6 +205,7 @@ class AtlasBuildResult:
     draft_report_path: Path | None = None
     index_page_count: int = 0
     front_matter_page_count: int = 0
+    credits_page_count: int = 0
     chart_directory_page_count: int = 0
 
     @property
@@ -578,28 +579,38 @@ def _draw_front_matter_pages(
     surface: cairo.Surface,
     atlas: AtlasConfig,
     style: StyleConfig,
-    chart_count: int,
+    main_charts: tuple[ChartDefinition, ...],
     scale_chart: ChartDefinition,
-    data_sources: list[dict[str, Any]],
-    geometry_inputs: dict[str, str | None],
-    geometry_catalogues: dict[str, list[str]],
-    inputs: ChartInputs,
-    star_names: dict[int, StarName],
 ) -> int:
-    """Write the introduction, field guide and provenance page."""
+    """Write the two opening pages shared by all editions."""
     page = atlas.page.to_geometry()
-    family = style.typography.sans_family
     mm_per_degree = PageTransform(
         scale_chart,
         page,
         scale_mm_per_degree=atlas.mm_per_degree,
     ).mm_per_deg
-    draw_introduction(cr, atlas, style)
+    draw_introduction(cr, atlas, style, main_charts)
     surface.show_page()
 
-    draw_field_guide(cr, atlas, style, chart_count, mm_per_degree)
+    draw_field_guide(cr, atlas, style, len(main_charts), mm_per_degree)
     surface.show_page()
+    return 2
 
+
+def _draw_build_credits_page(
+    cr: cairo.Context[cairo.Surface],
+    surface: cairo.Surface,
+    atlas: AtlasConfig,
+    style: StyleConfig,
+    data_sources: list[dict[str, Any]],
+    geometry_inputs: dict[str, str | None],
+    geometry_catalogues: dict[str, list[str]],
+    inputs: ChartInputs,
+    star_names: dict[int, StarName],
+) -> None:
+    """Append credits derived from the data and geometry used in this build."""
+    page = atlas.page.to_geometry()
+    family = style.typography.sans_family
     selected_dsos = _selected_dsos(inputs)
     left_sections, right_sections = _credits_columns(
         data_sources=data_sources,
@@ -622,9 +633,10 @@ def _draw_front_matter_pages(
         family,
         left_sections,
         right_sections,
+        edition=atlas.resolved_edition().name,
+        catalogue_data_label="source-specific dates in the build manifest",
     )
     surface.show_page()
-    return 3
 
 
 def _selected_dsos(inputs: ChartInputs) -> tuple[DeepSkyObject, ...]:
@@ -748,10 +760,18 @@ def _credits_columns(
         dso_entries.append(str(name))
     if not dso_entries and dso_source.get("source"):
         dso_entries.append(f"Deep-sky catalogue — {dso_source['source']}")
-    if has_galaxies:
-        dso_entries.append("Galaxy visibility method — Crumey (2014)")
     if dso_entries:
         left.append(("Deep-sky catalogues", tuple(dso_entries)))
+    if has_galaxies:
+        left.append(
+            (
+                "Galaxy visibility",
+                (
+                    "Classification informed by Crumey (2014); the atlas applies documented "
+                    "visual-observing assumptions and heuristics.",
+                ),
+            )
+        )
 
     wds = by_kind.get("double_stars", {}).get("manifest") or {}
     if wds:
@@ -779,7 +799,9 @@ def _credits_columns(
     elif line_sources:
         cartography.extend(f"Constellation figures — {item}" for item in sorted(line_sources))
     if "d3-celestial" in boundary_sources:
-        cartography.append("Constellation boundaries — d3-celestial, Olaf Frohn")
+        cartography.append(
+            "Constellation boundaries — IAU definitions; d3-celestial data, Olaf Frohn"
+        )
     elif boundary_sources:
         cartography.extend(
             f"Constellation boundaries — {item}" for item in sorted(boundary_sources)
@@ -807,10 +829,7 @@ def _credits_columns(
         source_url = dso_source.get("acknowledgement")
         service_entries.append("VizieR — CDS, Strasbourg, France")
         if source_url:
-            service_entries.append(
-                "This research has made use of the VizieR catalogue access tool, "
-                "CDS, Strasbourg, France."
-            )
+            service_entries.append(str(source_url))
     if service_entries:
         right.append(("Catalogue services", tuple(service_entries)))
 
@@ -1160,13 +1179,8 @@ def _build_atlas_impl(
                 surface,
                 atlas,
                 style,
-                len(charts),
+                tuple(charts),
                 charts[0],
-                selected_sources,
-                geometry_inputs,
-                geometry_catalogues,
-                inputs,
-                star_names,
             )
 
     chart_directory = ()
@@ -1514,6 +1528,22 @@ def _build_atlas_impl(
             f"{len(validation.issues)} hard issues ({time.perf_counter() - detail_start:.2f}s)"
         )
 
+    credits_page_count = 0
+    if write_front_matter:
+        with progress.step("append data sources and credits", detail=True):
+            _draw_build_credits_page(
+                context,
+                surface,
+                atlas,
+                style,
+                selected_sources,
+                geometry_inputs,
+                geometry_catalogues,
+                inputs,
+                star_names,
+            )
+            credits_page_count = 1
+
     with progress.step("append atlas index", detail=True):
         index_pages = draw_atlas_index_pages(
             context,
@@ -1615,6 +1645,7 @@ def _build_atlas_impl(
         ],
         "render_png": render_png,
         "front_matter_page_count": front_matter_pages,
+        "credits_page_count": credits_page_count,
         "chart_directory": {
             "page_count": chart_directory_pages,
             "entries": [entry.to_dict() for entry in chart_directory],
@@ -1685,6 +1716,7 @@ def _build_atlas_impl(
         draft_report_path=draft_report_path,
         index_page_count=index_pages,
         front_matter_page_count=front_matter_pages,
+        credits_page_count=credits_page_count,
         chart_directory_page_count=chart_directory_pages,
     )
 

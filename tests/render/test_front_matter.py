@@ -9,6 +9,7 @@ from nightsky_atlas.chart.page import PagePoint, PageTransform
 from nightsky_atlas.render import front_matter
 from nightsky_atlas.render.front_matter import (
     draw_field_guide,
+    draw_introduction,
     galaxy_visibility_examples,
     legend_symbols,
     planetary_nebula_size_ranges,
@@ -186,6 +187,36 @@ def test_standard_star_scale_and_telrad_sizes_are_exact() -> None:
         assert other.mm_per_degree == pytest.approx(5.0 if edition == "pocket" else 20.0)
 
 
+@pytest.mark.parametrize(
+    ("edition", "layout_fact"),
+    (
+        ("pocket", "39 charts in 5 declination rings and 2 polar charts"),
+        ("standard", "129 charts in 11 declination rings and 2 polar charts"),
+        ("deep", "430 charts in 22 declination rings and 2 polar charts"),
+    ),
+)
+def test_introduction_uses_current_edition_chart_geometry(
+    edition: str, layout_fact: str, monkeypatch
+) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    rendered_text: list[str] = []
+    monkeypatch.setattr(
+        front_matter,
+        "_text",
+        lambda _cr, value, *_a, **_k: rendered_text.append(value),
+    )
+    surface = cairo.RecordingSurface(cairo.CONTENT_COLOR_ALPHA, None)
+    draw_introduction(cairo.Context(surface), atlas, style)
+    text = " ".join(rendered_text)
+
+    assert "NightSky Atlas" in text
+    assert "NightSky Atlas is a printable star atlas designed for visual observing." in text
+    assert layout_fact in text
+    assert "The northern and southern overview maps" in text
+    assert "Print at 100% (actual size)" in text
+
+
 def test_field_guide_double_star_example_uses_production_renderer(monkeypatch) -> None:
     atlas = load_atlas_config(REPO_ROOT / "atlas" / "standard.yaml")
     style = load_style_config(REPO_ROOT / "styles" / "standard.yaml")
@@ -232,10 +263,62 @@ def test_field_guide_double_star_example_uses_production_renderer(monkeypatch) -
     assert component_separation + 1e-9 >= component_radii + 0.35
     assert "unresolved" in text
     assert "resolved" in text
-    assert "Stronger contour = easier integrated-light visibility" in text
+    assert any(
+        value.startswith("Apparent size and surface brightness") for value in text
+    )
     assert all(word in text for word in ("easy", "moderate", "difficult", "threshold"))
     assert not any("extreme" in value.lower() for value in text)
-    assert any(value.startswith("Reference model: 100 / 200 / 400 mm apertures") for value in text)
+    assert not any("Reference model:" in value for value in text)
+
+
+def test_field_guide_contains_edition_content_and_pn_ranges(monkeypatch) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / "standard.yaml")
+    style = load_style_config(REPO_ROOT / "styles" / "standard.yaml")
+    drawn_text: list[str] = []
+    centered_text: list[str] = []
+    monkeypatch.setattr(
+        front_matter,
+        "_text",
+        lambda _cr, value, *_args, **_kwargs: drawn_text.append(value),
+    )
+    monkeypatch.setattr(
+        front_matter,
+        "draw_centered_text",
+        lambda _cr, value, *_args, **_kwargs: centered_text.append(value),
+    )
+
+    surface = cairo.RecordingSurface(cairo.CONTENT_COLOR_ALPHA, None)
+    draw_field_guide(cairo.Context(surface), atlas, style, chart_count=129, mm_per_degree=10.0)
+
+    assert all(
+        heading in drawn_text
+        for heading in (
+            "STARS",
+            "DOUBLE STARS",
+            "CONSTELLATIONS",
+            "MAP LINES",
+            "DEEP-SKY OBJECTS",
+            "OBJECT LABELS",
+            "GALAXY VISIBILITY",
+            "TELRAD REFERENCE",
+        )
+    )
+    assert {
+        "Galaxy",
+        "Globular cluster",
+        "Open cluster",
+        "Planetary nebula",
+        "Bright nebula / SNR",
+        "Dark nebula",
+        "Galaxy cluster",
+        "Other / unknown",
+    } <= set(drawn_text)
+    assert all(value in centered_text for value in (
+        "≥10′",
+        "2.5–<10′",
+        "1–<2.5′",
+        "<1′",
+    ))
 
 
 def test_double_star_primitives_discard_stale_paths_without_connector_artifacts() -> None:

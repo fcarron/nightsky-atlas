@@ -108,7 +108,9 @@ def test_build_atlas_subset(tmp_path: Path) -> None:
     assert manifest["page"]["width_mm"] == 297.0
     assert len(manifest["pages"]) == 2
     assert manifest["overview_pages"] == []
-    assert result.front_matter_page_count == 3
+    assert result.front_matter_page_count == 2
+    assert result.credits_page_count == 1
+    assert manifest["credits_page_count"] == 1
     assert result.chart_directory_page_count == 1
     assert manifest["chart_directory"]["entries"][0]["chart_code"] == "c1"
     assert [source["kind"] for source in manifest["data_sources"]][:2] == [

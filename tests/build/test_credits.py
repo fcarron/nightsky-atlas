@@ -113,3 +113,45 @@ def test_credits_reject_a_long_source_list_before_it_overlaps_licence() -> None:
             sections,
             sections,
         )
+
+
+def test_credits_page_project_metadata_and_licences_stay_inside_printable_area() -> None:
+    register_bundled_fonts()
+    page = PageGeometry(width_mm=297.0, height_mm=210.0, margin_mm=12.0)
+    sections = (
+        (
+            "Stars and double stars",
+            (
+                "Tycho-2 — Høg et al. (2000), ESA",
+                "Hipparcos — ESA (1997)",
+                "Washington Double Star Catalog — Mason et al., U.S. Naval Observatory",
+            ),
+        ),
+        (
+            "Deep-sky catalogues",
+            (
+                "OpenNGC — Mattia Verga and contributors",
+                "Sharpless; Lynds; Barnard; van den Bergh; Collinder; Melotte; Kohoutek; "
+                "Palomar; Terzan; Hickson; Arp; de Vaucouleurs",
+            ),
+        ),
+    )
+    surface = cairo.RecordingSurface(cairo.CONTENT_COLOR_ALPHA, None)
+    draw_credits_page(
+        cairo.Context(surface),
+        page,
+        "Source Sans 3",
+        sections,
+        (("Constellations and cartography", ("IAU boundaries via d3-celestial",)),),
+        edition="Standard",
+        catalogue_data_label="source-specific dates in build manifest",
+    )
+    x, y, width, height = surface.ink_extents()
+    margin = page.margin_mm * 72.0 / 25.4
+    page_width = page.width_mm * 72.0 / 25.4
+    page_height = page.height_mm * 72.0 / 25.4
+
+    assert x >= margin - 1.0
+    assert y >= margin - 1.0
+    assert x + width <= page_width - margin + 1.0
+    assert y + height <= page_height - margin + 1.0
