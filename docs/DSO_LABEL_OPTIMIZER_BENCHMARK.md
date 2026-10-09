@@ -1,18 +1,24 @@
 # DSO label optimizer review set
 
-Use these production Standard charts to review DSO placement without changing
+Use these current Standard charts to review DSO placement without changing
 catalogue selection:
 
-- `standard-053` — Virgo Cluster stress field (primary benchmark)
-- `standard-084` — medium-density control field
+- `standard-050` — Virgo Cluster stress field (primary benchmark)
+- `standard-099` — Sagittarius medium-density control field
 - `standard-001` — sparse control field
+
+The result tables and saved image paths below are historical measurements from
+the previous 118-chart tiling. Their `S053`/`S084` IDs and crops remain tied to
+that archived geometry; do not interpret those IDs against the current
+numbering. The 12-degree RA phase moved the Virgo and Sagittarius review fields
+to `standard-050` and `standard-099` respectively.
 
 Regenerate a chart with the production Tycho-2 store, deterministic optimizer,
 PDF/preview and serialized placement diagnostics:
 
 ```sh
 .venv/bin/python -m nightsky_atlas chart render \
-  --edition standard --chart standard-053 \
+  --edition standard --chart standard-050 \
   --star-store data/processed/stars/tycho2.sqlite \
   --optimize --write-layout --outdir build/dso-label-benchmark
 ```

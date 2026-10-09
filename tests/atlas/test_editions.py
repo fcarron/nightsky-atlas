@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from nightsky_atlas.atlas.config import load_atlas_config, load_style_config
+from nightsky_atlas.atlas.config import DetailChartConfig, load_atlas_config, load_style_config
 from nightsky_atlas.atlas.tiling import (
     TilingSpec,
     chart_definitions,
@@ -16,6 +16,7 @@ from nightsky_atlas.atlas.tiling import (
     resolve_ring_counts,
 )
 from nightsky_atlas.build.atlas import _style_with_star_profile
+from nightsky_atlas.build.chart import build_chart_context, load_chart_inputs
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
 from nightsky_atlas.projection.base import ProjectionError
@@ -95,13 +96,13 @@ def test_pocket_symmetric_navigation_tiling() -> None:
         by_dec.setdefault(chart.center_dec_deg, []).append(chart.center_ra_deg)
     for dec in (-62.0, -33.0, 0.0, 33.0, 62.0):
         count = 5 if abs(dec) == 62.0 else 9
-        expected = [index * 360.0 / count for index in range(count)]
+        expected = [12.0 + index * 360.0 / count for index in range(count)]
         assert by_dec[dec] == pytest.approx(expected)
     assert by_dec[-62.0] == pytest.approx(by_dec[62.0])
     assert by_dec[-33.0] == pytest.approx(by_dec[33.0])
     detail = pocket.detail_charts[0]
-    assert detail.code == "PD021A"
-    assert detail.parent_chart_id == "pocket-021"
+    assert detail.code == "PD01"
+    assert detail.parent_chart_id == "pocket-020"
 
 
 def test_pocket_39_tiling_covers_transition_lines_and_chart_corners() -> None:
@@ -173,42 +174,33 @@ def test_pocket_constellation_boundaries_are_distinct_from_grid_and_figures() ->
     assert pocket.grid.line_width_mm == standard.grid.line_width_mm
 
 
-def test_deep_tiling_mirrors_standard_ring_design() -> None:
+def test_deep_tiling_uses_aligned_rings_with_polar_caps() -> None:
     standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
     deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
     assert deep.tiling.polar_caps is True
-    assert deep.tiling.stagger_ra_centers is True
+    assert deep.tiling.stagger_ra_centers is False
     assert deep.tiling.auto_adjust_counts is False
     assert deep.tiling.declination_centers
-    assert deep.tiling.target_overlap.vertical_deg == pytest.approx(
-        standard.tiling.target_overlap.vertical_deg / 2.0
-    )
-    assert deep.tiling.target_overlap.horizontal_min_deg == pytest.approx(
-        standard.tiling.target_overlap.horizontal_min_deg / 2.0
-    )
+    assert standard.tiling.target_overlap.vertical_deg == pytest.approx(3.0)
+    assert standard.tiling.target_overlap.horizontal_min_deg == pytest.approx(3.0)
+    assert deep.tiling.target_overlap.vertical_deg == pytest.approx(1.5)
+    assert deep.tiling.target_overlap.horizontal_min_deg == pytest.approx(1.0)
     spec = TilingSpec.from_config(deep.tiling)
     assert spec.is_ring_mode
 
 
-def test_standard_detail_maps_are_supplemental_and_doubled_scale() -> None:
+def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> None:
     standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
+    pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
     deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
     details = standard.detail_charts
-    assert len(chart_definitions(standard)) == 118
-    assert {detail.code for detail in details} == {
-        "SD053",
-        "SD053A",
-        "SD053B",
-        "SD089",
-        "SD084",
-        "SD031",
-        "SD063",
-        "SD013",
-        "SD035",
-    }
+    assert len(chart_definitions(standard)) == 129
+    assert [detail.code for detail in pocket.detail_charts] == ["PD01"]
+    assert [detail.code for detail in details] == [f"SD{i:02d}" for i in range(1, 10)]
+    assert [detail.code for detail in deep.detail_charts] == [f"DD{i:02d}" for i in range(1, 10)]
     assert {
         detail.code for detail in details if detail.fallback_parent_galaxy_labels
-    } == {"SD053A", "SD053B", "SD089"}
+    } == {"SD02", "SD03", "SD04"}
     assert {detail.name for detail in details} >= {
         "Virgo Cluster",
         "Sagittarius clusters · M22 / M28",
@@ -217,29 +209,202 @@ def test_standard_detail_maps_are_supplemental_and_doubled_scale() -> None:
         "Perseus Double Cluster",
         "Pleiades · M45",
     }
-    assert {
-        detail.code: detail.mm_per_degree
-        for detail in details
-        if detail.code in {"SD053A", "SD053B", "SD089"}
-    } == {"SD053A": 60.0, "SD053B": 60.0, "SD089": 60.0}
-    assert all(
-        detail.mm_per_degree == 20.0
-        for detail in details
-        if detail.code not in {"SD053A", "SD053B", "SD089"}
-    )
-    assert all(detail.star_profile == "deep" for detail in details)
+    assert [detail.mm_per_degree for detail in details] == [20, 80, 40, 40, 20, 20, 20, 20, 20]
+    assert [detail.star_profile for detail in details] == [
+        "deep",
+        "eyepiece_deep",
+        "eyepiece",
+        "eyepiece",
+        "deep",
+        "deep",
+        "deep",
+        "deep",
+        "deep",
+    ]
+    assert [detail.mm_per_degree for detail in deep.detail_charts] == [
+        40, 40, 80, 80, 80, 40, 80, 80, 40
+    ]
+    assert [detail.star_profile for detail in deep.detail_charts] == [
+        "eyepiece",
+        "eyepiece",
+        "eyepiece_deep",
+        "eyepiece_deep",
+        "eyepiece_deep",
+        "eyepiece",
+        "eyepiece_deep",
+        "eyepiece_deep",
+        "eyepiece",
+    ]
+    assert pocket.detail_charts[0].star_profile == "standard"
+    for detail in (*pocket.detail_charts, *details, *deep.detail_charts):
+        assert detail.mm_per_degree in {20.0, 40.0, 80.0}
+        assert detail.width_deg * detail.mm_per_degree == pytest.approx(260.0)
+        assert detail.height_deg * detail.mm_per_degree == pytest.approx(170.0)
     assert deep.stellar_limit_magnitude == 10.5
 
+    charts = {chart.id: chart for chart in chart_definitions(standard)}
+    assert {detail.code: detail.parent_chart_id for detail in details} == {
+        "SD01": "standard-050",
+        "SD02": "standard-050",
+        "SD03": "standard-065",
+        "SD04": "standard-090",
+        "SD05": "standard-099",
+        "SD06": "standard-026",
+        "SD07": "standard-061",
+        "SD08": "standard-008",
+        "SD09": "standard-030",
+    }
+    assert all(detail.parent_chart_id in charts for detail in details)
+    assert pocket.detail_charts[0].parent_chart_id == "pocket-020"
+    deep_charts = {chart.id for chart in chart_definitions(deep)}
+    assert all(detail.parent_chart_id in deep_charts for detail in deep.detail_charts)
 
-def test_detail_deep_star_profile_preserves_standard_dso_styling() -> None:
+
+def test_detail_chart_rejects_intermediate_scales() -> None:
+    with pytest.raises(ValueError, match="scale must be 20, 40 or 80"):
+        DetailChartConfig(
+            id="detail-test",
+            code="SD99",
+            name="Test field",
+            parent_chart_id="standard-001",
+            center_ra_deg=0.0,
+            center_dec_deg=0.0,
+            width_deg=4.0,
+            height_deg=3.0,
+            mm_per_degree=60.0,
+        )
+
+
+def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:
+    standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
+    spec = TilingSpec.from_config(standard.tiling)
+    assert spec.declination_centers == (
+        -75.0,
+        -60.0,
+        -45.0,
+        -30.0,
+        -15.0,
+        0.0,
+        15.0,
+        30.0,
+        45.0,
+        60.0,
+        75.0,
+    )
+    assert spec.stagger_ra_centers is False
+    assert spec.ra_offset_deg == pytest.approx(12.0)
+    assert spec.auto_adjust_counts is False
+    assert resolve_ring_counts(spec) == (5, 10, 11, 15, 15, 15, 15, 15, 11, 10, 5)
+    charts = chart_definitions(standard)
+    assert len(charts) == 129
+    by_dec: dict[float, list[float]] = {}
+    for chart in charts:
+        by_dec.setdefault(chart.center_dec_deg, []).append(chart.center_ra_deg)
+    for dec, count in zip(spec.declination_centers, spec.chart_counts, strict=True):
+        assert by_dec[dec] == pytest.approx(
+            [(12.0 + i * 360.0 / count) % 360.0 for i in range(count)]
+        )
+    for dec in (15.0, 30.0, 45.0, 60.0, 75.0):
+        assert by_dec[-dec] == pytest.approx(by_dec[dec])
+    assert coverage_report(charts, step_deg=0.5).covers_all
+    assert neighbour_overlap_report(charts, step_deg=1.0).is_complete
+
+
+def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
+    deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
+    spec = TilingSpec.from_config(deep.tiling)
+    expected_centers = tuple(-82.5 + 7.5 * index for index in range(23))
+    expected_counts = (
+        5, 10, 15, 15, 20, 25, 25, 25, 30, 30, 30, 30,
+        30, 30, 30, 25, 25, 25, 20, 15, 15, 10, 5,
+    )
+    assert spec.declination_centers == expected_centers
+    assert spec.chart_counts == expected_counts
+    assert spec.declination_centers[11] == 0.0
+    assert spec.polar_caps is True
+    assert spec.stagger_ra_centers is False
+    assert spec.ra_offset_deg == pytest.approx(0.0)
+    assert spec.auto_adjust_counts is False
+    assert expected_centers == tuple(-dec for dec in reversed(expected_centers))
+    assert expected_counts == tuple(reversed(expected_counts))
+
+    charts = chart_definitions(deep)
+    assert len(charts) == 492
+    assert charts[0].id == "deep-001"
+    assert charts[0].center_dec_deg == 90.0
+    assert charts[-1].center_dec_deg == -90.0
+    by_dec: dict[float, list[float]] = {}
+    for chart in charts:
+        by_dec.setdefault(chart.center_dec_deg, []).append(chart.center_ra_deg)
+    for dec, count in zip(expected_centers, expected_counts, strict=True):
+        assert by_dec[dec] == pytest.approx([index * 360.0 / count for index in range(count)])
+    for dec in expected_centers[11:]:
+        assert by_dec[-dec] == pytest.approx(by_dec[dec])
+
+    standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
+    standard_by_dec: dict[float, list[float]] = {}
+    for chart in chart_definitions(standard):
+        if abs(chart.center_dec_deg) < 89.0:
+            standard_by_dec.setdefault(chart.center_dec_deg, []).append(chart.center_ra_deg)
+    assert set(standard_by_dec[0.0]) <= set(by_dec[0.0])
+
+    assert coverage_report(charts, step_deg=0.25).covers_all
+    assert neighbour_overlap_report(charts, step_deg=1.0).is_complete
+    assert {detail.code: detail.parent_chart_id for detail in deep.detail_charts} == {
+        "DD01": "deep-116",
+        "DD02": "deep-147",
+        "DD03": "deep-131",
+        "DD04": "deep-188",
+        "DD05": "deep-269",
+        "DD06": "deep-381",
+        "DD07": "deep-466",
+        "DD08": "deep-465",
+        "DD09": "deep-477",
+    }
+
+
+def test_detail_star_profiles_preserve_parent_dso_styling_and_limit() -> None:
     standard_style = load_style_config(ROOT / "styles" / "standard.yaml")
-    deep_style = load_style_config(ROOT / "styles" / "deep.yaml")
-    detail_style = _style_with_star_profile(standard_style, deep_style)
-    assert detail_style.star == deep_style.star
-    assert detail_style.double_stars == deep_style.double_stars
-    assert detail_style.label.star_labels == deep_style.label.star_labels
-    assert detail_style.dso == standard_style.dso
-    assert detail_style.label.dso_labels == standard_style.label.dso_labels
+    for profile_name in ("deep", "eyepiece", "eyepiece_deep"):
+        profile_style = load_style_config(ROOT / "styles" / f"{profile_name}.yaml")
+        profile_atlas = load_atlas_config(ROOT / "atlas" / f"{profile_name}.yaml")
+        detail_style = _style_with_star_profile(standard_style, profile_style)
+        assert profile_atlas.stellar_limit_magnitude == profile_style.star.faint_magnitude
+        assert detail_style.star == profile_style.star
+        assert detail_style.double_stars == profile_style.double_stars
+        assert detail_style.label.star_labels == profile_style.label.star_labels
+        assert detail_style.dso == standard_style.dso
+        assert detail_style.label.dso_labels == standard_style.label.dso_labels
+
+
+def test_standard_detail_star_depth_does_not_change_dso_selection() -> None:
+    atlas_path = ROOT / "atlas" / "standard.yaml"
+    style_path = ROOT / "styles" / "standard.yaml"
+    atlas = load_atlas_config(atlas_path)
+    style = load_style_config(style_path)
+    inputs = load_chart_inputs(
+        atlas_path=atlas_path,
+        style_path=style_path,
+        atlas=atlas,
+        style=style,
+    )
+    detail = next(detail for detail in atlas.detail_charts if detail.code == "SD02")
+    definition = detail.to_definition(atlas_id=atlas.id)
+
+    selected_ids = []
+    for stellar_limit in (10.5, 13.5):
+        context = build_chart_context(
+            atlas_path=atlas_path,
+            style_path=style_path,
+            definition=definition,
+            magnitude_limit=stellar_limit,
+            scale_mm_per_degree=detail.mm_per_degree,
+            inputs=inputs,
+        )
+        selected_ids.append(tuple(item.dso.id for item in context.scene.deep_sky_objects))
+        assert context.selection_policy == inputs.selection_policy
+
+    assert selected_ids[0] == selected_ids[1]
 
 
 def test_standard_detail_markers_project_into_their_parent_charts() -> None:
@@ -265,6 +430,18 @@ def test_standard_detail_markers_project_into_their_parent_charts() -> None:
         ys = [point.y_mm for point in marker.boundary]
         assert max(xs) >= frame.left_mm and min(xs) <= frame.right_mm
         assert max(ys) >= frame.top_mm and min(ys) <= frame.bottom_mm
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+def test_detail_parent_contains_the_detail_centre(edition: str) -> None:
+    atlas = load_atlas_config(ROOT / "atlas" / f"{edition}.yaml")
+    charts = {chart.id: chart for chart in chart_definitions(atlas)}
+    for detail in atlas.detail_charts:
+        parent = charts[detail.parent_chart_id]
+        projected = StereographicProjection(
+            parent.center_ra_deg, parent.center_dec_deg
+        ).project(detail.center_ra_deg, detail.center_dec_deg)
+        assert parent.contains(projected), (detail.code, detail.parent_chart_id)
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))

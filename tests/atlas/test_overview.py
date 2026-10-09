@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from nightsky_atlas.atlas.config import load_atlas_config
+from nightsky_atlas.atlas.config import load_atlas_config, load_style_config
 from nightsky_atlas.atlas.overview import (
     NORTH,
     SOUTH,
@@ -44,7 +44,8 @@ def test_hemispheres_cover_every_chart(charts, constellations) -> None:
     covered = {cell.chart_id for cell in north.cells}
     covered |= {cell.chart_id for cell in south.cells}
     assert covered == {chart.id for chart in charts}
-    assert north.chart_count + south.chart_count == len(charts)
+    equatorial_count = sum(chart.center_dec_deg == 0.0 for chart in charts)
+    assert north.chart_count + south.chart_count == len(charts) + equatorial_count
 
 
 def test_equatorial_pocket_charts_appear_on_both_symmetric_overviews() -> None:
@@ -68,6 +69,40 @@ def test_equatorial_pocket_charts_appear_on_both_symmetric_overviews() -> None:
             assert _point_in_polygon(cell.label_point, cell.polygon)
 
 
+def test_standard_overviews_show_full_equatorial_chart_row_on_both_hemispheres() -> None:
+    atlas = load_atlas_config(ATLAS)
+    style_path = REPO_ROOT / "styles" / "standard.yaml"
+    style = load_style_config(style_path)
+    assert style.overview.equatorial_extension_deg == pytest.approx(9.25)
+
+    charts = chart_definitions(atlas)
+    equatorial = [chart for chart in charts if chart.center_dec_deg == 0.0]
+    assert len(equatorial) == 15
+    assert equatorial[0].center_ra_deg == pytest.approx(12.0)
+
+    for hemisphere in (NORTH, SOUTH):
+        overview = build_overview(
+            charts,
+            hemisphere=hemisphere,
+            edition=atlas.resolved_edition(),
+            equatorial_extension_deg=style.overview.equatorial_extension_deg,
+        )
+        assert overview.radius_deg == pytest.approx(99.25)
+        equatorial_ids = {chart.id for chart in equatorial}
+        equatorial_cells = [
+            cell for cell in overview.cells if cell.chart_id in equatorial_ids
+        ]
+        assert len(equatorial_cells) == len(equatorial)
+        ra_twelve_cell = next(cell for cell in equatorial_cells if cell.chart_code == "S065")
+        assert ra_twelve_cell.label_point is not None
+        assert ra_twelve_cell.label_point.xi_deg == pytest.approx(0.0, abs=1e-6)
+        assert ra_twelve_cell.label_point.eta_deg == pytest.approx(-90.0, abs=1e-6)
+        for cell in equatorial_cells:
+            radii = [math.hypot(point.xi_deg, point.eta_deg) for point in cell.polygon]
+            assert min(radii) < 90.0
+            assert max(radii) > 90.0
+
+
 def test_chart_codes_are_visible_and_sequential(charts, constellations) -> None:
     atlas = load_atlas_config(ATLAS)
     overview = build_overview(
@@ -75,7 +110,7 @@ def test_chart_codes_are_visible_and_sequential(charts, constellations) -> None:
     )
     codes = [cell.chart_code for cell in overview.cells]
     assert codes[0] == "S001"
-    assert codes[-1] == "S059"
+    assert codes[-1] == "S072"
     assert len(set(codes)) == len(codes)
 
 

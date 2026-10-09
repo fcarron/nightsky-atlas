@@ -132,6 +132,27 @@ def _first_multiple(start: float, step: float) -> float:
     return math.ceil(start / step - 1e-9) * step
 
 
+def _step_for_minimum_grid_values(
+    step: float, start_deg: float, end_deg: float, *, ra: bool
+) -> float:
+    """Densify a field only when its configured interval yields fewer than two values."""
+
+    def value_count(candidate: float) -> int:
+        first = _first_multiple(start_deg, candidate)
+        return max(0, math.floor((end_deg - first) / candidate + 1e-9) + 1)
+
+    if value_count(step) >= 2:
+        return step
+    for divisor in range(1, 121):
+        candidate = step / divisor
+        if value_count(candidate) < 2:
+            continue
+        display_units = candidate * (4.0 if ra else 10.0)
+        if abs(display_units - round(display_units)) < 1e-8:
+            return candidate
+    return step / 120.0
+
+
 def build_grid(
     definition: ChartDefinition,
     transform: PageTransform,
@@ -141,7 +162,12 @@ def build_grid(
     dec_step_deg: float | None = None,
     polar_ra_step_deg: float | None = None,
 ) -> tuple[GridLine, ...]:
-    """Build RA and Dec grid polylines for a chart."""
+    """Build RA/Dec grid polylines, subdividing narrow fields when needed.
+
+    Grid intervals are divided into displayable coordinate steps when a small
+    detail field would otherwise contain fewer than two distinct meridians or
+    parallels.  The configured intervals remain the maximum spacing.
+    """
     grid = style.grid
     if not grid.enabled:
         return ()
@@ -160,6 +186,12 @@ def build_grid(
         ra_step = polar_ra_step_deg or grid.polar_ra_step_deg
     else:
         ra_step = ra_step_deg or grid.ra_step_deg
+    ra_step = _step_for_minimum_grid_values(
+        ra_step,
+        0.0 if polar else definition.center_ra_deg - ra_half,
+        360.0 if polar else definition.center_ra_deg + ra_half,
+        ra=True,
+    )
     if polar:
         ra = 0.0
         ra_limit = 360.0 - 1e-9
@@ -193,7 +225,9 @@ def build_grid(
             )
         ra += ra_step
 
-    dec_step = dec_step_deg or grid.dec_step_deg
+    dec_step = _step_for_minimum_grid_values(
+        dec_step_deg or grid.dec_step_deg, dec_min, dec_max, ra=False
+    )
     dec = _first_multiple(dec_min, dec_step)
     dec_limit = dec_max + 1e-9
     while dec <= dec_limit:
@@ -395,6 +429,8 @@ def build_grid_labels(
     outside = grid.label_placement == "outside"
 
     labels: list[tuple[str, float, GridLabel]] = []
+    supplemental_labels: list[tuple[str, float, GridLabel]] = []
+    target_labels = labels
     seen_ids: set[str] = set()
     obstacles = tuple(avoid)
 
@@ -422,7 +458,7 @@ def build_grid_labels(
         ):
             return False
         seen_ids.add(label_id)
-        labels.append(
+        target_labels.append(
             (
                 edge,
                 along,
@@ -439,8 +475,9 @@ def build_grid_labels(
 
     for line in lines:
         if line.kind == "ra":
-            if not _is_multiple(line.value_deg, ra_step):
-                continue
+            target_labels = (
+                labels if _is_multiple(line.value_deg, ra_step) else supplemental_labels
+            )
             text = format_ra_deg(line.value_deg)
             metrics = measurer.measure_mm(text)
             if outside:
@@ -474,10 +511,12 @@ def build_grid_labels(
                         if add(edge, "ra", line.value_deg, text, left, top, x):
                             break
         else:
-            if not _is_multiple(line.value_deg, dec_step):
-                continue
+            target_labels = (
+                labels if _is_multiple(line.value_deg, dec_step) else supplemental_labels
+            )
             text = format_dec_deg(line.value_deg)
             metrics = measurer.measure_mm(text)
+            candidate_count = len(target_labels)
             if outside:
                 placements = (
                     ("left", rect.left_mm - pad - metrics.width_mm, rect.left_mm),
@@ -546,8 +585,78 @@ def build_grid_labels(
                                 rect.right_mm - pad - metrics.width_mm,
                             )
                         add(edge, "dec", line.value_deg, text, left, top, x)
+            if len(target_labels) == candidate_count and line.points:
+                point = min(
+                    line.points,
+                    key=lambda item: min(
+                        item.x_mm - rect.left_mm,
+                        rect.right_mm - item.x_mm,
+                        item.y_mm - rect.top_mm,
+                        rect.bottom_mm - item.y_mm,
+                    ),
+                )
+                left = _clamp(
+                    point.x_mm + pad,
+                    rect.left_mm + pad,
+                    rect.right_mm - pad - metrics.width_mm,
+                )
+                top = _clamp(
+                    point.y_mm + pad,
+                    rect.top_mm + pad,
+                    rect.bottom_mm - pad - metrics.height_mm,
+                )
+                add("inner", "dec", line.value_deg, text, left, top, point.y_mm)
 
-    return _thin_labels(labels, spacing_mm=grid.label_min_spacing_mm)
+    placed = list(_thin_labels(labels, spacing_mm=grid.label_min_spacing_mm))
+    for kind in ("ra", "dec"):
+        if len({_coordinate_value(label) for label in placed if label.kind == kind}) >= 2:
+            continue
+        candidates = sorted(
+            (item for item in supplemental_labels if item[2].kind == kind),
+            key=lambda item: (
+                _label_tier(kind, item[2].value_deg),
+                item[0],
+                item[1],
+                item[2].value_deg,
+            ),
+        )
+        for enforce_spacing in (True, False):
+            for edge, along, label in candidates:
+                present_values = {_coordinate_value(item) for item in placed if item.kind == kind}
+                if _coordinate_value(label) in present_values:
+                    continue
+                if (
+                    enforce_spacing
+                    and grid.label_min_spacing_mm > 0.0
+                    and any(
+                        item.id.rsplit(":", 1)[-1] == edge
+                        and abs(along - _label_along_position(item, edge))
+                        < grid.label_min_spacing_mm
+                        for item in placed
+                    )
+                ):
+                    continue
+                if any(
+                    _overlaps(label.bounds, item.bounds, margin_mm=_OBSTACLE_CLEARANCE_MM)
+                    for item in placed
+                ):
+                    continue
+                placed.append(label)
+                if len({_coordinate_value(item) for item in placed if item.kind == kind}) >= 2:
+                    break
+            if len({_coordinate_value(item) for item in placed if item.kind == kind}) >= 2:
+                break
+    return tuple(placed)
+
+
+def _coordinate_value(label: GridLabel) -> float:
+    """Return a stable, wrap-safe value for counting distinct grid labels."""
+    return round(label.value_deg % 360.0, 8) if label.kind == "ra" else round(label.value_deg, 8)
+
+
+def _label_along_position(label: GridLabel, edge: str) -> float:
+    """Return the along-edge coordinate used by grid-label spacing."""
+    return label.bounds.center.x_mm if edge in ("top", "bottom") else label.bounds.center.y_mm
 
 
 _LABEL_TIER_STEPS = (30.0, 10.0, 5.0, 2.0)

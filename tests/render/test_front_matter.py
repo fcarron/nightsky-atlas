@@ -192,7 +192,7 @@ def test_standard_star_scale_and_telrad_sizes_are_exact() -> None:
     (
         ("pocket", "39 charts in 5 declination rings and 2 polar charts"),
         ("standard", "129 charts in 11 declination rings and 2 polar charts"),
-        ("deep", "430 charts in 22 declination rings and 2 polar charts"),
+        ("deep", "492 charts in 23 declination rings and 2 polar charts"),
     ),
 )
 def test_introduction_uses_current_edition_chart_geometry(

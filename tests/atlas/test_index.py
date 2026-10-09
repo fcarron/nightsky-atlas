@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from nightsky_atlas.atlas.config import EditionConfig
-from nightsky_atlas.atlas.directory import build_chart_directory
+from pathlib import Path
+
+from nightsky_atlas.atlas.config import EditionConfig, load_atlas_config
+from nightsky_atlas.atlas.directory import build_chart_directory, build_detail_chart_directory
 from nightsky_atlas.atlas.index import build_atlas_index, natural_designation_key
+from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.star_names import StarName
@@ -157,3 +160,18 @@ def test_chart_directory_uses_edition_codes_and_published_neighbours() -> None:
     assert entries[0].center_ra == "00h40m"
     assert entries[0].field == "13.5° × 9°"
     assert entries[0].neighbours == ("D002",)
+
+
+def test_detail_directory_codes_and_parent_codes_are_independent_and_linkable() -> None:
+    root = Path(__file__).resolve().parents[2]
+    atlas = load_atlas_config(root / "atlas" / "standard.yaml")
+    details = build_detail_chart_directory(
+        atlas.detail_charts,
+        chart_definitions(atlas),
+        atlas.resolved_edition(),
+    )
+    assert [entry.chart_code for entry in details] == [f"SD{i:02d}" for i in range(1, 10)]
+    assert details[0].parent_chart_code == "S050"
+    assert details[0].name == "Virgo Cluster"
+    assert details[0].scale_mm_per_degree == 20.0
+    assert details[0].to_dict()["parent_chart_code"] == "S050"

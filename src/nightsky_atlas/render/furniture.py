@@ -119,6 +119,8 @@ class FurniturePlan:
 
     title: PlacedText | None
     brand: PlacedText | None
+    page_heading: PlacedText | None
+    page_footer: PlacedText | None
     navigation: tuple[PlacedText, ...]
     scale_bar: ScaleBar | None
     legend: MagnitudeLegend | None
@@ -340,7 +342,34 @@ def build_furniture_plan(
 
     title: PlacedText | None = None
     brand: PlacedText | None = None
-    if style.furniture.footer_layout == "split":
+    page_heading: PlacedText | None = None
+    page_footer: PlacedText | None = None
+    if presentation.page_heading is not None or presentation.page_footer is not None:
+        heading_size = style.furniture.title_font_size_pt
+        if presentation.page_heading:
+            page_heading = PlacedText(
+                presentation.page_heading,
+                page.width_mm / 2.0,
+                page.margin_mm,
+                "center",
+                heading_size,
+            )
+            obstacles.append(_obstacle_for_text(page_heading, family))
+        if presentation.page_footer:
+            footer_size = style.furniture.footer_brand_font_size_pt
+            footer_metrics = TextMeasurer(family, footer_size).measure_mm(
+                presentation.page_footer
+            )
+            page_footer = PlacedText(
+                presentation.page_footer,
+                page.width_mm / 2.0,
+                page.height_mm - page.margin_mm - footer_metrics.height_mm,
+                "center",
+                footer_size,
+                target_chart_code=presentation.page_footer_target,
+            )
+            obstacles.append(_obstacle_for_text(page_footer, family))
+    elif style.furniture.footer_layout == "split":
         code = presentation.chart_header_code
         if code:
             code_markup = presentation.chart_header_markup
@@ -434,6 +463,8 @@ def build_furniture_plan(
     return FurniturePlan(
         title=title,
         brand=brand,
+        page_heading=page_heading,
+        page_footer=page_footer,
         navigation=navigation,
         scale_bar=scale_bar,
         legend=legend,
@@ -571,6 +602,20 @@ def draw_furniture(
     if plan.brand is not None:
         brand_gray = style.furniture.footer_brand_gray
         _draw_placed_text(cr, plan.brand, family, brand_gray)
+
+    if plan.page_heading is not None:
+        _draw_placed_text(cr, plan.page_heading, family, style.furniture.title_gray)
+
+    if plan.page_footer is not None:
+        if pdf_navigation is not None and plan.page_footer.target_chart_code is not None:
+            with pdf_navigation.link(
+                cr,
+                plan.page_footer.target_chart_code,
+                _obstacle_for_text(plan.page_footer, family),
+            ):
+                _draw_placed_text(cr, plan.page_footer, family, style.furniture.footer_brand_gray)
+        else:
+            _draw_placed_text(cr, plan.page_footer, family, style.furniture.footer_brand_gray)
 
     nav_gray = style.furniture.navigation.gray
     for nav_text in plan.navigation:

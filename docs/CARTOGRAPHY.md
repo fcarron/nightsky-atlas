@@ -1,8 +1,8 @@
 # Standard edition cartography
 
-Frozen at M14.1 (2026-09-16); tiling revised for Standard v0.1 (full-sky draft),
-again for v0.2 (north-to-south order, calmer coordinate labels), and again for
-v0.3 (mirror-symmetric ring counts for regular navigation).
+Standard uses the symmetric, aligned 11-ring tiling described below. The
+geometry was first evaluated on the `experiment/standard-11-rings-aligned`
+branch and then adopted with a 12-degree RA phase.
 
 ## Page and field
 
@@ -15,74 +15,84 @@ v0.3 (mirror-symmetric ring counts for regular navigation).
 | Projection | stereographic, north up / east left |
 | Stellar limit | magnitude 9.0 |
 | DSO selection | per-type visibility, catalogue/curation rules and edition inheritance |
-| Charts (tiled) | 118 |
+| Charts (tiled) | 129 (baseline: 118) |
 
 This sits between Sky Atlas 2000.0 (26 charts, ~10 mm/deg, mag 8.5) and
 Uranometria 2000.0 (~220 charts, mag ~9.75) in chart count: Tirion-like scale
 and readability, but a deeper limit and many more pages.
 
-## Tiling (Standard v0.3)
+## Tiling (11 aligned rings)
 
-Explicit declination rings with staggered right ascension and stereographic
-polar caps:
+This branch tests eleven evenly spaced declination rings, no RA staggering,
+and one stereographic chart centred on each pole. Ring centres are
+`-75, -60, -45, -30, -15, 0, +15, +30, +45, +60, +75` degrees. Counts are
+mirror-symmetric, with a shared 12-degree RA phase:
 
-- ring centres every 16 deg: -72, -56, -40, -24, -8, +8, +24, +40, +56, +72;
-- one stereographic chart centred on each pole;
-- alternate rings offset by half a chart spacing (less four-corner clustering);
-- nominal vertical overlap 2 deg (`height - step = 2.5 deg` in practice).
+| Ring pair / ring | Charts per ring | RA step |
+| --- | ---: | ---: |
+| ±75° | 5 | 72.000° |
+| ±60° | 10 | 36.000° |
+| ±45° | 11 | 32.727° |
+| ±30° | 15 | 24.000° |
+| ±15° | 15 | 24.000° |
+| 0° | 15 | 24.000° |
+| Each pole | 1 | — |
 
-Charts are numbered **north to south, the reading order of the atlas**:
+This gives **129 main charts**: 57 non-equatorial charts in each hemisphere,
+plus the 15 equatorial charts shared by both overview maps (72 cells per map).
+The 11-chart rings at ±45° are the smallest
+tested counts that close coverage; 10 leave gaps around RA 18°/198° near
+Dec ±39.6°. Four charts at ±75° leave gaps near Dec ±69.9°. The 5/10/15 grids
+remain nested; the 11-chart rings are the sole additional RA raster. Same-count
+rings are exactly aligned north/south. The 12° phase puts RA 12h at the centre
+of chart S065; RA 0h lies between equatorial chart centres.
 
-- `standard-001` = north polar cap;
-- then the `+72, +56, ..., -72` rings in that order, each ring running in
-  increasing right ascension (0h -> 24h) so the RA-wrap neighbour is always
-  between the last and first chart of a ring;
-- `standard-118` = south polar cap.
+At 0.25° global sampling, the selected geometry has no uncovered samples.
+Area-weighted coverage multiplicity is 1.528; 56.57% of the sky is covered
+once, 36.26% twice, 5.02% three times and 2.16% four times. Its sampled
+minimum reserve—the largest signed distance in projected chart coordinates to
+any chart edge at each sky point—is 0.61° (about 6.1 mm at this edition's
+scale), near RA 192°, Dec ±38.1° with the selected 12° phase. A finer local
+scan below corroborates this sampled result; neither raster is a mathematical
+proof for every real-valued sky coordinate.
 
-### Resolved ring counts
+At ring-centre parallels, the smallest measured east-west overlap is 2.88°
+(28.8 mm) at the equator. The smallest north-south overlap on central meridians
+is 3.46° (34.6 mm); the polar-cap transition is also 3.46°. These are local
+axis measurements, not the global reserve above.
 
-The requested start counts (`14/13/11/8/5` per hemisphere) do **not** cover the
-sky.  The chart field is a rectangle in the tangent plane, so its declination
-extent shrinks away from the central meridian; a `cos(dec)` estimate is far too
-optimistic near the poles, where the outermost ring must interlock with the
-polar cap.  A coverage sweep fixed the minimum counts that leave no gap at
-0.25 deg sampling.  The counts are **mirror-symmetric** north/south: every
-`+dec` ring has the same number of charts as its `-dec` counterpart, so the two
-hemispheres pair chart-for-chart and navigation is regular:
+Baseline comparison: the previous 118-chart arrangement has a sampled minimum
+reserve of 0.11°, 67.85% singly covered sky, minimum ring-centre east-west
+overlap 1.42°, central-meridian north-south overlap 2.46°, and only 0.46° at
+the polar-cap transition. The 129-chart tiling is more navigable at the
+tightest seams but uses 11 additional main charts. The 127-chart simple
+5/10/15 proposal has gaps around Dec ±39.6° because 10 charts at ±45° are
+insufficient. Moving the outer rings to ±74°, ±76° or ±77° does not improve the
+balanced 75° choice: 74° reduces polar overlap to 2.46°, 76° increases
+outer-ring overlap, and 77° reduces the ±60/±77 central-meridian overlap to
+1.46°.
 
-| Ring | Count | RA step |
-| --- | --- | --- |
-| +72 | 10 | 36.00 deg |
-| +56 | 9 | 40.00 deg |
-| +40 | 12 | 30.00 deg |
-| +24 | 13 | 27.69 deg |
-| +8 | 14 | 25.71 deg |
-| -8 | 14 | 25.71 deg |
-| -24 | 13 | 27.69 deg |
-| -40 | 12 | 30.00 deg |
-| -56 | 9 | 40.00 deg |
-| -72 | 10 | 36.00 deg |
-| +90 | 1 | - |
-| -90 | 1 | - |
+A fine scan of 3,586,082 points around all ring transitions, the pole
+transitions and RA wrap found no gaps; the smallest sampled projected edge
+reserve was 0.602° in the aligned 0°-phase scan. The selected 12° phase is a
+global rotation of that tiling, so the geometric overlap measures are
+unchanged. Both hemisphere overviews extend 9.25° past the equator, showing the
+complete equatorial chart row on each map. The normal neighbour audit checked
+598 directed references with no missing overlaps. A full 12°-phase build is at
+`build/standard-11-rings-ra12/standard/atlas.pdf` (129 main charts plus 9
+details). Its manifest reports 78 hard layout issues; the 0°-phase comparison
+build reported 73. These are draft builds, not publication validations.
 
-Total **118 charts**, 59 per hemisphere.  `auto_adjust_counts` is off: the
-conservative per-ring resolver would demand 10 charts in the outer rings too
-(120 charts), while the assembled tiling with the stagger covers at the counts
-above, which are already the equal north/south minimum.
-
-- Coverage validated numerically (`nightsky atlas coverage --step 0.5`): 0 gaps,
-  overlap 1..4, 259,200 samples.
-- Every declared N/S/E/W neighbour pair shares covered sky
-  (`neighbour_overlap_report`): 629 pairs, 0 missing.
-- The two polar caps link to surrounding charts along all four page edges;
-  other single-chart rings have no same-ring east/west neighbour. The remaining
-  multi-chart rings are complete circles.
+Chart IDs remain north-to-south: `standard-001` is the north polar cap, then
+the +75° through 0° rings run in increasing RA; the southern rings follow and
+`standard-129` is the south polar cap. Declared N/S/E/W neighbours are derived
+from actual projected chart edges and must pass the neighbour-overlap test.
 
 ## Build
 
 ```bash
-nightsky atlas tile                        # 118 chart definitions + neighbours
-nightsky atlas coverage --step 0.5         # gaps=0, overlap 1..4
+nightsky atlas tile                        # 129 chart definitions + neighbours
+nightsky atlas coverage --step 0.25       # gaps=0, overlap 1..4
 nightsky atlas build --png-dpi 100         # per-page PDF/PNG + atlas.pdf + manifest
 nightsky atlas report                      # draft stats + region review list
 ```
@@ -128,8 +138,8 @@ consistent notation built centrally in `chart/presentation.py`:
 | Edition | Name | Code | Visible chart code |
 | --- | --- | --- | --- |
 | Pocket | Pocket | P | P01 … P39 |
-| Standard | Standard | S | S001 … S118 |
-| Deep | Deep | D | D001 … D430 |
+| Standard | Standard | S | S001 … S129 |
+| Deep | Deep | D | D001 … D492 |
 
 The edition name and code come from the atlas `edition:` block and fall back to
 this registry when omitted. The footer title uses compact visible-constellation
@@ -149,41 +159,101 @@ Furniture sits outside the chart frame and is deliberately quiet
 - **Footer** uses the same one-line atlas, constellation and chart identifier
   across editions. The magnitude legend remains at left where configured.
 
-## Pocket and Standard detail charts and galaxy labels
+## Detail charts
 
-Standard detail charts are framed on their parent page and tagged with their
-printed detail code. A detail chart may opt into `fallback_parent_galaxy_labels`:
-for that field, an ordinary galaxy number is omitted from the parent only when
-the same stable DSO ID has a placed detail label and that label has no hard
-layout violation. The galaxy symbol remains on both pages. Messier and Herschel
-400 labels are never transferred. It is enabled for Standard Virgo core
-(`SD053A`), southern Virgo (`SD053B`) and Fornax (`SD089`). Pocket now retains
-just Virgo core (`PD021A`, parent `P21`), at
-10 mm/° with stars to mag 9.0 and the parent's DSO selection; the other former
-Pocket detail fields use ordinary labels on the main maps. Pocket uses the
-compact detail code as its frame tag; the detail page carries the region name.
+Detail charts use only three physical map scales: 20, 40 or 80 mm/°. Their
+fields are 13 × 8.5°, 6.5 × 4.25° and 3.25 × 2.125°, respectively. This leaves
+space for a heading and a footer on A4 landscape while preserving true map
+scale. The page identifies each chart with a stable edition-specific code
+(`PD01`, `SD01`… or `DD01`…), its region, scale, field and primary parent chart.
+The detail-chart directory and PDF links provide the same code and parent
+reference. Codes do not derive from parent chart numbers.
 
-Deep has nine close-ups: NGC 7331 with Stephan's Quintet (`DD105`), the
-Pleiades (`DD111`), the Coma core (`DD121`), the Markarian chain (`DD174`),
-M42 (`DD223`), the Fornax core (`DD328`), 30 Doradus (`DD405A`), the LMC bar
-(`DD405B`) and NGC 346 in the SMC (`DD415`). Their dedicated star profile plots
-stars to magnitude 11.5, while Deep main charts plot stars to magnitude 10.5.
-Deep's bold, normal and fine galaxy classes use a 0.75-arcmin minimum major
-axis at 20 mm/degree. This is the same 0.25-mm angular threshold on paper as
-Pocket's 3 arcmin at 5 mm/degree and Standard's 1.5 arcmin at 10 mm/degree.
-Deep's dotted class retains its separate 0.5-arcmin and 400-mm visibility-score
-requirements. The plotted galaxy ellipse still has its cartographic minimum
-size; the selection threshold does not set the printed symbol diameter.
-DD105 at 40 mm/degree uses a separate star-diameter curve, extending the
-Standard-to-Deep size progression by one magnitude; its stellar limit remains
-11.5. The other Deep detail charts retain their existing star sizes.
-Galaxy-label fallback is enabled only for the four galaxy fields. In addition
-to the stable-ID and hard-clean
-detail-label requirements above, a Deep parent galaxy must be at least
-magnitude 12.5 and have three other plotted galaxies within the style's
-15-mm label-density radius. Brighter galaxies, Messier and H400 objects keep
-their main-chart labels. Chart pages do not include scale bars; angular scale
-is stated in the edition introduction and chart field information.
+The parent edition remains the source of DSO selection: Pocket details use
+Pocket selection, Standard details use Standard selection, and Deep details use
+Deep selection. A star profile can be denser without changing the DSO policy.
+The selected star profile supplies star limits, symbol sizes and star-label
+style; the base edition continues to supply DSO styling and selection. An
+optional UCAC4 supplement may be enabled for detail charts without adding it to
+the parent charts.
+
+| Edition and detail | Code | Scale | Stars to | Primary parent |
+| --- | --- | ---: | ---: | --- |
+| Pocket — Virgo core | PD01 | 20 mm/° | 9.0 | P20 |
+| Standard — Virgo Cluster | SD01 | 20 mm/° | 10.5 | S050 |
+| Standard — Virgo core | SD02 | 80 mm/° | 13.5 | S050 |
+| Standard — South Virgo | SD03 | 40 mm/° | 12.25 | S065 |
+| Standard — Fornax core | SD04 | 40 mm/° | 12.25 | S090 |
+| Standard — Sagittarius clusters | SD05 | 20 mm/° | 10.5 | S099 |
+| Standard — Cygnus nebula field | SD06 | 20 mm/° | 10.5 | S026 |
+| Standard — Orion Nebula | SD07 | 20 mm/° | 10.5 | S061 |
+| Standard — Double Cluster | SD08 | 20 mm/° | 10.5 | S008 |
+| Standard — Pleiades | SD09 | 20 mm/° | 10.5 | S030 |
+| Deep — NGC 7331 / Stephan's Quintet | DD01 | 40 mm/° | 12.25 | D116 |
+| Deep — Pleiades | DD02 | 40 mm/° | 12.25 | D147 |
+| Deep — Coma core | DD03 | 80 mm/° | 13.5 | D131 |
+| Deep — Markarian chain | DD04 | 80 mm/° | 13.5 | D188 |
+| Deep — Orion Nebula | DD05 | 80 mm/° | 13.5 | D269 |
+| Deep — Fornax core | DD06 | 40 mm/° | 12.25 | D381 |
+| Deep — 30 Doradus | DD07 | 80 mm/° | 13.5 | D466 |
+| Deep — LMC bar | DD08 | 80 mm/° | 13.5 | D465 |
+| Deep — NGC 346 / SMC | DD09 | 40 mm/° | 12.25 | D477 |
+
+Star profiles are existing edition presets: Standard detail stars use the
+Standard profile, Deep detail stars use Deep, and the denser detail fields use
+Eyepiece or Eyepiece Deep profiles. These profiles do not replace the parent's
+DSO selection policy. Parent-chart galaxy-label fallback remains a presentation
+rule: it may transfer only labels for selected objects that are present on both
+the detail field and its parent, and it never removes Messier or Herschel 400
+labels.
+
+Old public codes map to the stable codes as follows:
+
+| Old code | New code | Old code | New code |
+| --- | --- | --- | --- |
+| PD021A | PD01 | DD105 | DD01 |
+| SD053 | SD01 | DD111 | DD02 |
+| SD053A | SD02 | DD121 | DD03 |
+| SD053B | SD03 | DD174 | DD04 |
+| SD089 | SD04 | DD223 | DD05 |
+| SD084 | SD05 | DD328 | DD06 |
+| SD031 | SD06 | DD405A | DD07 |
+| SD063 | SD07 | DD405B | DD08 |
+| SD013 | SD08 | DD415 | DD09 |
+| SD035 | SD09 |  |  |
+
+### Deep 23-ring tiling experiment
+
+The experimental Deep configuration uses 23 symmetric declination rings from
+−82.5° to +82.5° at 7.5° intervals, plus two polar charts. RA staggering is
+disabled and every ring begins at 0°. Its symmetric ring counts, north to
+south, are `5 / 10 / 15 / 15 / 20 / 25 / 25 / 25 / 30 / 30 / 30 / 30 / 30 /
+30 / 30 / 25 / 25 / 25 / 20 / 15 / 15 / 10 / 5`, for 492 main charts. The
+equatorial ring has 30 charts at 12° intervals (00h00m, 00h48m, …, 23h12m).
+The grids at ±15°, ±30°, ±45°, ±60° and ±75° align with the experimental
+Standard grid.
+
+A vectorized audit of the actual stereographic rectangles sampled the full
+sky on a 0.25° RA/Dec grid with cos(Dec) area weighting. It found no uncovered
+samples among 1,036,800 tested directions. Estimated area fractions are 63.16%
+single coverage, 31.63% double, 2.79% triple and 2.43% four-or-more coverage;
+the mean multiplicity is 1.445. A projected edge-distance scan found the
+smallest sampled safety margin to be 0.216° (about 4.32 mm at 20 mm/°), near
+RA 16h48m, Dec −56.9°. The smallest horizontal overlap at ring centres is
+1.024° (20.48 mm) on the ±30° rings. Exact stereographic edge intersections
+sampled along the RA direction found a minimum adjacent-ring overlap of about
+0.78° (15.5 mm) at the polar-cap/±82.5° transition near RA 12h00m; a finer
+local check measures approximately 0.79°. These
+figures are numerical checks, not a proof for every continuous sky position;
+the polar and ring-transition margins are weaker than the 30 mm nominal target.
+
+The previous 430-chart layout also had no holes on the same 0.25° sample and
+had estimated coverage fractions of 76.58% single, 20.73% double, 2.55% triple
+and 0.14% four-or-more, with mean multiplicity 1.262. Its smallest sampled
+safety margin was about 0.080° (1.61 mm). The 492-chart experiment therefore
+trades 62 pages for more overlap and a regular equatorial/aligned grid. The
+current repository state is an experiment; review it before adopting it as the
+Deep release tiling.
 
 ## Short leaders for broad DSO labels
 
@@ -261,6 +331,6 @@ so no chart label is placed under it.
   pole is larger and the meridian fan can be dense, especially in Deep. Each
   edition uses `grid.polar_ra_step_deg` for its polar meridians and labels them
   at `label_polar_ra_step_deg`; the minimum-spacing rule handles crowded edges.
-- The 118-chart count is geometry-driven.  A later optional pass may nudge
+- The 129-chart count is geometry-driven. A later optional pass may nudge
   individual chart centres by +-1-2 deg to move important regions away from page
   edges, but the draft deliberately uses a clean geometric grid only.

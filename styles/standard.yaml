@@ -312,6 +312,10 @@ furniture:
 # centre.  Appearance only; geometry comes from the atlas tiling.
 overview:
   enabled: true
+  # Show the complete equatorial chart row on both hemisphere maps.  The
+  # 18.5-degree chart height gives a 9.25-degree half-height; this only extends
+  # the overview cells and does not alter the RA=12h-centred equatorial tiling.
+  equatorial_extension_deg: 9.25
   radius_mm: 76.0
   code_font_size_pt: 5.25
   show_stars: true

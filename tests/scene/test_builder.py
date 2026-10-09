@@ -402,6 +402,35 @@ def test_outline_alias_suppresses_only_its_nebula_fallback_symbol() -> None:
     assert {outline.dso_id for outline in scene.nebula_outlines} == {"NGC7000", "NGC7001"}
 
 
+def test_m42_outline_replaces_only_m42_square_and_keeps_m43_target() -> None:
+    m42 = DeepSkyObject(
+        id="NGC1976",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.BRIGHT_NEBULA,
+        provenance=Provenance(catalogue="TEST", source_id="NGC1976"),
+        cross_ids=("M42",),
+    )
+    m43 = DeepSkyObject(
+        id="NGC1982",
+        ra_deg=187.6,
+        dec_deg=12.1,
+        object_type=DsoType.BRIGHT_NEBULA,
+        provenance=Provenance(catalogue="TEST", source_id="NGC1982"),
+        cross_ids=("M43",),
+    )
+    outline = make_outline(
+        "NGC1976", ((186.5, 11.0), (188.5, 11.0), (188.5, 13.0), (186.5, 13.0))
+    )
+
+    scene = build_scene(DEFINITION, (), (m42, m43), nebula_outlines=(outline,))
+
+    by_id = {item.dso.id: item for item in scene.deep_sky_objects}
+    assert by_id["NGC1976"].symbol_visible is False
+    assert by_id["NGC1982"].symbol_visible is True
+    assert {item.dso_id for item in scene.nebula_outlines} == {"NGC1976"}
+
+
 def test_supernova_remnant_outline_is_solid_and_suppresses_fallback_symbol() -> None:
     remnant = DeepSkyObject(
         id="NGC6960",

@@ -7,17 +7,23 @@ import math
 import cairo
 
 from nightsky_atlas.atlas.config import EditionConfig, PageGeometry, StyleConfig
-from nightsky_atlas.atlas.directory import ChartDirectoryEntry
+from nightsky_atlas.atlas.directory import ChartDirectoryEntry, DetailChartDirectoryEntry
 from nightsky_atlas.chart.page import PageRect
 from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.render.text import TextMeasurer, draw_text
 from nightsky_atlas.units import mm_to_pt
 
-__all__ = ["chart_directory_page_count", "draw_chart_directory_pages"]
+__all__ = [
+    "chart_directory_page_count",
+    "detail_chart_directory_page_count",
+    "draw_chart_directory_pages",
+    "draw_detail_chart_directory_pages",
+]
 
 _COLUMNS = 2
 _ROW_MM = 5.0
 _HEADER_MM = 22.0
+_DETAIL_ROW_MM = 8.0
 
 
 def _capacity(page: PageGeometry) -> int:
@@ -28,6 +34,15 @@ def _capacity(page: PageGeometry) -> int:
 
 def chart_directory_page_count(entries: tuple[ChartDirectoryEntry, ...], page: PageGeometry) -> int:
     return max(1, math.ceil(len(entries) / _capacity(page)))
+
+
+def detail_chart_directory_page_count(
+    entries: tuple[DetailChartDirectoryEntry, ...], page: PageGeometry
+) -> int:
+    rows_per_column = max(
+        1, math.floor((page.height_mm - 2 * page.margin_mm - _HEADER_MM) / _DETAIL_ROW_MM)
+    )
+    return math.ceil(len(entries) / (rows_per_column * _COLUMNS)) if entries else 0
 
 
 def _footer(
@@ -112,3 +127,106 @@ def draw_chart_directory_pages(
         _footer(cr, page, edition, page_number, family)
         surface.show_page()
     return chart_directory_page_count(entries, page)
+
+
+def draw_detail_chart_directory_pages(
+    cr: cairo.Context[cairo.Surface],
+    surface: cairo.Surface,
+    entries: tuple[DetailChartDirectoryEntry, ...],
+    page: PageGeometry,
+    style: StyleConfig,
+    edition: EditionConfig,
+    pdf_navigation: PdfNavigation | None = None,
+) -> int:
+    """Append a compact lookup for detail codes and their parent charts."""
+    if not entries:
+        return 0
+    family = style.typography.sans_family
+    rows_per_column = max(
+        1, math.floor((page.height_mm - 2 * page.margin_mm - _HEADER_MM) / _DETAIL_ROW_MM)
+    )
+    capacity = rows_per_column * _COLUMNS
+    column_width = (page.width_mm - 2 * page.margin_mm) / _COLUMNS
+    for page_number, offset in enumerate(range(0, len(entries), capacity), start=1):
+        draw_text(
+            cr,
+            "DETAIL CHART DIRECTORY",
+            mm_to_pt(page.margin_mm),
+            mm_to_pt(page.margin_mm),
+            family,
+            11.0,
+            "semibold",
+        )
+        for local, entry in enumerate(entries[offset : offset + capacity]):
+            column, row = divmod(local, rows_per_column)
+            x = page.margin_mm + column * column_width
+            y = page.margin_mm + 13.0 + row * _DETAIL_ROW_MM
+            code_metrics = TextMeasurer(family, 7.0).measure_mm(entry.chart_code)
+            code_rect = PageRect(x, y, code_metrics.width_mm, code_metrics.height_mm)
+            if pdf_navigation is None:
+                draw_text(cr, entry.chart_code, mm_to_pt(x), mm_to_pt(y), family, 7.0, "semibold")
+            else:
+                with pdf_navigation.link(cr, entry.chart_code, code_rect):
+                    draw_text(
+                        cr,
+                        entry.chart_code,
+                        mm_to_pt(x),
+                        mm_to_pt(y),
+                        family,
+                        7.0,
+                        "semibold",
+                    )
+            draw_text(cr, entry.name, mm_to_pt(x + 17.0), mm_to_pt(y), family, 7.0)
+            draw_text(
+                cr,
+                f"{entry.scale_mm_per_degree:g} mm/°",
+                mm_to_pt(x + column_width - 45.0),
+                mm_to_pt(y),
+                family,
+                7.0,
+            )
+            draw_text(
+                cr,
+                f"{entry.center_ra} {entry.center_dec} · {entry.field}",
+                mm_to_pt(x + 17.0),
+                mm_to_pt(y + 3.2),
+                family,
+                6.5,
+            )
+            parent_text = f"Main chart {entry.parent_chart_code}"
+            parent_metrics = TextMeasurer(family, 6.5).measure_mm(parent_text)
+            parent_rect = PageRect(
+                x + column_width - parent_metrics.width_mm - 2.0,
+                y + 3.2,
+                parent_metrics.width_mm,
+                parent_metrics.height_mm,
+            )
+            if pdf_navigation is None:
+                draw_text(
+                    cr,
+                    parent_text,
+                    mm_to_pt(parent_rect.left_mm),
+                    mm_to_pt(parent_rect.top_mm),
+                    family,
+                    6.5,
+                )
+            else:
+                with pdf_navigation.link(cr, entry.parent_chart_code, parent_rect):
+                    draw_text(
+                        cr,
+                        parent_text,
+                        mm_to_pt(parent_rect.left_mm),
+                        mm_to_pt(parent_rect.top_mm),
+                        family,
+                        6.5,
+                    )
+        draw_text(
+            cr,
+            f"NightSky Atlas — {edition.name} · Detail chart directory · {page_number}",
+            mm_to_pt(page.margin_mm),
+            mm_to_pt(page.height_mm - page.margin_mm + 2.5),
+            family,
+            7.0,
+        )
+        surface.show_page()
+    return detail_chart_directory_page_count(entries, page)

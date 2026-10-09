@@ -318,6 +318,7 @@ def build_chart_context(
     double_star_ambiguous_radius_arcsec: float = DEFAULT_AMBIGUOUS_RADIUS_ARCSEC,
     magnitude_limit: float | None = None,
     scale_mm_per_degree: float | None = None,
+    allow_faint_star_supplement: bool = False,
     progress: Progress | None = None,
     inputs: ChartInputs | None = None,
 ) -> ChartContext:
@@ -343,8 +344,14 @@ def build_chart_context(
         )
     atlas = inputs.atlas
     style = inputs.style
-    if faint_star_store is not None and atlas.id not in {"eyepiece", "eyepieceDeep"}:
-        raise ValueError("the UCAC4 faint-star supplement is reserved for Eyepiece charts")
+    if (
+        faint_star_store is not None
+        and atlas.id not in {"eyepiece", "eyepieceDeep"}
+        and not allow_faint_star_supplement
+    ):
+        raise ValueError(
+            "the UCAC4 supplement outside Eyepiece requires an explicit detail-chart profile"
+        )
     if faint_star_limit is not None and faint_star_store is None:
         raise ValueError("--faint-star-limit requires --faint-star-store")
     if faint_star_limit is not None and not 0.0 < faint_star_limit <= 14.0:

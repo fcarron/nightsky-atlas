@@ -157,9 +157,27 @@ def test_edition_coordinate_grid_intervals(
     assert style.grid.dec_step_deg == pytest.approx(dec_step_deg)
     assert style.grid.label_ra_step_deg == pytest.approx(label_ra_step_deg)
     assert style.grid.label_dec_step_deg == pytest.approx(label_dec_step_deg)
-    for line in build_grid(CHART, TRANSFORM, style):
-        step = ra_step_deg if line.kind == "ra" else dec_step_deg
-        assert line.value_deg / step == pytest.approx(round(line.value_deg / step), abs=1e-8)
+    lines = build_grid(CHART, TRANSFORM, style)
+    for kind, step in (("ra", ra_step_deg), ("dec", dec_step_deg)):
+        kind_lines = [line for line in lines if line.kind == kind]
+
+        subdivisions = [
+            candidate
+            for divisor in range(1, 121)
+            if abs(
+                (candidate := step / divisor) * (4.0 if kind == "ra" else 10.0)
+                - round(candidate * (4.0 if kind == "ra" else 10.0))
+            )
+            < 1e-8
+            and all(
+                line.value_deg / candidate
+                == pytest.approx(round(line.value_deg / candidate), abs=1e-8)
+                for line in kind_lines
+            )
+        ]
+        assert subdivisions, (
+            f"{edition} {kind} lines do not follow a displayable subdivision of {step}°"
+        )
 
 
 def test_grid_points_are_finite() -> None:
@@ -223,16 +241,18 @@ def test_standard_whole_hour_charts_keep_ra_labels_clear_of_furniture(
     ra_labels = [label for label in labels if label.kind == "ra"]
 
     assert ra_labels, f"{chart.id} has no accepted RA edge labels"
-    assert {label.text for label in ra_labels} == {format_ra_deg(chart.center_ra_deg)}
+    assert format_ra_deg(chart.center_ra_deg) in {label.text for label in ra_labels}
+    assert len({label.value_deg for label in ra_labels}) >= 2
     assert len({(label.value_deg, label.id.rsplit(":", 1)[-1]) for label in ra_labels}) == len(
         ra_labels
     ), f"{chart.id} has duplicate RA labels on an edge"
     for label in ra_labels:
-        assert abs(label.bounds.center.x_mm - transform.center_page.x_mm) <= 12.5, (
-            chart.id,
-            label.text,
-            label.bounds,
-        )
+        if label.text == format_ra_deg(chart.center_ra_deg):
+            assert abs(label.bounds.center.x_mm - transform.center_page.x_mm) <= 12.5, (
+                chart.id,
+                label.text,
+                label.bounds,
+            )
         assert 0.0 <= label.bounds.left_mm
         assert label.bounds.right_mm <= transform.page.width_mm
         assert 0.0 <= label.bounds.top_mm
@@ -241,6 +261,71 @@ def test_standard_whole_hour_charts_keep_ra_labels_clear_of_furniture(
             _rectangles_overlap(label.bounds, obstacle, margin=0.5)
             for obstacle in furniture.obstacles
         ), f"{chart.id} RA label overlaps chart furniture: {label.text}"
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+def test_all_main_charts_have_two_ra_and_dec_coordinate_values(edition: str) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    charts = [(chart, atlas.mm_per_degree) for chart in chart_definitions(atlas)]
+    charts.extend(
+        (detail.to_definition(atlas_id=atlas.id), detail.mm_per_degree)
+        for detail in atlas.detail_charts
+    )
+    for chart, scale in charts:
+        transform = PageTransform(
+            chart=chart,
+            page=atlas.page.to_geometry(),
+            scale_mm_per_degree=scale,
+        )
+        presentation = presentation_from_edition(chart, atlas.resolved_edition())
+        furniture = build_furniture_plan(transform, chart, style, presentation)
+        lines = build_grid(chart, transform, style)
+        labels = build_grid_labels(chart, transform, style, lines=lines, avoid=furniture.obstacles)
+        ra_labels = [label for label in labels if label.kind == "ra"]
+        dec_labels = [label for label in labels if label.kind == "dec"]
+        assert len({round(label.value_deg % 360.0, 8) for label in ra_labels}) >= 2, (
+            f"{chart.id} has fewer than two distinct RA coordinate annotations: "
+            f"{[label.text for label in ra_labels]}"
+        )
+        assert len({round(label.value_deg, 8) for label in dec_labels}) >= 2, (
+            f"{chart.id} has fewer than two distinct declination coordinate annotations: "
+            f"{[label.text for label in dec_labels]}"
+        )
+        assert all(label.text == format_ra_deg(label.value_deg) for label in ra_labels)
+        assert all(label.text == format_dec_deg(label.value_deg) for label in dec_labels)
+        assert len({(label.text, label.id.rsplit(":", 1)[-1]) for label in ra_labels}) == len(
+            ra_labels
+        ), f"{chart.id} has duplicate RA edge labels"
+        assert all(
+            0.0 <= label.bounds.left_mm
+            and label.bounds.right_mm <= transform.page.width_mm
+            and 0.0 <= label.bounds.top_mm
+            and label.bounds.bottom_mm <= transform.page.height_mm
+            for label in (*ra_labels, *dec_labels)
+        ), chart.id
+
+
+@pytest.mark.parametrize("edition", ("eyepiece", "eyepiece_deep"))
+def test_experimental_detail_scales_keep_two_coordinate_values(edition: str) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    scale, width, height = (40.0, 6.75, 4.5) if edition == "eyepiece" else (80.0, 3.375, 2.25)
+    chart = ChartDefinition(
+        id=f"{edition}-label-check",
+        center_ra_deg=359.8,
+        center_dec_deg=0.0,
+        width_deg=width,
+        height_deg=height,
+    )
+    transform = PageTransform(chart=chart, page=PAGE, scale_mm_per_degree=scale)
+    labels = build_grid_labels(chart, transform, style, lines=build_grid(chart, transform, style))
+    for kind in ("ra", "dec"):
+        values = {
+            round(label.value_deg % 360.0, 8) if kind == "ra" else round(label.value_deg, 8)
+            for label in labels
+            if label.kind == kind
+        }
+        assert len(values) >= 2
 
 
 def _rectangles_overlap(first, second, *, margin: float = 0.0) -> bool:

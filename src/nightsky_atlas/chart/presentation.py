@@ -86,6 +86,9 @@ class ChartPresentation:
     product_name: str = PRODUCT_NAME
     chart_index_width: int = 3
     constellation_context: str | None = None
+    page_heading: str | None = None
+    page_footer: str | None = None
+    page_footer_target: str | None = None
 
     @property
     def chart_code(self) -> str:

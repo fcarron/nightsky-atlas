@@ -9,7 +9,7 @@ import pytest
 from nightsky_atlas.atlas.config import LocatorStyle, load_style_config
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
-from nightsky_atlas.chart.presentation import presentation_for
+from nightsky_atlas.chart.presentation import ChartPresentation, presentation_for
 from nightsky_atlas.render.furniture import build_furniture_plan
 from nightsky_atlas.render.overview import locator_rect
 from nightsky_atlas.render.text import TextMeasurer
@@ -48,6 +48,38 @@ def test_title_uses_short_code_and_footer_position() -> None:
         STYLE.label.font_family, plan.title.font_size_pt
     ).measure_markup_mm(plan.title.markup).height_mm
     assert plan.title.y_mm + title_height <= PAGE.height_mm - 2.0
+
+
+def test_detail_heading_and_metadata_footer_fit_outside_map_frame() -> None:
+    definition = ChartDefinition(
+        id="detail-virgo",
+        center_ra_deg=187.7,
+        center_dec_deg=12.4,
+        width_deg=13.0,
+        height_deg=8.5,
+    )
+    transform = PageTransform(definition, PAGE, scale_mm_per_degree=20.0)
+    presentation = ChartPresentation(
+        edition_name="Standard",
+        edition_code="S",
+        chart_index=None,
+        internal_chart_id="SD01",
+        page_heading="SD01 · Virgo Cluster",
+        page_footer="Standard · SD01 · 20 mm/° · 13° × 8.5° · Main chart S050",
+        page_footer_target="S050",
+    )
+    plan = build_furniture_plan(transform, definition, STYLE, presentation)
+    assert plan.page_heading is not None
+    assert plan.page_footer is not None
+    assert plan.page_footer.target_chart_code == "S050"
+    heading_metrics = TextMeasurer(STYLE.label.font_family, plan.page_heading.font_size_pt)
+    footer_metrics = TextMeasurer(STYLE.label.font_family, plan.page_footer.font_size_pt)
+    heading_height = heading_metrics.measure_mm(plan.page_heading.text).height_mm
+    footer_height = footer_metrics.measure_mm(plan.page_footer.text).height_mm
+    rect = transform.chart_rect
+    assert plan.page_heading.y_mm + heading_height < rect.top_mm
+    assert rect.bottom_mm < plan.page_footer.y_mm
+    assert plan.page_footer.y_mm + footer_height <= PAGE.height_mm - PAGE.margin_mm
 
 
 @pytest.mark.parametrize(

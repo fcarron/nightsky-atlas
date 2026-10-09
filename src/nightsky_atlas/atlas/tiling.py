@@ -2,11 +2,10 @@
 
 Two strategies share one coverage validator:
 
-- **Declination-ring tiling** (Standard v0.1, ``AGENTS.md`` sections 11 and M14):
-  explicit ring-centre declinations are filled with charts spaced in right
-  ascension, alternate rings are staggered by half a chart, and optional polar
-  caps close the sky.  Per-ring chart counts are start values that the tiler
-  raises until each ring covers its declination slice at every right ascension.
+- **Declination-ring tiling**: explicit ring-centre declinations are filled
+  with charts spaced in right ascension, optionally staggered, and optional
+  polar caps close the sky. Per-ring chart counts can be adjusted to cover each
+  ring's declination slice or held fixed for a globally validated layout.
 - **Legacy declination-band tiling**: bands of constant height step from pole to
   pole with a fixed overlap.
 
@@ -66,6 +65,7 @@ class TilingSpec:
     vertical_overlap_deg: float = 2.0
     horizontal_overlap_min_deg: float = 1.5
     stagger_ra_centers: bool = False
+    ra_offset_deg: float = 0.0
     auto_adjust_counts: bool = True
 
     def __post_init__(self) -> None:
@@ -91,6 +91,8 @@ class TilingSpec:
             raise ValueError("chart_counts entries must be positive")
         if self.polar_caps and not self.declination_centers:
             raise ValueError("polar_caps requires declination_centers")
+        if not math.isfinite(self.ra_offset_deg) or not 0.0 <= self.ra_offset_deg < 360.0:
+            raise ValueError("ra_offset_deg must be finite and lie in [0, 360)")
 
     @property
     def is_ring_mode(self) -> bool:
@@ -114,6 +116,7 @@ class TilingSpec:
             vertical_overlap_deg=config.target_overlap.vertical_deg,
             horizontal_overlap_min_deg=config.target_overlap.horizontal_min_deg,
             stagger_ra_centers=config.stagger_ra_centers,
+            ra_offset_deg=config.ra_offset_deg,
             auto_adjust_counts=config.auto_adjust_counts,
         )
 
@@ -274,7 +277,7 @@ def _charts_in_ring(
     return [
         ChartDefinition(
             id=f"ring-{center_dec_deg:+.0f}-{index}",
-            center_ra_deg=((index + phase) * 360.0 / count) % 360.0,
+            center_ra_deg=(spec.ra_offset_deg + (index + phase) * 360.0 / count) % 360.0,
             center_dec_deg=center_dec_deg,
             width_deg=spec.width_deg,
             height_deg=spec.height_deg,
@@ -289,7 +292,8 @@ def _tile_rings(atlas_id: str, spec: TilingSpec) -> list[ChartDefinition]:
     The chart order is the reading order of the atlas: the north polar cap
     first, then each declination ring from the north down to the south, and the
     south polar cap last.  Within a ring the charts run in increasing right
-    ascension (0h -> 24h); the per-ring RA stagger is a half chart and never
+    ascension; the global RA offset and per-ring stagger rotate the aligned
+    grids without changing their spacing. The stagger is a half chart and never
     breaks that order.  Phases are tied to the *ascending* ring index so the
     stagger pattern is independent of the reading direction.
     """
@@ -300,7 +304,7 @@ def _tile_rings(atlas_id: str, spec: TilingSpec) -> list[ChartDefinition]:
         charts.append(
             ChartDefinition(
                 id="ring-north-cap",
-                center_ra_deg=0.0,
+                center_ra_deg=spec.ra_offset_deg,
                 center_dec_deg=90.0,
                 width_deg=spec.width_deg,
                 height_deg=spec.height_deg,
@@ -314,7 +318,7 @@ def _tile_rings(atlas_id: str, spec: TilingSpec) -> list[ChartDefinition]:
         charts.append(
             ChartDefinition(
                 id="ring-south-cap",
-                center_ra_deg=0.0,
+                center_ra_deg=spec.ra_offset_deg,
                 center_dec_deg=-90.0,
                 width_deg=spec.width_deg,
                 height_deg=spec.height_deg,
@@ -349,7 +353,7 @@ def _charts_in_band(atlas_id: str, spec: TilingSpec, center_dec: float) -> list[
     return [
         ChartDefinition(
             id=f"{atlas_id}-T{index}",
-            center_ra_deg=index * 360.0 / count,
+            center_ra_deg=(spec.ra_offset_deg + index * 360.0 / count) % 360.0,
             center_dec_deg=center_dec,
             width_deg=spec.width_deg,
             height_deg=spec.height_deg,

@@ -98,18 +98,41 @@ def test_tile_sky_is_deterministic_and_unique() -> None:
     assert first[0].id == "standard-001"
 
 
-def test_ring_tiling_has_polar_caps_and_staggering() -> None:
+def test_ring_tiling_has_polar_caps_and_aligned_ra_centres() -> None:
     charts = tile_sky("standard", standard_spec())
-    assert len(charts) == 118
+    assert len(charts) == 129
     assert charts[0].center_dec_deg == pytest.approx(90.0)
     assert charts[-1].center_dec_deg == pytest.approx(-90.0)
     rings = {chart.center_dec_deg for chart in charts}
-    assert -72.0 in rings and 72.0 in rings
-    # Alternate rings are offset by half a chart spacing.
-    first = [chart for chart in charts if chart.center_dec_deg == -72.0]
-    second = [chart for chart in charts if chart.center_dec_deg == -56.0]
-    assert first[0].center_ra_deg == pytest.approx(0.0)
-    assert second[0].center_ra_deg == pytest.approx(0.5 * 360.0 / len(second))
+    assert set(range(-75, 76, 15)) <= rings
+    by_dec = {
+        dec: [chart.center_ra_deg for chart in charts if chart.center_dec_deg == dec]
+        for dec in rings
+        if abs(dec) < 89.0
+    }
+    assert by_dec[-75.0] == pytest.approx(by_dec[75.0])
+    assert by_dec[-45.0] == pytest.approx(by_dec[45.0])
+    assert by_dec[-15.0] == pytest.approx(by_dec[15.0])
+
+
+def test_ra_offset_rotates_every_ring_and_polar_cap_without_changing_coverage() -> None:
+    atlas = load_atlas_config(ATLAS)
+    assert atlas.tiling is not None
+    base = TilingSpec.from_config(atlas.tiling.model_copy(update={"ra_offset_deg": 0.0}))
+    shifted = TilingSpec.from_config(atlas.tiling)
+    base_charts = tile_sky("standard", base)
+    shifted_charts = tile_sky("standard", shifted)
+
+    assert len(shifted_charts) == len(base_charts) == 129
+    assert [chart.center_dec_deg for chart in shifted_charts] == [
+        chart.center_dec_deg for chart in base_charts
+    ]
+    for original, rotated in zip(base_charts, shifted_charts, strict=True):
+        assert rotated.center_ra_deg == pytest.approx(
+            (original.center_ra_deg + 12.0) % 360.0
+        )
+    report = coverage_report(shifted_charts, step_deg=1.0)
+    assert report.covers_all, report.gaps[:5]
 
 
 def test_atlas_order_runs_north_to_south_and_ra_ascending() -> None:
@@ -138,16 +161,19 @@ def test_frozen_ring_counts_match_declination_rings() -> None:
     per_ring: dict[float, int] = {}
     for chart in charts:
         per_ring[chart.center_dec_deg] = per_ring.get(chart.center_dec_deg, 0) + 1
-    assert per_ring[72.0] == 10
-    assert per_ring[56.0] == 9
-    assert per_ring[40.0] == 12
-    assert per_ring[24.0] == 13
-    assert per_ring[8.0] == 14
-    assert per_ring[-8.0] == 14
-    assert per_ring[-24.0] == 13
-    assert per_ring[-40.0] == 12
-    assert per_ring[-56.0] == 9
-    assert per_ring[-72.0] == 10
+    assert [per_ring[dec] for dec in (75, 60, 45, 30, 15, 0, -15, -30, -45, -60, -75)] == [
+        5,
+        10,
+        11,
+        15,
+        15,
+        15,
+        15,
+        15,
+        11,
+        10,
+        5,
+    ]
     assert per_ring[90.0] == 1
     assert per_ring[-90.0] == 1
 
@@ -220,10 +246,10 @@ def test_cygnus_chart_gets_two_meaningful_southern_handoffs() -> None:
     charts = {chart.id: chart for chart in with_neighbours(tile_sky("standard", standard_spec()))}
     south = [
         neighbour
-        for direction, neighbour in charts["standard-031"].neighbours
+        for direction, neighbour in charts["standard-026"].neighbours
         if direction == "S"
     ]
-    assert south == ["standard-045", "standard-044"]
+    assert south == ["standard-041", "standard-040"]
 
 
 def test_wide_edge_can_select_three_ordered_handoffs() -> None:

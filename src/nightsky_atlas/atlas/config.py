@@ -153,7 +153,15 @@ class DetailChartConfig(_StrictModel):
     width_deg: PositiveFloat
     height_deg: PositiveFloat
     mm_per_degree: PositiveFloat
-    star_profile: Literal["pocket", "standard", "deep", "deep_detail", "deep_detail_40"] = "deep"
+    star_profile: Literal[
+        "pocket",
+        "standard",
+        "deep",
+        "deep_detail",
+        "deep_detail_40",
+        "eyepiece",
+        "eyepiece_deep",
+    ] = "deep"
     fallback_parent_galaxy_labels: bool = False
     fallback_parent_min_magnitude: float | None = None
     fallback_parent_min_nearby_galaxies: int = Field(default=0, ge=0)
@@ -178,6 +186,13 @@ class DetailChartConfig(_StrictModel):
     def _declination_range(cls, value: float) -> float:
         if not -90.0 <= value <= 90.0:
             raise ValueError("detail-chart declination must lie in [-90, 90]")
+        return value
+
+    @field_validator("mm_per_degree")
+    @classmethod
+    def _supported_detail_scale(cls, value: float) -> float:
+        if value not in {20.0, 40.0, 80.0}:
+            raise ValueError("detail-chart scale must be 20, 40 or 80 mm/°")
         return value
 
     def to_definition(self, *, atlas_id: str) -> ChartDefinition:
@@ -212,7 +227,7 @@ class TilingConfig(_StrictModel):
 
     - **declination-ring mode** (``declination_centers`` non-empty): explicit
       ring centre declinations, optionally with per-ring start counts, polar
-      caps and right-ascension staggering.  This is the Standard v0.1 layout.
+      caps and right-ascension staggering.
     - **legacy band mode**: a single ``overlap_deg`` and a fixed declination
       step derived from the chart height.  Kept for the original tiling and
       small test atlases.
@@ -236,6 +251,7 @@ class TilingConfig(_StrictModel):
     polar_caps: bool = False
     target_overlap: OverlapTargetConfig = Field(default_factory=OverlapTargetConfig)
     stagger_ra_centers: bool = False
+    ra_offset_deg: float = Field(default=0.0, ge=0.0, lt=360.0)
     auto_adjust_counts: bool = True
 
     @model_validator(mode="after")

@@ -33,7 +33,7 @@ from nightsky_atlas.atlas.config import (
     load_atlas_config,
     load_style_config,
 )
-from nightsky_atlas.atlas.directory import build_chart_directory
+from nightsky_atlas.atlas.directory import build_chart_directory, build_detail_chart_directory
 from nightsky_atlas.atlas.index import build_atlas_index
 from nightsky_atlas.atlas.observing_config import DEFAULT_CONFIG_PATH as OBSERVING_CONFIG_PATH
 from nightsky_atlas.atlas.overview import OverviewMap, build_overview, hemisphere_for
@@ -82,9 +82,7 @@ from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import (
     ChartPresentation,
-    constellation_context,
     presentation_from_edition,
-    scene_constellation_area_fractions,
 )
 from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.models import Label
@@ -98,7 +96,10 @@ from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import ValidationResult, validate_layout
 from nightsky_atlas.render.atlas_index import draw_atlas_index_pages
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
-from nightsky_atlas.render.chart_directory import draw_chart_directory_pages
+from nightsky_atlas.render.chart_directory import (
+    draw_chart_directory_pages,
+    draw_detail_chart_directory_pages,
+)
 from nightsky_atlas.render.detail_markers import DetailMapMarker, build_detail_marker
 from nightsky_atlas.render.front_matter import (
     draw_credits_page,
@@ -133,6 +134,31 @@ def _style_with_star_profile(base_style: StyleConfig, star_profile: StyleConfig)
                 update={"star_labels": star_profile.label.star_labels}
             ),
         }
+    )
+
+
+def _detail_presentation(
+    detail: DetailChartConfig,
+    *,
+    edition: EditionConfig,
+    main_charts: tuple[ChartDefinition, ...],
+    stellar_limit_magnitude: float,
+) -> ChartPresentation:
+    parents = {chart.id: chart for chart in main_charts}
+    parent = parents[detail.parent_chart_id]
+    parent_code = presentation_from_edition(parent, edition).chart_code
+    field = f"{detail.width_deg:g}° × {detail.height_deg:g}°"
+    return ChartPresentation(
+        edition_name=edition.name,
+        edition_code=edition.code,
+        chart_index=None,
+        internal_chart_id=detail.code,
+        page_heading=f"{detail.code} · {detail.name}",
+        page_footer=(
+            f"{edition.name} · {detail.code} · {detail.mm_per_degree:g} mm/° · "
+            f"stars to {stellar_limit_magnitude:g} · {field} · Main chart {parent_code}"
+        ),
+        page_footer_target=parent_code,
     )
 
 
@@ -940,6 +966,10 @@ def _build_atlas_impl(
             profile_atlas.stellar_limit_magnitude,
             _style_with_star_profile(style, profile_style),
         )
+    main_faint_star_store = (
+        faint_star_store if atlas.id in {"eyepiece", "eyepieceDeep"} else None
+    )
+    main_faint_star_limit = faint_star_limit if main_faint_star_store is not None else None
     if publication:
         if not optimize:
             raise ValueError("publication requires deterministic layout optimization")
@@ -1045,18 +1075,24 @@ def _build_atlas_impl(
             continue
         definition = detail.to_definition(atlas_id=atlas.id)
         stellar_limit_magnitude, detail_style = detail_star_profiles[detail.star_profile]
+        detail_faint_limit = (
+            min(faint_star_limit, stellar_limit_magnitude)
+            if faint_star_limit is not None
+            else None
+        )
         detail_context = build_chart_context(
             atlas_path=atlas_path,
             style_path=style_path,
             definition=definition,
             star_store=star_store,
             faint_star_store=faint_star_store,
-            faint_star_limit=faint_star_limit,
+            faint_star_limit=detail_faint_limit,
             stars_csv=stars_csv,
             double_stars_path=double_stars_path,
             star_systems=star_systems,
             magnitude_limit=stellar_limit_magnitude,
             scale_mm_per_degree=detail.mm_per_degree,
+            allow_faint_star_supplement=True,
             progress=progress,
             inputs=inputs,
         )
@@ -1076,14 +1112,11 @@ def _build_atlas_impl(
         if detail_overrides is not None:
             detail_labels = apply_overrides(detail_labels, detail_overrides)
             applied_chart_ids.add(definition.id)
-        detail_presentation = ChartPresentation(
-            edition_name=f"Detail · {detail.name} · Stars to {stellar_limit_magnitude:.1f}",
-            edition_code="SD",
-            chart_index=None,
-            internal_chart_id=detail.code,
-            constellation_context=constellation_context(
-                scene_constellation_area_fractions(detail_context.scene)
-            ),
+        detail_presentation = _detail_presentation(
+            detail,
+            edition=edition,
+            main_charts=all_charts,
+            stellar_limit_magnitude=stellar_limit_magnitude,
         )
         detail_furniture = furniture_obstacles(
             detail_context.transform,
@@ -1184,15 +1217,26 @@ def _build_atlas_impl(
             )
 
     chart_directory = ()
+    detail_chart_directory = ()
     chart_directory_pages = 0
     if write_front_matter:
         chart_directory = build_chart_directory(charts, edition)
+        detail_chart_directory = build_detail_chart_directory(detail_charts, all_charts, edition)
         if atlas.chart_directory_position == "front":
             with progress.step("chart directory", detail=True):
                 chart_directory_pages = draw_chart_directory_pages(
                     context,
                     surface,
                     chart_directory,
+                    page,
+                    style,
+                    edition,
+                    pdf_navigation,
+                )
+                chart_directory_pages += draw_detail_chart_directory_pages(
+                    context,
+                    surface,
+                    detail_chart_directory,
                     page,
                     style,
                     edition,
@@ -1270,8 +1314,8 @@ def _build_atlas_impl(
         atlas_path=atlas_path,
         style_path=style_path,
         star_store=star_store,
-        faint_star_store=faint_star_store,
-        faint_star_limit=faint_star_limit,
+        faint_star_store=main_faint_star_store,
+        faint_star_limit=main_faint_star_limit,
         stars_csv=stars_csv,
         double_stars_path=double_stars_path,
         inputs=inputs,
@@ -1394,12 +1438,17 @@ def _build_atlas_impl(
                 definition=definition,
                 star_store=star_store,
                 faint_star_store=faint_star_store,
-                faint_star_limit=faint_star_limit,
+                faint_star_limit=(
+                    min(faint_star_limit, stellar_limit_magnitude)
+                    if faint_star_limit is not None
+                    else None
+                ),
                 stars_csv=stars_csv,
                 double_stars_path=double_stars_path,
                 star_systems=star_systems,
                 magnitude_limit=stellar_limit_magnitude,
                 scale_mm_per_degree=detail.mm_per_degree,
+                allow_faint_star_supplement=True,
                 progress=progress,
                 inputs=inputs,
             )
@@ -1415,16 +1464,11 @@ def _build_atlas_impl(
             if chart_overrides is not None:
                 labels = apply_overrides(labels, chart_overrides)
                 applied_chart_ids.add(definition.id)
-            presentation = ChartPresentation(
-                edition_name=(
-                    f"Detail · {detail.name} · Stars to {stellar_limit_magnitude:.1f}"
-                ),
-                edition_code="SD",
-                chart_index=None,
-                internal_chart_id=detail.code,
-                constellation_context=constellation_context(
-                    scene_constellation_area_fractions(chart_context.scene)
-                ),
+            presentation = _detail_presentation(
+                detail,
+                edition=edition,
+                main_charts=all_charts,
+                stellar_limit_magnitude=stellar_limit_magnitude,
             )
             furniture = furniture_obstacles(
                 chart_context.transform,
@@ -1462,16 +1506,11 @@ def _build_atlas_impl(
             cost_before = prepared.cost_before
             cost_after = prepared.cost_after
             validation = prepared.validation
-            presentation = ChartPresentation(
-                edition_name=(
-                    f"Detail · {detail.name} · Stars to {stellar_limit_magnitude:.1f}"
-                ),
-                edition_code="SD",
-                chart_index=None,
-                internal_chart_id=detail.code,
-                constellation_context=constellation_context(
-                    scene_constellation_area_fractions(chart_context.scene)
-                ),
+            presentation = _detail_presentation(
+                detail,
+                edition=edition,
+                main_charts=all_charts,
+                stellar_limit_magnitude=stellar_limit_magnitude,
             )
         page_dir = outroot / "charts" / definition.id
         render_chart(
@@ -1566,6 +1605,15 @@ def _build_atlas_impl(
                 edition,
                 pdf_navigation,
             )
+            chart_directory_pages += draw_detail_chart_directory_pages(
+                context,
+                surface,
+                detail_chart_directory,
+                page,
+                style,
+                edition,
+                pdf_navigation,
+            )
 
     with progress.step("finish combined PDF"):
         surface.finish()
@@ -1629,12 +1677,21 @@ def _build_atlas_impl(
                 "code": detail.code,
                 "name": detail.name,
                 "parent_chart_id": detail.parent_chart_id,
+                "parent_chart_code": presentation_from_edition(
+                    next(chart for chart in all_charts if chart.id == detail.parent_chart_id),
+                    edition,
+                ).chart_code,
                 "center_ra_deg": detail.center_ra_deg,
                 "center_dec_deg": detail.center_dec_deg,
                 "width_deg": detail.width_deg,
                 "height_deg": detail.height_deg,
                 "mm_per_degree": detail.mm_per_degree,
                 "star_profile": detail.star_profile,
+                "faint_star_limit": (
+                    min(faint_star_limit, detail_star_profiles[detail.star_profile][0])
+                    if faint_star_store is not None and faint_star_limit is not None
+                    else None
+                ),
                 "fallback_parent_galaxy_labels": detail.fallback_parent_galaxy_labels,
                 "fallback_parent_min_magnitude": detail.fallback_parent_min_magnitude,
                 "fallback_parent_min_nearby_galaxies": detail.fallback_parent_min_nearby_galaxies,
@@ -1649,6 +1706,7 @@ def _build_atlas_impl(
         "chart_directory": {
             "page_count": chart_directory_pages,
             "entries": [entry.to_dict() for entry in chart_directory],
+            "detail_entries": [entry.to_dict() for entry in detail_chart_directory],
         },
         "total_hard_issues": sum(page_result.hard_issues for page_result in results),
         "overview_pages": overview_page_info,

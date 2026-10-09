@@ -7,14 +7,14 @@ mm_per_degree: 5.0
 stellar_limit_magnitude: 7.5
 detail_charts:
   - id: pocket-detail-virgo-core
-    code: PD021A
+    code: PD01
     name: Virgo core
-    parent_chart_id: pocket-021
+    parent_chart_id: pocket-020
     center_ra_deg: 186.75
     center_dec_deg: 13.0
-    width_deg: 27.0
-    height_deg: 18.5
-    mm_per_degree: 10.0
+    width_deg: 13.0
+    height_deg: 8.5
+    mm_per_degree: 20.0
     star_profile: standard
     fallback_parent_galaxy_labels: true
     parent_marker_label: ""
