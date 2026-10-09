@@ -55,8 +55,8 @@ def test_equatorial_pocket_charts_appear_on_both_symmetric_overviews() -> None:
     equatorial_ids = {chart.id for chart in charts if chart.center_dec_deg == 0.0}
     north_ids = {cell.chart_id for cell in north.cells}
     south_ids = {cell.chart_id for cell in south.cells}
-    assert len(equatorial_ids) == 12
-    assert north.chart_count == south.chart_count == 30
+    assert len(equatorial_ids) == 9
+    assert north.chart_count == south.chart_count == 24
     assert north_ids & south_ids == equatorial_ids
     assert north_ids | south_ids == {chart.id for chart in charts}
     for overview in (north, south):

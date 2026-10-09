@@ -18,6 +18,8 @@ from nightsky_atlas.atlas.tiling import (
 from nightsky_atlas.build.atlas import _style_with_star_profile
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
+from nightsky_atlas.projection.base import ProjectionError
+from nightsky_atlas.projection.stereographic import StereographicProjection
 from nightsky_atlas.render.detail_markers import build_detail_marker
 from nightsky_atlas.render.symbols import StarSizeModel
 
@@ -81,12 +83,77 @@ def test_pocket_labels_named_stars_through_magnitude_5_5() -> None:
 def test_pocket_symmetric_navigation_tiling() -> None:
     pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
     spec = TilingSpec.from_config(pocket.tiling)
-    assert spec.declination_centers == (-67.0, -33.0, 0.0, 33.0, 67.0)
-    assert resolve_ring_counts(spec) == (5, 12, 12, 12, 5)
+    assert spec.declination_centers == (-62.0, -33.0, 0.0, 33.0, 62.0)
+    assert spec.coverage_step_deg == 0.25
+    assert resolve_ring_counts(spec) == (5, 9, 9, 9, 5)
     charts = chart_definitions(pocket)
-    assert len(charts) == 48
-    assert coverage_report(charts, step_deg=0.5).covers_all
-    assert neighbour_overlap_report(charts, step_deg=1.0).is_complete
+    assert len(charts) == 39
+    assert coverage_report(charts, step_deg=0.25).covers_all
+    assert neighbour_overlap_report(charts, step_deg=0.5).is_complete
+    by_dec: dict[float, list[float]] = {}
+    for chart in charts:
+        by_dec.setdefault(chart.center_dec_deg, []).append(chart.center_ra_deg)
+    for dec in (-62.0, -33.0, 0.0, 33.0, 62.0):
+        count = 5 if abs(dec) == 62.0 else 9
+        expected = [index * 360.0 / count for index in range(count)]
+        assert by_dec[dec] == pytest.approx(expected)
+    assert by_dec[-62.0] == pytest.approx(by_dec[62.0])
+    assert by_dec[-33.0] == pytest.approx(by_dec[33.0])
+    detail = pocket.detail_charts[0]
+    assert detail.code == "PD021A"
+    assert detail.parent_chart_id == "pocket-021"
+
+
+def test_pocket_39_tiling_covers_transition_lines_and_chart_corners() -> None:
+    charts = chart_definitions(load_atlas_config(ROOT / "atlas" / "pocket.yaml"))
+
+    def covering_count(ra_deg: float, dec_deg: float) -> int:
+        covered = 0
+        for chart in charts:
+            try:
+                point = StereographicProjection(chart.center_ra_deg, chart.center_dec_deg).project(
+                    ra_deg, dec_deg
+                )
+            except ProjectionError:
+                continue
+            covered += (
+                abs(point.xi_deg) <= chart.width_deg / 2.0 + 1e-8
+                and abs(point.eta_deg) <= chart.height_deg / 2.0 + 1e-8
+            )
+        return covered
+
+    critical_decs = (
+        -50.005,
+        -50.0,
+        -49.995,
+        -72.16,
+        -72.15,
+        -72.14,
+        -16.505,
+        -16.5,
+        -16.495,
+        16.495,
+        16.5,
+        16.505,
+        72.14,
+        72.15,
+        72.16,
+        49.995,
+        50.0,
+        50.005,
+    )
+    for dec in critical_decs:
+        for ra in range(0, 360, 2):
+            assert covering_count(float(ra), dec) >= 1, (ra, dec)
+        for ra in (0.0, 0.001, 359.999, 140.2, 219.8):
+            assert covering_count(ra, dec) >= 1, (ra, dec)
+
+    for chart in charts:
+        projection = StereographicProjection(chart.center_ra_deg, chart.center_dec_deg)
+        for xi in (-chart.width_deg / 2, chart.width_deg / 2):
+            for eta in (-chart.height_deg / 2, chart.height_deg / 2):
+                ra, dec = projection.inverse(xi, eta)
+                assert covering_count(ra, dec) >= 1, (chart.id, xi, eta, ra, dec)
 
 
 def test_pocket_constellation_boundaries_are_distinct_from_grid_and_figures() -> None:
