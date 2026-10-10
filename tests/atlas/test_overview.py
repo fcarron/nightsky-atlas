@@ -93,10 +93,15 @@ def test_standard_overviews_show_full_equatorial_chart_row_on_both_hemispheres()
             cell for cell in overview.cells if cell.chart_id in equatorial_ids
         ]
         assert len(equatorial_cells) == len(equatorial)
-        ra_twelve_cell = next(cell for cell in equatorial_cells if cell.chart_code == "S065")
-        assert ra_twelve_cell.label_point is not None
-        assert ra_twelve_cell.label_point.xi_deg == pytest.approx(0.0, abs=1e-6)
-        assert ra_twelve_cell.label_point.eta_deg == pytest.approx(-90.0, abs=1e-6)
+        central_meridian_chart = next(
+            chart for chart in equatorial if chart.center_ra_deg == pytest.approx(180.0)
+        )
+        central_meridian_cell = next(
+            cell for cell in equatorial_cells if cell.chart_id == central_meridian_chart.id
+        )
+        assert central_meridian_cell.label_point is not None
+        assert central_meridian_cell.label_point.xi_deg == pytest.approx(0.0, abs=1e-6)
+        assert central_meridian_cell.label_point.eta_deg == pytest.approx(-90.0, abs=1e-6)
         for cell in equatorial_cells:
             radii = [math.hypot(point.xi_deg, point.eta_deg) for point in cell.polygon]
             assert min(radii) < 90.0

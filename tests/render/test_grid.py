@@ -218,7 +218,7 @@ def test_grid_labels_cover_both_kinds() -> None:
             assert label.text.endswith("\u00b0")
 
 
-@pytest.mark.parametrize("chart_number", (45, 50, 55, 60, 65, 70, 75, 80, 85))
+@pytest.mark.parametrize("chart_number", (56, 51, 46, 71, 66, 61, 86, 81, 76))
 def test_standard_whole_hour_charts_keep_ra_labels_clear_of_furniture(
     chart_number: int,
 ) -> None:

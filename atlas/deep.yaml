@@ -11,7 +11,7 @@ detail_charts:
   - id: detail-deep-ngc7331-stephans-quintet
     code: DD01
     name: NGC 7331 · Stephan's Quintet
-    parent_chart_id: deep-116
+    parent_chart_id: deep-093
     parent_marker_label: ""
     center_ra_deg: 339.16
     center_dec_deg: 34.2
@@ -25,7 +25,7 @@ detail_charts:
   - id: detail-deep-pleiades
     code: DD02
     name: Pleiades · M45
-    parent_chart_id: deep-147
+    parent_chart_id: deep-167
     center_ra_deg: 56.75
     center_dec_deg: 24.35
     width_deg: 6.5
@@ -35,7 +35,7 @@ detail_charts:
   - id: detail-deep-coma-core
     code: DD03
     name: Coma core
-    parent_chart_id: deep-131
+    parent_chart_id: deep-128
     center_ra_deg: 194.97
     center_dec_deg: 27.97
     width_deg: 3.25
@@ -48,7 +48,7 @@ detail_charts:
   - id: detail-deep-virgo-core
     code: DD04
     name: Markarian chain
-    parent_chart_id: deep-188
+    parent_chart_id: deep-186
     center_ra_deg: 186.75
     center_dec_deg: 13.0
     width_deg: 3.25
@@ -61,7 +61,7 @@ detail_charts:
   - id: detail-deep-orion-m42
     code: DD05
     name: M42 · Orion Nebula
-    parent_chart_id: deep-269
+    parent_chart_id: deep-285
     center_ra_deg: 83.82
     center_dec_deg: -5.25
     width_deg: 3.25
@@ -71,7 +71,7 @@ detail_charts:
   - id: detail-deep-fornax-core
     code: DD06
     name: Fornax core
-    parent_chart_id: deep-381
+    parent_chart_id: deep-398
     center_ra_deg: 54.62
     center_dec_deg: -35.45
     width_deg: 6.5
@@ -84,7 +84,7 @@ detail_charts:
   - id: detail-deep-30-doradus
     code: DD07
     name: 30 Doradus
-    parent_chart_id: deep-466
+    parent_chart_id: deep-473
     parent_marker_label: ""
     center_ra_deg: 84.68
     center_dec_deg: -69.1
@@ -95,7 +95,7 @@ detail_charts:
   - id: detail-deep-lmc-central-bar
     code: DD08
     name: LMC bar
-    parent_chart_id: deep-465
+    parent_chart_id: deep-474
     parent_marker_label: ""
     center_ra_deg: 80.5
     center_dec_deg: -69.0

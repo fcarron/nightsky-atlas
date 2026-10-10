@@ -96,13 +96,13 @@ def test_pocket_symmetric_navigation_tiling() -> None:
         by_dec.setdefault(chart.center_dec_deg, []).append(chart.center_ra_deg)
     for dec in (-62.0, -33.0, 0.0, 33.0, 62.0):
         count = 5 if abs(dec) == 62.0 else 9
-        expected = [12.0 + index * 360.0 / count for index in range(count)]
+        expected = [(12.0 - index * 360.0 / count) % 360.0 for index in range(count)]
         assert by_dec[dec] == pytest.approx(expected)
     assert by_dec[-62.0] == pytest.approx(by_dec[62.0])
     assert by_dec[-33.0] == pytest.approx(by_dec[33.0])
     detail = pocket.detail_charts[0]
     assert detail.code == "PD01"
-    assert detail.parent_chart_id == "pocket-020"
+    assert detail.parent_chart_id == "pocket-021"
 
 
 def test_pocket_39_tiling_covers_transition_lines_and_chart_corners() -> None:
@@ -244,18 +244,18 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
 
     charts = {chart.id: chart for chart in chart_definitions(standard)}
     assert {detail.code: detail.parent_chart_id for detail in details} == {
-        "SD01": "standard-050",
-        "SD02": "standard-050",
-        "SD03": "standard-065",
-        "SD04": "standard-090",
-        "SD05": "standard-099",
-        "SD06": "standard-026",
-        "SD07": "standard-061",
-        "SD08": "standard-008",
-        "SD09": "standard-030",
+        "SD01": "standard-051",
+        "SD02": "standard-051",
+        "SD03": "standard-066",
+        "SD04": "standard-101",
+        "SD05": "standard-092",
+        "SD06": "standard-019",
+        "SD07": "standard-070",
+        "SD08": "standard-016",
+        "SD09": "standard-041",
     }
     assert all(detail.parent_chart_id in charts for detail in details)
-    assert pocket.detail_charts[0].parent_chart_id == "pocket-020"
+    assert pocket.detail_charts[0].parent_chart_id == "pocket-021"
     deep_charts = {chart.id for chart in chart_definitions(deep)}
     assert all(detail.parent_chart_id in deep_charts for detail in deep.detail_charts)
 
@@ -273,6 +273,19 @@ def test_detail_chart_rejects_intermediate_scales() -> None:
             height_deg=3.0,
             mm_per_degree=60.0,
         )
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+def test_detail_chart_parent_covers_its_reference_center(edition: str) -> None:
+    atlas = load_atlas_config(ROOT / "atlas" / f"{edition}.yaml")
+    charts = {chart.id: chart for chart in chart_definitions(atlas)}
+    for detail in atlas.detail_charts:
+        parent = charts[detail.parent_chart_id]
+        point = StereographicProjection(parent.center_ra_deg, parent.center_dec_deg).project(
+            detail.center_ra_deg, detail.center_dec_deg
+        )
+        assert abs(point.xi_deg) <= parent.width_deg / 2.0
+        assert abs(point.eta_deg) <= parent.height_deg / 2.0
 
 
 def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:
@@ -302,7 +315,7 @@ def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:
         by_dec.setdefault(chart.center_dec_deg, []).append(chart.center_ra_deg)
     for dec, count in zip(spec.declination_centers, spec.chart_counts, strict=True):
         assert by_dec[dec] == pytest.approx(
-            [(12.0 + i * 360.0 / count) % 360.0 for i in range(count)]
+            [(12.0 - i * 360.0 / count) % 360.0 for i in range(count)]
         )
     for dec in (15.0, 30.0, 45.0, 60.0, 75.0):
         assert by_dec[-dec] == pytest.approx(by_dec[dec])
@@ -361,7 +374,9 @@ def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
     for chart in charts:
         by_dec.setdefault(chart.center_dec_deg, []).append(chart.center_ra_deg)
     for dec, count in zip(expected_centers, expected_counts, strict=True):
-        assert by_dec[dec] == pytest.approx([index * 360.0 / count for index in range(count)])
+        assert by_dec[dec] == pytest.approx(
+            [(-index * 360.0 / count) % 360.0 for index in range(count)]
+        )
     for dec in expected_centers[11:]:
         assert by_dec[-dec] == pytest.approx(by_dec[dec])
 
@@ -375,14 +390,14 @@ def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
     assert coverage_report(charts, step_deg=0.25).covers_all
     assert neighbour_overlap_report(charts, step_deg=0.25).is_complete
     assert {detail.code: detail.parent_chart_id for detail in deep.detail_charts} == {
-        "DD01": "deep-116",
-        "DD02": "deep-147",
-        "DD03": "deep-131",
-        "DD04": "deep-188",
-        "DD05": "deep-269",
-        "DD06": "deep-381",
-        "DD07": "deep-466",
-        "DD08": "deep-465",
+        "DD01": "deep-093",
+        "DD02": "deep-167",
+        "DD03": "deep-128",
+        "DD04": "deep-186",
+        "DD05": "deep-285",
+        "DD06": "deep-398",
+        "DD07": "deep-473",
+        "DD08": "deep-474",
         "DD09": "deep-477",
     }
     by_id = {chart.id: chart for chart in charts}

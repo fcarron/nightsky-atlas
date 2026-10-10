@@ -84,9 +84,22 @@ details). Its manifest reports 78 hard layout issues; the 0°-phase comparison
 build reported 73. These are draft builds, not publication validations.
 
 Chart IDs remain north-to-south: `standard-001` is the north polar cap, then
-the +75° through 0° rings run in increasing RA; the southern rings follow and
-`standard-129` is the south polar cap. Declared N/S/E/W neighbours are derived
-from actual projected chart edges and must pass the neighbour-overlap test.
+the declination rings proceed from north to south, and `standard-129` is the
+south polar cap. Within each ring, the RA anchor is numbered first and
+subsequent charts proceed westward (decreasing RA), matching the printed
+north-up, east-left chart orientation. Thus a chart's west neighbour is
+normally the next number, wrapping at the RA seam. Declared N/S/E/W neighbours
+are derived from actual projected chart edges and must pass the neighbour-
+overlap test.
+
+The numbering change only permutes chart IDs within each ring; centres, fields,
+ring counts, offsets and projected footprints are unchanged. For a ring of
+`n` charts, the anchor remains first, followed by the other centres in
+decreasing RA. This convention is shared by Pocket, Standard and Deep. Example
+physical-chart mappings from the former ordering are Pocket `P03 → P06`,
+Standard `S026 → S019`, and Deep `D116 → D093`. Detail charts keep their stable
+PD/SD/DD codes; their parent IDs refer to the same physical main-chart fields
+under the new numbering.
 
 ## Build
 

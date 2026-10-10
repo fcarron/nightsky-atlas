@@ -53,7 +53,7 @@ detail_charts:
   - id: detail-virgo
     code: SD01
     name: Virgo Cluster
-    parent_chart_id: standard-050
+    parent_chart_id: standard-051
     center_ra_deg: 187.7059
     center_dec_deg: 12.3911
     width_deg: 13.0
@@ -63,7 +63,7 @@ detail_charts:
   - id: detail-virgo-core-label-fallback
     code: SD02
     name: Virgo core
-    parent_chart_id: standard-050
+    parent_chart_id: standard-051
     center_ra_deg: 186.75
     center_dec_deg: 13.0
     width_deg: 3.25
@@ -74,7 +74,7 @@ detail_charts:
   - id: detail-virgo-south-label-fallback
     code: SD03
     name: South Virgo
-    parent_chart_id: standard-065
+    parent_chart_id: standard-066
     center_ra_deg: 185.5
     center_dec_deg: 5.0
     width_deg: 6.5
@@ -85,7 +85,7 @@ detail_charts:
   - id: detail-fornax-core-label-fallback
     code: SD04
     name: Fornax core
-    parent_chart_id: standard-090
+    parent_chart_id: standard-101
     center_ra_deg: 54.62
     center_dec_deg: -35.45
     width_deg: 6.5
@@ -96,7 +96,7 @@ detail_charts:
   - id: detail-sagittarius
     code: SD05
     name: Sagittarius clusters · M22 / M28
-    parent_chart_id: standard-099
+    parent_chart_id: standard-092
     center_ra_deg: 280.7
     center_dec_deg: -24.7
     width_deg: 13.0
@@ -106,7 +106,7 @@ detail_charts:
   - id: detail-cygnus
     code: SD06
     name: Cygnus nebula field
-    parent_chart_id: standard-026
+    parent_chart_id: standard-019
     center_ra_deg: 309.5
     center_dec_deg: 40.5
     width_deg: 13.0
@@ -116,7 +116,7 @@ detail_charts:
   - id: detail-orion-m42
     code: SD07
     name: Orion Nebula · M42
-    parent_chart_id: standard-061
+    parent_chart_id: standard-070
     center_ra_deg: 83.822
     center_dec_deg: -5.391
     width_deg: 13.0
@@ -126,7 +126,7 @@ detail_charts:
   - id: detail-double-cluster
     code: SD08
     name: Perseus Double Cluster
-    parent_chart_id: standard-008
+    parent_chart_id: standard-016
     center_ra_deg: 34.75
     center_dec_deg: 57.15
     width_deg: 13.0
@@ -136,7 +136,7 @@ detail_charts:
   - id: detail-pleiades
     code: SD09
     name: Pleiades · M45
-    parent_chart_id: standard-030
+    parent_chart_id: standard-041
     center_ra_deg: 56.75
     center_dec_deg: 24.1167
     width_deg: 13.0

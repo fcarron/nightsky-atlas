@@ -9,7 +9,7 @@ detail_charts:
   - id: pocket-detail-virgo-core
     code: PD01
     name: Virgo core
-    parent_chart_id: pocket-020
+    parent_chart_id: pocket-021
     center_ra_deg: 186.75
     center_dec_deg: 13.0
     width_deg: 13.0

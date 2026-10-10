@@ -135,8 +135,9 @@ def test_ra_offset_rotates_every_ring_and_polar_cap_without_changing_coverage() 
     assert report.covers_all, report.gaps[:5]
 
 
-def test_atlas_order_runs_north_to_south_and_ra_ascending() -> None:
-    charts = tile_sky("standard", standard_spec())
+def test_atlas_order_runs_north_to_south_and_westward_from_each_ra_anchor() -> None:
+    spec = ring_spec(ra_offset_deg=23.0)
+    charts = tile_sky("standard", spec)
     declinations = [chart.center_dec_deg for chart in charts]
     assert declinations[0] == pytest.approx(90.0)
     assert declinations[-1] == pytest.approx(-90.0)
@@ -145,14 +146,49 @@ def test_atlas_order_runs_north_to_south_and_ra_ascending() -> None:
         later <= earlier + 1e-9
         for earlier, later in zip(declinations, declinations[1:], strict=False)
     )
-    # Within each ring charts run in increasing right ascension (0h -> 24h).
+    # Within each ring the RA anchor stays first, then chart numbers proceed
+    # westward (decreasing RA), wrapping continuously through 0h.
     ring_centers = {
         chart.center_dec_deg for chart in charts if abs(chart.center_dec_deg) < 89.0
     }
-    for center in sorted(ring_centers):
+    counts = dict(zip(sorted(spec.declination_centers), resolve_ring_counts(spec), strict=True))
+    for ring_index, center in enumerate(sorted(ring_centers)):
         ring = [chart for chart in charts if chart.center_dec_deg == center]
         ras = [chart.center_ra_deg for chart in ring]
-        assert ras == sorted(ras)
+        count = counts[center]
+        phase = 0.5 if spec.stagger_ra_centers and ring_index % 2 == 1 else 0.0
+        anchor = (spec.ra_offset_deg + phase * 360.0 / count) % 360.0
+        expected = [(anchor - index * 360.0 / count) % 360.0 for index in range(count)]
+        assert ras == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    ("edition", "expected_count"),
+    (("pocket", 39), ("standard", 129), ("deep", 492)),
+)
+def test_main_editions_keep_geometry_counts_and_westward_neighbours(
+    edition: str, expected_count: int
+) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
+    assert atlas.tiling is not None
+    spec = TilingSpec.from_config(atlas.tiling)
+    charts = with_neighbours(tile_sky(edition, spec))
+    assert len(charts) == expected_count
+    assert charts[0].center_dec_deg == pytest.approx(90.0)
+    assert charts[-1].center_dec_deg == pytest.approx(-90.0)
+    assert len({chart.id for chart in charts}) == expected_count
+
+    bands = sorted({chart.center_dec_deg for chart in charts})
+    for dec in bands:
+        if abs(dec) >= 89.0:
+            continue
+        ring = [chart for chart in charts if chart.center_dec_deg == dec]
+        if len(ring) < 2:
+            continue
+        by_id = {chart.id: dict(chart.neighbours) for chart in ring}
+        for index, chart in enumerate(ring):
+            assert by_id[chart.id]["W"] == ring[(index + 1) % len(ring)].id
+            assert by_id[chart.id]["E"] == ring[(index - 1) % len(ring)].id
 
 
 def test_frozen_ring_counts_match_declination_rings() -> None:
@@ -246,10 +282,10 @@ def test_cygnus_chart_gets_two_meaningful_southern_handoffs() -> None:
     charts = {chart.id: chart for chart in with_neighbours(tile_sky("standard", standard_spec()))}
     south = [
         neighbour
-        for direction, neighbour in charts["standard-026"].neighbours
+        for direction, neighbour in charts["standard-019"].neighbours
         if direction == "S"
     ]
-    assert south == ["standard-041", "standard-040"]
+    assert set(south) == {"standard-030", "standard-031"}
 
 
 def test_wide_edge_can_select_three_ordered_handoffs() -> None:

@@ -274,6 +274,7 @@ def _ring_phase(spec: TilingSpec, ring_index: int) -> float:
 def _charts_in_ring(
     spec: TilingSpec, center_dec_deg: float, count: int, phase: float
 ) -> list[ChartDefinition]:
+    indices = (0, *range(count - 1, 0, -1))
     return [
         ChartDefinition(
             id=f"ring-{center_dec_deg:+.0f}-{index}",
@@ -282,7 +283,7 @@ def _charts_in_ring(
             width_deg=spec.width_deg,
             height_deg=spec.height_deg,
         )
-        for index in range(count)
+        for index in indices
     ]
 
 
@@ -291,10 +292,10 @@ def _tile_rings(atlas_id: str, spec: TilingSpec) -> list[ChartDefinition]:
 
     The chart order is the reading order of the atlas: the north polar cap
     first, then each declination ring from the north down to the south, and the
-    south polar cap last.  Within a ring the charts run in increasing right
-    ascension; the global RA offset and per-ring stagger rotate the aligned
-    grids without changing their spacing. The stagger is a half chart and never
-    breaks that order.  Phases are tied to the *ascending* ring index so the
+    south polar cap last. Within each ring, the first chart stays at its RA
+    anchor and subsequent chart numbers proceed westward (decreasing RA). The
+    global RA offset and per-ring stagger rotate the grids without changing
+    their geometry. Phases are tied to the *ascending* ring index so the
     stagger pattern is independent of the reading direction.
     """
     centers = sorted(spec.declination_centers)
