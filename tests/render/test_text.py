@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from io import BytesIO
+
 import cairo
 import pytest
 
@@ -30,7 +32,7 @@ def test_short_numeric_label_ink_is_measured_tighter_than_logical_box() -> None:
     ink = metrics.ink_bounds_mm
 
     assert ink is not None
-    assert ink.width_mm == pytest.approx(metrics.width_mm)
+    assert ink.width_mm <= metrics.width_mm
     assert ink.height_mm < metrics.height_mm
 
 
@@ -47,12 +49,43 @@ def test_larger_font_is_larger() -> None:
 
 
 def test_measurer_matches_render_context() -> None:
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 8, 8)
+    surface = cairo.PDFSurface(BytesIO(), 842.0, 595.0)
     context = cairo.Context(surface)
     width_pt, height_pt = measure_point_size(context, "M31", "DejaVu Sans", 10.0)
     metrics = TextMeasurer("DejaVu Sans", 10.0).measure_mm("M31")
+    surface.finish()
     assert mm_to_pt(metrics.width_mm) == pytest.approx(width_pt)
     assert mm_to_pt(metrics.height_mm) == pytest.approx(height_pt)
+
+
+def test_measurement_uses_pango_logical_units() -> None:
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 8, 8)
+    context = cairo.Context(surface)
+    layout = make_layout(context, "Source Sans 3", 9.25)
+    layout.set_text("Natural word spacing and kerning", -1)
+
+    width_pt, height_pt = measure_point_size(
+        context, "Natural word spacing and kerning", "Source Sans 3", 9.25
+    )
+    pango_width, pango_height = layout.get_size()
+
+    assert width_pt == pytest.approx(pango_width / 1024.0)
+    assert height_pt == pytest.approx(pango_height / 1024.0)
+
+
+def test_text_measurer_matches_pdf_font_metrics() -> None:
+    pdf_data = BytesIO()
+    surface = cairo.PDFSurface(pdf_data, 842.0, 595.0)
+    context = cairo.Context(surface)
+    layout = make_layout(context, "Source Sans 3", 9.2)
+    layout.set_text("Typography: 12345 abcdef", -1)
+    pdf_width, pdf_height = layout.get_size()
+
+    measured = TextMeasurer("Source Sans 3", 9.2).measure_mm("Typography: 12345 abcdef")
+    surface.finish()
+
+    assert mm_to_pt(measured.width_mm) == pytest.approx(pdf_width / 1024.0)
+    assert mm_to_pt(measured.height_mm) == pytest.approx(pdf_height / 1024.0)
 
 
 def test_expected_size_at_72_dpi() -> None:

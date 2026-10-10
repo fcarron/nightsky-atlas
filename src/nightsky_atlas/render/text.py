@@ -131,8 +131,13 @@ def measure_point_size(
     """Measure text and return its logical size in points."""
     layout = make_layout(cr, font_family, font_size_pt, font_weight)
     layout.set_text(text, -1)
-    width, height = layout.get_pixel_size()
-    return float(width), float(height)
+    return _layout_size_pt(layout)
+
+
+def _layout_size_pt(layout: Pango.Layout) -> tuple[float, float]:
+    """Return Pango's unrounded logical extent in points at the configured 72 dpi."""
+    width, height = layout.get_size()
+    return width / Pango.SCALE, height / Pango.SCALE
 
 
 def draw_centered_text(
@@ -147,7 +152,7 @@ def draw_centered_text(
     """Draw text centred on a point using the same metrics as :class:`TextMeasurer`."""
     layout = make_layout(cr, font_family, font_size_pt, font_weight)
     layout.set_text(text, -1)
-    width, height = layout.get_pixel_size()
+    width, height = _layout_size_pt(layout)
     cr.move_to(center_x_pt - width / 2.0, center_y_pt - height / 2.0)
     PangoCairo.show_layout(cr, layout)
 
@@ -202,7 +207,7 @@ def draw_markup_centered_text(
 ) -> None:
     """Draw Pango markup centred on a point."""
     layout = make_markup_layout(cr, markup, font_family, font_size_pt, font_weight)
-    width, height = layout.get_pixel_size()
+    width, height = _layout_size_pt(layout)
     cr.move_to(center_x_pt - width / 2.0, center_y_pt - height / 2.0)
     PangoCairo.show_layout(cr, layout)
 
@@ -238,7 +243,7 @@ def draw_rotated_markup_centered_text(
     narrow for horizontal text once it is enlarged.
     """
     layout = make_markup_layout(cr, markup, font_family, font_size_pt, font_weight)
-    width, height = layout.get_pixel_size()
+    width, height = _layout_size_pt(layout)
     cr.save()
     cr.translate(center_x_pt, center_y_pt)
     cr.rotate(angle_rad)
@@ -266,13 +271,16 @@ class TextMeasurer:
         self.font_weight = font_weight
         self._surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 4, 4)
         self._context = cairo.Context(self._surface)
+        font_options = cairo.FontOptions()
+        font_options.set_hint_metrics(cairo.HINT_METRICS_OFF)
+        font_options.set_hint_style(cairo.HINT_STYLE_NONE)
+        self._context.set_font_options(font_options)
         self._layout = make_layout(self._context, font_family, font_size_pt, font_weight)
 
     def measure_pt(self, text: str) -> tuple[float, float]:
         """Return the logical text extent in points."""
         self._layout.set_text(text, -1)
-        width, height = self._layout.get_pixel_size()
-        return float(width), float(height)
+        return _layout_size_pt(self._layout)
 
     def measure_mm(self, text: str) -> TextMetrics:
         """Return the logical text extent in millimetres."""
@@ -310,7 +318,7 @@ class TextMeasurer:
         use the same layout.
         """
         self._layout.set_markup(markup, -1)
-        width, height = self._layout.get_pixel_size()
+        width, height = _layout_size_pt(self._layout)
         return TextMetrics(width_mm=pt_to_mm(width), height_mm=pt_to_mm(height))
 
 

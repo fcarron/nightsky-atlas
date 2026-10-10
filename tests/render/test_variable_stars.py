@@ -92,4 +92,7 @@ def test_field_guide_explains_and_uses_the_production_variable_ring(monkeypatch)
     )
 
     assert len(rings) == 1
-    assert "Strong variables only · incomplete selection · no current brightness" in labels
+    assert (
+        "Selected variable stars are ringed; selection is incomplete and current brightness "
+        "is not shown."
+    ) in labels

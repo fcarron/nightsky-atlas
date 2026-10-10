@@ -190,9 +190,12 @@ def test_standard_star_scale_and_telrad_sizes_are_exact() -> None:
 @pytest.mark.parametrize(
     ("edition", "layout_fact"),
     (
-        ("pocket", "39 charts in 5 declination rings and 2 polar charts"),
-        ("standard", "129 charts in 11 declination rings and 2 polar charts"),
-        ("deep", "492 charts in 23 declination rings and 2 polar charts"),
+        ("pocket", "39 main charts: 37 arranged in 5 declination rings, plus 2 polar charts"),
+        (
+            "standard",
+            "129 main charts: 127 arranged in 11 declination rings, plus 2 polar charts",
+        ),
+        ("deep", "492 main charts: 490 arranged in 23 declination rings, plus 2 polar charts"),
     ),
 )
 def test_introduction_uses_current_edition_chart_geometry(
@@ -201,20 +204,89 @@ def test_introduction_uses_current_edition_chart_geometry(
     atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     rendered_text: list[str] = []
+    paragraphs: list[str] = []
+    paragraph_widths: list[float] = []
+    paragraph_starts: list[float] = []
+    paragraph_ends: list[float] = []
+    draw_paragraph = front_matter._paragraph
+
+    def record_paragraph(_cr, value, x, y, width, family, **kwargs):
+        paragraphs.append(value)
+        paragraph_widths.append(width)
+        paragraph_starts.append(y)
+        end_y = draw_paragraph(_cr, value, x, y, width, family, **kwargs)
+        paragraph_ends.append(end_y)
+        return end_y
+
     monkeypatch.setattr(
         front_matter,
         "_text",
         lambda _cr, value, *_a, **_k: rendered_text.append(value),
     )
+    monkeypatch.setattr(front_matter, "_paragraph", record_paragraph)
     surface = cairo.RecordingSurface(cairo.CONTENT_COLOR_ALPHA, None)
     draw_introduction(cairo.Context(surface), atlas, style)
     text = " ".join(rendered_text)
 
     assert "NightSky Atlas" in text
-    assert "NightSky Atlas is a printable star atlas designed for visual observing." in text
-    assert layout_fact in text
-    assert "The northern and southern overview maps" in text
-    assert "Print at 100% (actual size)" in text
+    assert paragraphs[:3] == [
+        "NightSky Atlas is a freely available, printable star atlas designed for visual observing.",
+        "The atlas PDFs can be downloaded and printed free of charge. The software used to "
+        "generate them is open source, allowing anyone to customize the charts or create their "
+        "own atlas editions.",
+        "Three editions offer different levels of detail, while sharing the same cartographic "
+        "conventions and A4 page format.",
+    ]
+    assert "amateur astronomer" not in text
+    assert paragraph_widths[:3] == [154.0, 154.0, 154.0]
+    assert paragraph_starts[1] - paragraph_ends[0] == pytest.approx(
+        paragraph_starts[2] - paragraph_ends[1]
+    )
+    assert paragraphs[3] == (
+        "Pocket provides a wide-field overview of the sky, suitable for general orientation, "
+        "binoculars and small telescopes. It includes all Messier and Herschel 400 objects, "
+        "along with many additional deep-sky targets. Its broad coverage also makes it useful "
+        "with larger telescopes, particularly for locating objects and exploring wider regions "
+        "of the sky."
+    )
+    assert paragraphs[4] == (
+        "Standard offers twice the map scale of Pocket, with more stars and a richer selection "
+        "of deep-sky objects. It is intended as a general-purpose observing atlas, particularly "
+        "well suited to medium-sized telescopes. The additional detail makes it easier to "
+        "navigate smaller star patterns and locate fainter targets."
+    )
+    assert paragraphs[5] == (
+        "Deep provides the highest level of detail, with denser star fields and a more extensive "
+        "deep-sky catalogue. It is intended for detailed exploration of smaller sky regions, "
+        "especially when observing faint or challenging objects with larger telescopes."
+    )
+    assert "Pocket gives the wider view" not in text
+    assert layout_fact in paragraphs[-2]
+    assert "The northern and southern overview maps" in paragraphs[-2]
+    assert "Print at 100% (actual size)" in paragraphs[-1]
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+def test_introduction_is_deterministic_and_within_page(edition: str) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    page = atlas.page.to_geometry()
+    extents = []
+    for _ in range(2):
+        surface = cairo.RecordingSurface(cairo.CONTENT_COLOR_ALPHA, None)
+        draw_introduction(cairo.Context(surface), atlas, style)
+        extents.append(surface.ink_extents())
+
+    assert extents[0] == extents[1]
+    x, y, width, height = extents[0]
+    left = page.margin_mm * 72.0 / 25.4
+    right = (page.width_mm - page.margin_mm) * 72.0 / 25.4
+    top = page.margin_mm * 72.0 / 25.4
+    bottom = (page.height_mm - page.margin_mm) * 72.0 / 25.4
+    assert x >= left - 1.0
+    assert y >= top - 1.0
+    assert x + width <= right + 1.0
+    assert y + height <= bottom + 1.0
 
 
 def test_field_guide_double_star_example_uses_production_renderer(monkeypatch) -> None:
@@ -264,7 +336,7 @@ def test_field_guide_double_star_example_uses_production_renderer(monkeypatch) -
     assert "unresolved" in text
     assert "resolved" in text
     assert any(
-        value.startswith("Apparent size and surface brightness") for value in text
+        value.startswith("Contours estimate visual difficulty") for value in text
     )
     assert all(word in text for word in ("easy", "moderate", "difficult", "threshold"))
     assert not any("extreme" in value.lower() for value in text)
