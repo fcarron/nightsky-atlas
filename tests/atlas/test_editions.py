@@ -313,7 +313,31 @@ def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:
 def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
     deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
     spec = TilingSpec.from_config(deep.tiling)
-    expected_centers = tuple(-82.5 + 7.5 * index for index in range(23))
+    expected_centers = (
+        -83.0,
+        -75.0,
+        -67.5,
+        -60.0,
+        -53.0,
+        -45.0,
+        -37.5,
+        -30.0,
+        -22.5,
+        -15.0,
+        -7.5,
+        0.0,
+        7.5,
+        15.0,
+        22.5,
+        30.0,
+        37.5,
+        45.0,
+        53.0,
+        60.0,
+        67.5,
+        75.0,
+        83.0,
+    )
     expected_counts = (
         5, 10, 15, 15, 20, 25, 25, 25, 30, 30, 30, 30,
         30, 30, 30, 25, 25, 25, 20, 15, 15, 10, 5,
@@ -349,7 +373,7 @@ def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
     assert set(standard_by_dec[0.0]) <= set(by_dec[0.0])
 
     assert coverage_report(charts, step_deg=0.25).covers_all
-    assert neighbour_overlap_report(charts, step_deg=1.0).is_complete
+    assert neighbour_overlap_report(charts, step_deg=0.25).is_complete
     assert {detail.code: detail.parent_chart_id for detail in deep.detail_charts} == {
         "DD01": "deep-116",
         "DD02": "deep-147",
@@ -361,6 +385,14 @@ def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
         "DD08": "deep-465",
         "DD09": "deep-477",
     }
+    by_id = {chart.id: chart for chart in charts}
+    for detail in deep.detail_charts:
+        parent = by_id[detail.parent_chart_id]
+        point = StereographicProjection(parent.center_ra_deg, parent.center_dec_deg).project(
+            detail.center_ra_deg, detail.center_dec_deg
+        )
+        assert abs(point.xi_deg) <= parent.width_deg / 2.0
+        assert abs(point.eta_deg) <= parent.height_deg / 2.0
 
 
 def test_detail_star_profiles_preserve_parent_dso_styling_and_limit() -> None:

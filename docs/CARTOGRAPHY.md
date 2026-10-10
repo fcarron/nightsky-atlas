@@ -224,36 +224,63 @@ Old public codes map to the stable codes as follows:
 
 ### Deep 23-ring tiling experiment
 
-The experimental Deep configuration uses 23 symmetric declination rings from
-−82.5° to +82.5° at 7.5° intervals, plus two polar charts. RA staggering is
-disabled and every ring begins at 0°. Its symmetric ring counts, north to
-south, are `5 / 10 / 15 / 15 / 20 / 25 / 25 / 25 / 30 / 30 / 30 / 30 / 30 /
-30 / 30 / 25 / 25 / 25 / 20 / 15 / 15 / 10 / 5`, for 492 main charts. The
-equatorial ring has 30 charts at 12° intervals (00h00m, 00h48m, …, 23h12m).
-The grids at ±15°, ±30°, ±45°, ±60° and ±75° align with the experimental
-Standard grid.
+The experimental Deep configuration has 23 symmetric declination rings plus
+two polar charts, for 492 main charts. RA staggering is disabled, every ring
+starts at 0°, and the equatorial ring has 30 charts at 12° intervals
+(00h00m, 00h48m, …, 23h12m). The selected ring centres, north to south, are
+`+83°, +75°, +67.5°, +60°, +53°, +45°, +37.5°, +30°, +22.5°, +15°, +7.5°,
+0°, −7.5°, −15°, −22.5°, −30°, −37.5°, −45°, −53°, −60°, −67.5°, −75°,
+−83°`. Ring counts remain `5 / 10 / 15 / 15 / 20 / 25 / 25 / 25 / 30 / 30 /
+30 / 30 / 30 / 30 / 30 / 25 / 25 / 25 / 20 / 15 / 15 / 10 / 5`. Standard-
+aligned declination rings at 0°, ±15°, ±30°, ±45°, ±60° and ±75° remain in
+place.
 
-A vectorized audit of the actual stereographic rectangles sampled the full
-sky on a 0.25° RA/Dec grid with cos(Dec) area weighting. It found no uncovered
-samples among 1,036,800 tested directions. Estimated area fractions are 63.16%
-single coverage, 31.63% double, 2.79% triple and 2.43% four-or-more coverage;
-the mean multiplicity is 1.445. A projected edge-distance scan found the
-smallest sampled safety margin to be 0.216° (about 4.32 mm at 20 mm/°), near
-RA 16h48m, Dec −56.9°. The smallest horizontal overlap at ring centres is
-1.024° (20.48 mm) on the ±30° rings. Exact stereographic edge intersections
-sampled along the RA direction found a minimum adjacent-ring overlap of about
-0.78° (15.5 mm) at the polar-cap/±82.5° transition near RA 12h00m; a finer
-local check measures approximately 0.79°. These
-figures are numerical checks, not a proof for every continuous sky position;
-the polar and ring-transition margins are weaker than the 30 mm nominal target.
+The small shifts were compared using the same deterministic audit utility:
+`.venv/bin/python tools/audit_deep_ring_shifts.py`. It projects the actual
+stereographic chart rectangles. Global coverage uses 1,036,800 directions on
+the 0.25° RA/Dec grid, weighted by cos(Dec); transition widths use a finer
+0.125° RA / 0.0125° declination scan. The local margin column further samples
+within one degree of the coarse global minimum, its antipode and reflected
+declination. These are numerical samples, not a proof of continuous coverage.
+Safety margin means the greatest projected edge clearance available from any
+covering chart at a sampled sky point. Ring overlap is the narrowest common
+declination run covered by adjacent rings at a given RA; polar overlap is
+reported separately. Horizontal overlap is measured between adjacent charts
+along a ring-centre parallel.
 
-The previous 430-chart layout also had no holes on the same 0.25° sample and
-had estimated coverage fractions of 76.58% single, 20.73% double, 2.55% triple
-and 0.14% four-or-more, with mean multiplicity 1.262. Its smallest sampled
-safety margin was about 0.080° (1.61 mm). The 492-chart experiment therefore
-trades 62 pages for more overlap and a regular equatorial/aligned grid. The
-current repository state is an experiment; review it before adopting it as the
-Deep release tiling.
+| Metric | Baseline | Candidate A | Candidate B | Candidate C | Selected |
+|---|---:|---:|---:|---:|---:|
+| Ring shifts from baseline | none | 82.5→83.5°, 75→75.5° | A + 52.5→53° | A + 52.5→53.25° | 82.5→83°, 52.5→53° |
+| Main charts | 492 | 492 | 492 | 492 | 492 |
+| Uncovered samples (0.25°) | 0 | 0 | 0 | 0 | 0 |
+| Minimum global safety margin | 4.32 mm | 4.32 mm | 5.21 mm | 6.10 mm | **5.21 mm** |
+| Approx. location of global minimum | RA 00h48m, Dec −56.875° | same | RA 00h48m, Dec −57.125° | RA 00h48m, Dec −57.375° | RA 00h48m, Dec −57.125° |
+| Fine local safety margin | 3.64 mm | 3.64 mm | 5.16 mm | 5.92 mm | **5.16 mm** |
+| Minimum horizontal overlap | 20.48 mm at ±30° | same | same | same | same |
+| Minimum ring-to-ring overlap | 20.25 mm, ±75/82.5° | 12.50 mm, 67.5/75.5° | 12.50 mm, 67.5/75.5° | 10.50 mm, 45/53.25° | **15.50 mm, 45/53°** |
+| Polar-cap transition overlap | 15.75 mm near RA 12h00m | 40.50 mm | 40.50 mm | 40.50 mm | **28.00 mm near RA 12h00m** |
+| Area covered 1 / 2 / 3 / 4+ times | 63.16 / 31.63 / 2.79 / 2.43% | 63.00 / 31.91 / 2.70 / 2.39% | 62.90 / 32.10 / 2.64 / 2.36% | 62.84 / 32.20 / 2.61 / 2.35% | 63.01 / 31.91 / 2.68 / 2.40% |
+| Mean coverage multiplicity | 1.4448 | 1.4447 | 1.4447 | 1.4447 | 1.4447 |
+
+Candidate B improves the weakest sampled margin but shifts the ±75° ring to
+±75.5°, creating a 12.5 mm narrow transition to ±67.5°. Candidate C raises
+the sampled global margin further, but its 45°/53.25° transition falls to
+10.5 mm and its chart-corner clearance is only 7.5 mm. The selected smaller
+adjustment keeps ±75° unchanged: it matches Candidate B's global and fine
+local safety margins, improves the polar transition from 15.75 to 28.0 mm,
+and keeps the narrowest ring-only transition at 15.5 mm. Its weakest region is
+still the 45°/53° ring junction, so the change is a measured improvement, not
+a claim of uniformly generous overlap. All variants retained 2,220 neighbour
+references with no missing target IDs; the tiling regression test checks that
+referenced neighbours have actual geometric overlap.
+
+For context, the preceding 430-chart layout had no holes on its 0.25° sample,
+estimated coverage fractions of 76.58% single, 20.73% double, 2.55% triple and
+0.14% four-or-more, and mean multiplicity 1.262. Its smallest sampled safety
+margin was about 1.61 mm. The 492-chart aligned experiment uses 62 more main
+charts for higher overlap and regular RA grids. Reproduce the shift comparison
+with the command above; inspect the active YAML for the exact published
+configuration.
 
 ## Short leaders for broad DSO labels
 
