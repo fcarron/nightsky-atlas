@@ -16,6 +16,9 @@ double_stars:
   min_marker_length_mm: 0.8
   marker_line_width_mm: 0.15
 constellation:
+  names:
+    font_size_pt: 15.3
+    min_visible_area_fraction: 0.10
   lines:
     gray: 0.64
     bold_width_mm: 0.18

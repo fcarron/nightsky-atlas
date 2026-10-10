@@ -1195,6 +1195,7 @@ class ConstellationNameStyle(_StrictModel):
     font_size_pt: PositiveFloat = 10.2
     gray: float = 0.66
     min_segments: int = Field(default=2, ge=1)
+    min_visible_area_fraction: float = Field(default=0.15, ge=0.0, le=1.0)
 
 
 class ConstellationStyle(_StrictModel):

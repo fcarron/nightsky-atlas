@@ -359,7 +359,7 @@ def constellation_visible_area_fractions(scene: ChartScene) -> dict[str, float]:
     return fractions
 
 
-def _forced_constellation_ids(scene: ChartScene) -> set[str]:
+def _constellation_ids_for_area(scene: ChartScene, minimum_fraction: float) -> set[str]:
     fractions = constellation_visible_area_fractions(scene)
     if not fractions:
         return set()
@@ -367,8 +367,12 @@ def _forced_constellation_ids(scene: ChartScene) -> set[str]:
     return {
         constellation_id
         for constellation_id, fraction in fractions.items()
-        if fraction >= _CONSTELLATION_LABEL_AREA_FRACTION
+        if fraction >= minimum_fraction
     } | {largest}
+
+
+def _forced_constellation_ids(scene: ChartScene) -> set[str]:
+    return _constellation_ids_for_area(scene, _CONSTELLATION_LABEL_AREA_FRACTION)
 
 
 def constellation_label_anchors(
@@ -379,11 +383,11 @@ def constellation_label_anchors(
     if not config.enabled:
         return {}
     if scene.constellation_regions:
-        forced = _forced_constellation_ids(scene)
+        eligible = _constellation_ids_for_area(scene, config.min_visible_area_fraction)
         regions = {
             region.constellation_id: region
             for region in scene.constellation_regions
-            if region.constellation_id in forced
+            if region.constellation_id in eligible
         }
         return {
             f"constellation:{constellation_id}": transform.to_page(region.centroid)
