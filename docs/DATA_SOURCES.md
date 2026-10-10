@@ -332,6 +332,10 @@ the label formatter does not use Caldwell designations as chart labels.
 
 Edition styles select levels 1 for Pocket, 1+3 for Standard and Eyepiece,
 and 1+3+5 for Deep. Rendering is stroke-only; levels 2 and 4 are not selected.
+The main-edition contour widths are 0.095 mm (Pocket), 0.09 mm (Standard)
+and 0.085 mm (Deep). Grays descend from level 1 toward level 5, so the inner,
+brighter contours read slightly more strongly. No geometric simplification is
+applied; the vendored outline coordinates are projected and clipped as supplied.
 
 ### Star names and designations
 

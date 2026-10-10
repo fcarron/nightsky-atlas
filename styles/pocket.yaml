@@ -86,4 +86,7 @@ label:
 furniture:
   scale_bar: {enabled: false, length_deg: 10.0}
 milky_way:
+  enabled: true
   levels: [1]
+  line_width_mm: 0.095
+  level_gray: {1: 0.82, 2: 0.80, 3: 0.78, 4: 0.76, 5: 0.74}
