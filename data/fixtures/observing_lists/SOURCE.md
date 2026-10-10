@@ -41,7 +41,7 @@ an explicit source-version difference, not a coordinate or catalogue rewrite.
 - **Retrieved:** 2026-09-28
 - **License/usage:** designation membership only; no HEASARC coordinates or photometry are imported.
 - **M102 handling:** HEASARC's compiled table contains 109 objects because it treats M102 as spurious; the modern observing list has 110 entries. M102 is linked to NGC 5866 for membership only.
-- **M40 handling:** this is a double-star entry rather than a DSO. It is reported separately as a non-DSO list member; it does not create a DSO symbol. The star field remains supplied by the normal star/WDS layers.
+- **M40 handling:** this is a double-star entry rather than an extended deep-sky object. It is reported separately as a non-DSO list member and printed with a thin X at its catalogue position; the component stars remain supplied by the normal star/WDS layers.
 
 ## caldwell.json
 

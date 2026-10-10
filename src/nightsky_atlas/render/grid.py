@@ -94,6 +94,40 @@ def _field_angular_radius_deg(definition: ChartDefinition) -> float:
     return math.degrees(2.0 * math.atan(math.radians(half_diagonal_deg) / 2.0))
 
 
+def _projected_field_sky_bounds(
+    definition: ChartDefinition, projector: StereographicProjection
+) -> tuple[float, float, float]:
+    """Return the sky Dec bounds and RA half-span of the projected rectangle.
+
+    The tangent-plane width and height are not coordinate spans, especially
+    near a pole. Inverting samples along the actual rectangle boundary avoids
+    ending grid curves short of its edges when a spherical approximation is
+    too narrow.
+    """
+    half_width = definition.width_deg / 2.0
+    half_height = definition.height_deg / 2.0
+    dec_values: list[float] = []
+    ra_offsets: list[float] = []
+    for index in range(_SAMPLES):
+        fraction = index / (_SAMPLES - 1)
+        x = -half_width + definition.width_deg * fraction
+        y = -half_height + definition.height_deg * fraction
+        for xi_deg, eta_deg in (
+            (x, -half_height),
+            (x, half_height),
+            (-half_width, y),
+            (half_width, y),
+        ):
+            ra_deg, dec_deg = projector.inverse(xi_deg, eta_deg)
+            dec_values.append(dec_deg)
+            ra_offsets.append((ra_deg - definition.center_ra_deg + 180.0) % 360.0 - 180.0)
+    return (
+        max(abs(offset) for offset in ra_offsets),
+        min(dec_values),
+        max(dec_values),
+    )
+
+
 def _is_polar_field(definition: ChartDefinition) -> bool:
     """Whether the field reaches the celestial pole it is closest to.
 
@@ -173,36 +207,43 @@ def build_grid(
         return ()
 
     projector = default_projection(definition)
-    half_height = definition.height_deg / 2.0
-    dec_min = max(-90.0, definition.center_dec_deg - half_height)
-    dec_max = min(90.0, definition.center_dec_deg + half_height)
-    worst_dec = min(89.9, max(abs(dec_min), abs(dec_max)))
-    ra_half = _ra_half_width_deg(definition, worst_dec)
     polar = _is_polar_field(definition)
+    ra_step = ra_step_deg or grid.ra_step_deg
+    dec_step = dec_step_deg or grid.dec_step_deg
+    if polar:
+        ra_step = polar_ra_step_deg or grid.polar_ra_step_deg
+        half_height = definition.height_deg / 2.0
+        dec_min = max(-90.0, definition.center_dec_deg - half_height)
+        dec_max = min(90.0, definition.center_dec_deg + half_height)
+        worst_dec = min(89.9, max(abs(dec_min), abs(dec_max)))
+        ra_half = _ra_half_width_deg(definition, worst_dec)
+        sample_ra_half = ra_half
+        radius = _field_angular_radius_deg(definition)
+        sample_dec_min = max(-90.0, definition.center_dec_deg - radius - _EDGE_MARGIN_DEG)
+        sample_dec_max = min(90.0, definition.center_dec_deg + radius + _EDGE_MARGIN_DEG)
+        ra_step = _step_for_minimum_grid_values(ra_step, 0.0, 360.0, ra=True)
+        dec_step = _step_for_minimum_grid_values(dec_step, dec_min, dec_max, ra=False)
+    else:
+        ra_half, dec_min, dec_max = _projected_field_sky_bounds(definition, projector)
+        sample_ra_half = min(180.0, ra_half + _EDGE_MARGIN_DEG)
+        sample_dec_min = max(-90.0, dec_min - _EDGE_MARGIN_DEG)
+        sample_dec_max = min(90.0, dec_max + _EDGE_MARGIN_DEG)
+        ra_step = _step_for_minimum_grid_values(
+            ra_step,
+            definition.center_ra_deg - ra_half,
+            definition.center_ra_deg + ra_half,
+            ra=True,
+        )
+        dec_step = _step_for_minimum_grid_values(dec_step, dec_min, dec_max, ra=False)
     rect = transform.chart_rect
     lines: list[GridLine] = []
 
     if polar:
-        ra_step = polar_ra_step_deg or grid.polar_ra_step_deg
-    else:
-        ra_step = ra_step_deg or grid.ra_step_deg
-    ra_step = _step_for_minimum_grid_values(
-        ra_step,
-        0.0 if polar else definition.center_ra_deg - ra_half,
-        360.0 if polar else definition.center_ra_deg + ra_half,
-        ra=True,
-    )
-    if polar:
         ra = 0.0
         ra_limit = 360.0 - 1e-9
-        radius = _field_angular_radius_deg(definition)
-        sample_dec_min = max(-90.0, definition.center_dec_deg - radius - _EDGE_MARGIN_DEG)
-        sample_dec_max = min(90.0, definition.center_dec_deg + radius + _EDGE_MARGIN_DEG)
     else:
-        ra = _first_multiple(definition.center_ra_deg - ra_half, ra_step)
-        ra_limit = definition.center_ra_deg + ra_half + 1e-9
-        sample_dec_min = dec_min - _EDGE_MARGIN_DEG
-        sample_dec_max = dec_max + _EDGE_MARGIN_DEG
+        ra = _first_multiple(definition.center_ra_deg - sample_ra_half, ra_step)
+        ra_limit = definition.center_ra_deg + sample_ra_half + 1e-9
     while ra <= ra_limit:
         points = [
             point
@@ -225,14 +266,10 @@ def build_grid(
             )
         ra += ra_step
 
-    dec_step = _step_for_minimum_grid_values(
-        dec_step_deg or grid.dec_step_deg, dec_min, dec_max, ra=False
-    )
-    dec = _first_multiple(dec_min, dec_step)
-    dec_limit = dec_max + 1e-9
+    dec = _first_multiple(sample_dec_min, dec_step)
+    dec_limit = sample_dec_max + 1e-9
     while dec <= dec_limit:
-        ra_half_dec = _ra_half_width_deg(definition, dec)
-        samples = max(_SAMPLES, int(2.0 * ra_half_dec) + 1)
+        samples = max(_SAMPLES, int(2.0 * sample_ra_half) + 1)
         points = [
             point
             for index in range(samples)
@@ -241,8 +278,8 @@ def build_grid(
                     projector,
                     transform,
                     definition.center_ra_deg
-                    - ra_half_dec
-                    + 2.0 * ra_half_dec * index / (samples - 1),
+                    - sample_ra_half
+                    + 2.0 * sample_ra_half * index / (samples - 1),
                     dec,
                 )
             )
@@ -425,6 +462,16 @@ def build_grid_labels(
     else:
         ra_step = grid.label_ra_step_deg or grid.ra_step_deg
     dec_step = grid.label_dec_step_deg or grid.dec_step_deg
+    if not polar:
+        projector = default_projection(definition)
+        ra_half, dec_min, dec_max = _projected_field_sky_bounds(definition, projector)
+        ra_step = _step_for_minimum_grid_values(
+            ra_step,
+            definition.center_ra_deg - ra_half,
+            definition.center_ra_deg + ra_half,
+            ra=True,
+        )
+        dec_step = _step_for_minimum_grid_values(dec_step, dec_min, dec_max, ra=False)
     pad = grid.label_padding_mm
     outside = grid.label_placement == "outside"
 

@@ -226,6 +226,8 @@ def test_decorative_symbol_reach_stays_within_extent() -> None:
         (DsoType.SUPERNOVA_REMNANT, DsoShape.DASHED_SQUARE),
         (DsoType.DARK_NEBULA, DsoShape.DASHED_SQUARE),
         (DsoType.GALAXY_CLUSTER, DsoShape.DASHED_CIRCLE),
+        (DsoType.DOUBLE_STAR, DsoShape.X_MARK),
+        (DsoType.STAR, DsoShape.X_MARK),
     ],
 )
 def test_dso_shape_mapping(object_type: DsoType, expected: DsoShape) -> None:

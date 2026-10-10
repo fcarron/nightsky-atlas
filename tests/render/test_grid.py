@@ -54,6 +54,46 @@ def test_polar_grid_has_no_long_chords() -> None:
             assert distance < 50.0
 
 
+@pytest.mark.parametrize(
+    ("edition", "center_dec_deg", "width_deg", "height_deg"),
+    (
+        ("pocket", 62.0, 54.0, 36.0),
+        ("standard", 75.0, 27.0, 18.5),
+        ("deep", 83.0, 13.5, 9.0),
+    ),
+)
+def test_high_declination_grid_lines_extend_past_chart_edges(
+    edition: str, center_dec_deg: float, width_deg: float, height_deg: float
+) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    chart = ChartDefinition(
+        id=f"{edition}-high-declination-grid",
+        center_ra_deg=0.0,
+        center_dec_deg=center_dec_deg,
+        width_deg=width_deg,
+        height_deg=height_deg,
+    )
+    transform = PageTransform(
+        chart=chart,
+        page=atlas.page.to_geometry(),
+        scale_mm_per_degree=atlas.mm_per_degree,
+    )
+    rect = transform.chart_rect
+    lines = build_grid(chart, transform, style)
+    assert lines
+
+    for line in lines:
+        if line.polar:
+            continue
+        for endpoint in (line.points[0], line.points[-1]):
+            stops_inside_chart = (
+                rect.left_mm + 0.2 < endpoint.x_mm < rect.right_mm - 0.2
+                and rect.top_mm + 0.2 < endpoint.y_mm < rect.bottom_mm - 0.2
+            )
+            assert not stops_inside_chart, (edition, line.kind, line.value_deg, endpoint)
+
+
 def test_polar_grid_has_radial_meridians() -> None:
     """Polar fields wrap RA, so every meridian is drawn at the coarse step."""
     chart = ChartDefinition(

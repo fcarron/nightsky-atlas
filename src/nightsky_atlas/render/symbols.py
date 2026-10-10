@@ -73,6 +73,7 @@ class DsoShape(StrEnum):
     DASHED_SQUARE = "dashed_square"
     SQUARE = "square"
     DOT = "dot"
+    X_MARK = "x_mark"
 
 
 # Decorative-mark reach as a multiple of the circle radius.  The planetary
@@ -92,8 +93,8 @@ _SHAPE_BY_TYPE: dict[DsoType, DsoShape] = {
     DsoType.SUPERNOVA_REMNANT: DsoShape.DASHED_SQUARE,
     DsoType.DARK_NEBULA: DsoShape.DASHED_SQUARE,
     DsoType.GALAXY_CLUSTER: DsoShape.DASHED_CIRCLE,
-    DsoType.DOUBLE_STAR: DsoShape.DOT,
-    DsoType.STAR: DsoShape.DOT,
+    DsoType.DOUBLE_STAR: DsoShape.X_MARK,
+    DsoType.STAR: DsoShape.X_MARK,
     DsoType.OTHER: DsoShape.CIRCLE,
 }
 

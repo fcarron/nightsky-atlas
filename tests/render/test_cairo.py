@@ -374,6 +374,51 @@ def test_dso_fallback_renderer_uses_requested_symbol(
     assert drawn_shapes == [expected_shape]
 
 
+@pytest.mark.parametrize(
+    ("object_type", "expected_shape"),
+    (
+        (DsoType.STAR, DsoShape.X_MARK),
+        (DsoType.DOUBLE_STAR, DsoShape.X_MARK),
+    ),
+)
+def test_non_dso_fallback_renderer_uses_x_mark(
+    monkeypatch, object_type: DsoType, expected_shape: DsoShape
+) -> None:
+    dso = DeepSkyObject(
+        id="M40",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=object_type,
+        provenance=Provenance("TEST", "M40"),
+    )
+    scene = build_scene(CHART, (), (dso,))
+    drawn_shapes = []
+    monkeypatch.setattr(
+        "nightsky_atlas.render.cairo.draw_dso_symbol",
+        lambda _cr, _x, _y, extent, _dash: drawn_shapes.append(extent.shape),
+    )
+    transform = PageTransform(chart=CHART, page=PAGE)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
+
+    draw_chart_page(cairo.Context(surface), scene, transform, STYLE)
+
+    assert drawn_shapes == [expected_shape]
+
+
+@pytest.mark.parametrize("object_type", (DsoType.STAR, DsoType.DOUBLE_STAR))
+def test_non_dso_x_mark_uses_thin_normal_stroke_even_for_emphasized_label(object_type) -> None:
+    scene_dso = _scene_dso(None, object_type=object_type)
+
+    width, dash = _dso_contour(
+        scene_dso,
+        STYLE,
+        frozenset({scene_dso.dso.id}),
+    )
+
+    assert width == pytest.approx(STYLE.dso.line_width_mm)
+    assert dash is None
+
+
 def test_supernova_remnant_contours_are_solid(monkeypatch) -> None:
     remnant = DeepSkyObject(
         id="NGC6960",

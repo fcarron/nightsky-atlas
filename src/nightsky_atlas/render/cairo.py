@@ -843,6 +843,8 @@ def _dso_contour(
     other object keeps the existing bold-label stroke rule.
     """
     dso = scene_dso.dso
+    if dso.object_type in (DsoType.STAR, DsoType.DOUBLE_STAR):
+        return style.dso.line_width_mm, None
     metadata = scene_dso.metadata
     if dso.object_type == DsoType.GALAXY and metadata is not None:
         contour = style.dso.galaxy_contours.for_class(metadata.galaxy_contour_class)
@@ -1006,6 +1008,12 @@ def _draw_dso_shape(
     if shape == DsoShape.DOT:
         cr.arc(cx, cy, radius, 0.0, 2.0 * math.pi)
         cr.fill()
+    if shape == DsoShape.X_MARK:
+        cr.move_to(cx - radius, cy - radius)
+        cr.line_to(cx + radius, cy + radius)
+        cr.move_to(cx - radius, cy + radius)
+        cr.line_to(cx + radius, cy - radius)
+        cr.stroke()
     if shape == DsoShape.CIRCLE_CROSS:
         reach = radius * CIRCLE_CROSS_REACH_FACTOR
         cr.move_to(cx - reach, cy)
