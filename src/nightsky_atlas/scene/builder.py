@@ -7,7 +7,7 @@ projects them onto the chart plane.  It performs no label or layout work.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 
 from nightsky_atlas.catalog.constellations import ConstellationPolygon, ConstellationSegment
@@ -26,6 +26,7 @@ from nightsky_atlas.scene.models import (
     SceneConstellationRegion,
     SceneDso,
     SceneMilkyWayContour,
+    SceneMilkyWayPolygon,
     SceneOutline,
     SceneSegment,
     SceneStar,
@@ -69,6 +70,7 @@ def build_scene(
     nebula_outlines: Iterable[NebulaOutline] = (),
     milky_way_contours: Iterable[MilkyWayContour] = (),
     milky_way_levels: Iterable[int] = (),
+    milky_way_fill_enabled: bool = False,
     star_systems: Iterable[StarSystem] = (),
     observing_index: Mapping[str, frozenset[str]] | None = None,
     selection_policy: SelectionPolicy | None = None,
@@ -93,6 +95,7 @@ def build_scene(
     closed outlines curve correctly.
     """
     projector = projection if projection is not None else default_projection(definition)
+    milky_way_sources = tuple(milky_way_contours)
 
     scene_stars: list[SceneStar] = []
     for star in stars:
@@ -149,7 +152,14 @@ def build_scene(
         _outline_sources(nebula_outlines, selected_dsos), projector, definition
     )
     projected_milky_way = _project_milky_way(
-        milky_way_contours, frozenset(milky_way_levels), projector, definition
+        milky_way_sources, frozenset(milky_way_levels), projector, definition
+    )
+    projected_milky_way_polygons = (
+        _project_milky_way_polygons(
+            milky_way_sources, frozenset(milky_way_levels), projector, definition
+        )
+        if milky_way_fill_enabled
+        else ()
     )
     outlined_ids = {outline.dso_id for outline in projected_outlines}
     scene_dsos = [
@@ -180,6 +190,9 @@ def build_scene(
         ),
         nebula_outlines=projected_outlines,
         milky_way_contours=projected_milky_way,
+        milky_way_polygons=projected_milky_way_polygons,
+        milky_way_fill_available=milky_way_fill_enabled
+        and any(contour.level == 1 for contour in milky_way_sources),
     )
 
 
@@ -287,8 +300,21 @@ def _project_constellation_lines(
     """
     half_width = definition.width_deg / 2.0
     half_height = definition.height_deg / 2.0
+    center_dec_rad = math.radians(projector.center_dec_deg)
     segments: list[SceneSegment] = []
     for source in sources:
+        if any(
+            math.sin(center_dec_rad) * math.sin(math.radians(dec_deg))
+            + math.cos(center_dec_rad)
+            * math.cos(math.radians(dec_deg))
+            * math.cos(math.radians(ra_deg - projector.center_ra_deg))
+            <= 0.0
+            for ra_deg, dec_deg in (
+                (source.ra1_deg, source.dec1_deg),
+                (source.ra2_deg, source.dec2_deg),
+            )
+        ):
+            continue
         try:
             start = projector.project(source.ra1_deg % 360.0, source.dec1_deg)
             end = projector.project(source.ra2_deg % 360.0, source.dec2_deg)
@@ -615,6 +641,7 @@ def _project_outlines(
         if failed or len(chart_points) < 3:
             continue
         runs = _polyline_runs(chart_points, half_width, half_height)
+        fill_points = tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in chart_points)
         for run_index, run in enumerate(runs):
             suffix = "" if len(runs) == 1 else f"#{run_index}"
             outlines.append(
@@ -623,6 +650,7 @@ def _project_outlines(
                     dso_id=dso.id,
                     points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in run),
                     dashed=dso.object_type == DsoType.DARK_NEBULA,
+                    fill_points=fill_points if run_index == 0 else None,
                 )
             )
     return tuple(outlines)
@@ -698,6 +726,300 @@ def _project_milky_way(
                 current = projected
         flush(contour)
     return tuple(results)
+
+
+def _project_milky_way_polygons(
+    contours: Iterable[MilkyWayContour],
+    levels: frozenset[int],
+    projector: StereographicProjection,
+    definition: ChartDefinition,
+) -> tuple[SceneMilkyWayPolygon, ...]:
+    if not levels:
+        return ()
+    source_groups: dict[tuple[int, str], list[MilkyWayContour]] = {}
+    for contour in contours:
+        if contour.level not in levels or contour.points[0] != contour.points[-1]:
+            continue
+        group_id = contour.polygon_id or contour.id
+        source_groups.setdefault((contour.level, group_id), []).append(contour)
+    polygons: list[SceneMilkyWayPolygon] = []
+    for (level, group_id), rings in source_groups.items():
+        for loop in _project_milky_way_polygon_group(rings, projector, definition):
+            polygons.append(SceneMilkyWayPolygon(level, loop, polygon_id=group_id))
+    return tuple(polygons)
+
+
+def _project_milky_way_polygon_group(
+    rings: list[MilkyWayContour],
+    projector: StereographicProjection,
+    definition: ChartDefinition,
+) -> tuple[tuple[ChartPoint, ...], ...]:
+    half_width = definition.width_deg / 2.0
+    half_height = definition.height_deg / 2.0
+    plane_radius_rad = math.radians(math.hypot(half_width, half_height))
+    chart_radius_deg = math.degrees(2.0 * math.atan(plane_radius_rad / 2.0))
+    center = _unit_vector(definition.center_ra_deg, definition.center_dec_deg)
+    source_rings = tuple(contour.points for contour in rings)
+    def contains(x: float, y: float) -> bool:
+        return _d3_spherical_polygon_contains(source_rings, *projector.inverse(x, y))
+
+    center_inside = contains(0.0, 0.0)
+    near_cosine = math.cos(math.radians(chart_radius_deg + 0.5))
+    edges: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    border_points: list[tuple[float, float]] = []
+    for contour in rings:
+        for start, end in zip(contour.points, contour.points[1:], strict=False):
+            dense = _densify(*start, *end)
+            for first, second in zip(dense, dense[1:], strict=False):
+                first_near = _unit_dot(center, _unit_vector(*first)) >= near_cosine
+                second_near = _unit_dot(center, _unit_vector(*second)) >= near_cosine
+                if not first_near and not second_near:
+                    continue
+                try:
+                    projected_first = projector.project(first[0] % 360.0, first[1])
+                    projected_second = projector.project(second[0] % 360.0, second[1])
+                except ProjectionError:
+                    continue
+                clipped = _clip_segment(
+                    (projected_first.xi_deg, projected_first.eta_deg),
+                    (projected_second.xi_deg, projected_second.eta_deg),
+                    half_width,
+                    half_height,
+                )
+                if clipped is None:
+                    continue
+                edges.append(clipped)
+                border_points.extend(
+                    point
+                    for point in clipped
+                    if _point_on_chart_border(point, half_width, half_height)
+                )
+    loops = _clip_milky_way_edges_to_chart(
+        edges, border_points, half_width, half_height, contains
+    )
+    if not loops and center_inside and not border_points:
+        loops = (
+            (
+                (-half_width, -half_height),
+                (half_width, -half_height),
+                (half_width, half_height),
+                (-half_width, half_height),
+                (-half_width, -half_height),
+            ),
+        )
+    return tuple(
+        tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in loop) for loop in loops
+    )
+
+
+def _unit_dot(
+    first: tuple[float, float, float], second: tuple[float, float, float]
+) -> float:
+    return sum(a * b for a, b in zip(first, second, strict=True))
+
+
+def _point_on_chart_border(
+    point: tuple[float, float], half_width: float, half_height: float
+) -> bool:
+    tolerance = 1e-8
+    return (
+        abs(abs(point[0]) - half_width) <= tolerance
+        or abs(abs(point[1]) - half_height) <= tolerance
+    )
+
+
+def _clip_milky_way_edges_to_chart(
+    edges: list[tuple[tuple[float, float], tuple[float, float]]],
+    border_points: list[tuple[float, float]],
+    half_width: float,
+    half_height: float,
+    contains: Callable[[float, float], bool],
+) -> tuple[tuple[tuple[float, float], ...], ...]:
+    tolerance = 1e-8
+
+    def key(point: tuple[float, float]) -> tuple[int, int]:
+        return round(point[0] / tolerance), round(point[1] / tolerance)
+
+    graph: dict[tuple[int, int], list[tuple[int, tuple[float, float]]]] = {}
+    graph_edges: list[
+        tuple[tuple[int, int], tuple[int, int], tuple[tuple[float, float], ...]]
+    ] = []
+
+    def add_edge(path: tuple[tuple[float, float], ...]) -> None:
+        if len(path) < 2 or math.dist(path[0], path[-1]) <= tolerance:
+            return
+        first_key, last_key = key(path[0]), key(path[-1])
+        if first_key == last_key:
+            return
+        index = len(graph_edges)
+        graph_edges.append((first_key, last_key, path))
+        graph.setdefault(first_key, []).append((index, path[0]))
+        graph.setdefault(last_key, []).append((index, path[-1]))
+
+    for start, end in edges:
+        add_edge((start, end))
+
+    corners = (
+        (-half_width, -half_height),
+        (half_width, -half_height),
+        (half_width, half_height),
+        (-half_width, half_height),
+    )
+    sides = tuple(zip(corners, corners[1:] + corners[:1], strict=True))
+    for start, end in sides:
+        side_points = [start, end]
+        side_points.extend(
+            point
+            for point in border_points
+            if _point_on_segment(point, start, end, tolerance)
+        )
+        unique = {key(point): point for point in side_points}
+        ordered = sorted(unique.values(), key=lambda point: math.dist(start, point))
+        for first, second in zip(ordered, ordered[1:], strict=False):
+            midpoint = ((first[0] + second[0]) / 2.0, (first[1] + second[1]) / 2.0)
+            try:
+                inside = contains(*midpoint)
+            except ProjectionError:
+                inside = False
+            if inside:
+                add_edge((first, second))
+
+    loops: list[tuple[tuple[float, float], ...]] = []
+    visited: set[int] = set()
+    for first_index, (first_key, last_key, first_path) in enumerate(graph_edges):
+        if first_index in visited:
+            continue
+        path = list(first_path)
+        visited.add(first_index)
+        start_key = first_key
+        current_key = last_key
+        while current_key != start_key:
+            options = [item for item in graph.get(current_key, ()) if item[0] not in visited]
+            if not options:
+                path = []
+                break
+            next_index, _ = options[0]
+            edge_start, edge_end, edge_path = graph_edges[next_index]
+            if edge_start == current_key:
+                oriented = edge_path
+                current_key = edge_end
+            else:
+                oriented = tuple(reversed(edge_path))
+                current_key = edge_start
+            visited.add(next_index)
+            path.extend(oriented[1:])
+            if len(path) > len(graph_edges) + 2:
+                path = []
+                break
+        if len(path) >= 4 and math.dist(path[0], path[-1]) <= tolerance:
+            loops.append(tuple(path))
+    return tuple(loops)
+
+
+def _point_on_segment(
+    point: tuple[float, float],
+    start: tuple[float, float],
+    end: tuple[float, float],
+    tolerance: float,
+) -> bool:
+    cross = (point[0] - start[0]) * (end[1] - start[1]) - (
+        point[1] - start[1]
+    ) * (end[0] - start[0])
+    return (
+        abs(cross) <= tolerance
+        and min(start[0], end[0]) - tolerance <= point[0] <= max(start[0], end[0]) + tolerance
+        and min(start[1], end[1]) - tolerance <= point[1] <= max(start[1], end[1]) + tolerance
+    )
+
+
+def _d3_spherical_polygon_contains(
+    rings: tuple[tuple[tuple[float, float], ...], ...], ra_deg: float, dec_deg: float
+) -> bool:
+    """Match d3-geo's spherical GeoJSON polygon containment semantics."""
+    tau = 2.0 * math.pi
+
+    def longitude(value: float) -> float:
+        return (math.radians(value) + math.pi) % tau - math.pi
+
+    longitude_query = longitude(ra_deg)
+    latitude_query = math.radians(dec_deg)
+    normal = (math.sin(longitude_query), -math.cos(longitude_query), 0.0)
+    angle = 0.0
+    winding = 0
+    spherical_area = 0.0
+
+    def cartesian(longitude_rad: float, latitude_rad: float) -> tuple[float, float, float]:
+        cos_latitude = math.cos(latitude_rad)
+        return (
+            cos_latitude * math.cos(longitude_rad),
+            cos_latitude * math.sin(longitude_rad),
+            math.sin(latitude_rad),
+        )
+
+    for source_ring in rings:
+        points = (
+            source_ring[:-1]
+            if source_ring and source_ring[0] == source_ring[-1]
+            else source_ring
+        )
+        if not points:
+            continue
+        lambda0, latitude0 = longitude(points[-1][0]), math.radians(points[-1][1])
+        phi0 = latitude0 / 2.0 + math.pi / 4.0
+        sin_phi0, cos_phi0 = math.sin(phi0), math.cos(phi0)
+        for ra1, dec1 in points:
+            lambda1, latitude1 = longitude(ra1), math.radians(dec1)
+            phi1 = latitude1 / 2.0 + math.pi / 4.0
+            sin_phi1, cos_phi1 = math.sin(phi1), math.cos(phi1)
+            delta = lambda1 - lambda0
+            direction = 1.0 if delta >= 0.0 else -1.0
+            absolute_delta = direction * delta
+            crosses_antimeridian = absolute_delta > math.pi
+            product = sin_phi0 * sin_phi1
+            spherical_area += math.atan2(
+                product * direction * math.sin(absolute_delta),
+                cos_phi0 * cos_phi1 + product * math.cos(absolute_delta),
+            )
+            angle += delta + (direction * tau if crosses_antimeridian else 0.0)
+            if crosses_antimeridian ^ (lambda0 >= longitude_query) ^ (
+                lambda1 >= longitude_query
+            ):
+                first = cartesian(lambda0, latitude0)
+                second = cartesian(lambda1, latitude1)
+                arc = (
+                    first[1] * second[2] - first[2] * second[1],
+                    first[2] * second[0] - first[0] * second[2],
+                    first[0] * second[1] - first[1] * second[0],
+                )
+                arc_norm = math.sqrt(sum(component * component for component in arc))
+                if arc_norm > 0.0:
+                    arc = tuple(component / arc_norm for component in arc)
+                    intersection = (
+                        normal[1] * arc[2] - normal[2] * arc[1],
+                        normal[2] * arc[0] - normal[0] * arc[2],
+                        normal[0] * arc[1] - normal[1] * arc[0],
+                    )
+                    intersection_norm = math.sqrt(
+                        sum(component * component for component in intersection)
+                    )
+                    if intersection_norm > 0.0:
+                        intersection = tuple(
+                            component / intersection_norm for component in intersection
+                        )
+                        arc_latitude = (
+                            -1.0
+                            if crosses_antimeridian ^ (delta >= 0.0)
+                            else 1.0
+                        ) * math.asin(max(-1.0, min(1.0, intersection[2])))
+                        if latitude_query > arc_latitude or (
+                            latitude_query == arc_latitude and (arc[0] or arc[1])
+                        ):
+                            winding += 1 if crosses_antimeridian ^ (delta >= 0.0) else -1
+            lambda0, latitude0 = lambda1, latitude1
+            phi0, sin_phi0, cos_phi0 = phi1, sin_phi1, cos_phi1
+
+    inside = angle < -1e-6 or (angle < 1e-6 and spherical_area < -1e-6)
+    return bool(winding & 1) ^ inside
 
 
 def build_star_scene(

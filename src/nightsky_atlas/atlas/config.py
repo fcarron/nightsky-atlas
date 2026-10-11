@@ -14,6 +14,7 @@ milestone; atlas tiling is not implemented yet.
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -38,6 +39,8 @@ from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 __all__ = [
     "AtlasConfig",
     "ChartConfig",
+    "ColorAtlasStyle",
+    "ColorDSOPalette",
     "ConfigError",
     "ConstellationBoundaryStyle",
     "ConstellationLineStyle",
@@ -1150,6 +1153,51 @@ class MilkyWayStyle(_StrictModel):
         return self
 
 
+class ColorDSOPalette(_StrictModel):
+    galaxies: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    clusters: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    planetary_nebulae: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    bright_nebulae: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    reflection_nebulae: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    dark_nebulae: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    supernova_remnants: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    other: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
+class ColorAtlasStyle(_StrictModel):
+    background: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
+    stars: str = Field(default="#17191C", pattern=r"^#[0-9A-Fa-f]{6}$")
+    labels: str = Field(default="#252525", pattern=r"^#[0-9A-Fa-f]{6}$")
+    constellation_names: str = Field(default="#92969E", pattern=r"^#[0-9A-Fa-f]{6}$")
+    constellation_lines: str = Field(default="#748B80", pattern=r"^#[0-9A-Fa-f]{6}$")
+    coordinate_grid: str = Field(default="#D6D9DC", pattern=r"^#[0-9A-Fa-f]{6}$")
+    constellation_boundaries: str = Field(default="#C2C6CA", pattern=r"^#[0-9A-Fa-f]{6}$")
+    dso: ColorDSOPalette
+    dso_fill_white_blend: tuple[float, float, float, float] = (0.0, 0.10, 0.22, 0.34)
+    milky_way_fills: dict[int, str]
+    milky_way_outline: str = Field(default="#D6E3ED", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    @field_validator("dso_fill_white_blend")
+    @classmethod
+    def _dso_fill_blends_are_valid(
+        cls, value: tuple[float, float, float, float]
+    ) -> tuple[float, float, float, float]:
+        if any(not 0.0 <= blend <= 1.0 for blend in value):
+            raise ValueError("DSO fill blends must be within [0, 1]")
+        if value != tuple(sorted(value)):
+            raise ValueError("DSO fill blends must progress from stronger to lighter")
+        return value
+
+    @field_validator("milky_way_fills")
+    @classmethod
+    def _milky_way_fill_levels_are_valid(cls, value: dict[int, str]) -> dict[int, str]:
+        if not value or any(level not in range(1, 6) for level in value):
+            raise ValueError("color Milky Way fills may define levels 1 through 5")
+        if any(not re.fullmatch(r"#[0-9A-Fa-f]{6}", color) for color in value.values()):
+            raise ValueError("Milky Way fill colors must be six-digit hex colors")
+        return value
+
+
 class ConstellationLineStyle(_StrictModel):
     """Stick-figure constellation line appearance.
 
@@ -1356,11 +1404,22 @@ class StyleConfig(_StrictModel):
     grid: GridStyle = Field(default_factory=GridStyle)
     ecliptic: EclipticStyle = Field(default_factory=EclipticStyle)
     milky_way: MilkyWayStyle = Field(default_factory=MilkyWayStyle)
+    color_atlas: ColorAtlasStyle | None = None
     constellation: ConstellationStyle = Field(default_factory=ConstellationStyle)
     furniture: FurnitureStyle = Field(default_factory=FurnitureStyle)
     overview: OverviewStyle = Field(default_factory=OverviewStyle)
     locator: LocatorStyle = Field(default_factory=LocatorStyle)
     typography: TypographyStyle = Field(default_factory=TypographyStyle)
+
+    @model_validator(mode="after")
+    def _color_milky_way_levels_are_enabled(self) -> StyleConfig:
+        if self.color_atlas is not None:
+            unused = set(self.color_atlas.milky_way_fills) - set(self.milky_way.levels)
+            if unused:
+                raise ValueError(
+                    "color Milky Way fill levels must also be enabled in milky_way.levels"
+                )
+        return self
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, object]:

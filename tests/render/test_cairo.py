@@ -8,7 +8,9 @@ that raster dimensions follow from physical page size and resolution.
 from __future__ import annotations
 
 import struct
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
 
 import cairo
 import pytest
@@ -26,7 +28,11 @@ from nightsky_atlas.layout.models import Label
 from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.cairo import (
     _bold_symbol_ids,
+    _draw_dsos,
+    _draw_filled_dso_outlines,
+    _draw_nebula_outline_fills,
     _draw_outlines,
+    _draw_stars_over_dso_symbols,
     _dso_contour,
     _dso_line_width_mm,
     _dso_overlaps_bright_star,
@@ -34,6 +40,7 @@ from nightsky_atlas.render.cairo import (
     _foreground_double_star_marks,
     _foreground_star_double_marks,
     _foreground_stars_over_dsos,
+    _star_halo_overlaps_filled_dso,
     draw_chart_page,
     render_chart,
     render_edition_magnitude_scale,
@@ -192,6 +199,155 @@ def test_dso_line_width_uses_bold_width_for_emphasized_objects() -> None:
     assert STYLE.dso.bold_line_width_mm > STYLE.dso.line_width_mm
 
 
+def test_filled_dso_contours_are_redrawn_after_star_overlays(monkeypatch) -> None:
+    color_style = load_style_config(
+        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-b.yaml"
+    )
+    first = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
+    second_dso = replace(
+        first.dso,
+        id="NGC0002",
+        object_type=DsoType.GALAXY,
+        major_axis_arcmin=600.0,
+        minor_axis_arcmin=300.0,
+        provenance=Provenance("TEST", "NGC0002"),
+    )
+    scene = ChartScene(
+        definition=CHART,
+        deep_sky_objects=(first, SceneDso(second_dso, ChartPoint(1.0, 0.0))),
+    )
+    calls = []
+    monkeypatch.setattr(
+        "nightsky_atlas.render.cairo.draw_dso_symbol",
+        lambda _cr, _x, _y, _extent, _dash, **kwargs: calls.append(
+            (
+                kwargs.get("fill_color"),
+                kwargs.get("fill_only", False),
+                kwargs.get("outline_only", False),
+                _extent.width_mm,
+            )
+        ),
+    )
+
+    transform = PageTransform(CHART, PAGE)
+    _draw_dsos(
+        Mock(),
+        transform,
+        scene,
+        StarSizeModel.from_style(color_style.star),
+        color_style,
+    )
+    fill_calls = tuple(calls)
+    _draw_filled_dso_outlines(Mock(), transform, scene, color_style)
+
+    assert [fill_only for _, fill_only, _, _ in fill_calls[:2]] == [True, True]
+    assert [outline_only for _, _, outline_only, _ in fill_calls[:2]] == [False, False]
+    assert all(color is not None for color, _, _, _ in fill_calls[:2])
+    assert fill_calls[0][3] > fill_calls[1][3]
+    assert [outline_only for _, _, outline_only, _ in fill_calls[2:]] == [True, True]
+    assert all(color is None for color, _, _, _ in fill_calls[2:])
+    assert [outline_only for _, _, outline_only, _ in calls[4:]] == [True, True]
+
+
+def test_colored_dso_keeps_its_fill_behind_overlapping_bright_star(monkeypatch) -> None:
+    color_style = load_style_config(
+        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-a.yaml"
+    )
+    cluster = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
+    star = Star("bright", 187.5, 12.0, 1.0, Provenance("TEST", "bright"))
+    scene = ChartScene(
+        definition=CHART,
+        stars=(SceneStar(star, ChartPoint(0.0, 0.0)),),
+        deep_sky_objects=(cluster,),
+    )
+    knockout = Mock()
+    monkeypatch.setattr("nightsky_atlas.render.cairo._draw_dso_knockout", knockout)
+
+    _draw_dsos(
+        Mock(),
+        PageTransform(CHART, PAGE),
+        scene,
+        StarSizeModel.from_style(color_style.star),
+        color_style,
+    )
+
+    knockout.assert_not_called()
+
+
+def test_star_halos_do_not_cut_holes_in_colored_dso_fills(monkeypatch) -> None:
+    color_style = load_style_config(
+        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-a.yaml"
+    )
+    cluster = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
+    star = Star("bright", 187.5, 12.0, 1.0, Provenance("TEST", "bright"))
+    scene = ChartScene(
+        definition=CHART,
+        stars=(SceneStar(star, ChartPoint(0.0, 0.0)),),
+        deep_sky_objects=(cluster,),
+    )
+    transform = PageTransform(CHART, PAGE)
+    star_point = transform.to_page(ChartPoint(0.0, 0.0))
+
+    assert _star_halo_overlaps_filled_dso(star_point, 0.5, scene, transform, color_style)
+    assert not _star_halo_overlaps_filled_dso(
+        PagePoint(star_point.x_mm + 10.0, star_point.y_mm), 0.5, scene, transform, color_style
+    )
+
+    disk_calls = []
+    halo = Mock()
+    monkeypatch.setattr(
+        "nightsky_atlas.render.cairo.draw_star_disk",
+        lambda *args, **kwargs: disk_calls.append(args),
+    )
+    monkeypatch.setattr("nightsky_atlas.render.cairo._draw_star_with_halo", halo)
+    _draw_stars_over_dso_symbols(
+        Mock(), transform, scene, StarSizeModel.from_style(color_style.star), color_style
+    )
+
+    halo.assert_not_called()
+    assert disk_calls
+
+
+def test_final_filled_dso_outline_pass_follows_star_overlays(monkeypatch) -> None:
+    import nightsky_atlas.render.cairo as renderer
+
+    events = []
+    for name in (
+        "_draw_stars",
+        "_draw_dsos",
+        "_draw_stars_over_dso_symbols",
+        "_draw_variable_star_marks",
+        "_draw_filled_dso_outlines",
+        "draw_furniture",
+        "draw_detail_markers",
+        "_draw_chart_border",
+    ):
+        monkeypatch.setattr(
+            renderer,
+            name,
+            lambda *args, _name=name, **kwargs: events.append(_name),
+        )
+
+    surface = cairo.ImageSurface(
+        cairo.FORMAT_RGB24,
+        round(mm_to_pt(PAGE.width_mm)),
+        round(mm_to_pt(PAGE.height_mm)),
+    )
+    draw_chart_page(
+        cairo.Context(surface), ChartScene(definition=CHART), PageTransform(CHART, PAGE), STYLE
+    )
+
+    assert events.index("_draw_dsos") < events.index("_draw_stars_over_dso_symbols")
+    assert events.index("_draw_stars_over_dso_symbols") < events.index(
+        "_draw_filled_dso_outlines"
+    )
+    assert events.index("_draw_variable_star_marks") < events.index(
+        "_draw_filled_dso_outlines"
+    )
+    assert events.index("_draw_filled_dso_outlines") < events.index("draw_furniture")
+    assert events[-1] == "_draw_chart_border"
+
+
 def _pixel_rgb(surface: cairo.ImageSurface, x_pt: float, y_pt: float) -> tuple[int, int, int]:
     surface.flush()
     stride = surface.get_stride()
@@ -331,7 +487,7 @@ def test_bright_nebula_contour_preserves_contour_and_solid_square_fallback(monke
     drawn_shapes = []
     monkeypatch.setattr(
         "nightsky_atlas.render.cairo.draw_dso_symbol",
-        lambda _cr, _x, _y, extent, _dash: drawn_shapes.append(extent.shape),
+        lambda _cr, _x, _y, extent, _dash, **_kwargs: drawn_shapes.append(extent.shape),
     )
     transform = PageTransform(chart=CHART, page=PAGE)
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
@@ -340,6 +496,64 @@ def test_bright_nebula_contour_preserves_contour_and_solid_square_fallback(monke
     assert drawn_shapes == []
     draw_chart_page(cairo.Context(surface), fallback_scene, transform, STYLE)
     assert drawn_shapes == [DsoShape.SQUARE]
+
+
+def test_bright_nebula_outline_uses_color_fill_beneath_its_contour() -> None:
+    nebula = DeepSkyObject(
+        id="NGC7000",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.BRIGHT_NEBULA,
+        provenance=Provenance("TEST", "NGC7000"),
+    )
+    outline = NebulaOutline(
+        id="outline:NGC7000",
+        dso_id="NGC7000",
+        points=((186.5, 11.0), (188.5, 11.0), (188.5, 13.0), (186.5, 13.0)),
+        provenance=Provenance("TEST", "outline:NGC7000"),
+    )
+    scene = build_scene(CHART, (), (nebula,), nebula_outlines=(outline,))
+    color_style = load_style_config(
+        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-b.yaml"
+    )
+    context = Mock()
+
+    _draw_nebula_outline_fills(
+        context,
+        PageTransform(chart=CHART, page=PAGE),
+        scene,
+        color_style,
+    )
+
+    context.set_source_rgba.assert_called_once_with(0x9A / 255, 0xC3 / 255, 0x7A / 255, 0.24)
+    context.fill.assert_called_once_with()
+
+    remnant = replace(nebula, id="NGC6960", object_type=DsoType.SUPERNOVA_REMNANT)
+    remnant_outline = replace(outline, dso_id="NGC6960")
+    remnant_scene = build_scene(CHART, (), (remnant,), nebula_outlines=(remnant_outline,))
+    remnant_context = Mock()
+    _draw_nebula_outline_fills(
+        remnant_context,
+        PageTransform(chart=CHART, page=PAGE),
+        remnant_scene,
+        color_style,
+    )
+    remnant_context.set_source_rgba.assert_called_once_with(
+        0x9A / 255, 0xA8 / 255, 0xBC / 255, 0.24
+    )
+    remnant_context.fill.assert_called_once_with()
+
+    dark_nebula = replace(nebula, id="B168", object_type=DsoType.DARK_NEBULA)
+    dark_outline = replace(outline, dso_id="B168")
+    dark_scene = build_scene(CHART, (), (dark_nebula,), nebula_outlines=(dark_outline,))
+    dark_context = Mock()
+    _draw_nebula_outline_fills(
+        dark_context,
+        PageTransform(chart=CHART, page=PAGE),
+        dark_scene,
+        color_style,
+    )
+    dark_context.fill.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -364,7 +578,7 @@ def test_dso_fallback_renderer_uses_requested_symbol(
     drawn_shapes = []
     monkeypatch.setattr(
         "nightsky_atlas.render.cairo.draw_dso_symbol",
-        lambda _cr, _x, _y, extent, _dash: drawn_shapes.append(extent.shape),
+        lambda _cr, _x, _y, extent, _dash, **_kwargs: drawn_shapes.append(extent.shape),
     )
     transform = PageTransform(chart=CHART, page=PAGE)
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
@@ -395,7 +609,7 @@ def test_non_dso_fallback_renderer_uses_x_mark(
     drawn_shapes = []
     monkeypatch.setattr(
         "nightsky_atlas.render.cairo.draw_dso_symbol",
-        lambda _cr, _x, _y, extent, _dash: drawn_shapes.append(extent.shape),
+        lambda _cr, _x, _y, extent, _dash, **_kwargs: drawn_shapes.append(extent.shape),
     )
     transform = PageTransform(chart=CHART, page=PAGE)
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)

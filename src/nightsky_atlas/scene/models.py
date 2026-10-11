@@ -23,6 +23,7 @@ __all__ = [
     "SceneDso",
     "SceneOutline",
     "SceneMilkyWayContour",
+    "SceneMilkyWayPolygon",
     "SceneSegment",
     "SceneStar",
     "SceneStarSystem",
@@ -89,7 +90,8 @@ class SceneOutline:
 
     ``points`` form an open run of the projected outline; a fully contained
     outline is closed (its first and last points coincide), otherwise it is the
-    portion inside the chart field.  Outlines are stroke-only furniture.
+    portion inside the chart field. ``fill_points`` retains the complete
+    projected source polygon for color rendering, clipped by the chart frame.
     ``dashed`` is resolved from the object's semantic class; only dark nebulae
     use a dashed contour.
     """
@@ -98,6 +100,7 @@ class SceneOutline:
     dso_id: str
     points: tuple[ChartPoint, ...]
     dashed: bool = False
+    fill_points: tuple[ChartPoint, ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.outline_id.strip():
@@ -123,6 +126,20 @@ class SceneMilkyWayContour:
             raise ValueError("Milky Way contour level must be between 1 and 5")
         if len(self.points) < 2:
             raise ValueError("a scene Milky Way contour needs at least two points")
+
+
+@dataclass(frozen=True, slots=True)
+class SceneMilkyWayPolygon:
+    level: int
+    points: tuple[ChartPoint, ...]
+    polygon_id: str | None = None
+    complement: bool = False
+
+    def __post_init__(self) -> None:
+        if self.level not in range(1, 6):
+            raise ValueError("Milky Way polygon level must be between 1 and 5")
+        if len(self.points) < 3:
+            raise ValueError("a scene Milky Way polygon needs at least three points")
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +174,8 @@ class ChartScene:
     constellation_regions: tuple[SceneConstellationRegion, ...] = ()
     nebula_outlines: tuple[SceneOutline, ...] = ()
     milky_way_contours: tuple[SceneMilkyWayContour, ...] = ()
+    milky_way_polygons: tuple[SceneMilkyWayPolygon, ...] = ()
+    milky_way_fill_available: bool = False
 
     @property
     def star_count(self) -> int:

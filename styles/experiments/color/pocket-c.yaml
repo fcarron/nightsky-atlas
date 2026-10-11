@@ -1,0 +1,5 @@
+extends: pocket-a.yaml
+milky_way:
+  levels: [1, 2, 3, 4, 5]
+color_atlas:
+  milky_way_fills: {1: "#E8F1F8", 2: "#E3EEF7", 3: "#CFE2F1", 4: "#B8D7EA", 5: "#9FC9E2"}

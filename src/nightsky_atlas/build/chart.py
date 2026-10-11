@@ -420,6 +420,7 @@ def build_chart_context(
             nebula_outlines=outlines,
             milky_way_contours=inputs.milky_way_contours,
             milky_way_levels=style.milky_way.levels if style.milky_way.enabled else (),
+            milky_way_fill_enabled=style.color_atlas is not None,
             star_systems=matched_systems,
             observing_index=build_membership_index(observing_lists, inputs.dsos),
             selection_policy=selection_policy,

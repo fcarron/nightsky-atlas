@@ -81,7 +81,8 @@ class DsoShape(StrEnum):
 # the circle to keep the full mark within :class:`SymbolExtent`.
 CIRCLE_CROSS_REACH_FACTOR = 1.0
 SPOKED_CIRCLE_INNER_FACTOR = 1.0
-SPOKED_CIRCLE_OUTER_FACTOR = 1.85
+SPOKED_CIRCLE_OUTER_FACTOR = 2.02
+SPOKED_CIRCLE_SPIKE_WIDTH_FACTOR = 0.88
 
 
 _SHAPE_BY_TYPE: dict[DsoType, DsoShape] = {

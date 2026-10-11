@@ -22,6 +22,8 @@ class MilkyWayContour:
     id: str
     level: int
     points: tuple[tuple[float, float], ...]
+    polygon_id: str | None = None
+    is_hole: bool = False
     edge_midpoint_vectors: tuple[tuple[float, float, float], ...] = field(init=False, repr=False)
     max_edge_half_angle_deg: float = field(init=False, repr=False)
 
@@ -119,6 +121,7 @@ def load_milky_way_contours(
         for polygon_index, polygon in enumerate(polygons):
             if not isinstance(polygon, list):
                 raise ValueError(f"Milky Way polygon is malformed in {feature_id}")
+            polygon_id = f"milky-way:{level}:{polygon_index}"
             for ring_index, ring in enumerate(polygon):
                 contour_id = f"milky-way:{level}:{polygon_index}:{ring_index}"
                 contours.append(
@@ -126,6 +129,8 @@ def load_milky_way_contours(
                         id=contour_id,
                         level=level,
                         points=_coordinates(ring, contour_id),
+                        polygon_id=polygon_id,
+                        is_hole=ring_index > 0,
                     )
                 )
     if found_levels != set(range(1, 6)):
