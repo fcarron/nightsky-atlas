@@ -15,8 +15,9 @@ It does two things, in order, without any AI:
    brighter target, then the stable id.
 2. **Local density selection** -- mandatory Messier and Herschel 400 labels
    survive. Other DSO labels have a generous, separate density budget so only
-   exceptional local saturation removes them. Star labels retain their
-   existing budgets.
+   exceptional local saturation removes them. Proper-name and Bayer star labels
+   bypass this prefilter and are left to geometric placement; other star labels
+   retain their existing budgets.
 
 Selection is deterministic: candidates are ordered by ``(-priority, id)`` and
 every comparison is total.
@@ -54,7 +55,7 @@ def select_labels(
     """
     selection = style.label.selection
     if not selection.enabled:
-        return _make_selected_labels_mandatory(labels)
+        return _freeze_selected_labels(labels)
 
     anchors = _anchors(scene, transform, style)
     magnitudes = _magnitudes(scene)
@@ -68,25 +69,35 @@ def select_labels(
         label.id for label in labels if label.id.startswith("label:constellation:")
     )
     protected.update(
+        label.id
+        for label in deduplicated
+        if label.id.startswith("label:star:")
+        and label.semantic_key is not None
+        and label.semantic_key.startswith(("star:name:", "star:bayer:"))
+    )
+    protected.update(
         f"label:dso:{scene_dso.dso.id}"
         for scene_dso in scene.deep_sky_objects
         if scene_dso.dso.object_type in selection.always_label_object_types
     )
     kept = _thin_by_density(deduplicated, anchors, style, protected_ids=protected)
     kept_ids = {label.id for label in kept}
-    return _make_selected_labels_mandatory(
+    return _freeze_selected_labels(
         label for label in labels if label.id in kept_ids
     )
 
 
-def _make_selected_labels_mandatory(labels: Iterable[Label]) -> tuple[Label, ...]:
-    """Freeze visibility after semantic selection, before geometric placement."""
-    return tuple(
-        replace(label, mandatory=True, hidden=False)
-        if label.id.startswith(("label:star:", "label:dso:"))
-        else label
-        for label in labels
-    )
+def _freeze_selected_labels(labels: Iterable[Label]) -> tuple[Label, ...]:
+    """Freeze DSO selection while leaving optional star placement to geometry."""
+    selected = []
+    for label in labels:
+        if label.id.startswith("label:dso:"):
+            selected.append(replace(label, mandatory=True, hidden=False))
+        elif label.id.startswith("label:star:"):
+            selected.append(replace(label, hidden=False))
+        else:
+            selected.append(label)
+    return tuple(selected)
 
 
 def _anchors(
