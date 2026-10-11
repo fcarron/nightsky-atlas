@@ -11,8 +11,10 @@ from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, St
 from nightsky_atlas.catalog.selection import SelectionPolicy
 from nightsky_atlas.catalog.star_names import StarName
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
-from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.labels import build_dso_labels, build_star_labels
+from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
+from nightsky_atlas.layout.optimizer import optimize_labels
 from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.scene.builder import build_scene
 
@@ -253,4 +255,77 @@ def test_selected_star_and_dso_labels_become_mandatory() -> None:
         STYLE,
     )
     assert dso and stars
-    assert dso[0].mandatory and stars[0].mandatory
+    assert dso[0].mandatory
+    assert not stars[0].mandatory
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+@pytest.mark.parametrize(
+    ("star_name", "expected_text"),
+    (
+        (StarName(1, bayer="β", constellation="Lyr"), "β"),
+        (
+            StarName(1, name="Test Name", curated_name="Test Name", proper_name_tier="standard"),
+            "Test Name",
+        ),
+    ),
+)
+def test_bayer_and_proper_name_stars_bypass_density_without_forcing_placement(
+    edition: str,
+    star_name: StarName,
+    expected_text: str,
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    dense_scene, _ = clustered_scene()
+    star = Star(
+        id="HIP 1",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        magnitude=4.5,
+        provenance=Provenance(catalogue="TEST", source_id="star"),
+        hip_id="HIP 1",
+    )
+    scene = build_scene(
+        CHART,
+        (star,),
+        tuple(item.dso for item in dense_scene.deep_sky_objects),
+    )
+    star_label = build_star_labels(scene, TRANSFORM, style, {1: star_name})[0]
+    labels = (*build_dso_labels(scene, TRANSFORM, style), star_label)
+
+    selected = select_labels(labels, scene, TRANSFORM, style)
+    selected_star = next(label for label in selected if label.id == star_label.id)
+
+    assert selected_star.text == expected_text
+    assert selected_star.candidates
+    assert selected_star.mandatory == star_label.mandatory
+
+
+def test_preserved_star_label_can_still_be_rejected_for_geometric_overlap() -> None:
+    bounds = PageRect(100.0, 100.0, 8.0, 2.5)
+
+    def label(label_id: str, priority: int, mandatory: bool, semantic_key: str) -> Label:
+        candidate = LabelCandidate(
+            id=f"{label_id}:N",
+            position=CompassPosition.N,
+            anchor=bounds.center,
+            bounds=bounds,
+        )
+        return Label(
+            id=label_id,
+            target_id=label_id.removeprefix("label:star:"),
+            text=label_id,
+            priority=priority,
+            mandatory=mandatory,
+            candidates=(candidate,),
+            semantic_key=semantic_key,
+        )
+
+    high = label("label:star:HIP 1", 95, True, "star:name:First")
+    optional = label("label:star:HIP 2", 65, False, "star:bayer:β Lyr")
+    scene = build_scene(CHART, (), ())
+    selected = select_labels((high, optional), scene, TRANSFORM, STYLE)
+    result = optimize_labels(selected, scene, TRANSFORM, STYLE)
+
+    optional_result = next(item for item in result.labels if item.id == optional.id)
+    assert optional_result.hidden

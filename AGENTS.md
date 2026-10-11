@@ -270,7 +270,9 @@ Sans 3 for editorial/index pages. Register package assets through
   to the higher priority, then the brighter target, then the stable id) and a
   local density selection (`layout/selection.py`) before placement: high-tier
   labels are always kept, medium/low labels are thinned by the printed label
-  area within a local neighbourhood. It is a local rule, never a global label
+  area within a local neighbourhood. Proper-name and Bayer star labels bypass
+  this prefilter and remain subject to geometric placement; other lower-tier
+  star labels retain local thinning. It is a local rule, never a global label
   percentage. Manual overrides are protected from selection.
 
 ## 15. Deterministic layout optimizer
