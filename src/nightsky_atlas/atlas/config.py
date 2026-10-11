@@ -1173,8 +1173,20 @@ class ColorAtlasStyle(_StrictModel):
     coordinate_grid: str = Field(default="#D6D9DC", pattern=r"^#[0-9A-Fa-f]{6}$")
     constellation_boundaries: str = Field(default="#C2C6CA", pattern=r"^#[0-9A-Fa-f]{6}$")
     dso: ColorDSOPalette
+    dso_fill_white_blend: tuple[float, float, float, float] = (0.0, 0.10, 0.22, 0.34)
     milky_way_fills: dict[int, str]
     milky_way_outline: str = Field(default="#D6E3ED", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    @field_validator("dso_fill_white_blend")
+    @classmethod
+    def _dso_fill_blends_are_valid(
+        cls, value: tuple[float, float, float, float]
+    ) -> tuple[float, float, float, float]:
+        if any(not 0.0 <= blend <= 1.0 for blend in value):
+            raise ValueError("DSO fill blends must be within [0, 1]")
+        if value != tuple(sorted(value)):
+            raise ValueError("DSO fill blends must progress from stronger to lighter")
+        return value
 
     @field_validator("milky_way_fills")
     @classmethod

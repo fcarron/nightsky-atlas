@@ -18,6 +18,7 @@ from pathlib import Path
 import cairo
 
 from nightsky_atlas.atlas.config import StyleConfig
+from nightsky_atlas.catalog.galaxy_visibility import GalaxyContourClass
 from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
@@ -183,7 +184,6 @@ def draw_chart_page(
     _draw_ecliptic(cr, transform, scene.definition, style)
     _draw_constellations(cr, transform, scene, style, label_list)
     _draw_labels(cr, constellation_labels, style)
-    _draw_chart_border(cr, transform, style)
     _draw_grid_ticks(cr, transform, scene.definition, style)
     _draw_outlines(cr, transform, scene, style)
     _draw_leader_lines(cr, label_list, scene, transform, style)
@@ -193,6 +193,7 @@ def draw_chart_page(
     _draw_variable_star_marks(
         cr, scene, transform, size_model, style, variable_star_hips
     )
+    _draw_filled_dso_outlines(cr, transform, scene, style, bold_symbol_ids)
     _draw_grid_labels(cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles)
     _draw_labels(cr, foreground_labels, style)
     if locator is not None:
@@ -212,6 +213,7 @@ def draw_chart_page(
                 scene, transform, style, label_list
             ),
         )
+    _draw_chart_border(cr, transform, style)
 
 
 def _detail_marker_obstacles(
@@ -474,6 +476,40 @@ def _dso_color(style: StyleConfig, scene_dso: SceneDso) -> str | None:
     return palette.dso.other
 
 
+def _dso_fill_color(style: StyleConfig, scene_dso: SceneDso) -> str | None:
+    """Return a palette fill softened according to existing visibility metadata."""
+    color = _dso_color(style, scene_dso)
+    palette = style.color_atlas
+    if color is None or palette is None:
+        return color
+    metadata = scene_dso.metadata
+    if metadata is None:
+        return color
+
+    if scene_dso.dso.object_type == DsoType.GALAXY:
+        visibility_class = metadata.galaxy_contour_class
+        class_level = {
+            GalaxyContourClass.BOLD: 0,
+            GalaxyContourClass.NORMAL: 1,
+            GalaxyContourClass.FINE: 2,
+            GalaxyContourClass.DOTTED: 3,
+        }.get(visibility_class)
+    else:
+        class_level = None
+
+    if class_level is None:
+        score = metadata.visual_score
+        class_level = 0 if score >= 75 else 1 if score >= 50 else 2 if score >= 25 else 3
+    blend = palette.dso_fill_white_blend[class_level]
+    if blend == 0.0:
+        return color
+    red, green, blue = _hex_rgb(color)
+    return "#" + "".join(
+        f"{round((component * (1.0 - blend) + blend) * 255):02X}"
+        for component in (red, green, blue)
+    )
+
+
 def _draw_chart_border(
     cr: cairo.Context[cairo.Surface], transform: PageTransform, style: StyleConfig
 ) -> None:
@@ -700,7 +736,9 @@ def _dso_marks_requiring_foreground(
         if not item.symbol_visible:
             continue
         extent = dso_symbol_extent(item.dso, mm_per_deg=transform.mm_per_deg, style=style)
-        if _dso_overlaps_bright_star(item, scene, transform, size_model, extent, style):
+        if _dso_fill_color(style, item) is None and _dso_overlaps_bright_star(
+            item, scene, transform, size_model, extent, style
+        ):
             continue
         marks.append((transform.to_page(item.chart_point), extent))
     return tuple(marks)
@@ -741,15 +779,35 @@ def _draw_stars_over_dso_symbols(
     star_color = style.color_atlas.stars if style.color_atlas else None
     star_rgb = _hex_rgb(star_color) if star_color else (0.0, 0.0, 0.0)
     for point, radius_mm in foreground:
-        _draw_star_with_halo(
-            cr, point, radius_mm, style.star.close_overlap_halo_mm, color=star_rgb
-        )
+        if _star_halo_overlaps_filled_dso(
+            point,
+            radius_mm + style.star.close_overlap_halo_mm,
+            scene,
+            transform,
+            style,
+        ):
+            draw_star_disk(
+                cr, point.x_mm, point.y_mm, radius_mm * 2.0, color=star_rgb
+            )
+        else:
+            _draw_star_with_halo(
+                cr, point, radius_mm, style.star.close_overlap_halo_mm, color=star_rgb
+            )
     for mark in foreground_marks:
+        knockout_mm = style.star.close_overlap_halo_mm
+        if _star_halo_overlaps_filled_dso(
+            mark.page_point,
+            knockout_mm + (mark.marker_length_mm + mark.marker_line_width_mm) / 2.0,
+            scene,
+            transform,
+            style,
+        ):
+            knockout_mm = 0.0
         _draw_double_star_mark(
             cr,
             mark,
             size_model,
-            knockout_mm=style.star.close_overlap_halo_mm,
+            knockout_mm=knockout_mm,
             color=star_rgb,
         )
     cr.restore()
@@ -774,6 +832,46 @@ def draw_star_disk(
         2.0 * math.pi,
     )
     cr.fill()
+
+
+def _star_halo_overlaps_filled_dso(
+    point: PagePoint,
+    radius_mm: float,
+    scene: ChartScene,
+    transform: PageTransform,
+    style: StyleConfig,
+) -> bool:
+    """Whether a white stellar knockout would cut into a colored DSO fill."""
+    for item in scene.deep_sky_objects:
+        if not item.symbol_visible or _dso_fill_color(style, item) is None:
+            continue
+        extent = dso_symbol_extent(item.dso, mm_per_deg=transform.mm_per_deg, style=style)
+        center = transform.to_page(item.chart_point)
+        dx = point.x_mm - center.x_mm
+        dy = point.y_mm - center.y_mm
+        if extent.is_elliptical:
+            cosine = math.cos(extent.rotation_rad)
+            sine = math.sin(extent.rotation_rad)
+            local_x = cosine * dx + sine * dy
+            local_y = -sine * dx + cosine * dy
+            rx = extent.radius_x_mm + radius_mm
+            ry = extent.radius_y_mm + radius_mm
+            if (local_x / rx) ** 2 + (local_y / ry) ** 2 <= 1.0:
+                return True
+            continue
+
+        shape = extent.shape
+        if shape == DsoShape.X_MARK:
+            continue
+        symbol_radius = extent.radius_x_mm
+        if shape == DsoShape.SPOKED_CIRCLE:
+            symbol_radius /= SPOKED_CIRCLE_OUTER_FACTOR
+        if shape in (DsoShape.SQUARE, DsoShape.DASHED_SQUARE):
+            if abs(dx) <= symbol_radius + radius_mm and abs(dy) <= symbol_radius + radius_mm:
+                return True
+        elif math.hypot(dx, dy) <= symbol_radius + radius_mm:
+            return True
+    return False
 
 
 def _foreground_double_star_marks(
@@ -935,6 +1033,7 @@ def _draw_dsos(
     bold_symbol_ids: frozenset[str] = frozenset(),
 ) -> None:
     rect = transform.chart_rect
+    filled = []
     cr.save()
     cr.rectangle(
         mm_to_pt(rect.left_mm),
@@ -943,12 +1042,36 @@ def _draw_dsos(
         mm_to_pt(rect.height_mm),
     )
     cr.clip()
-    filled_symbols = []
     for scene_dso in scene.deep_sky_objects:
         if not scene_dso.symbol_visible:
             continue
         dso = scene_dso.dso
-        color = _dso_color(style, scene_dso)
+        color = _dso_fill_color(style, scene_dso)
+        point = transform.to_page(scene_dso.chart_point)
+        extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
+        if color is not None:
+            filled.append((extent.width_mm * extent.height_mm, scene_dso, color, point, extent))
+
+    for _, scene_dso, color, point, extent in sorted(
+        filled, key=lambda item: item[0], reverse=True
+    ):
+        cr.set_source_rgb(0.0, 0.0, 0.0)
+        cr.set_line_width(mm_to_pt(_dso_contour(scene_dso, style, bold_symbol_ids)[0]))
+        draw_dso_symbol(
+            cr,
+            mm_to_pt(point.x_mm),
+            mm_to_pt(point.y_mm),
+            extent,
+            style.dso.dash_mm,
+            fill_color=_hex_rgb(color),
+            fill_only=True,
+        )
+
+    for scene_dso in scene.deep_sky_objects:
+        if not scene_dso.symbol_visible:
+            continue
+        dso = scene_dso.dso
+        color = _dso_fill_color(style, scene_dso)
         cr.set_source_rgb(0.0, 0.0, 0.0)
         width_mm, dash = _dso_contour(scene_dso, style, bold_symbol_ids)
         cr.set_line_width(mm_to_pt(width_mm))
@@ -958,7 +1081,9 @@ def _draw_dsos(
             cr.set_dash([], 0.0)
         point = transform.to_page(scene_dso.chart_point)
         extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
-        if _dso_overlaps_bright_star(scene_dso, scene, transform, size_model, extent, style):
+        if color is None and _dso_overlaps_bright_star(
+            scene_dso, scene, transform, size_model, extent, style
+        ):
             _draw_dso_knockout(
                 cr,
                 mm_to_pt(point.x_mm),
@@ -973,12 +1098,37 @@ def _draw_dsos(
             mm_to_pt(point.y_mm),
             extent,
             style.dso.dash_mm,
-            fill_color=_hex_rgb(color) if color else None,
-            fill_only=color is not None,
+            outline_only=color is not None,
         )
-        if color is not None:
-            filled_symbols.append((point, extent, width_mm, dash))
-    for point, extent, width_mm, dash in filled_symbols:
+
+    cr.restore()
+
+
+def _draw_filled_dso_outlines(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    scene: ChartScene,
+    style: StyleConfig,
+    bold_symbol_ids: frozenset[str] = frozenset(),
+) -> None:
+    """Restore filled DSO contours above star marks and their knockout halos."""
+    rect = transform.chart_rect
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
+    for scene_dso in scene.deep_sky_objects:
+        if not scene_dso.symbol_visible or _dso_fill_color(style, scene_dso) is None:
+            continue
+        width_mm, dash = _dso_contour(scene_dso, style, bold_symbol_ids)
+        point = transform.to_page(scene_dso.chart_point)
+        extent = dso_symbol_extent(
+            scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style
+        )
         cr.set_source_rgb(0.0, 0.0, 0.0)
         cr.set_line_width(mm_to_pt(width_mm))
         if dash is not None:
@@ -991,7 +1141,6 @@ def _draw_dsos(
             mm_to_pt(point.y_mm),
             extent,
             style.dso.dash_mm,
-            fill_only=False,
             outline_only=True,
         )
     cr.restore()
@@ -1456,7 +1605,7 @@ def _draw_nebula_outline_fills(
     )
     cr.clip()
     for outline, item in fills:
-        color = _dso_color(style, item)
+        color = _dso_fill_color(style, item)
         if color is None or outline.fill_points is None:
             continue
         first = transform.to_page(outline.fill_points[0])

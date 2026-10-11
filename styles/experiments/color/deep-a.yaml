@@ -20,5 +20,6 @@ color_atlas:
     dark_nebulae: "#A3978A"
     supernova_remnants: "#9AA8BC"
     other: "#666666"
+  dso_fill_white_blend: [0.0, 0.10, 0.22, 0.34]
   milky_way_fills: {1: "#E8F1F8", 3: "#D6E6F3"}
   milky_way_outline: "#D6E3ED"

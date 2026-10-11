@@ -10,8 +10,10 @@ import cairo
 import pytest
 
 from nightsky_atlas.atlas.config import StyleConfig, load_style_config
+from nightsky_atlas.catalog.galaxy_visibility import GalaxyContourClass
 from nightsky_atlas.catalog.milky_way import MilkyWayContour, load_milky_way_contours
 from nightsky_atlas.catalog.models import DsoType
+from nightsky_atlas.catalog.selection import DsoMetadata
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.projection.base import ChartPoint
@@ -20,6 +22,7 @@ from nightsky_atlas.render.cairo import (
     _draw_dso_shape,
     _draw_milky_way_contours,
     _dso_color,
+    _dso_fill_color,
 )
 from nightsky_atlas.render.symbols import DsoShape
 from nightsky_atlas.scene.builder import build_scene
@@ -126,6 +129,53 @@ def test_dso_classes_use_the_configured_color_palette(
     color = _dso_color(style, Mock(dso=dso))
     assert style.color_atlas is not None
     assert color == getattr(style.color_atlas.dso, palette_key)
+
+
+@pytest.mark.parametrize(
+    ("visibility_class", "blend_level"),
+    (
+        (GalaxyContourClass.BOLD, 0),
+        (GalaxyContourClass.NORMAL, 1),
+        (GalaxyContourClass.FINE, 2),
+        (GalaxyContourClass.DOTTED, 3),
+    ),
+)
+def test_galaxy_fill_intensity_follows_existing_contour_class(
+    visibility_class: GalaxyContourClass, blend_level: int
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-a.yaml")
+    dso = Mock(object_type=DsoType.GALAXY, semantic_subtype=None)
+    metadata = DsoMetadata("NGC 1", galaxy_contour_class=visibility_class)
+    scene_dso = Mock(dso=dso, metadata=metadata)
+
+    base = _dso_color(style, scene_dso)
+    fill = _dso_fill_color(style, scene_dso)
+    assert style.color_atlas is not None
+    expected = _blend_hex_to_white(base, style.color_atlas.dso_fill_white_blend[blend_level])
+    assert fill == expected
+
+
+@pytest.mark.parametrize(
+    ("score", "blend_level"),
+    ((90.0, 0), (60.0, 1), (40.0, 2), (10.0, 3)),
+)
+def test_other_dso_fill_intensity_uses_existing_visual_score(
+    score: float, blend_level: int
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-a.yaml")
+    dso = Mock(object_type=DsoType.BRIGHT_NEBULA, semantic_subtype=None)
+    scene_dso = Mock(dso=dso, metadata=DsoMetadata("NGC 1", visual_score=score))
+
+    base = _dso_color(style, scene_dso)
+    fill = _dso_fill_color(style, scene_dso)
+    assert style.color_atlas is not None
+    expected = _blend_hex_to_white(base, style.color_atlas.dso_fill_white_blend[blend_level])
+    assert fill == expected
+
+
+def _blend_hex_to_white(color: str, factor: float) -> str:
+    rgb = _rgb_bytes(color)
+    return "#" + "".join(f"{round(channel + (255 - channel) * factor):02X}" for channel in rgb)
 
 
 def test_closed_milky_way_contours_create_closed_chart_clips() -> None:

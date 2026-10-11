@@ -35,6 +35,27 @@ existing contours are drawn over the fill. The fill follows only the supplied
 schematic outline data; unoutlined regions are unchanged. Existing symbol
 shapes, line styles and sizes are unchanged.
 
+The fill intensity now reinforces existing visibility metadata without changing
+selection. Galaxies follow their existing contour classes directly (`bold`,
+`normal`, `fine`, `dotted`). Other DSO types use four display bands of their
+existing 0–100 `visual_score` (`>=75`, `>=50 and <75`, `>=25 and <50`, `<25`); these bands affect
+color only and are not a new visibility or selection model. The configured
+`dso_fill_white_blend` values are `[0.00, 0.10, 0.22, 0.34]`, from the original
+palette color to progressively lighter blends toward white. Color styles can
+override this four-value sequence. Black symbol outlines remain in the later
+stroke pass, unaffected by the fill intensity. Monochrome styles are unchanged.
+
+Pocket before/after samples with production stars and labels are in
+`build/color-atlas/intensity-comparison/{baseline,intensity}/<chart>/pocket/charts/<chart>/`:
+
+| Region | Chart |
+| --- | --- |
+| Virgo galaxies | P021 |
+| Cygnus / dense star field | P009 |
+| Sagittarius / Scutum | P028 |
+| Orion / Monoceros | P023 |
+| Taurus / Pleiades | P015 |
+
 | Variant | Standard / Deep | Pocket preview |
 | --- | --- | --- |
 | A | 1 + 3: `#E8F1F8`, `#D6E6F3` | 1–5: `#E8F1F8`, `#E3EEF7`, `#D6E6F3`, `#CFE2F1`, `#C4D9EC` |

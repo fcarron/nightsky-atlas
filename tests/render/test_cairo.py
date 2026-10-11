@@ -29,8 +29,10 @@ from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.cairo import (
     _bold_symbol_ids,
     _draw_dsos,
+    _draw_filled_dso_outlines,
     _draw_nebula_outline_fills,
     _draw_outlines,
+    _draw_stars_over_dso_symbols,
     _dso_contour,
     _dso_line_width_mm,
     _dso_overlaps_bright_star,
@@ -38,6 +40,7 @@ from nightsky_atlas.render.cairo import (
     _foreground_double_star_marks,
     _foreground_star_double_marks,
     _foreground_stars_over_dsos,
+    _star_halo_overlaps_filled_dso,
     draw_chart_page,
     render_chart,
     render_edition_magnitude_scale,
@@ -196,7 +199,7 @@ def test_dso_line_width_uses_bold_width_for_emphasized_objects() -> None:
     assert STYLE.dso.bold_line_width_mm > STYLE.dso.line_width_mm
 
 
-def test_filled_dso_contours_are_redrawn_after_all_fills(monkeypatch) -> None:
+def test_filled_dso_contours_are_redrawn_after_star_overlays(monkeypatch) -> None:
     color_style = load_style_config(
         REPO_ROOT / "styles" / "experiments" / "color" / "pocket-b.yaml"
     )
@@ -205,6 +208,8 @@ def test_filled_dso_contours_are_redrawn_after_all_fills(monkeypatch) -> None:
         first.dso,
         id="NGC0002",
         object_type=DsoType.GALAXY,
+        major_axis_arcmin=600.0,
+        minor_axis_arcmin=300.0,
         provenance=Provenance("TEST", "NGC0002"),
     )
     scene = ChartScene(
@@ -219,9 +224,44 @@ def test_filled_dso_contours_are_redrawn_after_all_fills(monkeypatch) -> None:
                 kwargs.get("fill_color"),
                 kwargs.get("fill_only", False),
                 kwargs.get("outline_only", False),
+                _extent.width_mm,
             )
         ),
     )
+
+    transform = PageTransform(CHART, PAGE)
+    _draw_dsos(
+        Mock(),
+        transform,
+        scene,
+        StarSizeModel.from_style(color_style.star),
+        color_style,
+    )
+    fill_calls = tuple(calls)
+    _draw_filled_dso_outlines(Mock(), transform, scene, color_style)
+
+    assert [fill_only for _, fill_only, _, _ in fill_calls[:2]] == [True, True]
+    assert [outline_only for _, _, outline_only, _ in fill_calls[:2]] == [False, False]
+    assert all(color is not None for color, _, _, _ in fill_calls[:2])
+    assert fill_calls[0][3] > fill_calls[1][3]
+    assert [outline_only for _, _, outline_only, _ in fill_calls[2:]] == [True, True]
+    assert all(color is None for color, _, _, _ in fill_calls[2:])
+    assert [outline_only for _, _, outline_only, _ in calls[4:]] == [True, True]
+
+
+def test_colored_dso_keeps_its_fill_behind_overlapping_bright_star(monkeypatch) -> None:
+    color_style = load_style_config(
+        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-a.yaml"
+    )
+    cluster = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
+    star = Star("bright", 187.5, 12.0, 1.0, Provenance("TEST", "bright"))
+    scene = ChartScene(
+        definition=CHART,
+        stars=(SceneStar(star, ChartPoint(0.0, 0.0)),),
+        deep_sky_objects=(cluster,),
+    )
+    knockout = Mock()
+    monkeypatch.setattr("nightsky_atlas.render.cairo._draw_dso_knockout", knockout)
 
     _draw_dsos(
         Mock(),
@@ -231,10 +271,81 @@ def test_filled_dso_contours_are_redrawn_after_all_fills(monkeypatch) -> None:
         color_style,
     )
 
-    assert [fill_only for _, fill_only, _ in calls] == [True, True, False, False]
-    assert [outline_only for _, _, outline_only in calls] == [False, False, True, True]
-    assert all(color is not None for color, _, _ in calls[:2])
-    assert all(color is None for color, _, _ in calls[2:])
+    knockout.assert_not_called()
+
+
+def test_star_halos_do_not_cut_holes_in_colored_dso_fills(monkeypatch) -> None:
+    color_style = load_style_config(
+        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-a.yaml"
+    )
+    cluster = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
+    star = Star("bright", 187.5, 12.0, 1.0, Provenance("TEST", "bright"))
+    scene = ChartScene(
+        definition=CHART,
+        stars=(SceneStar(star, ChartPoint(0.0, 0.0)),),
+        deep_sky_objects=(cluster,),
+    )
+    transform = PageTransform(CHART, PAGE)
+    star_point = transform.to_page(ChartPoint(0.0, 0.0))
+
+    assert _star_halo_overlaps_filled_dso(star_point, 0.5, scene, transform, color_style)
+    assert not _star_halo_overlaps_filled_dso(
+        PagePoint(star_point.x_mm + 10.0, star_point.y_mm), 0.5, scene, transform, color_style
+    )
+
+    disk_calls = []
+    halo = Mock()
+    monkeypatch.setattr(
+        "nightsky_atlas.render.cairo.draw_star_disk",
+        lambda *args, **kwargs: disk_calls.append(args),
+    )
+    monkeypatch.setattr("nightsky_atlas.render.cairo._draw_star_with_halo", halo)
+    _draw_stars_over_dso_symbols(
+        Mock(), transform, scene, StarSizeModel.from_style(color_style.star), color_style
+    )
+
+    halo.assert_not_called()
+    assert disk_calls
+
+
+def test_final_filled_dso_outline_pass_follows_star_overlays(monkeypatch) -> None:
+    import nightsky_atlas.render.cairo as renderer
+
+    events = []
+    for name in (
+        "_draw_stars",
+        "_draw_dsos",
+        "_draw_stars_over_dso_symbols",
+        "_draw_variable_star_marks",
+        "_draw_filled_dso_outlines",
+        "draw_furniture",
+        "draw_detail_markers",
+        "_draw_chart_border",
+    ):
+        monkeypatch.setattr(
+            renderer,
+            name,
+            lambda *args, _name=name, **kwargs: events.append(_name),
+        )
+
+    surface = cairo.ImageSurface(
+        cairo.FORMAT_RGB24,
+        round(mm_to_pt(PAGE.width_mm)),
+        round(mm_to_pt(PAGE.height_mm)),
+    )
+    draw_chart_page(
+        cairo.Context(surface), ChartScene(definition=CHART), PageTransform(CHART, PAGE), STYLE
+    )
+
+    assert events.index("_draw_dsos") < events.index("_draw_stars_over_dso_symbols")
+    assert events.index("_draw_stars_over_dso_symbols") < events.index(
+        "_draw_filled_dso_outlines"
+    )
+    assert events.index("_draw_variable_star_marks") < events.index(
+        "_draw_filled_dso_outlines"
+    )
+    assert events.index("_draw_filled_dso_outlines") < events.index("draw_furniture")
+    assert events[-1] == "_draw_chart_border"
 
 
 def _pixel_rgb(surface: cairo.ImageSurface, x_pt: float, y_pt: float) -> tuple[int, int, int]:
