@@ -22,6 +22,7 @@ __all__ = [
     "dso_source_geometries",
     "source_contains_point",
     "source_edge_distance",
+    "source_outline_edge_distance",
     "source_extent_edge_distance",
     "source_facing_point",
     "source_geometries_overlap",
@@ -42,6 +43,9 @@ class SourceGeometry:
     outline_paths: tuple[tuple[PagePoint, ...], ...] = ()
     ignore_interior_stars: bool = False
     shape: DsoShape = DsoShape.CIRCLE
+    dash_length_mm: float = 0.0
+    dash_gap_mm: float = 0.0
+    outline_width_mm: float = 0.0
 
     @property
     def collision_radius_mm(self) -> float:
@@ -68,6 +72,7 @@ def dso_source_geometries(
             mm_per_deg=transform.mm_per_deg,
             style=style,
         )
+        is_dashed_circle = extent.shape == DsoShape.DASHED_CIRCLE
         geometries.append(
             SourceGeometry(
                 id=scene_dso.dso.id,
@@ -79,6 +84,9 @@ def dso_source_geometries(
                 outline_paths=tuple(outlines_by_dso.get(scene_dso.dso.id, ())),
                 ignore_interior_stars=scene_dso.dso.object_type == DsoType.OPEN_CLUSTER,
                 shape=extent.shape,
+                dash_length_mm=style.dso.dash_mm if is_dashed_circle else 0.0,
+                dash_gap_mm=style.dso.dash_mm if is_dashed_circle else 0.0,
+                outline_width_mm=style.dso.line_width_mm,
             )
         )
     return tuple(geometries)
@@ -96,6 +104,51 @@ def source_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
     if source.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:
         return _axis_aligned_rect_edge_distance(source, rect)
     return _ellipse_rect_edge_distance(source, rect)
+
+
+@lru_cache(maxsize=32768)
+def source_outline_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
+    """Measure clearance to the drawn outline, ignoring footprint containment."""
+    if source.outline_paths:
+        return min(
+            _segment_rect_distance(start, end, rect)
+            for path in source.outline_paths
+            for start, end in zip(path, path[1:], strict=False)
+        )
+    if source.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:
+        return _axis_aligned_rect_outline_distance(source, rect)
+    if source.shape == DsoShape.DASHED_CIRCLE and source.dash_length_mm > 0.0:
+        return _dashed_circle_rect_distance(source, rect)
+    return _ellipse_rect_outline_distance(source, rect)
+
+
+def _dashed_circle_rect_distance(source: SourceGeometry, rect: PageRect) -> float:
+    """Measure against the actual short dash segments of an open-cluster mark."""
+    radius = (source.radius_x_mm + source.radius_y_mm) / 2.0
+    circumference = 2.0 * math.pi * radius
+    period = source.dash_length_mm + source.dash_gap_mm
+    if circumference <= 0.0 or period <= 0.0:
+        return _ellipse_rect_outline_distance(source, rect)
+    distance = math.inf
+    dash_start = 0.0
+    while dash_start < circumference:
+        dash_end = min(circumference, dash_start + source.dash_length_mm)
+        count = max(1, math.ceil((dash_end - dash_start) / 0.05))
+        previous = _circle_point(source.center, radius, dash_start / radius)
+        for index in range(1, count + 1):
+            arc = dash_start + (dash_end - dash_start) * index / count
+            current = _circle_point(source.center, radius, arc / radius)
+            distance = min(distance, _segment_rect_distance(previous, current, rect))
+            previous = current
+        dash_start += period
+    return max(0.0, distance - source.outline_width_mm / 2.0)
+
+
+def _circle_point(center: PagePoint, radius: float, angle: float) -> PagePoint:
+    return PagePoint(
+        center.x_mm + radius * math.cos(angle),
+        center.y_mm + radius * math.sin(angle),
+    )
 
 
 def source_intersects_rect(source: SourceGeometry, rect: PageRect) -> bool:
@@ -189,12 +242,7 @@ def _source_rect(source: SourceGeometry) -> PageRect:
 
 def _axis_aligned_rect_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
     bounds = _source_rect(source)
-    if (
-        bounds.left_mm <= rect.right_mm
-        and bounds.right_mm >= rect.left_mm
-        and bounds.top_mm <= rect.bottom_mm
-        and bounds.bottom_mm >= rect.top_mm
-    ):
+    if _rectangles_overlap(bounds, rect):
         return 0.0
     dx = max(bounds.left_mm - rect.right_mm, rect.left_mm - bounds.right_mm, 0.0)
     dy = max(bounds.top_mm - rect.bottom_mm, rect.top_mm - bounds.bottom_mm, 0.0)
@@ -233,6 +281,14 @@ def _ellipse_rect_edge_distance(source: SourceGeometry, rect: PageRect) -> float
     """
     if source_intersects_rect(source, rect):
         return 0.0
+    return _ellipse_rect_boundary_distance(source, rect)
+
+
+def _ellipse_rect_outline_distance(source: SourceGeometry, rect: PageRect) -> float:
+    return _ellipse_rect_boundary_distance(source, rect)
+
+
+def _ellipse_rect_boundary_distance(source: SourceGeometry, rect: PageRect) -> float:
     cos_angle = math.cos(source.rotation_rad)
     sin_angle = math.sin(source.rotation_rad)
 
@@ -265,6 +321,36 @@ def _ellipse_rect_edge_distance(source: SourceGeometry, rect: PageRect) -> float
             second = left + ratio * (right - left)
             second_value = distance(second)
     return min(samples[best_index], first_value, second_value)
+
+
+def _axis_aligned_rect_outline_distance(source: SourceGeometry, rect: PageRect) -> float:
+    bounds = _source_rect(source)
+    if not _rectangles_overlap(bounds, rect):
+        dx = max(bounds.left_mm - rect.right_mm, rect.left_mm - bounds.right_mm, 0.0)
+        dy = max(bounds.top_mm - rect.bottom_mm, rect.top_mm - bounds.bottom_mm, 0.0)
+        return math.hypot(dx, dy)
+    source_inside_label = (
+        rect.left_mm <= bounds.left_mm
+        and rect.right_mm >= bounds.right_mm
+        and rect.top_mm <= bounds.top_mm
+        and rect.bottom_mm >= bounds.bottom_mm
+    )
+    if source_inside_label:
+        return 0.0
+    label_inside_source = (
+        bounds.left_mm <= rect.left_mm
+        and bounds.right_mm >= rect.right_mm
+        and bounds.top_mm <= rect.top_mm
+        and bounds.bottom_mm >= rect.bottom_mm
+    )
+    if label_inside_source:
+        return min(
+            rect.left_mm - bounds.left_mm,
+            bounds.right_mm - rect.right_mm,
+            rect.top_mm - bounds.top_mm,
+            bounds.bottom_mm - rect.bottom_mm,
+        )
+    return 0.0
 
 
 def source_contains_point(source: SourceGeometry, point: PagePoint) -> bool:

@@ -67,7 +67,7 @@ label:
     joint_max_component_labels: 8
     joint_beam_width: 24
     joint_node_budget: 24000
-    hard_repair_neighborhood_labels: 6
+    hard_repair_neighborhood_labels: 8
     hard_repair_search_limit: 45
   leader_lines:
     enabled: true

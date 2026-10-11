@@ -15,7 +15,10 @@ from nightsky_atlas.render.front_matter import (
     planetary_nebula_size_ranges,
     telrad_ring_diameters_mm,
 )
-from nightsky_atlas.render.symbols import compact_star_reference_magnitudes
+from nightsky_atlas.render.symbols import (
+    SPOKED_CIRCLE_OUTER_FACTOR,
+    compact_star_reference_magnitudes,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -86,7 +89,7 @@ def test_legend_uses_edition_dso_geometry(
         assert symbols["Dark nebula"].minimum_extent is not None
     assert symbols["Galaxy cluster"].minimum_extent is not None
     assert planetary.extent.width_mm == pytest.approx(
-        minimum / 60.0 * mm_per_degree * 1.85
+        minimum / 60.0 * mm_per_degree * SPOKED_CIRCLE_OUTER_FACTOR
     )
     assert symbols["Other / unknown"].size_classes == ()
     assert symbols["Other / unknown"].angular_size_arcmin is None

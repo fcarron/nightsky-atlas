@@ -24,6 +24,7 @@ from nightsky_atlas.layout.association import (
     source_edge_distance,
     source_geometries_overlap,
     source_intersects_rect,
+    source_outline_edge_distance,
 )
 from nightsky_atlas.layout.candidates import direction_preference_rank
 from nightsky_atlas.layout.geometry import (
@@ -888,7 +889,7 @@ def _repair_dso_hard_conflicts(
             and circle_intersects_rect(
                 source.center, source.collision_radius_mm, source_bounds
             )
-            and source_edge_distance(source, source_bounds) <= 0.0
+            and source_outline_edge_distance(source, source_bounds) <= 0.0
             for source in sources
         )
 
@@ -964,7 +965,7 @@ def _repair_dso_hard_conflicts(
                     and circle_intersects_rect(
                         source.center, source.collision_radius_mm, visible_bounds
                     )
-                    and source_edge_distance(source, visible_bounds) <= 0.0
+                    and source_outline_edge_distance(source, visible_bounds) <= 0.0
                 ):
                     dso_pairs.add((label.id, source.id))
         return len(label_pairs) + len(dso_pairs) + page_issues
@@ -995,6 +996,65 @@ def _repair_dso_hard_conflicts(
                 ):
                     seeds.add(tuple(sorted((first.id, second.id))))
         return sorted(seeds)
+
+    def active_conflict_groups(candidate_labels: tuple[Label, ...]) -> list[tuple[str, ...]]:
+        placed = tuple(
+            (label, label.effective_candidate())
+            for label in candidate_labels
+            if not label.hidden and label.effective_candidate() is not None
+        )
+        adjacency: dict[str, set[str]] = {}
+        label_id_by_target = {
+            label.target_id: label.id
+            for label in candidate_labels
+            if label.id.startswith("label:dso:")
+        }
+        for index, (first, first_candidate) in enumerate(placed):
+            if first_candidate is None or not first.id.startswith("label:dso:"):
+                continue
+            source_bounds = candidate_ink_bounds(first_candidate)
+            nearby_ids = {symbol.id for symbol in symbols_index.query(source_bounds)}
+            for source in sources:
+                related_label_id = label_id_by_target.get(source.id)
+                if (
+                    source.id == first.target_id
+                    or related_label_id is None
+                    or related_label_id == first.id
+                    or source.id not in nearby_ids
+                    or not circle_intersects_rect(
+                        source.center, source.collision_radius_mm, source_bounds
+                    )
+                    or source_outline_edge_distance(source, source_bounds) > 0.0
+                ):
+                    continue
+                adjacency.setdefault(first.id, set()).add(related_label_id)
+                adjacency.setdefault(related_label_id, set()).add(first.id)
+            for second, second_candidate in placed[index + 1 :]:
+                if (
+                    second_candidate is not None
+                    and second.id.startswith("label:dso:")
+                    and _labels_overlap(first, first_candidate, second, second_candidate, style)
+                ):
+                    adjacency.setdefault(first.id, set()).add(second.id)
+                    adjacency.setdefault(second.id, set()).add(first.id)
+        groups: list[tuple[str, ...]] = []
+        remaining = set(adjacency)
+        while remaining:
+            root = min(remaining)
+            pending = [root]
+            members: set[str] = set()
+            while pending:
+                current = pending.pop()
+                if current in members:
+                    continue
+                members.add(current)
+                pending.extend(sorted(adjacency[current] - members, reverse=True))
+            remaining.difference_update(members)
+            if len(members) >= max(
+                3, style.label.dso_placement.hard_repair_neighborhood_labels - 1
+            ):
+                groups.append(tuple(sorted(members)))
+        return sorted(groups, key=lambda group: (-len(group), group))
 
     def expand_neighborhood(seed: tuple[str, ...]) -> tuple[str, ...]:
         neighborhood = set(seed)
@@ -1234,6 +1294,64 @@ def _repair_dso_hard_conflicts(
                 changed = True
         if not changed:
             break
+
+    groups_to_repair = active_conflict_groups(current_labels())
+    for _ in range(2):
+        current = current_labels()
+        current_hard_count = hard_conflict_count(current)
+        if current_hard_count == 0:
+            break
+        changed = False
+        for group in groups_to_repair:
+            if (
+                stats["neighborhood_searches"]
+                >= style.label.dso_placement.hard_repair_search_limit
+            ):
+                stats["neighborhood_search_limit_reached"] = True
+                break
+            neighborhood = expand_neighborhood(group)
+            if len(neighborhood) > style.label.dso_placement.hard_repair_neighborhood_labels:
+                continue
+            stats["neighborhood_searches"] += 1
+            stats["neighborhood_sizes"].append(len(neighborhood))
+            solution, visited = _joint_component_search(
+                neighborhood,
+                labels_by_id,
+                placements,
+                anchors,
+                printable,
+                symbols_index,
+                sources,
+                stars_index,
+                stars,
+                style,
+                weights,
+                furniture,
+                constellation_lines,
+                cost_cache,
+            )
+            stats["neighborhood_search_nodes"] += visited
+            if solution is None:
+                stats["neighborhood_search_budget_hits"] += 1
+                continue
+            proposed = dict(placements)
+            proposed.update(solution)
+            new_count = hard_conflict_count(
+                tuple(
+                    label.with_placement(
+                        proposed.get(label.id), hidden=proposed.get(label.id) is None
+                    )
+                    for label in labels
+                )
+            )
+            if new_count < current_hard_count:
+                placements.update(solution)
+                current_hard_count = new_count
+                stats["neighborhood_moves"] += 1
+                changed = True
+        if not changed:
+            break
+
     final_labels = current_labels()
     unresolved = []
     unresolved_dso = []
@@ -1257,7 +1375,7 @@ def _repair_dso_hard_conflicts(
                 and circle_intersects_rect(
                     source.center, source.collision_radius_mm, visible_bounds
                 )
-                and source_edge_distance(source, visible_bounds) <= 0.0
+                and source_outline_edge_distance(source, visible_bounds) <= 0.0
             ):
                 unresolved_dso.append([first.id, source.id])
         for second in final_labels[index + 1 :]:
@@ -2167,7 +2285,8 @@ def _candidate_rejection_reason(
     nearby_symbols = tuple(symbols_index.query(visible_bounds))
     nearby_source_ids = {symbol.id for symbol in nearby_symbols}
     if any(
-        source.id in nearby_source_ids and source_edge_distance(source, visible_bounds) <= 0.0
+        source.id in nearby_source_ids
+        and source_outline_edge_distance(source, visible_bounds) <= 0.0
         for source in source_geometries
     ):
         return "dso_symbol_overlap"
@@ -2365,7 +2484,7 @@ def _label_diagnostics(
                     other_source.id
                     for other_source in sources
                     if other_source.id in nearby_symbol_ids
-                    and source_edge_distance(other_source, visible_bounds) <= 0.0
+                    and source_outline_edge_distance(other_source, visible_bounds) <= 0.0
                 ],
                 "leader_line_used": leader is not None,
                 "leader_line_length_mm": line_length,

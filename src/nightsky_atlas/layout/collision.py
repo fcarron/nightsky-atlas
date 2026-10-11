@@ -13,7 +13,10 @@ from enum import StrEnum
 
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.page import PageRect, PageTransform
-from nightsky_atlas.layout.association import dso_source_geometries, source_edge_distance
+from nightsky_atlas.layout.association import (
+    dso_source_geometries,
+    source_outline_edge_distance,
+)
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
     rects_overlap,
@@ -118,6 +121,10 @@ def find_hard_violations(
         f"constellation:{segment.constellation_id}"
         for segment in scene.constellation_lines
         if segment.constellation_id
+    )
+    known_targets.update(
+        f"constellation:{region.constellation_id}"
+        for region in scene.constellation_regions
     )
 
     id_counts = Counter(label.id for label in labels)
@@ -254,17 +261,13 @@ def find_hard_violations(
                     )
                 )
 
-        visible_bounds = (
-            candidate_ink_bounds(candidate)
-            if label.id.startswith("label:dso:")
-            else candidate.bounds
-        )
+        visible_bounds = candidate_ink_bounds(candidate)
         for source in dso_sources:
             if not circle_intersects_rect(
                 source.center, source.collision_radius_mm, visible_bounds
             ):
                 continue
-            if source_edge_distance(source, visible_bounds) <= 0.0:
+            if source_outline_edge_distance(source, visible_bounds) <= 0.0:
                 issues.append(
                     _issue(
                         IssueType.LABEL_DSO,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from nightsky_atlas.catalog.models import DsoType
@@ -10,6 +12,7 @@ from nightsky_atlas.layout.association import (
     SourceGeometry,
     source_edge_distance,
     source_intersects_rect,
+    source_outline_edge_distance,
 )
 from nightsky_atlas.render.symbols import DsoShape
 
@@ -37,6 +40,63 @@ def test_ellipse_label_overlap_reports_zero_edge_gap() -> None:
     )
     label = PageRect(101.0, 99.0, 2.0, 1.0)
     assert source_edge_distance(source, label) == 0.0
+    assert source_outline_edge_distance(source, label) == 0.0
+
+
+def test_text_inside_ellipse_footprint_clears_its_rendered_outline() -> None:
+    source = SourceGeometry(
+        id="ESO056-115",
+        source_type=DsoType.GALAXY,
+        center=PagePoint(100.0, 100.0),
+        radius_x_mm=30.0,
+        radius_y_mm=18.0,
+        rotation_rad=0.4,
+    )
+    label = PageRect(98.0, 99.0, 4.0, 2.0)
+
+    assert source_edge_distance(source, label) == 0.0
+    assert source_outline_edge_distance(source, label) > 0.0
+
+
+def test_text_inside_square_footprint_clears_its_rendered_outline() -> None:
+    source = SourceGeometry(
+        id="cluster",
+        source_type=DsoType.OPEN_CLUSTER,
+        center=PagePoint(100.0, 100.0),
+        radius_x_mm=15.0,
+        radius_y_mm=12.0,
+        shape=DsoShape.SQUARE,
+    )
+    label = PageRect(98.0, 99.0, 4.0, 2.0)
+
+    assert source_edge_distance(source, label) == 0.0
+    assert source_outline_edge_distance(source, label) > 0.0
+
+
+@pytest.mark.parametrize(
+    ("angle", "intersects"),
+    ((0.12, False), (0.06, True)),
+)
+def test_open_cluster_dash_geometry_matches_rendered_strokes(
+    angle: float, intersects: bool
+) -> None:
+    source = SourceGeometry(
+        id="Mel022",
+        source_type=DsoType.OPEN_CLUSTER,
+        center=PagePoint(100.0, 100.0),
+        radius_x_mm=5.0,
+        radius_y_mm=5.0,
+        shape=DsoShape.DASHED_CIRCLE,
+        dash_length_mm=0.4,
+        dash_gap_mm=0.4,
+        outline_width_mm=0.15,
+    )
+    x = 100.0 + 5.0 * math.cos(angle)
+    y = 100.0 + 5.0 * math.sin(angle)
+    label = PageRect(x - 0.1, y - 0.1, 0.2, 0.2)
+
+    distance = source_outline_edge_distance(source, label)
+    assert (distance == 0.0) is intersects
 
 
 @pytest.mark.parametrize("shape", [DsoShape.CIRCLE, DsoShape.DASHED_CIRCLE, DsoShape.SQUARE])
