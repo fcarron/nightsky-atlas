@@ -20,6 +20,7 @@ from nightsky_atlas.render.symbols import (
     CIRCLE_CROSS_REACH_FACTOR,
     SPOKED_CIRCLE_INNER_FACTOR,
     SPOKED_CIRCLE_OUTER_FACTOR,
+    SPOKED_CIRCLE_SPIKE_WIDTH_FACTOR,
     DsoShape,
     StarSizeModel,
     SymbolExtent,
@@ -324,6 +325,14 @@ def test_planetary_nebula_uses_angular_diameter_and_includes_outer_spokes() -> N
     extent = extent_for(make_dso(DsoType.PLANETARY_NEBULA, major_axis_arcmin=30.0))
     assert extent.uses_angular_size is True
     assert extent.width_mm == pytest.approx(30.0 / 60.0 * 10.0 * SPOKED_CIRCLE_OUTER_FACTOR)
+
+
+def test_planetary_nebula_spikes_are_longer_and_lighter_than_baseline() -> None:
+    baseline_outer_factor = 1.85
+    baseline_spike_length = baseline_outer_factor - SPOKED_CIRCLE_INNER_FACTOR
+    current_spike_length = SPOKED_CIRCLE_OUTER_FACTOR - SPOKED_CIRCLE_INNER_FACTOR
+    assert current_spike_length == pytest.approx(baseline_spike_length * 1.2)
+    assert SPOKED_CIRCLE_SPIKE_WIDTH_FACTOR == pytest.approx(0.88)
 
 
 @pytest.mark.parametrize(

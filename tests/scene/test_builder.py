@@ -156,6 +156,19 @@ def test_constellation_segment_far_away_is_excluded() -> None:
     assert scene.constellation_lines == ()
 
 
+def test_constellation_line_on_far_hemisphere_does_not_clip_across_chart() -> None:
+    definition = ChartDefinition(
+        id="pocket-008",
+        center_ra_deg=332.0,
+        center_dec_deg=33.0,
+        width_deg=54.0,
+        height_deg=36.0,
+    )
+    segment = make_segment(156.78792132, -31.06777987, 142.31132975, -35.95133667)
+    scene = build_scene(definition, [], [], constellation_lines=[segment])
+    assert scene.constellation_lines == ()
+
+
 def test_constellation_boundaries_tracked_separately() -> None:
     boundary = make_segment(175.0, 12.0, 200.0, 12.0)
     line = make_segment(178.0, 10.0, 190.0, 10.0)
@@ -318,6 +331,8 @@ def test_outline_inside_field_is_closed() -> None:
     ring = scene.nebula_outlines[0]
     assert ring.dso_id == "NGC7000"
     assert ring.points[0] == ring.points[-1]
+    assert ring.fill_points is not None
+    assert ring.fill_points[0] == ring.fill_points[-1]
     for point in ring.points:
         assert DEFINITION.contains(point)
 
@@ -342,6 +357,10 @@ def test_outline_partly_outside_field_is_clipped() -> None:
         DEFINITION, [], [make_dso("BIG", 187.5, 12.0, 8.0)], nebula_outlines=[outline]
     )
     assert scene.outline_count >= 1
+    assert scene.nebula_outlines[0].fill_points is not None
+    assert any(
+        not DEFINITION.contains(point) for point in scene.nebula_outlines[0].fill_points
+    )
     for run in scene.nebula_outlines:
         for point in run.points:
             assert DEFINITION.contains(point)
