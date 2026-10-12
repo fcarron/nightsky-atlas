@@ -215,10 +215,9 @@ and the normal edition defaults.
 | Standard — South Virgo | SD03 | 40 mm/° | 12.25 | S066, S051 |
 | Standard — Fornax core | SD04 | 40 mm/° | 12.25 | S101, S113, S102 |
 | Standard — Sagittarius clusters | SD05 | 20 mm/° | 10.5 | S092, S077, S091, S076 |
-| Standard — Cygnus nebula field | SD06 | 20 mm/° | 10.5 | S019, S031, S030 |
 | Standard — Orion Nebula | SD07 | 20 mm/° | 10.5 | S070, S085 |
 | Standard — Double Cluster | SD08 | 20 mm/° | 10.5 | S016, S007, S027, S017 |
-| Standard — Pleiades | SD09 | 20 mm/° | 10.5 | S041, S056, S042, S057 |
+| Standard — Pleiades | SD09 | 40 mm/° | 12.0 | S041, S056, S042, S057 |
 | Deep — NGC 7331 / Stephan's Quintet | DD01 | 40 mm/° | 12.25 | D093, D094, D118, D119 |
 | Deep — Pleiades | DD02 | 40 mm/° | 12.25 | D167, D168, D138 |
 | Deep — Coma core | DD03 | 80 mm/° | 13.5 | D128, D129, D156 |
@@ -247,10 +246,9 @@ Old public codes map to the stable codes as follows:
 | SD053B | SD03 | DD174 | DD04 |
 | SD089 | SD04 | DD223 | DD05 |
 | SD084 | SD05 | DD328 | DD06 |
-| SD031 | SD06 | DD405A | DD07 |
-| SD063 | SD07 | DD405B | DD08 |
-| SD013 | SD08 | DD415 | DD09 |
-| SD035 | SD09 |  |  |
+| SD063 | SD07 | DD405A | DD07 |
+| SD013 | SD08 | DD405B | DD08 |
+| SD035 | SD09 | DD415 | DD09 |
 
 ### Deep 23-ring tiling experiment
 

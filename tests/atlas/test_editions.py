@@ -70,18 +70,25 @@ def test_edition_presets_load_with_expected_scale_and_codes(
     assert presentation_from_edition(chart, atlas.resolved_edition()).chart_code == expected_code
 
 
-def test_star_label_exclusions_are_pocket_only_stable_hip_ids() -> None:
+def test_star_label_exclusions_are_configured_for_pocket_and_standard() -> None:
     pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
     assert pocket.exclude_star_labels == (17702, 17847)
-    for edition in ("standard", "deep"):
-        assert load_atlas_config(ROOT / "atlas" / f"{edition}.yaml").exclude_star_labels == ()
+    standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
+    assert standard.exclude_star_labels == (17702, 17847)
+    assert load_atlas_config(ROOT / "atlas" / "deep.yaml").exclude_star_labels == ()
 
 
-def test_pocket_p15_excludes_two_names_but_keeps_star_symbols() -> None:
-    atlas_path = ROOT / "atlas" / "pocket.yaml"
-    style_path = ROOT / "styles" / "pocket.yaml"
+@pytest.mark.parametrize(
+    ("edition", "chart_id"),
+    (("pocket", "pocket-015"), ("standard", "standard-041")),
+)
+def test_pleiades_main_chart_excludes_two_names_but_keeps_star_symbols(
+    edition: str, chart_id: str
+) -> None:
+    atlas_path = ROOT / "atlas" / f"{edition}.yaml"
+    style_path = ROOT / "styles" / f"{edition}.yaml"
     atlas = load_atlas_config(atlas_path)
-    definition = next(chart for chart in chart_definitions(atlas) if chart.id == "pocket-015")
+    definition = next(chart for chart in chart_definitions(atlas) if chart.id == chart_id)
     context = build_chart_context(
         atlas_path=atlas_path,
         style_path=style_path,
@@ -259,7 +266,17 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     details = standard.detail_charts
     assert len(chart_definitions(standard)) == 129
     assert [detail.code for detail in pocket.detail_charts] == ["PD01", "PD02"]
-    assert [detail.code for detail in details] == [f"SD{i:02d}" for i in range(1, 10)]
+    assert [detail.code for detail in details] == [
+        "SD01",
+        "SD02",
+        "SD03",
+        "SD04",
+        "SD05",
+        "SD07",
+        "SD08",
+        "SD09",
+    ]
+    assert "SD06" not in {detail.code for detail in details}
     assert [detail.code for detail in deep.detail_charts] == [f"DD{i:02d}" for i in range(1, 10)]
     assert all(
         not hasattr(detail, "fallback_parent_galaxy_labels")
@@ -269,12 +286,11 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     assert {detail.name for detail in details} >= {
         "Virgo Cluster",
         "Sagittarius clusters · M22 / M28",
-        "Cygnus nebula field",
         "Orion Nebula · M42",
         "Perseus Double Cluster",
         "Pleiades · M45",
     }
-    assert [detail.mm_per_degree for detail in details] == [20, 80, 40, 40, 20, 20, 20, 20, 20]
+    assert [detail.mm_per_degree for detail in details] == [20, 80, 40, 40, 20, 20, 20, 40]
     assert [detail.star_profile for detail in details] == [
         "deep",
         "eyepiece_deep",
@@ -283,9 +299,20 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         "deep",
         "deep",
         "deep",
-        "deep",
-        "deep",
+        "eyepiece",
     ]
+    standard_pleiades = details[-1]
+    pocket_pleiades = pocket.detail_charts[1]
+    assert standard_pleiades.width_deg == pocket_pleiades.width_deg == 6.5
+    assert standard_pleiades.height_deg == pocket_pleiades.height_deg == 4.25
+    assert standard_pleiades.mm_per_degree == pocket_pleiades.mm_per_degree == 40.0
+    assert standard_pleiades.star_profile == pocket_pleiades.star_profile == "eyepiece"
+    assert standard_pleiades.stars.magnitude_limit == 12.0
+    assert standard_pleiades.stars.include_ucac4 is True
+    assert standard_pleiades.stars.named_labels == pocket_pleiades.stars.named_labels
+    assert pocket_pleiades.stars.magnitude_limit == pytest.approx(11.25)
+    assert standard_pleiades.show_constellation_names is False
+    assert standard_pleiades.objects == pocket_pleiades.objects
     assert [detail.mm_per_degree for detail in deep.detail_charts] == [
         40,
         40,

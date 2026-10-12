@@ -4,6 +4,7 @@ id: deep
 edition: {name: Deep, code: D}
 mm_per_degree: 20.0
 stellar_limit_magnitude: 10.5
+exclude_star_labels: []
 # The explicit Standard test charts are inherited but Deep is generated from
 # its own tiling below.
 charts: []
