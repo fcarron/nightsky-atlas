@@ -10,14 +10,24 @@ import pytest
 import yaml
 
 from nightsky_atlas.atlas.config import load_atlas_config
-from nightsky_atlas.build.atlas import AtlasBuildResult, build_atlas, chart_definitions
+from nightsky_atlas.build.atlas import (
+    AtlasBuildResult,
+    _detail_fallback_suppression_candidate,
+    _require_mandatory_labels,
+    build_atlas,
+    chart_definitions,
+)
 from nightsky_atlas.build.chart import field_query_box, find_chart
 from nightsky_atlas.build.preflight import validate_atlas_output
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
 from nightsky_atlas.catalog.openngc import iter_openngc_objects
 from nightsky_atlas.catalog.store import chart_query_box
 from nightsky_atlas.chart.models import ChartDefinition
+from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.cli import main
+from nightsky_atlas.layout.collision import IssueType, LayoutIssue
+from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
+from nightsky_atlas.layout.validation import ValidationResult
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = REPO_ROOT / "styles" / "standard.yaml"
@@ -61,6 +71,72 @@ def make_dso_json(tmp_path: Path) -> Path:
     path = tmp_path / "openngc.json"
     write_dso_catalog(path, iter_openngc_objects([DSO_FIXTURE]))
     return path
+
+
+def test_detail_fallback_only_suppresses_lowest_priority_conflicting_label() -> None:
+    def make_label(label_id: str, priority: int) -> Label:
+        candidate = LabelCandidate(
+            id=f"{label_id}:N",
+            position=CompassPosition.N,
+            anchor=PagePoint(100.0, 100.0),
+            bounds=PageRect(100.0, 100.0, 8.0, 3.0),
+        )
+        return Label(
+            id=label_id,
+            target_id=label_id,
+            text=label_id,
+            priority=priority,
+            mandatory=True,
+            candidates=(candidate,),
+        )
+
+    low = make_label("label:dso:low", 30)
+    high = make_label("label:dso:high", 100)
+    issue = LayoutIssue(
+        id="issue:label_label:low:high",
+        issue_type=IssueType.LABEL_LABEL,
+        element_ids=(low.id, high.id),
+        message="labels overlap",
+    )
+    result = _detail_fallback_suppression_candidate(
+        (high, low),
+        ValidationResult(issues=(issue,)),
+        {low.id: "PD01", high.id: "PD01"},
+    )
+
+    assert result is not None
+    assert result[0].id == low.id
+    assert result[1] == "PD01"
+    assert result[2] == (issue,)
+
+
+def test_detail_fallback_does_not_suppress_a_clear_label() -> None:
+    label = Label(
+        id="label:dso:clear",
+        target_id="NGC1",
+        text="1",
+        priority=30,
+        mandatory=True,
+        candidates=(),
+    )
+
+    assert _detail_fallback_suppression_candidate(
+        (label,), ValidationResult(issues=()), {label.id: "PD01"}
+    ) is None
+
+
+def test_missing_mandatory_label_fails_chart_build() -> None:
+    label = Label(
+        id="label:star:HIP 1",
+        target_id="HIP 1",
+        text="α",
+        priority=55,
+        mandatory=True,
+        candidates=(),
+    )
+
+    with pytest.raises(ValueError, match="chart pocket-001 has missing mandatory labels"):
+        _require_mandatory_labels("pocket-001", (label,))
 
 
 def test_chart_definitions_for_tiled_atlas() -> None:

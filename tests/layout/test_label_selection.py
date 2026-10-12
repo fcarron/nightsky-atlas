@@ -72,12 +72,12 @@ def clustered_scene(*, object_type: DsoType = DsoType.GALAXY_CLUSTER) -> tuple:
     return scene, build_dso_labels(scene, TRANSFORM, STYLE)
 
 
-def test_high_priority_labels_survive_dense_field() -> None:
+def test_all_selected_labels_survive_dense_field() -> None:
     scene, labels = clustered_scene()
     selected = select_labels(labels, scene, TRANSFORM, STYLE)
     ids = {label.id for label in selected}
     assert "label:dso:NGC4486" in ids
-    assert len(selected) < len(labels)
+    assert len(selected) == len(labels)
 
 
 def test_herschel400_designation_survives_dense_field() -> None:
@@ -102,7 +102,7 @@ def test_herschel400_designation_survives_dense_field() -> None:
     assert all(label.mandatory for label in selected if label.id.startswith("label:dso:"))
 
 
-def test_extreme_dso_density_restores_conservative_local_budget() -> None:
+def test_extreme_dso_density_does_not_drop_selected_labels() -> None:
     scene, labels = clustered_scene()
     adaptive = select_labels(labels, scene, TRANSFORM, STYLE)
     relaxed_selection = STYLE.label.selection.model_copy(
@@ -112,7 +112,7 @@ def test_extreme_dso_density_restores_conservative_local_budget() -> None:
         update={"label": STYLE.label.model_copy(update={"selection": relaxed_selection})}
     )
     relaxed = select_labels(labels, scene, TRANSFORM, relaxed_style)
-    assert len(adaptive) < len(relaxed)
+    assert len(adaptive) == len(relaxed) == len(labels)
     assert any(label.id == "label:dso:NGC4486" for label in adaptive)
 
 
@@ -121,7 +121,7 @@ def test_dso_density_transition_must_increase() -> None:
         LabelSelectionStyle(dso_dense_start_neighbors=12, dso_dense_full_neighbors=6)
 
 
-def test_dense_field_thins_ordinary_labels_but_sparse_field_keeps_them() -> None:
+def test_dense_field_keeps_selected_ordinary_dso_labels() -> None:
     _scene, dense_labels = clustered_scene()
     dense = select_labels(dense_labels, _scene, TRANSFORM, STYLE)
 
@@ -133,7 +133,7 @@ def test_dense_field_thins_ordinary_labels_but_sparse_field_keeps_them() -> None
     sparse_labels = build_dso_labels(sparse_scene, TRANSFORM, STYLE)
     sparse = select_labels(sparse_labels, sparse_scene, TRANSFORM, STYLE)
 
-    assert len(dense) < len(dense_labels) / 2
+    assert len(dense) == len(dense_labels)
     assert len(sparse) == len(sparse_labels)
 
 
@@ -216,12 +216,7 @@ def test_selection_can_be_disabled() -> None:
 def test_protected_ids_are_always_kept() -> None:
     scene, labels = clustered_scene()
     unprotected = select_labels(labels, scene, TRANSFORM, STYLE)
-    unprotected_ids = {label.id for label in unprotected}
-    dropped = [label.id for label in labels if label.id not in unprotected_ids]
-    assert dropped, "expected the dense field to drop some ordinary labels"
-    protected = dropped[0]
-    selected = select_labels(labels, scene, TRANSFORM, STYLE, protected_ids=[protected])
-    assert protected in {label.id for label in selected}
+    assert {label.id for label in unprotected} == {label.id for label in labels}
 
 
 def test_selection_is_deterministic() -> None:
@@ -231,7 +226,7 @@ def test_selection_is_deterministic() -> None:
     assert [label.id for label in first] == [label.id for label in second]
 
 
-def test_selected_star_and_dso_labels_become_mandatory() -> None:
+def test_selected_star_and_dso_labels_are_mandatory() -> None:
     dso_scene = build_scene(CHART, (), [make_dso("NGC1000", 187.5, 12.0)])
     dso = select_labels(build_dso_labels(dso_scene, TRANSFORM, STYLE), dso_scene, TRANSFORM, STYLE)
     star = Star(
@@ -256,7 +251,37 @@ def test_selected_star_and_dso_labels_become_mandatory() -> None:
     )
     assert dso and stars
     assert dso[0].mandatory
-    assert not stars[0].mandatory
+    assert stars[0].mandatory
+
+
+def test_star_with_no_in_field_candidate_gets_reportable_fallback() -> None:
+    star = Star(
+        id="HIP 1",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        magnitude=1.0,
+        provenance=Provenance(catalogue="TEST", source_id="star"),
+        hip_id="HIP 1",
+    )
+    long_name = "A" * 200
+    scene = build_scene(CHART, (star,))
+    labels = build_star_labels(
+        scene,
+        TRANSFORM,
+        STYLE,
+        {
+            1: StarName(
+                1,
+                name=long_name,
+                curated_name=long_name,
+                proper_name_tier="standard",
+            )
+        },
+    )
+
+    assert len(labels) == 1
+    assert labels[0].candidates
+    assert all(candidate.id.endswith(":fallback") for candidate in labels[0].candidates)
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
@@ -270,7 +295,7 @@ def test_selected_star_and_dso_labels_become_mandatory() -> None:
         ),
     ),
 )
-def test_bayer_and_proper_name_stars_bypass_density_without_forcing_placement(
+def test_selected_bayer_and_proper_name_stars_are_mandatory(
     edition: str,
     star_name: StarName,
     expected_text: str,
@@ -298,10 +323,10 @@ def test_bayer_and_proper_name_stars_bypass_density_without_forcing_placement(
 
     assert selected_star.text == expected_text
     assert selected_star.candidates
-    assert selected_star.mandatory == star_label.mandatory
+    assert selected_star.mandatory
 
 
-def test_preserved_star_label_can_still_be_rejected_for_geometric_overlap() -> None:
+def test_preserved_star_label_remains_visible_with_geometric_overlap() -> None:
     bounds = PageRect(100.0, 100.0, 8.0, 2.5)
 
     def label(label_id: str, priority: int, mandatory: bool, semantic_key: str) -> Label:
@@ -322,10 +347,10 @@ def test_preserved_star_label_can_still_be_rejected_for_geometric_overlap() -> N
         )
 
     high = label("label:star:HIP 1", 95, True, "star:name:First")
-    optional = label("label:star:HIP 2", 65, False, "star:bayer:β Lyr")
+    optional = label("label:star:HIP 2", 65, True, "star:bayer:β Lyr")
     scene = build_scene(CHART, (), ())
     selected = select_labels((high, optional), scene, TRANSFORM, STYLE)
     result = optimize_labels(selected, scene, TRANSFORM, STYLE)
 
     optional_result = next(item for item in result.labels if item.id == optional.id)
-    assert optional_result.hidden
+    assert not optional_result.hidden
