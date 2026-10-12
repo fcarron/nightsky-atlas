@@ -5,6 +5,7 @@ edition: {name: Pocket, code: P, chart_index_width: 2}
 chart_directory_position: back
 mm_per_degree: 5.0
 stellar_limit_magnitude: 7.5
+exclude_star_labels: [17702, 17847] # HIP 17702 Alcyone; HIP 17847 Atlas
 detail_charts:
   - id: pocket-detail-virgo-core
     code: PD01

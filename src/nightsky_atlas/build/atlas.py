@@ -77,6 +77,7 @@ from nightsky_atlas.catalog.star_names import (
 )
 from nightsky_atlas.catalog.star_names import (
     StarName,
+    hip_number,
     load_star_names,
 )
 from nightsky_atlas.catalog.store import QueryBox, StarStore
@@ -281,6 +282,7 @@ class ChartPageResult:
     layout_issues: tuple[dict[str, Any], ...] = ()
     permitted_suppressions: tuple[dict[str, Any], ...] = ()
     fallback_candidate_label_ids: tuple[str, ...] = ()
+    intentional_excluded_star_labels: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         primary_neighbours: dict[str, str] = {}
@@ -306,6 +308,7 @@ class ChartPageResult:
             "layout_issues": list(self.layout_issues),
             "permitted_suppressions": list(self.permitted_suppressions),
             "fallback_candidate_label_ids": list(self.fallback_candidate_label_ids),
+            "intentional_excluded_star_labels": list(self.intentional_excluded_star_labels),
             "neighbours": primary_neighbours,
             "navigation": [
                 {"direction": direction, "chart_id": neighbour}
@@ -349,6 +352,7 @@ class _MainChartShared:
     detail_charts: tuple[DetailChartConfig, ...]
     detail_parent_chart_ids: dict[str, tuple[str, ...]]
     detail_labelled_dso_ids: dict[str, frozenset[str]]
+    exclude_star_labels: tuple[int, ...]
     edition: EditionConfig
     overviews: dict[str, OverviewMap]
     variable_star_hips: frozenset[int]
@@ -382,6 +386,36 @@ def _require_mandatory_labels(chart_id: str, labels: tuple[Label, ...]) -> None:
     )
     if missing:
         raise ValueError(f"chart {chart_id} has missing mandatory labels: {', '.join(missing)}")
+
+
+def _exclude_star_labels(
+    labels: tuple[Label, ...], scene: ChartScene, excluded_hips: tuple[int, ...]
+) -> tuple[tuple[Label, ...], tuple[dict[str, Any], ...]]:
+    """Remove explicitly excluded HIP labels and return auditable records."""
+    if not excluded_hips:
+        return labels, ()
+    hip_by_star_id = {
+        item.star.id: hip
+        for item in scene.stars
+        if isinstance(item.star, Star)
+        and (hip := hip_number(item.star.hip_id)) in excluded_hips
+    }
+    removed = tuple(
+        label
+        for label in labels
+        if label.target_id in hip_by_star_id and label.id.startswith("label:star:")
+    )
+    records = tuple(
+        {
+            "hip_id": f"HIP {hip_by_star_id[label.target_id]}",
+            "star_id": label.target_id,
+            "label_id": label.id,
+            "text": label.text,
+        }
+        for label in removed
+    )
+    removed_ids = {label.id for label in removed}
+    return tuple(label for label in labels if label.id not in removed_ids), records
 
 
 def _layout_issue_records(issues: tuple[LayoutIssue, ...]) -> tuple[dict[str, Any], ...]:
@@ -499,6 +533,12 @@ def _build_main_chart(
     stage_start = time.perf_counter()
     labels = build_labels(
         chart_context.scene, chart_context.transform, chart_context.style, shared.star_names
+    )
+    labels, intentional_exclusions = _exclude_star_labels(
+        labels, chart_context.scene, shared.exclude_star_labels
+    )
+    intentional_exclusions = tuple(
+        {"chart_id": definition.id, **item} for item in intentional_exclusions
     )
     labels_s = time.perf_counter() - stage_start
     chart_overrides = shared.library.for_chart(definition.id) if shared.library else None
@@ -674,6 +714,7 @@ def _build_main_chart(
             ),
         ),
         permitted_suppressions=tuple(permitted_suppressions),
+        intentional_excluded_star_labels=intentional_exclusions,
         fallback_candidate_label_ids=tuple(
             label.id
             for label in labels
@@ -1268,6 +1309,7 @@ def _build_atlas_impl(
 
     prepared_details: dict[str, _PreparedDetail] = {}
     detail_labelled_dso_ids: dict[str, frozenset[str]] = {}
+    detail_labelled_star_hips: dict[str, frozenset[int]] = {}
     for detail in detail_charts:
         definition = detail.to_definition(atlas_id=atlas.id)
         profile_limit, profile_style = detail_star_profiles[detail.star_profile]
@@ -1369,6 +1411,19 @@ def _build_atlas_impl(
             if scene_dso.symbol_visible
             and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
             and f"label:dso:{scene_dso.dso.id}" not in problematic_label_ids
+        )
+        placed_targets = {
+            label.target_id
+            for label in detail_labels
+            if not label.hidden and label.effective_candidate() is not None
+        }
+        detail_labelled_star_hips[detail.id] = frozenset(
+            hip
+            for scene_star in detail_context.scene.stars
+            if isinstance(scene_star.star, Star)
+            and (hip := hip_number(scene_star.star.hip_id)) in atlas.exclude_star_labels
+            and scene_star.star.id in placed_targets
+            and f"label:star:{scene_star.star.id}" not in problematic_label_ids
         )
         prepared_details[detail.id] = _PreparedDetail(
             context=detail_context,
@@ -1580,6 +1635,7 @@ def _build_atlas_impl(
         detail_charts=detail_charts,
         detail_parent_chart_ids=selected_detail_parent_chart_ids,
         detail_labelled_dso_ids=detail_labelled_dso_ids,
+        exclude_star_labels=atlas.exclude_star_labels,
         edition=edition,
         overviews=overviews if style.locator.enabled else {},
         variable_star_hips=variable_star_hips,
@@ -1662,6 +1718,25 @@ def _build_atlas_impl(
     finally:
         if pool is not None:
             pool.shutdown(cancel_futures=True)
+
+    excluded_hips_in_build = {
+        int(record["hip_id"].removeprefix("HIP "))
+        for page_result in results
+        for record in page_result.intentional_excluded_star_labels
+    }
+    verified_hips = (
+        set().union(*detail_labelled_star_hips.values())
+        if detail_labelled_star_hips
+        else set()
+    )
+    unverified = sorted(excluded_hips_in_build - verified_hips)
+    if unverified:
+        detail_codes = ", ".join(detail.code for detail in detail_charts) or "none"
+        missing = ", ".join(f"HIP {hip}" for hip in unverified)
+        raise ValueError(
+            "explicitly excluded main-chart star labels are not visibly labelled on an "
+            f"included detail chart ({detail_codes}): {missing}"
+        )
 
     atlas_index = build_atlas_index(
         index_dsos,
@@ -1969,6 +2044,29 @@ def _build_atlas_impl(
         "detail_chart_count": len(detail_charts),
         "main_chart_ids": [chart.id for chart in charts],
         "detail_chart_ids": [detail.id for detail in detail_charts],
+        "intentional_star_label_exclusions": [
+            {
+                "hip_id": f"HIP {hip}",
+                "name": (
+                    star_names[hip].curated_name or star_names[hip].name
+                    if hip in star_names
+                    else None
+                ),
+                "scope": "main_charts",
+                "main_chart_label_instances": [
+                    record
+                    for page_result in results
+                    for record in page_result.intentional_excluded_star_labels
+                    if record["hip_id"] == f"HIP {hip}"
+                ],
+                "verified_detail_charts": [
+                    detail.code
+                    for detail in detail_charts
+                    if hip in detail_labelled_star_hips.get(detail.id, frozenset())
+                ],
+            }
+            for hip in atlas.exclude_star_labels
+        ],
         "detail_charts": [
             {
                 "id": detail.id,

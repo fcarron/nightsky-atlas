@@ -28,11 +28,12 @@ from nightsky_atlas.atlas.tiling import (
 from nightsky_atlas.build.atlas import (
     _detail_scene,
     _detail_style,
+    _exclude_star_labels,
     _profile_config_path,
     _style_with_star_profile,
 )
 from nightsky_atlas.build.chart import build_chart_context, load_chart_inputs
-from nightsky_atlas.catalog.star_names import load_star_names
+from nightsky_atlas.catalog.star_names import hip_number, load_star_names
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
@@ -67,6 +68,47 @@ def test_edition_presets_load_with_expected_scale_and_codes(
     assert style.furniture.scale_bar.enabled is False
     expected_code = f"{code}01" if edition == "pocket" else f"{code}001"
     assert presentation_from_edition(chart, atlas.resolved_edition()).chart_code == expected_code
+
+
+def test_star_label_exclusions_are_pocket_only_stable_hip_ids() -> None:
+    pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
+    assert pocket.exclude_star_labels == (17702, 17847)
+    for edition in ("standard", "deep"):
+        assert load_atlas_config(ROOT / "atlas" / f"{edition}.yaml").exclude_star_labels == ()
+
+
+def test_pocket_p15_excludes_two_names_but_keeps_star_symbols() -> None:
+    atlas_path = ROOT / "atlas" / "pocket.yaml"
+    style_path = ROOT / "styles" / "pocket.yaml"
+    atlas = load_atlas_config(atlas_path)
+    definition = next(chart for chart in chart_definitions(atlas) if chart.id == "pocket-015")
+    context = build_chart_context(
+        atlas_path=atlas_path,
+        style_path=style_path,
+        definition=definition,
+        star_store=ROOT / "data" / "processed" / "stars" / "tycho2.sqlite",
+    )
+    names = load_star_names()
+    labels = build_labels(context.scene, context.transform, context.style, names)
+    excluded_label_ids = {
+        label.id
+        for label in labels
+        if label.target_id
+        in {
+            item.star.id
+            for item in context.scene.stars
+            if hip_number(item.star.hip_id) in {17702, 17847}
+        }
+    }
+    assert len(excluded_label_ids) == 2
+
+    remaining, records = _exclude_star_labels(labels, context.scene, atlas.exclude_star_labels)
+    assert not {label.text for label in remaining} & {"Alcyone", "Atlas"}
+    assert {record["hip_id"] for record in records} == {"HIP 17702", "HIP 17847"}
+    assert {record["label_id"] for record in records} == excluded_label_ids
+    assert {
+        item.star.hip_id for item in context.scene.stars
+    } >= {"HIP 17702", "HIP 17847"}
 
 
 def test_deep_magnitude_10_5_uses_a_smaller_printable_faint_star() -> None:

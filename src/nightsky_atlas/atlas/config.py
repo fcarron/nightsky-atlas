@@ -414,6 +414,7 @@ class AtlasConfig(_StrictModel):
     edition: EditionConfig | None = None
     charts: list[ChartConfig] = Field(default_factory=list)
     detail_charts: tuple[DetailChartConfig, ...] = ()
+    exclude_star_labels: tuple[int, ...] = ()
     tiling: TilingConfig | None = None
     chart_directory_position: Literal["front", "back"] = "front"
     mm_per_degree: PositiveFloat | None = None
@@ -422,6 +423,10 @@ class AtlasConfig(_StrictModel):
 
     @model_validator(mode="after")
     def _configured_scale_fits_page(self) -> AtlasConfig:
+        if any(hip <= 0 for hip in self.exclude_star_labels):
+            raise ValueError("exclude_star_labels must contain positive HIP numbers")
+        if len(self.exclude_star_labels) != len(set(self.exclude_star_labels)):
+            raise ValueError("exclude_star_labels must not contain duplicate HIP numbers")
         page = self.page.to_geometry()
         if self.mm_per_degree is not None:
             fields = [(chart.width_deg, chart.height_deg) for chart in self.charts]
