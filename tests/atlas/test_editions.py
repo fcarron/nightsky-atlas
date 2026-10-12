@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from nightsky_atlas.atlas.config import DetailChartConfig, load_atlas_config, load_style_config
+from nightsky_atlas.atlas.config import (
+    AtlasConfig,
+    DetailChartConfig,
+    load_atlas_config,
+    load_style_config,
+)
 from nightsky_atlas.atlas.detail_geometry import (
     detail_chart_contains_position,
     detail_chart_overlaps_main_chart,
@@ -202,7 +207,7 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
     details = standard.detail_charts
     assert len(chart_definitions(standard)) == 129
-    assert [detail.code for detail in pocket.detail_charts] == ["PD01"]
+    assert [detail.code for detail in pocket.detail_charts] == ["PD01", "PD02"]
     assert [detail.code for detail in details] == [f"SD{i:02d}" for i in range(1, 10)]
     assert [detail.code for detail in deep.detail_charts] == [f"DD{i:02d}" for i in range(1, 10)]
     assert all(
@@ -252,7 +257,11 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         "eyepiece_deep",
         "eyepiece",
     ]
-    assert pocket.detail_charts[0].star_profile == "standard"
+    assert pocket.detail_charts[0].mm_per_degree == 20.0
+    assert pocket.detail_charts[0].star_profile == "deep"
+    assert pocket.detail_charts[1].name == "Pleiades · M45"
+    assert pocket.detail_charts[1].mm_per_degree == 20.0
+    assert pocket.detail_charts[1].star_profile == "deep"
     for detail in (*pocket.detail_charts, *details, *deep.detail_charts):
         assert detail.mm_per_degree in {20.0, 40.0, 80.0}
         assert detail.width_deg * detail.mm_per_degree == pytest.approx(260.0)
@@ -271,7 +280,7 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
 
 
 def test_detail_chart_rejects_intermediate_scales() -> None:
-    with pytest.raises(ValueError, match="scale must be 20, 40 or 80"):
+    with pytest.raises(ValueError, match="scale must be 10, 20, 40 or 80"):
         DetailChartConfig(
             id="detail-test",
             code="SD99",
@@ -282,6 +291,37 @@ def test_detail_chart_rejects_intermediate_scales() -> None:
             height_deg=3.0,
             mm_per_degree=60.0,
         )
+
+
+def test_pocket_detail_scale_requires_matching_stellar_profile() -> None:
+    pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
+    raw = pocket.model_dump()
+    detail = raw["detail_charts"][0]
+
+    detail["mm_per_degree"] = 10.0
+    detail["width_deg"] = 26.0
+    detail["height_deg"] = 17.0
+    detail["star_profile"] = "standard"
+    AtlasConfig.model_validate(raw)
+
+    detail["mm_per_degree"] = 20.0
+    detail["width_deg"] = 13.0
+    detail["height_deg"] = 8.5
+    detail["star_profile"] = "deep"
+    AtlasConfig.model_validate(raw)
+
+    detail["mm_per_degree"] = 40.0
+    detail["width_deg"] = 6.5
+    detail["height_deg"] = 4.25
+    with pytest.raises(ValueError, match="Pocket detail charts must use 10 or 20 mm/°"):
+        AtlasConfig.model_validate(raw)
+
+    detail["mm_per_degree"] = 10.0
+    detail["width_deg"] = 26.0
+    detail["height_deg"] = 17.0
+    detail["star_profile"] = "deep"
+    with pytest.raises(ValueError, match="must use the 'standard' star profile"):
+        AtlasConfig.model_validate(raw)
 
 
 def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:

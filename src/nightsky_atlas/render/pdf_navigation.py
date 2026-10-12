@@ -12,7 +12,7 @@ import cairo
 from nightsky_atlas.chart.page import PageRect
 from nightsky_atlas.units import mm_to_pt
 
-__all__ = ["PdfNavigation", "chart_destination"]
+__all__ = ["PdfNavigation", "chart_destination", "page_destination"]
 
 _CHART_CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
@@ -23,14 +23,25 @@ def chart_destination(chart_code: str) -> str:
     return f"chart_{chart_code}"
 
 
+def page_destination(page_id: str) -> str:
+    """Return a stable named destination for a non-chart atlas page."""
+    if not _CHART_CODE.fullmatch(page_id):
+        raise ValueError(f"invalid page id for PDF destination: {page_id!r}")
+    return f"page_{page_id}"
+
+
 @dataclass(frozen=True, slots=True)
 class PdfNavigation:
     chart_codes: frozenset[str]
+    page_ids: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         destinations = [chart_destination(code) for code in self.chart_codes]
         if len(destinations) != len(set(destinations)):
             raise ValueError("PDF chart destinations must be unique")
+        page_destinations = [page_destination(page_id) for page_id in self.page_ids]
+        if len(page_destinations) != len(set(page_destinations)):
+            raise ValueError("PDF page destinations must be unique")
 
     def has_chart(self, chart_code: str) -> bool:
         return chart_code in self.chart_codes
@@ -45,6 +56,20 @@ class PdfNavigation:
             raise ValueError(f"chart is not part of this PDF: {chart_code}")
         surface.set_page_label(chart_code)
         cr.tag_begin(cairo.TAG_DEST, f"name='{chart_destination(chart_code)}' x=0 y=0")
+        cr.tag_end(cairo.TAG_DEST)
+
+    def mark_page(
+        self,
+        surface: cairo.PDFSurface,
+        cr: cairo.Context[cairo.Surface],
+        page_id: str,
+        *,
+        label: str | None = None,
+    ) -> None:
+        if page_id not in self.page_ids:
+            raise ValueError(f"page is not registered in this PDF: {page_id}")
+        surface.set_page_label(label or page_id)
+        cr.tag_begin(cairo.TAG_DEST, f"name='{page_destination(page_id)}' x=0 y=0")
         cr.tag_end(cairo.TAG_DEST)
 
     def add_outline(
@@ -63,6 +88,25 @@ class PdfNavigation:
             parent_id,
             title,
             f"dest='{chart_destination(chart_code)}'",
+            flags,
+        )
+
+    def add_page_outline(
+        self,
+        surface: cairo.PDFSurface,
+        parent_id: int,
+        title: str,
+        page_id: str,
+        *,
+        open_item: bool = False,
+    ) -> int | None:
+        if page_id not in self.page_ids:
+            return None
+        flags = cairo.PDF_OUTLINE_FLAG_OPEN if open_item else 0
+        return surface.add_outline(
+            parent_id,
+            title,
+            f"dest='{page_destination(page_id)}'",
             flags,
         )
 

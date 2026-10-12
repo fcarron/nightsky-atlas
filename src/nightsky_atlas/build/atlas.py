@@ -704,6 +704,8 @@ def _draw_front_matter_pages(
     style: StyleConfig,
     main_charts: tuple[ChartDefinition, ...],
     scale_chart: ChartDefinition,
+    pdf_navigation: PdfNavigation,
+    outline_parent_id: int,
 ) -> int:
     """Write the two opening pages shared by all editions."""
     page = atlas.page.to_geometry()
@@ -713,9 +715,15 @@ def _draw_front_matter_pages(
         scale_mm_per_degree=atlas.mm_per_degree,
     ).mm_per_deg
     draw_introduction(cr, atlas, style, main_charts)
+    pdf_navigation.mark_page(surface, cr, "introduction", label="Introduction")
+    pdf_navigation.add_page_outline(surface, outline_parent_id, "Introduction", "introduction")
     surface.show_page()
 
     draw_field_guide(cr, atlas, style, len(main_charts), mm_per_degree)
+    pdf_navigation.mark_page(surface, cr, "field-guide", label="Field Guide")
+    pdf_navigation.add_page_outline(
+        surface, outline_parent_id, "Field Guide & Symbol Key", "field-guide"
+    )
     surface.show_page()
     return 2
 
@@ -730,6 +738,8 @@ def _draw_build_credits_page(
     geometry_catalogues: dict[str, list[str]],
     inputs: ChartInputs,
     star_names: dict[int, StarName],
+    pdf_navigation: PdfNavigation,
+    outline_parent_id: int,
 ) -> None:
     """Append credits derived from the data and geometry used in this build."""
     page = atlas.page.to_geometry()
@@ -758,6 +768,10 @@ def _draw_build_credits_page(
         right_sections,
         edition=atlas.resolved_edition().name,
         catalogue_data_label="source-specific dates in the build manifest",
+    )
+    pdf_navigation.mark_page(surface, cr, "credits", label="Data Sources & Credits")
+    pdf_navigation.add_page_outline(
+        surface, outline_parent_id, "Data Sources & Credits", "credits"
     )
     surface.show_page()
 
@@ -1284,7 +1298,23 @@ def _build_atlas_impl(
         chart.id: presentation_from_edition(chart, edition).chart_code for chart in charts
     }
     pdf_navigation = PdfNavigation(
-        frozenset((*chart_codes.values(), *(detail.code for detail in detail_charts)))
+        frozenset((*chart_codes.values(), *(detail.code for detail in detail_charts))),
+        frozenset(
+            {
+                "introduction",
+                "field-guide",
+                "overview-north",
+                "overview-south",
+                "overview-both",
+                "credits",
+                "index-dso",
+                "index-stars",
+                "index-constellations",
+                "index-cross-references",
+                "chart-directory",
+                "detail-directory",
+            }
+        ),
     )
     outline_root = pdf_navigation.add_outline(
         surface,
@@ -1304,6 +1334,8 @@ def _build_atlas_impl(
                 style,
                 tuple(charts),
                 charts[0],
+                pdf_navigation,
+                outline_root,
             )
 
     chart_directory = ()
@@ -1322,6 +1354,7 @@ def _build_atlas_impl(
                     style,
                     edition,
                     pdf_navigation,
+                    outline_parent_id=outline_root,
                 )
                 chart_directory_pages += draw_detail_chart_directory_pages(
                     context,
@@ -1331,6 +1364,7 @@ def _build_atlas_impl(
                     style,
                     edition,
                     pdf_navigation,
+                    outline_parent_id=outline_root,
                 )
 
     overviews: dict[str, OverviewMap] = {}
@@ -1365,6 +1399,19 @@ def _build_atlas_impl(
                     style,
                     pdf_navigation,
                 )
+                overview_outline = pdf_navigation.add_page_outline(
+                    surface, outline_root, "Sky Overviews", "overview-both", open_item=False
+                )
+                assert overview_outline is not None
+                pdf_navigation.mark_page(
+                    surface, context, "overview-both", label="Sky Overviews"
+                )
+                pdf_navigation.add_page_outline(
+                    surface, overview_outline, "Northern Sky", "overview-both"
+                )
+                pdf_navigation.add_page_outline(
+                    surface, overview_outline, "Southern Sky", "overview-both"
+                )
                 surface.show_page()
                 overview_page_info.append(
                     {
@@ -1376,9 +1423,34 @@ def _build_atlas_impl(
                     }
                 )
             else:
+                overview_outline = None
                 for hemisphere in ("north", "south"):
                     overview = overviews[hemisphere]
+                    page_id = f"overview-{hemisphere}"
                     draw_overview_page(context, overview, page, style, pdf_navigation)
+                    pdf_navigation.mark_page(
+                        surface,
+                        context,
+                        page_id,
+                        label=(
+                            "Northern Sky Overview"
+                            if hemisphere == "north"
+                            else "Southern Sky Overview"
+                        ),
+                    )
+                    if hemisphere == "north":
+                        overview_outline = pdf_navigation.add_page_outline(
+                            surface, outline_root, "Sky Overviews", page_id
+                        )
+                        assert overview_outline is not None
+                    else:
+                        assert overview_outline is not None
+                    pdf_navigation.add_page_outline(
+                        surface,
+                        overview_outline,
+                        "Northern Sky" if hemisphere == "north" else "Southern Sky",
+                        page_id,
+                    )
                     surface.show_page()
                     overview_page_info.append(
                         {
@@ -1697,6 +1769,8 @@ def _build_atlas_impl(
                 geometry_catalogues,
                 inputs,
                 star_names,
+                pdf_navigation,
+                outline_root,
             )
             credits_page_count = 1
 
@@ -1709,6 +1783,7 @@ def _build_atlas_impl(
             style,
             edition,
             pdf_navigation,
+            outline_parent_id=outline_root,
         )
 
     if write_front_matter and atlas.chart_directory_position == "back":
@@ -1721,6 +1796,7 @@ def _build_atlas_impl(
                 style,
                 edition,
                 pdf_navigation,
+                outline_parent_id=outline_root,
             )
             chart_directory_pages += draw_detail_chart_directory_pages(
                 context,
@@ -1730,6 +1806,7 @@ def _build_atlas_impl(
                 style,
                 edition,
                 pdf_navigation,
+                outline_parent_id=outline_root,
             )
 
     with progress.step("finish combined PDF"):

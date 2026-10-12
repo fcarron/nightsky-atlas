@@ -6,7 +6,12 @@ from pathlib import Path
 
 from nightsky_atlas.atlas.config import EditionConfig, load_atlas_config
 from nightsky_atlas.atlas.directory import build_chart_directory, build_detail_chart_directory
-from nightsky_atlas.atlas.index import build_atlas_index, natural_designation_key
+from nightsky_atlas.atlas.index import (
+    AtlasIndex,
+    NamedStarIndexEntry,
+    build_atlas_index,
+    natural_designation_key,
+)
 from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
@@ -148,6 +153,15 @@ def test_faint_stars_are_excluded_from_named_star_index() -> None:
         star_names={123: StarName(123, name="Test Star", constellation="Com")},
     )
     assert [entry.name for entry in index.named_star_entries] == ["Test Star"]
+
+
+def test_named_star_index_gets_its_own_printed_page() -> None:
+    page = PageGeometry(297.0, 210.0, 12.0)
+    without_stars = AtlasIndex((), ())
+    with_stars = AtlasIndex(
+        (), (), named_star_entries=(NamedStarIndexEntry("HIP 1", "Test", "α Com", "Com", "S001"),)
+    )
+    assert index_page_count(with_stars, page) == index_page_count(without_stars, page) + 1
 
 
 def test_chart_directory_uses_edition_codes_and_published_neighbours() -> None:

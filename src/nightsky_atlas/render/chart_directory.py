@@ -70,6 +70,8 @@ def draw_chart_directory_pages(
     style: StyleConfig,
     edition: EditionConfig,
     pdf_navigation: PdfNavigation | None = None,
+    *,
+    outline_parent_id: int | None = None,
 ) -> int:
     """Append paginated directory pages and return the number written."""
     family = style.typography.sans_family
@@ -77,6 +79,14 @@ def draw_chart_directory_pages(
     capacity = capacity_per_column * _COLUMNS
     column_width = (page.width_mm - 2 * page.margin_mm) / _COLUMNS
     for page_number, offset in enumerate(range(0, max(1, len(entries)), capacity), start=1):
+        if pdf_navigation is not None and offset == 0:
+            pdf_navigation.mark_page(
+                surface, cr, "chart-directory", label="Chart Directory"
+            )
+            if outline_parent_id is not None:
+                pdf_navigation.add_page_outline(
+                    surface, outline_parent_id, "Chart Directory", "chart-directory"
+                )
         cr.set_source_rgb(0.0, 0.0, 0.0)
         draw_text(
             cr,
@@ -137,6 +147,8 @@ def draw_detail_chart_directory_pages(
     style: StyleConfig,
     edition: EditionConfig,
     pdf_navigation: PdfNavigation | None = None,
+    *,
+    outline_parent_id: int | None = None,
 ) -> int:
     """Append a compact lookup for detail codes and their parent charts."""
     if not entries:
@@ -148,6 +160,17 @@ def draw_detail_chart_directory_pages(
     capacity = rows_per_column * _COLUMNS
     column_width = (page.width_mm - 2 * page.margin_mm) / _COLUMNS
     for page_number, offset in enumerate(range(0, len(entries), capacity), start=1):
+        if pdf_navigation is not None and offset == 0:
+            pdf_navigation.mark_page(
+                surface, cr, "detail-directory", label="Detail Chart Directory"
+            )
+            if outline_parent_id is not None:
+                pdf_navigation.add_page_outline(
+                    surface,
+                    outline_parent_id,
+                    "Detail Chart Directory",
+                    "detail-directory",
+                )
         draw_text(
             cr,
             "DETAIL CHART DIRECTORY",

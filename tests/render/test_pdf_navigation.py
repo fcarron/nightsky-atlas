@@ -10,7 +10,11 @@ import cairo
 import pytest
 
 from nightsky_atlas.chart.page import PageRect
-from nightsky_atlas.render.pdf_navigation import PdfNavigation, chart_destination
+from nightsky_atlas.render.pdf_navigation import (
+    PdfNavigation,
+    chart_destination,
+    page_destination,
+)
 
 
 class RecordingContext:
@@ -46,6 +50,9 @@ def test_destinations_are_stable_and_unique() -> None:
     }
     with pytest.raises(ValueError, match="invalid chart code"):
         chart_destination("S 031")
+    assert page_destination("overview-north") == "page_overview-north"
+    with pytest.raises(ValueError, match="invalid page id"):
+        page_destination("overview north")
 
 
 def test_reciprocal_links_use_named_destinations() -> None:
@@ -85,8 +92,37 @@ def test_page_label_destination_and_bookmark_use_chart_id() -> None:
     assert surface.outlines[0][1:3] == ("S031", "dest='chart_S031'")
 
 
+def test_named_page_destination_and_bookmark() -> None:
+    navigation = PdfNavigation(frozenset(), frozenset({"overview-north"}))
+    surface = RecordingSurface()
+    cr = RecordingContext()
+    navigation.mark_page(surface, cr, "overview-north", label="Northern Sky Overview")
+    bookmark = navigation.add_page_outline(
+        surface, 0, "Northern Sky", "overview-north"
+    )
+    assert surface.labels == ["Northern Sky Overview"]
+    assert cr.calls == [
+        (f"begin:{cairo.TAG_DEST}", "name='page_overview-north' x=0 y=0"),
+        (f"end:{cairo.TAG_DEST}", ""),
+    ]
+    assert bookmark == 1
+    assert surface.outlines[0][1:3] == ("Northern Sky", "dest='page_overview-north'")
+
+
+def test_named_page_destination_supports_hyphenated_ids(tmp_path: Path) -> None:
+    path = tmp_path / "named-page.pdf"
+    surface = cairo.PDFSurface(str(path), 200.0, 200.0)
+    cr = cairo.Context(surface)
+    navigation = PdfNavigation(frozenset(), frozenset({"overview-north"}))
+    navigation.mark_page(surface, cr, "overview-north", label="Northern Sky Overview")
+    cr.show_text("Overview")
+    surface.show_page()
+    surface.finish()
+    assert path.exists()
+
+
 def test_link_attributes_are_deterministic() -> None:
-    navigation = PdfNavigation(frozenset({"S031", "S032"}))
+    navigation = PdfNavigation(frozenset({"S031", "S032"}), frozenset({"overview"}))
     rect = PageRect(10.0, 20.0, 8.0, 3.0)
     contexts = [RecordingContext(), RecordingContext()]
     for cr in contexts:
@@ -100,7 +136,7 @@ def test_cairo_pdf_contains_navigation_after_front_matter(tmp_path: Path) -> Non
     path = tmp_path / "navigation.pdf"
     surface = cairo.PDFSurface(str(path), 200.0, 200.0)
     cr = cairo.Context(surface)
-    navigation = PdfNavigation(frozenset({"S031", "S032"}))
+    navigation = PdfNavigation(frozenset({"S031", "S032"}), frozenset({"overview"}))
     root = navigation.add_outline(
         surface, cairo.PDF_OUTLINE_ROOT, "Standard", "S031", open_item=True
     )
@@ -108,6 +144,12 @@ def test_cairo_pdf_contains_navigation_after_front_matter(tmp_path: Path) -> Non
 
     cr.move_to(10.0, 20.0)
     cr.show_text("Front matter")
+    surface.show_page()
+
+    navigation.mark_page(surface, cr, "overview", label="Sky Overviews")
+    navigation.add_page_outline(surface, root, "Sky Overviews", "overview")
+    cr.move_to(10.0, 20.0)
+    cr.show_text("Overview")
     surface.show_page()
 
     for chart_code, target in (("S031", "S032"), ("S032", "S031")):
@@ -127,6 +169,7 @@ def test_cairo_pdf_contains_navigation_after_front_matter(tmp_path: Path) -> Non
     ).stdout
     assert "(chart_S031)" in structure
     assert "(chart_S032)" in structure
+    assert "(page_overview)" in structure
     assert "/PageLabels" in structure
     assert "/Outlines" in structure
     assert "/Annots" in structure

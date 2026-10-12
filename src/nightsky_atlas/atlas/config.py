@@ -190,8 +190,8 @@ class DetailChartConfig(_StrictModel):
     @field_validator("mm_per_degree")
     @classmethod
     def _supported_detail_scale(cls, value: float) -> float:
-        if value not in {20.0, 40.0, 80.0}:
-            raise ValueError("detail-chart scale must be 20, 40 or 80 mm/°")
+        if value not in {10.0, 20.0, 40.0, 80.0}:
+            raise ValueError("detail-chart scale must be 10, 20, 40 or 80 mm/°")
         return value
 
     def to_definition(self, *, atlas_id: str) -> ChartDefinition:
@@ -416,6 +416,18 @@ class AtlasConfig(_StrictModel):
             raise ValueError("detail chart IDs must be unique")
         if len(detail_codes) != len(set(detail_codes)):
             raise ValueError("detail chart PDF codes must be unique")
+        if self.id == "pocket":
+            for detail in self.detail_charts:
+                expected_profile = {10.0: "standard", 20.0: "deep"}.get(
+                    detail.mm_per_degree
+                )
+                if expected_profile is None:
+                    raise ValueError("Pocket detail charts must use 10 or 20 mm/°")
+                if detail.star_profile != expected_profile:
+                    raise ValueError(
+                        f"Pocket detail charts at {detail.mm_per_degree:g} mm/° "
+                        f"must use the {expected_profile!r} star profile"
+                    )
         for detail in self.detail_charts:
             if (
                 detail.width_deg * detail.mm_per_degree > page.printable_width_mm + 1e-9

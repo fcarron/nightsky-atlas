@@ -33,6 +33,11 @@ def index_page_count(index: AtlasIndex, page: PageGeometry) -> int:
     dso_capacity = _capacity(page)
     constellation_capacity = _capacity(page, _CONSTELLATION_ROW_MM)
     count = max(1, math.ceil(len(index.dso_entries) / dso_capacity))
+    count += (
+        max(1, math.ceil(len(index.named_star_entries) / dso_capacity))
+        if index.named_star_entries
+        else 0
+    )
     count += max(1, math.ceil(len(index.constellation_entries) / constellation_capacity))
     count += max(1, math.ceil(len(index.aliases) / dso_capacity)) if index.aliases else 0
     return count
@@ -218,12 +223,20 @@ def _draw_section(
     page_number: int,
     row_mm: float = _ROW_MM,
     pdf_navigation: PdfNavigation | None = None,
+    *,
+    page_id: str | None = None,
+    outline_parent_id: int | None = None,
 ) -> int:
     capacity_per_column = _capacity(page, row_mm) // _COLUMNS
     capacity = capacity_per_column * _COLUMNS
     family = style.typography.sans_family
     column_width = (page.width_mm - 2 * page.margin_mm) / _COLUMNS
     for offset in range(0, max(1, len(entries)), capacity):
+        if pdf_navigation is not None and page_id is not None and offset == 0:
+            label = title.title().replace("Dso", "DSO")
+            pdf_navigation.mark_page(surface, cr, page_id, label=label)
+            if outline_parent_id is not None:
+                pdf_navigation.add_page_outline(surface, outline_parent_id, label, page_id)
         cr.set_source_rgb(0.0, 0.0, 0.0)
         draw_text(
             cr, title, mm_to_pt(page.margin_mm), mm_to_pt(page.margin_mm), family, 11.0, "semibold"
@@ -261,8 +274,15 @@ def draw_atlas_index_pages(
     style: StyleConfig,
     edition: EditionConfig,
     pdf_navigation: PdfNavigation | None = None,
+    *,
+    outline_parent_id: int | None = None,
 ) -> int:
     """Append compact vector index pages and return the number written."""
+    index_outline = None
+    if pdf_navigation is not None and outline_parent_id is not None:
+        index_outline = pdf_navigation.add_page_outline(
+            surface, outline_parent_id, "Object Index", "index-dso", open_item=False
+        )
     cr.set_source_rgb(0.0, 0.0, 0.0)
     next_page = _draw_section(
         cr,
@@ -275,7 +295,24 @@ def draw_atlas_index_pages(
         edition,
         1,
         pdf_navigation=pdf_navigation,
+        page_id="index-dso",
+        outline_parent_id=index_outline,
     )
+    if index.named_star_entries:
+        next_page = _draw_section(
+            cr,
+            surface,
+            index.named_star_entries,
+            "NAMED STAR INDEX",
+            (("Name", 0), ("Designation", 35), ("Con", 75), ("Chart", 90)),
+            page,
+            style,
+            edition,
+            next_page,
+            pdf_navigation=pdf_navigation,
+            page_id="index-stars",
+            outline_parent_id=index_outline,
+        )
     next_page = _draw_section(
         cr,
         surface,
@@ -288,6 +325,8 @@ def draw_atlas_index_pages(
         next_page,
         _CONSTELLATION_ROW_MM,
         pdf_navigation,
+        page_id="index-constellations",
+        outline_parent_id=index_outline,
     )
     if index.aliases:
         next_page = _draw_section(
@@ -301,5 +340,7 @@ def draw_atlas_index_pages(
             edition,
             next_page,
             pdf_navigation=pdf_navigation,
+            page_id="index-cross-references",
+            outline_parent_id=index_outline,
         )
     return index_page_count(index, page)
