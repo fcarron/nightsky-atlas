@@ -717,7 +717,7 @@ class DsoLabelPlacementStyle(_StrictModel):
     joint_max_component_labels: int = Field(default=8, ge=2)
     joint_beam_width: int = Field(default=24, ge=1)
     joint_node_budget: int = Field(default=24000, ge=1)
-    hard_repair_neighborhood_labels: int = Field(default=6, ge=2, le=8)
+    hard_repair_neighborhood_labels: int = Field(default=8, ge=2, le=8)
     hard_repair_search_limit: int = Field(default=45, ge=1)
 
     @field_validator("candidate_edge_gaps_mm")

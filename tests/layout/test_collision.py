@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.constellations import ConstellationSegment
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
@@ -13,8 +15,10 @@ from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.collision import IssueType, find_hard_violations
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.validation import validate_layout
+from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
+from nightsky_atlas.scene.models import SceneConstellationRegion
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = load_style_config(REPO_ROOT / "styles" / "standard.yaml")
@@ -318,6 +322,32 @@ def test_known_target_is_accepted() -> None:
     assert IssueType.DUPLICATE_LABEL_ID not in types
 
 
+@pytest.mark.parametrize("object_type", (DsoType.GALAXY, DsoType.OPEN_CLUSTER))
+def test_label_inside_large_dso_footprint_does_not_hit_its_outline(
+    object_type: DsoType,
+) -> None:
+    dso = replace(
+        make_dso(),
+        object_type=object_type,
+        major_axis_arcmin=500.0,
+        minor_axis_arcmin=360.0,
+    )
+    scene = build_scene(CHART, [], [dso])
+    label = make_label(
+        "label:dso:NGC1",
+        CENTER.x_mm - 4.0,
+        CENTER.y_mm - 1.25,
+    )
+
+    issues = find_hard_violations((label,), scene, TRANSFORM, STYLE)
+
+    assert not any(
+        issue.issue_type == IssueType.LABEL_DSO
+        and "NGC1" in issue.element_ids
+        for issue in issues
+    )
+
+
 def test_constellation_layout_target_is_accepted() -> None:
     segment = ConstellationSegment(
         id="ori:line",
@@ -336,6 +366,30 @@ def test_constellation_layout_target_is_accepted() -> None:
     types = {
         issue.issue_type for issue in find_hard_violations((label,), scene, TRANSFORM, STYLE)
     }
+    assert IssueType.UNKNOWN_TARGET not in types
+
+
+def test_constellation_region_is_a_valid_label_target_without_local_lines() -> None:
+    scene = replace(
+        build_scene(CHART, [], []),
+        constellation_regions=(
+            SceneConstellationRegion(
+                constellation_id="Com",
+                rings=((ChartPoint(-1.0, -1.0), ChartPoint(1.0, -1.0), ChartPoint(0.0, 1.0)),),
+                visible_area_fraction=0.5,
+                centroid=ChartPoint(0.0, 0.0),
+            ),
+        ),
+    )
+    label = replace(
+        make_label("label:constellation:Com", 20.0, 20.0),
+        target_id="constellation:Com",
+    )
+
+    types = {
+        issue.issue_type for issue in find_hard_violations((label,), scene, TRANSFORM, STYLE)
+    }
+
     assert IssueType.UNKNOWN_TARGET not in types
 
 

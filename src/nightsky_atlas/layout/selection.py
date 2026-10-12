@@ -13,11 +13,9 @@ It does two things, in order, without any AI:
    name must not appear twice.  Catalogue aliases and duplicated star names are
    collapsed to one primary label, preferring the higher priority, then the
    brighter target, then the stable id.
-2. **Local density selection** -- mandatory Messier and Herschel 400 labels
-   survive. Other DSO labels have a generous, separate density budget so only
-   exceptional local saturation removes them. Proper-name and Bayer star labels
-   bypass this prefilter and are left to geometric placement; other star labels
-   retain their existing budgets.
+2. **Local density selection** -- selected star and DSO labels are retained for
+   geometric placement. Density selection remains available for optional
+   presentation labels such as constellation names.
 
 Selection is deterministic: candidates are ordered by ``(-priority, id)`` and
 every comparison is total.
@@ -71,9 +69,7 @@ def select_labels(
     protected.update(
         label.id
         for label in deduplicated
-        if label.id.startswith("label:star:")
-        and label.semantic_key is not None
-        and label.semantic_key.startswith(("star:name:", "star:bayer:"))
+        if label.id.startswith(("label:star:", "label:dso:"))
     )
     protected.update(
         f"label:dso:{scene_dso.dso.id}"
@@ -94,7 +90,7 @@ def _freeze_selected_labels(labels: Iterable[Label]) -> tuple[Label, ...]:
         if label.id.startswith("label:dso:"):
             selected.append(replace(label, mandatory=True, hidden=False))
         elif label.id.startswith("label:star:"):
-            selected.append(replace(label, hidden=False))
+            selected.append(replace(label, mandatory=True, hidden=False))
         else:
             selected.append(label)
     return tuple(selected)

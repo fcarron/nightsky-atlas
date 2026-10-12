@@ -66,7 +66,6 @@ from nightsky_atlas.catalog.observing_lists import (
     DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
 )
 from nightsky_atlas.catalog.observing_lists import build_membership_index
-from nightsky_atlas.catalog.priority import HERSCHEL_400, messier_id
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.selection import select_dso
 from nightsky_atlas.catalog.star_names import (
@@ -84,6 +83,7 @@ from nightsky_atlas.chart.presentation import (
     ChartPresentation,
     presentation_from_edition,
 )
+from nightsky_atlas.layout.collision import LayoutIssue
 from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.optimizer import layout_cost, layout_hash, optimize_labels
@@ -190,6 +190,9 @@ class ChartPageResult:
     layout_hash: str
     neighbours: tuple[tuple[str, str], ...] = ()
     fallback_label_ids: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    layout_issues: tuple[dict[str, Any], ...] = ()
+    permitted_suppressions: tuple[dict[str, Any], ...] = ()
+    fallback_candidate_label_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         primary_neighbours: dict[str, str] = {}
@@ -212,6 +215,9 @@ class ChartPageResult:
                 code: list(label_ids) for code, label_ids in self.fallback_label_ids
             },
             "fallback_label_count": sum(len(label_ids) for _, label_ids in self.fallback_label_ids),
+            "layout_issues": list(self.layout_issues),
+            "permitted_suppressions": list(self.permitted_suppressions),
+            "fallback_candidate_label_ids": list(self.fallback_candidate_label_ids),
             "neighbours": primary_neighbours,
             "navigation": [
                 {"direction": direction, "chart_id": neighbour}
@@ -277,6 +283,71 @@ class _BuiltMainChart:
     forced_lists: tuple[str, ...]
     applied_overrides: bool
     timings: tuple[float, float, float, float, float, float, float]
+
+
+def _require_mandatory_labels(chart_id: str, labels: tuple[Label, ...]) -> None:
+    missing = sorted(
+        label.id
+        for label in labels
+        if label.mandatory
+        and (label.hidden or label.effective_candidate() is None)
+    )
+    if missing:
+        raise ValueError(
+            f"chart {chart_id} has missing mandatory labels: {', '.join(missing)}"
+        )
+
+
+def _layout_issue_records(issues: tuple[LayoutIssue, ...]) -> tuple[dict[str, Any], ...]:
+    return tuple(
+        {
+            "issue_id": issue.id,
+            "type": issue.issue_type.value,
+            "severity": "hard",
+            "affected_ids": list(issue.element_ids),
+            "message": issue.message,
+        }
+        for issue in issues
+    )
+
+
+def _detail_fallback_suppression_candidate(
+    labels: tuple[Label, ...],
+    validation: ValidationResult,
+    detail_by_label: dict[str, str],
+) -> tuple[Label, str, tuple[LayoutIssue, ...]] | None:
+    suppressible_types = {
+        "label_label",
+        "label_page",
+        "label_star",
+        "label_dso",
+        "furniture_overlap",
+        "invalid_leader_line",
+    }
+    label_by_id = {label.id: label for label in labels}
+    issues_by_label: dict[str, list[LayoutIssue]] = {}
+    for issue in validation.issues:
+        if issue.issue_type.value not in suppressible_types:
+            continue
+        for element_id in issue.element_ids:
+            if element_id in detail_by_label:
+                issues_by_label.setdefault(element_id, []).append(issue)
+    if not issues_by_label:
+        return None
+    label_id = min(
+        issues_by_label,
+        key=lambda item: (
+            label_by_id[item].priority,
+            -len(issues_by_label[item]),
+            len(label_by_id[item].candidates),
+            item,
+        ),
+    )
+    return (
+        label_by_id[label_id],
+        detail_by_label[label_id],
+        tuple(issues_by_label[label_id]),
+    )
 
 
 _CHART_WORKER_SHARED: _MainChartShared | None = None
@@ -350,32 +421,29 @@ def _build_main_chart(
         if chart_overrides is not None
         else frozenset()
     )
+    parent_dsos = {
+        scene_dso.dso.id: scene_dso
+        for scene_dso in chart_context.scene.deep_sky_objects
+        if scene_dso.symbol_visible
+    }
     parent_galaxies = tuple(
         scene_dso
         for scene_dso in chart_context.scene.deep_sky_objects
         if scene_dso.dso.object_type == DsoType.GALAXY and scene_dso.symbol_visible
     )
-    parent_ordinary_galaxies = {
-        scene_dso.dso.id: scene_dso
-        for scene_dso in parent_galaxies
-        if messier_id(scene_dso.dso) is None
-        and HERSCHEL_400
-        not in (scene_dso.metadata.list_memberships if scene_dso.metadata is not None else ())
-    }
-    fallback_label_ids: list[tuple[str, tuple[str, ...]]] = []
+    fallback_eligible: list[tuple[str, tuple[str, ...]]] = []
     for detail in shared.detail_charts:
         if detail.parent_chart_id != definition.id or not detail.fallback_parent_galaxy_labels:
             continue
         detail_ids = (
-            shared.fallback_ids_by_detail.get(detail.id, frozenset())
-            & parent_ordinary_galaxies.keys()
+            shared.fallback_ids_by_detail.get(detail.id, frozenset()) & parent_dsos.keys()
         )
         if detail.fallback_parent_min_magnitude is not None:
             detail_ids = {
                 item
                 for item in detail_ids
-                if parent_ordinary_galaxies[item].dso.magnitude is not None
-                and parent_ordinary_galaxies[item].dso.magnitude
+                if parent_dsos[item].dso.magnitude is not None
+                and parent_dsos[item].dso.magnitude
                 >= detail.fallback_parent_min_magnitude
             }
         if detail.fallback_parent_min_nearby_galaxies:
@@ -387,7 +455,8 @@ def _build_main_chart(
             detail_ids = {
                 item
                 for item in detail_ids
-                if sum(
+                if item in galaxy_positions
+                and sum(
                     other_id != item
                     and (galaxy_positions[item].x_mm - position.x_mm) ** 2
                     + (galaxy_positions[item].y_mm - position.y_mm) ** 2
@@ -401,17 +470,9 @@ def _build_main_chart(
             item for item in detail_ids if f"label:dso:{item}" in available_parent_label_ids
         }
         if detail_ids:
-            fallback_label_ids.append(
+            fallback_eligible.append(
                 (detail.code, tuple(sorted(f"label:dso:{item}" for item in detail_ids)))
             )
-    omitted_label_ids = {
-        label_id
-        for _, label_ids in fallback_label_ids
-        for label_id in label_ids
-        if label_id not in protected_ids
-    }
-    if omitted_label_ids:
-        labels = tuple(label for label in labels if label.id not in omitted_label_ids)
     labels = select_labels(
         labels,
         chart_context.scene,
@@ -464,6 +525,50 @@ def _build_main_chart(
         chart_context.style,
         furniture=furniture,
     )
+    _require_mandatory_labels(definition.id, labels)
+    permitted_suppressions: list[dict[str, Any]] = []
+    fallback_detail_by_label = {
+        label_id: detail_code
+        for detail_code, label_ids in fallback_eligible
+        for label_id in label_ids
+    }
+    while shared.optimize and fallback_detail_by_label:
+        choice = _detail_fallback_suppression_candidate(
+            labels, validation, fallback_detail_by_label
+        )
+        if choice is None:
+            break
+        suppressed_label, detail_code, suppressed_issues = choice
+        suppressed_id = suppressed_label.id
+        permitted_suppressions.append(
+            {
+                "label_id": suppressed_id,
+                "text": suppressed_label.text,
+                "priority": suppressed_label.priority,
+                "detail_chart": detail_code,
+                "reason": "remaining_geometric_issue_after_optimization",
+                "issues": [issue.id for issue in suppressed_issues],
+            }
+        )
+        labels = tuple(label for label in labels if label.id != suppressed_id)
+        fallback_detail_by_label.pop(suppressed_id)
+        optimized = optimize_labels(
+            labels,
+            chart_context.scene,
+            chart_context.transform,
+            chart_context.style,
+            furniture=furniture,
+        )
+        labels = optimized.labels
+        cost_after = optimized.cost_after
+        validation = validate_layout(
+            labels,
+            chart_context.scene,
+            chart_context.transform,
+            chart_context.style,
+            furniture=furniture,
+        )
+        _require_mandatory_labels(definition.id, labels)
     validate_s = time.perf_counter() - stage_start
     stage_start = time.perf_counter()
     page_dir = shared.outroot / "charts" / definition.id
@@ -499,9 +604,37 @@ def _build_main_chart(
         fallback_label_ids=tuple(
             (
                 code,
-                tuple(label_id for label_id in label_ids if label_id in omitted_label_ids),
+                tuple(
+                    item["label_id"]
+                    for item in permitted_suppressions
+                    if item["detail_chart"] == code
+                ),
             )
-            for code, label_ids in fallback_label_ids
+            for code, _label_ids in fallback_eligible
+            if any(item["detail_chart"] == code for item in permitted_suppressions)
+        ),
+        layout_issues=(
+            *_layout_issue_records(validation.issues),
+            *(
+                {
+                    "issue_id": f"issue:fallback_candidate:{label.id}",
+                    "type": "fallback_candidate",
+                    "severity": "warning",
+                    "affected_ids": [label.id],
+                    "message": (
+                        "No candidate fit inside the chart field; unrestricted candidates "
+                        "were generated."
+                    ),
+                }
+                for label in labels
+                if any(candidate.id.endswith(":fallback") for candidate in label.candidates)
+            ),
+        ),
+        permitted_suppressions=tuple(permitted_suppressions),
+        fallback_candidate_label_ids=tuple(
+            label.id
+            for label in labels
+            if any(candidate.id.endswith(":fallback") for candidate in label.candidates)
         ),
     )
     return _BuiltMainChart(
@@ -1150,6 +1283,7 @@ def _build_atlas_impl(
             detail_style,
             furniture=detail_furniture,
         )
+        _require_mandatory_labels(definition.id, detail_labels)
         prepared_details[detail.id] = _PreparedDetail(
             context=detail_context,
             style=detail_style,
@@ -1172,11 +1306,7 @@ def _build_atlas_impl(
         fallback_ids_by_detail[detail.id] = frozenset(
             scene_dso.dso.id
             for scene_dso in detail_context.scene.deep_sky_objects
-            if scene_dso.dso.object_type == DsoType.GALAXY
-            and scene_dso.symbol_visible
-            and messier_id(scene_dso.dso) is None
-            and HERSCHEL_400
-            not in (scene_dso.metadata.list_memberships if scene_dso.metadata is not None else ())
+            if scene_dso.symbol_visible
             and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
             and f"label:dso:{scene_dso.dso.id}" not in problematic_detail_labels
         )
@@ -1499,6 +1629,7 @@ def _build_atlas_impl(
                 detail_style,
                 furniture=furniture,
             )
+            _require_mandatory_labels(definition.id, labels)
         else:
             chart_context = prepared.context
             detail_style = prepared.style
@@ -1512,6 +1643,7 @@ def _build_atlas_impl(
                 main_charts=all_charts,
                 stellar_limit_magnitude=stellar_limit_magnitude,
             )
+        _require_mandatory_labels(definition.id, labels)
         page_dir = outroot / "charts" / definition.id
         render_chart(
             chart_context.scene,
@@ -1559,6 +1691,28 @@ def _build_atlas_impl(
                 cost_after=cost_after,
                 layout_hash=layout_hash(labels),
                 neighbours=definition.neighbours,
+                layout_issues=(
+                    *_layout_issue_records(validation.issues),
+                    *(
+                        {
+                            "issue_id": f"issue:fallback_candidate:{label.id}",
+                            "type": "fallback_candidate",
+                            "severity": "warning",
+                            "affected_ids": [label.id],
+                            "message": (
+                                "No candidate fit inside the chart field; unrestricted "
+                                "candidates were generated."
+                            ),
+                        }
+                        for label in labels
+                        if any(candidate.id.endswith(":fallback") for candidate in label.candidates)
+                    ),
+                ),
+                fallback_candidate_label_ids=tuple(
+                    label.id
+                    for label in labels
+                    if any(candidate.id.endswith(":fallback") for candidate in label.candidates)
+                ),
             )
         )
         progress.info(

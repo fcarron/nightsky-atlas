@@ -267,13 +267,14 @@ Sans 3 for editorial/index pages. Register package assets through
 - **14.6 Deterministic selection before placement** — `object visible != label
   visible`. Candidate labels pass semantic de-duplication (one primary visible
   label per printed name; catalogue aliases and duplicated star names collapse
-  to the higher priority, then the brighter target, then the stable id) and a
-  local density selection (`layout/selection.py`) before placement: high-tier
-  labels are always kept, medium/low labels are thinned by the printed label
-  area within a local neighbourhood. Proper-name and Bayer star labels bypass
-  this prefilter and remain subject to geometric placement; other lower-tier
-  star labels retain local thinning. It is a local rule, never a global label
-  percentage. Manual overrides are protected from selection.
+  to the higher priority, then the brighter target, then the stable id). Every
+  selected star and DSO label is retained for geometric placement, regardless
+  of local density. The optimizer tries alternate candidates and reports any
+  remaining conflicts rather than hiding selected labels. A DSO label may be
+  suppressed from a main chart only after optimization when a configured detail
+  chart covers the object and visibly labels it. Density selection remains for
+  other optional presentation labels. Manual overrides are protected from
+  selection.
 
 ## 15. Deterministic layout optimizer
 

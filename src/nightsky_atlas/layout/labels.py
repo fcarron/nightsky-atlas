@@ -7,6 +7,7 @@ Priority and mandatory status follow the conceptual ordering in section 14.3.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from math import hypot
 
 from nightsky_atlas.atlas.config import StyleConfig
@@ -172,7 +173,7 @@ def build_dso_labels(
                     return source_extent_edge_distance(geometry, visible_bounds)
 
                 approximate_edge_distance = approximate_distance
-        candidates = compass_candidates(
+        candidate_kwargs = dict(
             label_id=label_id,
             metrics=metrics,
             anchor=anchor,
@@ -191,6 +192,13 @@ def build_dso_labels(
             ring_count=1 if source is not None else style.label.candidate_rings,
             ring_gap_mm=style.label.ring_gap_mm,
         )
+        candidates = compass_candidates(**candidate_kwargs)
+        if not candidates:
+            candidate_kwargs["allowed_rect"] = None
+            candidates = tuple(
+                replace(candidate, id=f"{candidate.id}:fallback")
+                for candidate in compass_candidates(**candidate_kwargs)
+            )
         labels.append(
             Label(
                 id=label_id,
@@ -247,8 +255,8 @@ def build_star_labels(
     Only stars brighter than ``style.star.label_magnitude_limit`` that resolve to
     a common name or a Bayer/Flamsteed/variable designation are labelled; stars
     without a human-readable designation are skipped (their stable ID is used
-    elsewhere, not printed).  Star labels are optional except for the brightest
-    named stars, so the optimizer may hide them in crowded fields.
+    elsewhere, not printed). Selected labels are mandatory; collisions are
+    reported rather than silently hiding a selected designation.
     """
     if not star_names:
         return ()
@@ -300,7 +308,7 @@ def build_star_labels(
             if obstacle is not None
             else transform.to_page(scene_star.chart_point)
         )
-        candidates = compass_candidates(
+        candidate_kwargs = dict(
             label_id=label_id,
             metrics=measurer.measure_mm(text),
             anchor=anchor,
@@ -332,6 +340,13 @@ def build_star_labels(
                 else style.label.ring_gap_mm
             ),
         )
+        candidates = compass_candidates(**candidate_kwargs)
+        if not candidates:
+            candidate_kwargs["allowed_rect"] = None
+            candidates = tuple(
+                replace(candidate, id=f"{candidate.id}:fallback")
+                for candidate in compass_candidates(**candidate_kwargs)
+            )
         priority, mandatory = _star_label_priority(star, star_name, kind)
         has_proper_name = kind == "combined" or kind.startswith("proper_")
         labels.append(
@@ -340,7 +355,9 @@ def build_star_labels(
                 target_id=star.id,
                 text=text,
                 priority=priority,
-                mandatory=mandatory or (has_proper_name and policy.proper_names_always_visible),
+                mandatory=(
+                    mandatory or (has_proper_name and policy.proper_names_always_visible)
+                ),
                 candidates=candidates,
                 selected_candidate_id=candidates[0].id if candidates else None,
                 semantic_key=semantic_key,
