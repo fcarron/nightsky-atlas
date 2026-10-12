@@ -13,6 +13,7 @@ from nightsky_atlas.atlas.config import load_atlas_config
 from nightsky_atlas.build.atlas import (
     AtlasBuildResult,
     _detail_label_suppression_candidate,
+    _detail_label_suppression_group,
     _require_mandatory_labels,
     build_atlas,
     chart_definitions,
@@ -167,6 +168,61 @@ def test_detail_suppression_preserves_manually_overridden_labels() -> None:
         )
         is None
     )
+
+
+def test_detail_suppression_group_uses_minimum_deterministic_issue_cover() -> None:
+    def make_label(label_id: str, priority: int) -> Label:
+        candidate = LabelCandidate(
+            id=f"{label_id}:N",
+            position=CompassPosition.N,
+            anchor=PagePoint(100.0, 100.0),
+            bounds=PageRect(100.0, 100.0, 8.0, 3.0),
+        )
+        return Label(
+            id=label_id,
+            target_id=label_id,
+            text=label_id,
+            priority=priority,
+            mandatory=True,
+            candidates=(candidate,),
+        )
+
+    left, middle, right = (
+        make_label("label:dso:left", 10),
+        make_label("label:dso:middle", 100),
+        make_label("label:dso:right", 10),
+    )
+    validation = ValidationResult(
+        issues=(
+            LayoutIssue(
+                id="issue:left-middle",
+                issue_type=IssueType.LABEL_LABEL,
+                element_ids=(left.id, middle.id),
+                message="labels overlap",
+            ),
+            LayoutIssue(
+                id="issue:middle-right",
+                issue_type=IssueType.LABEL_LABEL,
+                element_ids=(middle.id, right.id),
+                message="labels overlap",
+            ),
+        )
+    )
+
+    group = _detail_label_suppression_group(
+        (left, middle, right),
+        validation,
+        {label.id: "PD01" for label in (left, middle, right)},
+    )
+    protected_middle_group = _detail_label_suppression_group(
+        (left, middle, right),
+        validation,
+        {label.id: "PD01" for label in (left, middle, right)},
+        protected_ids=frozenset({middle.id}),
+    )
+
+    assert tuple(item[0].id for item in group) == (middle.id,)
+    assert tuple(item[0].id for item in protected_middle_group) == (left.id, right.id)
 
 
 def test_missing_mandatory_label_fails_chart_build() -> None:

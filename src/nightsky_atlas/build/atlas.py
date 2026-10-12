@@ -18,7 +18,7 @@ from collections import deque
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
-from itertools import islice
+from itertools import combinations, islice
 from multiprocessing import get_context
 from pathlib import Path
 from typing import Any
@@ -283,6 +283,7 @@ class ChartPageResult:
     permitted_suppressions: tuple[dict[str, Any], ...] = ()
     fallback_candidate_label_ids: tuple[str, ...] = ()
     intentional_excluded_star_labels: tuple[dict[str, Any], ...] = ()
+    optimization_runs: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         primary_neighbours: dict[str, str] = {}
@@ -300,6 +301,7 @@ class ChartPageResult:
             "hard_issues": self.hard_issues,
             "cost_before": self.cost_before,
             "cost_after": self.cost_after,
+            "optimization_runs": self.optimization_runs,
             "layout_hash": self.layout_hash,
             "fallback_label_ids": {
                 code: list(label_ids) for code, label_ids in self.fallback_label_ids
@@ -471,6 +473,108 @@ def _detail_label_suppression_candidate(
     )
 
 
+def _detail_label_suppression_group(
+    labels: tuple[Label, ...],
+    validation: ValidationResult,
+    detail_by_label: dict[str, str],
+    protected_ids: frozenset[str] = frozenset(),
+) -> tuple[tuple[Label, str, tuple[LayoutIssue, ...]], ...]:
+    """Choose a small deterministic cover of current issues by eligible labels."""
+    suppressible_types = {
+        "label_label",
+        "label_page",
+        "label_star",
+        "label_dso",
+        "furniture_overlap",
+        "invalid_leader_line",
+    }
+    label_by_id = {label.id: label for label in labels}
+    issues_by_label: dict[str, list[LayoutIssue]] = {}
+    labels_by_issue: dict[str, set[str]] = {}
+    for issue in validation.issues:
+        if issue.issue_type.value not in suppressible_types:
+            continue
+        for label_id in issue.element_ids:
+            if label_id not in detail_by_label or label_id in protected_ids:
+                continue
+            issues_by_label.setdefault(label_id, []).append(issue)
+            labels_by_issue.setdefault(issue.id, set()).add(label_id)
+    if not issues_by_label:
+        return ()
+
+    # Find the smallest issue-cover for normal local conflict groups. Large or
+    # pathological groups use a deterministic maximum-coverage approximation.
+    label_ids = tuple(
+        sorted(
+            issues_by_label,
+            key=lambda label_id: (
+                label_by_id[label_id].priority,
+                len(label_by_id[label_id].candidates),
+                label_id,
+            ),
+        )
+    )
+    issue_ids = frozenset(labels_by_issue)
+    selected_ids: tuple[str, ...] | None = None
+    if len(label_ids) <= 16 and len(issue_ids) <= 24:
+        examined = 0
+        for count in range(1, len(label_ids) + 1):
+            best: tuple[tuple[int, tuple[str, ...]], tuple[str, ...]] | None = None
+            for group in combinations(label_ids, count):
+                examined += 1
+                if examined > 100_000:
+                    break
+                covered = frozenset(
+                    issue.id
+                    for label_id in group
+                    for issue in issues_by_label[label_id]
+                )
+                if not issue_ids <= covered:
+                    continue
+                rank = (sum(label_by_id[label_id].priority for label_id in group), group)
+                if best is None or rank < best[0]:
+                    best = (rank, group)
+            if best is not None:
+                selected_ids = best[1]
+                break
+            if examined > 100_000:
+                break
+
+    if selected_ids is None:
+        uncovered = set(issue_ids)
+        greedy: list[str] = []
+        while uncovered:
+            label_id = min(
+                label_ids,
+                key=lambda candidate_id: (
+                    -len(
+                        {
+                            issue.id for issue in issues_by_label[candidate_id]
+                        }
+                        & uncovered
+                    ),
+                    label_by_id[candidate_id].priority,
+                    len(label_by_id[candidate_id].candidates),
+                    candidate_id,
+                ),
+            )
+            covered = {issue.id for issue in issues_by_label[label_id]} & uncovered
+            if not covered:
+                break
+            greedy.append(label_id)
+            uncovered -= covered
+        selected_ids = tuple(greedy)
+
+    return tuple(
+        (
+            label_by_id[label_id],
+            detail_by_label[label_id],
+            tuple(issues_by_label[label_id]),
+        )
+        for label_id in selected_ids
+    )
+
+
 _CHART_WORKER_SHARED: _MainChartShared | None = None
 
 
@@ -571,6 +675,7 @@ def _build_main_chart(
     )
     optimize_s = 0.0
     cost_s = 0.0
+    optimization_runs = 0
     if shared.optimize:
         stage_start = time.perf_counter()
         optimized = optimize_labels(
@@ -582,6 +687,7 @@ def _build_main_chart(
         )
         labels = optimized.labels
         optimize_s = time.perf_counter() - stage_start
+        optimization_runs = 1
         cost_before = optimized.cost_before
         cost_after = optimized.cost_after
     else:
@@ -616,43 +722,99 @@ def _build_main_chart(
                 ):
                     detail_by_label.setdefault(f"label:dso:{scene_dso.dso.id}", detail.code)
     permitted_suppressions: list[dict[str, Any]] = []
-    while detail_by_label:
-        choice = _detail_label_suppression_candidate(
-            labels, validation, detail_by_label, protected_ids=protected_ids
-        )
-        if choice is None:
-            break
-        suppressed_label, detail_code, suppressed_issues = choice
-        suppressed_id = suppressed_label.id
-        permitted_suppressions.append(
-            {
-                "label_id": suppressed_id,
-                "text": suppressed_label.text,
-                "priority": suppressed_label.priority,
-                "detail_chart": detail_code,
-                "reason": "remaining_geometric_issue_after_optimization",
-                "issues": [issue.id for issue in suppressed_issues],
-            }
-        )
-        labels = tuple(label for label in labels if label.id != suppressed_id)
-        detail_by_label.pop(suppressed_id)
-        optimized = optimize_labels(
-            labels,
-            chart_context.scene,
-            chart_context.transform,
-            chart_context.style,
-            furniture=furniture,
-        )
-        labels = optimized.labels
-        cost_after = optimized.cost_after
-        validation = validate_layout(
-            labels,
-            chart_context.scene,
-            chart_context.transform,
-            chart_context.style,
-            furniture=furniture,
-        )
-        _require_mandatory_labels(definition.id, labels)
+    if detail_by_label:
+        original_labels = labels
+        original_validation = validation
+        original_detail_by_label = dict(detail_by_label)
+        grouped_failed = False
+        while detail_by_label and validation.issues:
+            previous_issue_count = len(validation.issues)
+            group = _detail_label_suppression_group(
+                labels, validation, detail_by_label, protected_ids=protected_ids
+            )
+            if not group:
+                break
+            suppressed_ids = {label.id for label, _, _ in group}
+            for suppressed_label, detail_code, suppressed_issues in group:
+                permitted_suppressions.append(
+                    {
+                        "label_id": suppressed_label.id,
+                        "text": suppressed_label.text,
+                        "priority": suppressed_label.priority,
+                        "detail_chart": detail_code,
+                        "reason": "remaining_geometric_issue_after_optimization",
+                        "issues": [issue.id for issue in suppressed_issues],
+                    }
+                )
+            labels = tuple(label for label in labels if label.id not in suppressed_ids)
+            for suppressed_id in suppressed_ids:
+                detail_by_label.pop(suppressed_id, None)
+            optimized = optimize_labels(
+                labels,
+                chart_context.scene,
+                chart_context.transform,
+                chart_context.style,
+                furniture=furniture,
+            )
+            optimization_runs += 1
+            labels = optimized.labels
+            cost_after = optimized.cost_after
+            validation = validate_layout(
+                labels,
+                chart_context.scene,
+                chart_context.transform,
+                chart_context.style,
+                furniture=furniture,
+            )
+            _require_mandatory_labels(definition.id, labels)
+            if len(validation.issues) > previous_issue_count:
+                grouped_failed = True
+                break
+
+        if grouped_failed:
+            # Preserve the previous sequential strategy as a correctness fallback.
+            labels = original_labels
+            validation = original_validation
+            detail_by_label = original_detail_by_label
+            permitted_suppressions.clear()
+            while detail_by_label:
+                choice = _detail_label_suppression_candidate(
+                    labels, validation, detail_by_label, protected_ids=protected_ids
+                )
+                if choice is None:
+                    break
+                suppressed_label, detail_code, suppressed_issues = choice
+                suppressed_id = suppressed_label.id
+                permitted_suppressions.append(
+                    {
+                        "label_id": suppressed_id,
+                        "text": suppressed_label.text,
+                        "priority": suppressed_label.priority,
+                        "detail_chart": detail_code,
+                        "reason": "remaining_geometric_issue_after_optimization",
+                        "issues": [issue.id for issue in suppressed_issues],
+                    }
+                )
+                labels = tuple(label for label in labels if label.id != suppressed_id)
+                detail_by_label.pop(suppressed_id)
+                optimized = optimize_labels(
+                    labels,
+                    chart_context.scene,
+                    chart_context.transform,
+                    chart_context.style,
+                    furniture=furniture,
+                )
+                optimization_runs += 1
+                labels = optimized.labels
+                cost_after = optimized.cost_after
+                validation = validate_layout(
+                    labels,
+                    chart_context.scene,
+                    chart_context.transform,
+                    chart_context.style,
+                    furniture=furniture,
+                )
+                _require_mandatory_labels(definition.id, labels)
     validate_s = time.perf_counter() - stage_start
     stage_start = time.perf_counter()
     page_dir = shared.outroot / "charts" / definition.id
@@ -720,6 +882,7 @@ def _build_main_chart(
             for label in labels
             if any(candidate.id.endswith(":fallback") for candidate in label.candidates)
         ),
+        optimization_runs=optimization_runs,
     )
     return _BuiltMainChart(
         scene=chart_context.scene,
