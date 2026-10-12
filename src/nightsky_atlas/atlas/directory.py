@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from nightsky_atlas.atlas.config import DetailChartConfig, EditionConfig
+from nightsky_atlas.atlas.detail_geometry import detail_chart_parent_ids
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.presentation import (
     format_dec_deg,
@@ -48,7 +49,12 @@ class DetailChartDirectoryEntry:
     center_dec: str
     field: str
     scale_mm_per_degree: float
-    parent_chart_code: str
+    parent_chart_codes: tuple[str, ...]
+
+    @property
+    def parent_chart_code(self) -> str:
+        """Return the preferred parent code for legacy callers."""
+        return self.parent_chart_codes[0]
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -59,6 +65,7 @@ class DetailChartDirectoryEntry:
             "field": self.field,
             "scale_mm_per_degree": self.scale_mm_per_degree,
             "parent_chart_code": self.parent_chart_code,
+            "parent_chart_codes": list(self.parent_chart_codes),
         }
 
 
@@ -84,8 +91,9 @@ def build_detail_chart_directory(
     charts: tuple[ChartDefinition, ...],
     edition: EditionConfig,
 ) -> tuple[DetailChartDirectoryEntry, ...]:
-    """Build stable detail-chart lookup rows with their primary parent codes."""
+    """Build stable detail-chart lookup rows with all geometric parent codes."""
     chart_by_id = {chart.id: chart for chart in charts}
+    parent_ids_by_detail = detail_chart_parent_ids(details, charts)
     return tuple(
         DetailChartDirectoryEntry(
             chart_code=detail.code,
@@ -94,9 +102,10 @@ def build_detail_chart_directory(
             center_dec=format_dec_deg(detail.center_dec_deg),
             field=f"{detail.width_deg:g}° × {detail.height_deg:g}°",
             scale_mm_per_degree=detail.mm_per_degree,
-            parent_chart_code=presentation_from_edition(
-                chart_by_id[detail.parent_chart_id], edition
-            ).chart_code,
+            parent_chart_codes=tuple(
+                presentation_from_edition(chart_by_id[chart_id], edition).chart_code
+                for chart_id in parent_ids_by_detail[detail.id]
+            ),
         )
         for detail in details
     )

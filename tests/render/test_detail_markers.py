@@ -130,6 +130,14 @@ def test_detail_tag_keeps_named_pdf_link(monkeypatch: pytest.MonkeyPatch) -> Non
             PagePoint(100.0, 90.0),
             PagePoint(70.0, 90.0),
         ),
+        visible_boundary=(
+            PagePoint(70.0, 60.0),
+            PagePoint(100.0, 60.0),
+            PagePoint(100.0, 90.0),
+            PagePoint(70.0, 90.0),
+        ),
+        overlap_area_deg2=30.0,
+        detail_area_fraction=1.0,
     )
     cr = RecordingContext()
     draw_detail_markers(
@@ -140,9 +148,7 @@ def test_detail_tag_keeps_named_pdf_link(monkeypatch: pytest.MonkeyPatch) -> Non
         PdfNavigation(frozenset({"SD031"})),
         draw_frames=False,
     )
-    links = [
-        attributes for kind, attributes in cr.tags if kind == "begin:Link"
-    ]
+    links = [attributes for kind, attributes in cr.tags if kind == "begin:Link"]
     assert len(links) == 1
     assert "dest='chart_SD031'" in links[0]
     fill_index = next(index for index, event in enumerate(cr.events) if event[0] == "fill")

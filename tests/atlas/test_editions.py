@@ -8,6 +8,11 @@ from pathlib import Path
 import pytest
 
 from nightsky_atlas.atlas.config import DetailChartConfig, load_atlas_config, load_style_config
+from nightsky_atlas.atlas.detail_geometry import (
+    detail_chart_contains_position,
+    detail_chart_overlaps_main_chart,
+    detail_chart_parent_ids,
+)
 from nightsky_atlas.atlas.tiling import (
     TilingSpec,
     chart_definitions,
@@ -17,6 +22,7 @@ from nightsky_atlas.atlas.tiling import (
 )
 from nightsky_atlas.build.atlas import _style_with_star_profile
 from nightsky_atlas.build.chart import build_chart_context, load_chart_inputs
+from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
 from nightsky_atlas.projection.base import ProjectionError
@@ -102,7 +108,8 @@ def test_pocket_symmetric_navigation_tiling() -> None:
     assert by_dec[-33.0] == pytest.approx(by_dec[33.0])
     detail = pocket.detail_charts[0]
     assert detail.code == "PD01"
-    assert detail.parent_chart_id == "pocket-021"
+    parent_ids = detail_chart_parent_ids((detail,), charts)[detail.id]
+    assert {"pocket-020", "pocket-021"} <= set(parent_ids)
 
 
 def test_pocket_39_tiling_covers_transition_lines_and_chart_corners() -> None:
@@ -198,9 +205,11 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     assert [detail.code for detail in pocket.detail_charts] == ["PD01"]
     assert [detail.code for detail in details] == [f"SD{i:02d}" for i in range(1, 10)]
     assert [detail.code for detail in deep.detail_charts] == [f"DD{i:02d}" for i in range(1, 10)]
-    assert {
-        detail.code for detail in details if detail.fallback_parent_galaxy_labels
-    } == {"SD02", "SD03", "SD04"}
+    assert all(
+        not hasattr(detail, "fallback_parent_galaxy_labels")
+        and not hasattr(detail, "parent_chart_id")
+        for detail in (*pocket.detail_charts, *details, *deep.detail_charts)
+    )
     assert {detail.name for detail in details} >= {
         "Virgo Cluster",
         "Sagittarius clusters · M22 / M28",
@@ -222,7 +231,15 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         "deep",
     ]
     assert [detail.mm_per_degree for detail in deep.detail_charts] == [
-        40, 40, 80, 80, 80, 40, 80, 80, 40
+        40,
+        40,
+        80,
+        80,
+        80,
+        40,
+        80,
+        80,
+        40,
     ]
     assert [detail.star_profile for detail in deep.detail_charts] == [
         "eyepiece",
@@ -242,22 +259,15 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         assert detail.height_deg * detail.mm_per_degree == pytest.approx(170.0)
     assert deep.stellar_limit_magnitude == 10.5
 
-    charts = {chart.id: chart for chart in chart_definitions(standard)}
-    assert {detail.code: detail.parent_chart_id for detail in details} == {
-        "SD01": "standard-051",
-        "SD02": "standard-051",
-        "SD03": "standard-066",
-        "SD04": "standard-101",
-        "SD05": "standard-092",
-        "SD06": "standard-019",
-        "SD07": "standard-070",
-        "SD08": "standard-016",
-        "SD09": "standard-041",
-    }
-    assert all(detail.parent_chart_id in charts for detail in details)
-    assert pocket.detail_charts[0].parent_chart_id == "pocket-021"
-    deep_charts = {chart.id for chart in chart_definitions(deep)}
-    assert all(detail.parent_chart_id in deep_charts for detail in deep.detail_charts)
+    for atlas in (pocket, standard, deep):
+        charts = tuple(chart_definitions(atlas))
+        relations = detail_chart_parent_ids(atlas.detail_charts, charts)
+        assert all(relations[detail.id] for detail in atlas.detail_charts)
+        assert all(
+            chart_id in {chart.id for chart in charts}
+            for parent_ids in relations.values()
+            for chart_id in parent_ids
+        )
 
 
 def test_detail_chart_rejects_intermediate_scales() -> None:
@@ -266,26 +276,12 @@ def test_detail_chart_rejects_intermediate_scales() -> None:
             id="detail-test",
             code="SD99",
             name="Test field",
-            parent_chart_id="standard-001",
             center_ra_deg=0.0,
             center_dec_deg=0.0,
             width_deg=4.0,
             height_deg=3.0,
             mm_per_degree=60.0,
         )
-
-
-@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
-def test_detail_chart_parent_covers_its_reference_center(edition: str) -> None:
-    atlas = load_atlas_config(ROOT / "atlas" / f"{edition}.yaml")
-    charts = {chart.id: chart for chart in chart_definitions(atlas)}
-    for detail in atlas.detail_charts:
-        parent = charts[detail.parent_chart_id]
-        point = StereographicProjection(parent.center_ra_deg, parent.center_dec_deg).project(
-            detail.center_ra_deg, detail.center_dec_deg
-        )
-        assert abs(point.xi_deg) <= parent.width_deg / 2.0
-        assert abs(point.eta_deg) <= parent.height_deg / 2.0
 
 
 def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:
@@ -352,8 +348,29 @@ def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
         83.0,
     )
     expected_counts = (
-        5, 10, 15, 15, 20, 25, 25, 25, 30, 30, 30, 30,
-        30, 30, 30, 25, 25, 25, 20, 15, 15, 10, 5,
+        5,
+        10,
+        15,
+        15,
+        20,
+        25,
+        25,
+        25,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        25,
+        25,
+        25,
+        20,
+        15,
+        15,
+        10,
+        5,
     )
     assert spec.declination_centers == expected_centers
     assert spec.chart_counts == expected_counts
@@ -389,25 +406,8 @@ def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
 
     assert coverage_report(charts, step_deg=0.25).covers_all
     assert neighbour_overlap_report(charts, step_deg=0.25).is_complete
-    assert {detail.code: detail.parent_chart_id for detail in deep.detail_charts} == {
-        "DD01": "deep-093",
-        "DD02": "deep-167",
-        "DD03": "deep-128",
-        "DD04": "deep-186",
-        "DD05": "deep-285",
-        "DD06": "deep-398",
-        "DD07": "deep-473",
-        "DD08": "deep-474",
-        "DD09": "deep-477",
-    }
-    by_id = {chart.id: chart for chart in charts}
-    for detail in deep.detail_charts:
-        parent = by_id[detail.parent_chart_id]
-        point = StereographicProjection(parent.center_ra_deg, parent.center_dec_deg).project(
-            detail.center_ra_deg, detail.center_dec_deg
-        )
-        assert abs(point.xi_deg) <= parent.width_deg / 2.0
-        assert abs(point.eta_deg) <= parent.height_deg / 2.0
+    deep_relations = detail_chart_parent_ids(deep.detail_charts, charts)
+    assert all(deep_relations[detail.id] for detail in deep.detail_charts)
 
 
 def test_detail_star_profiles_preserve_parent_dso_styling_and_limit() -> None:
@@ -456,39 +456,97 @@ def test_standard_detail_star_depth_does_not_change_dso_selection() -> None:
 
 def test_standard_detail_markers_project_into_their_parent_charts() -> None:
     standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
-    charts = {chart.id: chart for chart in chart_definitions(standard)}
+    chart_list = tuple(chart_definitions(standard))
+    charts = {chart.id: chart for chart in chart_list}
+    relations = detail_chart_parent_ids(standard.detail_charts, chart_list)
     for detail in standard.detail_charts:
-        parent = charts[detail.parent_chart_id]
-        transform = PageTransform(
-            chart=parent,
-            page=standard.page.to_geometry(),
-            scale_mm_per_degree=standard.mm_per_degree,
-        )
-        marker = build_detail_marker(detail, parent, transform)
+        assert relations[detail.id]
+        for chart_id in relations[detail.id]:
+            parent = charts[chart_id]
+            transform = PageTransform(
+                chart=parent,
+                page=standard.page.to_geometry(),
+                scale_mm_per_degree=standard.mm_per_degree,
+            )
+            marker = build_detail_marker(detail, parent, transform)
+            assert marker is not None
+            assert marker.chart_code == detail.code
+            assert marker.label == detail.name
+            assert len(marker.boundary) == 128
+            assert all(
+                math.isfinite(point.x_mm) and math.isfinite(point.y_mm) for point in marker.boundary
+            )
+            frame = transform.chart_rect
+            assert all(
+                frame.left_mm - 1e-9 <= point.x_mm <= frame.right_mm + 1e-9
+                and frame.top_mm - 1e-9 <= point.y_mm <= frame.bottom_mm + 1e-9
+                for point in marker.visible_boundary
+            )
+
+
+def test_pocket_detail_chart_has_all_geometric_main_chart_relations() -> None:
+    pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
+    charts = tuple(chart_definitions(pocket))
+    detail = pocket.detail_charts[0]
+
+    parent_ids = detail_chart_parent_ids((detail,), charts)[detail.id]
+
+    assert "pocket-020" in parent_ids
+    assert "pocket-021" in parent_ids
+    for chart_id in parent_ids:
+        chart = next(item for item in charts if item.id == chart_id)
+        overlap = detail_chart_overlaps_main_chart(detail, chart)
+        assert overlap is not None
+        assert overlap.area_deg2 > 0.01
+        transform = PageTransform(chart, pocket.page.to_geometry(), pocket.mm_per_degree)
+        marker = build_detail_marker(detail, chart, transform)
+        assert marker is not None
         assert marker.chart_code == detail.code
-        assert marker.label == detail.name
-        assert len(marker.boundary) == 48
         assert all(
-            math.isfinite(point.x_mm) and math.isfinite(point.y_mm)
-            for point in marker.boundary
+            transform.chart_rect.left_mm <= point.x_mm <= transform.chart_rect.right_mm
+            and transform.chart_rect.top_mm <= point.y_mm <= transform.chart_rect.bottom_mm
+            for point in marker.visible_boundary
         )
-        frame = transform.chart_rect
-        xs = [point.x_mm for point in marker.boundary]
-        ys = [point.y_mm for point in marker.boundary]
-        assert max(xs) >= frame.left_mm and min(xs) <= frame.right_mm
-        assert max(ys) >= frame.top_mm and min(ys) <= frame.bottom_mm
 
 
-@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
-def test_detail_parent_contains_the_detail_centre(edition: str) -> None:
-    atlas = load_atlas_config(ROOT / "atlas" / f"{edition}.yaml")
-    charts = {chart.id: chart for chart in chart_definitions(atlas)}
-    for detail in atlas.detail_charts:
-        parent = charts[detail.parent_chart_id]
-        projected = StereographicProjection(
-            parent.center_ra_deg, parent.center_dec_deg
-        ).project(detail.center_ra_deg, detail.center_dec_deg)
-        assert parent.contains(projected), (detail.code, detail.parent_chart_id)
+def test_detail_chart_geometry_handles_ra_wrap_and_rejects_edge_only_contact() -> None:
+    detail = DetailChartConfig(
+        id="detail-wrap",
+        code="PD99",
+        name="Wrap field",
+        center_ra_deg=359.8,
+        center_dec_deg=0.0,
+        width_deg=4.0,
+        height_deg=2.0,
+        mm_per_degree=20.0,
+    )
+    wrap_chart = ChartDefinition(
+        id="wrap-main",
+        center_ra_deg=0.0,
+        center_dec_deg=0.0,
+        width_deg=10.0,
+        height_deg=6.0,
+    )
+    opposite_chart = ChartDefinition(
+        id="opposite",
+        center_ra_deg=180.0,
+        center_dec_deg=0.0,
+        width_deg=10.0,
+        height_deg=6.0,
+    )
+    touching_chart = ChartDefinition(
+        id="touching",
+        center_ra_deg=364.8,
+        center_dec_deg=0.0,
+        width_deg=6.0,
+        height_deg=2.0,
+    )
+
+    assert detail_chart_contains_position(detail, 0.1, 0.0)
+    assert not detail_chart_contains_position(detail, 2.5, 0.0)
+    assert detail_chart_overlaps_main_chart(detail, wrap_chart) is not None
+    assert detail_chart_overlaps_main_chart(detail, opposite_chart) is None
+    assert detail_chart_overlaps_main_chart(detail, touching_chart) is None
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))

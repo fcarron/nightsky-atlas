@@ -178,9 +178,17 @@ Detail charts use only three physical map scales: 20, 40 or 80 mm/°. Their
 fields are 13 × 8.5°, 6.5 × 4.25° and 3.25 × 2.125°, respectively. This leaves
 space for a heading and a footer on A4 landscape while preserving true map
 scale. The page identifies each chart with a stable edition-specific code
-(`PD01`, `SD01`… or `DD01`…), its region, scale, field and primary parent chart.
-The detail-chart directory and PDF links provide the same code and parent
-reference. Codes do not derive from parent chart numbers.
+(`PD01`, `SD01`… or `DD01`…), its region, scale and field. Main-chart
+relationships are derived from the actual projected sky footprints: a detail
+chart can be referenced from several overlapping main charts, while it is
+printed only once. Its clipped footprint and linked code appear on each main
+chart with meaningful overlap. The detail-chart directory and PDF links list
+all related main-chart codes. Codes do not derive from parent chart numbers.
+
+An optimized main-chart DSO label can be suppressed only when its object lies
+inside a related detail chart and that same DSO label is successfully placed
+there without a hard layout issue. The symbol remains visible on the main
+chart. A detail chart elsewhere in the atlas is not sufficient evidence.
 
 The parent edition remains the source of DSO selection: Pocket details use
 Pocket selection, Standard details use Standard selection, and Deep details use
@@ -190,27 +198,27 @@ style; the base edition continues to supply DSO styling and selection. An
 optional UCAC4 supplement may be enabled for detail charts without adding it to
 the parent charts.
 
-| Edition and detail | Code | Scale | Stars to | Primary parent |
+| Edition and detail | Code | Scale | Stars to | Related main charts |
 | --- | --- | ---: | ---: | --- |
-| Pocket — Virgo core | PD01 | 20 mm/° | 9.0 | P20 |
-| Standard — Virgo Cluster | SD01 | 20 mm/° | 10.5 | S050 |
-| Standard — Virgo core | SD02 | 80 mm/° | 13.5 | S050 |
-| Standard — South Virgo | SD03 | 40 mm/° | 12.25 | S065 |
-| Standard — Fornax core | SD04 | 40 mm/° | 12.25 | S090 |
-| Standard — Sagittarius clusters | SD05 | 20 mm/° | 10.5 | S099 |
-| Standard — Cygnus nebula field | SD06 | 20 mm/° | 10.5 | S026 |
-| Standard — Orion Nebula | SD07 | 20 mm/° | 10.5 | S061 |
-| Standard — Double Cluster | SD08 | 20 mm/° | 10.5 | S008 |
-| Standard — Pleiades | SD09 | 20 mm/° | 10.5 | S030 |
-| Deep — NGC 7331 / Stephan's Quintet | DD01 | 40 mm/° | 12.25 | D116 |
-| Deep — Pleiades | DD02 | 40 mm/° | 12.25 | D147 |
-| Deep — Coma core | DD03 | 80 mm/° | 13.5 | D131 |
-| Deep — Markarian chain | DD04 | 80 mm/° | 13.5 | D188 |
-| Deep — Orion Nebula | DD05 | 80 mm/° | 13.5 | D269 |
-| Deep — Fornax core | DD06 | 40 mm/° | 12.25 | D381 |
-| Deep — 30 Doradus | DD07 | 80 mm/° | 13.5 | D466 |
-| Deep — LMC bar | DD08 | 80 mm/° | 13.5 | D465 |
-| Deep — NGC 346 / SMC | DD09 | 40 mm/° | 12.25 | D477 |
+| Pocket — Virgo core | PD01 | 20 mm/° | 9.0 | P21, P20, P12, P11 |
+| Standard — Virgo Cluster | SD01 | 20 mm/° | 10.5 | S051, S050, S066, S065 |
+| Standard — Virgo core | SD02 | 80 mm/° | 13.5 | S051 |
+| Standard — South Virgo | SD03 | 40 mm/° | 12.25 | S066, S051 |
+| Standard — Fornax core | SD04 | 40 mm/° | 12.25 | S101, S113, S102 |
+| Standard — Sagittarius clusters | SD05 | 20 mm/° | 10.5 | S092, S077, S091, S076 |
+| Standard — Cygnus nebula field | SD06 | 20 mm/° | 10.5 | S019, S031, S030 |
+| Standard — Orion Nebula | SD07 | 20 mm/° | 10.5 | S070, S085 |
+| Standard — Double Cluster | SD08 | 20 mm/° | 10.5 | S016, S007, S027, S017 |
+| Standard — Pleiades | SD09 | 20 mm/° | 10.5 | S041, S056, S042, S057 |
+| Deep — NGC 7331 / Stephan's Quintet | DD01 | 40 mm/° | 12.25 | D093, D094, D118, D119 |
+| Deep — Pleiades | DD02 | 40 mm/° | 12.25 | D167, D168, D138 |
+| Deep — Coma core | DD03 | 80 mm/° | 13.5 | D128, D129, D156 |
+| Deep — Markarian chain | DD04 | 80 mm/° | 13.5 | D186, D187 |
+| Deep — Orion Nebula | DD05 | 80 mm/° | 13.5 | D285, D255 |
+| Deep — Fornax core | DD06 | 40 mm/° | 12.25 | D398, D373, D399, D374 |
+| Deep — 30 Doradus | DD07 | 80 mm/° | 13.5 | D473, D474, D485, D484 |
+| Deep — LMC bar | DD08 | 80 mm/° | 13.5 | D474, D473 |
+| Deep — NGC 346 / SMC | DD09 | 40 mm/° | 12.25 | D477, D486, D476, D462 |
 
 Star profiles are existing edition presets: Standard detail stars use the
 Standard profile, Deep detail stars use Deep, and the denser detail fields use

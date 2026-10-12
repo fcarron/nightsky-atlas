@@ -11,6 +11,7 @@ import cairo
 
 from nightsky_atlas import __version__
 from nightsky_atlas.atlas.config import AtlasConfig, GalaxyContourStyle, StyleConfig
+from nightsky_atlas.atlas.detail_geometry import detail_chart_parent_ids
 from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
@@ -297,11 +298,7 @@ def _paragraph(
             chunks.append(chunk)
         return chunks
 
-    words_to_place = [
-        chunk
-        for word in words.split()
-        for chunk in split_long_word(word)
-    ]
+    words_to_place = [chunk for word in words.split() for chunk in split_long_word(word)]
     for word in words_to_place:
         candidate = f"{line} {word}" if line else word
         candidate_width_pt, _ = measure_point_size(cr, candidate, family, size_pt)
@@ -1136,7 +1133,8 @@ def _draw_detail_frame_example(
         return
     charts = tuple(chart_definitions(atlas))
     detail = atlas.detail_charts[0]
-    parent = next((item for item in charts if item.id == detail.parent_chart_id), None)
+    parent_ids = detail_chart_parent_ids((detail,), charts)[detail.id]
+    parent = next((item for item in charts if parent_ids and item.id == parent_ids[0]), None)
     if parent is None:
         return
     sample_scale = min(30.0 / parent.width_deg, 16.0 / parent.height_deg)
@@ -1155,7 +1153,8 @@ def _draw_detail_frame_example(
         mm_to_pt(x_mm - atlas.page.width_mm / 2.0),
         mm_to_pt(y_mm - atlas.page.height_mm / 2.0),
     )
-    draw_detail_markers(cr, (marker,), transform, style)
+    if marker is not None:
+        draw_detail_markers(cr, (marker,), transform, style)
     cr.restore()
 
 

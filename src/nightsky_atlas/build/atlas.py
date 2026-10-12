@@ -33,6 +33,10 @@ from nightsky_atlas.atlas.config import (
     load_atlas_config,
     load_style_config,
 )
+from nightsky_atlas.atlas.detail_geometry import (
+    detail_chart_contains_position,
+    detail_chart_parent_ids,
+)
 from nightsky_atlas.atlas.directory import build_chart_directory, build_detail_chart_directory
 from nightsky_atlas.atlas.index import build_atlas_index
 from nightsky_atlas.atlas.observing_config import DEFAULT_CONFIG_PATH as OBSERVING_CONFIG_PATH
@@ -142,12 +146,17 @@ def _detail_presentation(
     *,
     edition: EditionConfig,
     main_charts: tuple[ChartDefinition, ...],
+    parent_chart_ids: tuple[str, ...],
     stellar_limit_magnitude: float,
 ) -> ChartPresentation:
     parents = {chart.id: chart for chart in main_charts}
-    parent = parents[detail.parent_chart_id]
-    parent_code = presentation_from_edition(parent, edition).chart_code
+    parent_codes = tuple(
+        presentation_from_edition(parents[chart_id], edition).chart_code
+        for chart_id in parent_chart_ids
+    )
+    parent_code = parent_codes[0] if parent_codes else None
     field = f"{detail.width_deg:g}° × {detail.height_deg:g}°"
+    parent_text = ", ".join(parent_codes) if parent_codes else "none"
     return ChartPresentation(
         edition_name=edition.name,
         edition_code=edition.code,
@@ -156,7 +165,7 @@ def _detail_presentation(
         page_heading=f"{detail.code} · {detail.name}",
         page_footer=(
             f"{edition.name} · {detail.code} · {detail.mm_per_degree:g} mm/° · "
-            f"stars to {stellar_limit_magnitude:g} · {field} · Main chart {parent_code}"
+            f"stars to {stellar_limit_magnitude:g} · {field} · Main charts {parent_text}"
         ),
         page_footer_target=parent_code,
     )
@@ -259,7 +268,8 @@ class _MainChartShared:
     star_names: dict[int, StarName]
     library: OverridesLibrary | None
     detail_charts: tuple[DetailChartConfig, ...]
-    fallback_ids_by_detail: dict[str, frozenset[str]]
+    detail_parent_chart_ids: dict[str, tuple[str, ...]]
+    detail_labelled_dso_ids: dict[str, frozenset[str]]
     edition: EditionConfig
     overviews: dict[str, OverviewMap]
     variable_star_hips: frozenset[int]
@@ -289,13 +299,10 @@ def _require_mandatory_labels(chart_id: str, labels: tuple[Label, ...]) -> None:
     missing = sorted(
         label.id
         for label in labels
-        if label.mandatory
-        and (label.hidden or label.effective_candidate() is None)
+        if label.mandatory and (label.hidden or label.effective_candidate() is None)
     )
     if missing:
-        raise ValueError(
-            f"chart {chart_id} has missing mandatory labels: {', '.join(missing)}"
-        )
+        raise ValueError(f"chart {chart_id} has missing mandatory labels: {', '.join(missing)}")
 
 
 def _layout_issue_records(issues: tuple[LayoutIssue, ...]) -> tuple[dict[str, Any], ...]:
@@ -311,10 +318,11 @@ def _layout_issue_records(issues: tuple[LayoutIssue, ...]) -> tuple[dict[str, An
     )
 
 
-def _detail_fallback_suppression_candidate(
+def _detail_label_suppression_candidate(
     labels: tuple[Label, ...],
     validation: ValidationResult,
     detail_by_label: dict[str, str],
+    protected_ids: frozenset[str] = frozenset(),
 ) -> tuple[Label, str, tuple[LayoutIssue, ...]] | None:
     suppressible_types = {
         "label_label",
@@ -330,7 +338,7 @@ def _detail_fallback_suppression_candidate(
         if issue.issue_type.value not in suppressible_types:
             continue
         for element_id in issue.element_ids:
-            if element_id in detail_by_label:
+            if element_id in detail_by_label and element_id not in protected_ids:
                 issues_by_label.setdefault(element_id, []).append(issue)
     if not issues_by_label:
         return None
@@ -403,9 +411,10 @@ def _build_main_chart(
         inputs=shared.inputs,
     )
     detail_markers = tuple(
-        build_detail_marker(detail, definition, chart_context.transform)
+        marker
         for detail in shared.detail_charts
-        if detail.parent_chart_id == definition.id
+        if definition.id in shared.detail_parent_chart_ids[detail.id]
+        if (marker := build_detail_marker(detail, definition, chart_context.transform)) is not None
     )
     context_s = time.perf_counter() - stage_start
     stage_start = time.perf_counter()
@@ -421,58 +430,6 @@ def _build_main_chart(
         if chart_overrides is not None
         else frozenset()
     )
-    parent_dsos = {
-        scene_dso.dso.id: scene_dso
-        for scene_dso in chart_context.scene.deep_sky_objects
-        if scene_dso.symbol_visible
-    }
-    parent_galaxies = tuple(
-        scene_dso
-        for scene_dso in chart_context.scene.deep_sky_objects
-        if scene_dso.dso.object_type == DsoType.GALAXY and scene_dso.symbol_visible
-    )
-    fallback_eligible: list[tuple[str, tuple[str, ...]]] = []
-    for detail in shared.detail_charts:
-        if detail.parent_chart_id != definition.id or not detail.fallback_parent_galaxy_labels:
-            continue
-        detail_ids = (
-            shared.fallback_ids_by_detail.get(detail.id, frozenset()) & parent_dsos.keys()
-        )
-        if detail.fallback_parent_min_magnitude is not None:
-            detail_ids = {
-                item
-                for item in detail_ids
-                if parent_dsos[item].dso.magnitude is not None
-                and parent_dsos[item].dso.magnitude
-                >= detail.fallback_parent_min_magnitude
-            }
-        if detail.fallback_parent_min_nearby_galaxies:
-            galaxy_positions = {
-                scene_dso.dso.id: chart_context.transform.to_page(scene_dso.chart_point)
-                for scene_dso in parent_galaxies
-            }
-            radius_sq = chart_context.style.label.selection.density_radius_mm**2
-            detail_ids = {
-                item
-                for item in detail_ids
-                if item in galaxy_positions
-                and sum(
-                    other_id != item
-                    and (galaxy_positions[item].x_mm - position.x_mm) ** 2
-                    + (galaxy_positions[item].y_mm - position.y_mm) ** 2
-                    <= radius_sq
-                    for other_id, position in galaxy_positions.items()
-                )
-                >= detail.fallback_parent_min_nearby_galaxies
-            }
-        available_parent_label_ids = {label.id for label in labels}
-        detail_ids = {
-            item for item in detail_ids if f"label:dso:{item}" in available_parent_label_ids
-        }
-        if detail_ids:
-            fallback_eligible.append(
-                (detail.code, tuple(sorted(f"label:dso:{item}" for item in detail_ids)))
-            )
     labels = select_labels(
         labels,
         chart_context.scene,
@@ -482,9 +439,7 @@ def _build_main_chart(
     )
     if chart_overrides is not None:
         labels = apply_overrides(labels, chart_overrides)
-    presentation = presentation_from_edition(
-        definition, shared.edition, scene=chart_context.scene
-    )
+    presentation = presentation_from_edition(definition, shared.edition, scene=chart_context.scene)
     locator: LocatorInset | None = None
     if shared.inputs.style.locator.enabled and shared.overviews:
         locator = LocatorInset(
@@ -526,15 +481,25 @@ def _build_main_chart(
         furniture=furniture,
     )
     _require_mandatory_labels(definition.id, labels)
+    detail_by_label: dict[str, str] = {}
+    if shared.optimize:
+        for detail in shared.detail_charts:
+            if definition.id not in shared.detail_parent_chart_ids[detail.id]:
+                continue
+            detail_labelled_dso_ids = shared.detail_labelled_dso_ids.get(detail.id, frozenset())
+            for scene_dso in chart_context.scene.deep_sky_objects:
+                if (
+                    scene_dso.symbol_visible
+                    and scene_dso.dso.id in detail_labelled_dso_ids
+                    and detail_chart_contains_position(
+                        detail, scene_dso.dso.ra_deg, scene_dso.dso.dec_deg
+                    )
+                ):
+                    detail_by_label.setdefault(f"label:dso:{scene_dso.dso.id}", detail.code)
     permitted_suppressions: list[dict[str, Any]] = []
-    fallback_detail_by_label = {
-        label_id: detail_code
-        for detail_code, label_ids in fallback_eligible
-        for label_id in label_ids
-    }
-    while shared.optimize and fallback_detail_by_label:
-        choice = _detail_fallback_suppression_candidate(
-            labels, validation, fallback_detail_by_label
+    while detail_by_label:
+        choice = _detail_label_suppression_candidate(
+            labels, validation, detail_by_label, protected_ids=protected_ids
         )
         if choice is None:
             break
@@ -551,7 +516,7 @@ def _build_main_chart(
             }
         )
         labels = tuple(label for label in labels if label.id != suppressed_id)
-        fallback_detail_by_label.pop(suppressed_id)
+        detail_by_label.pop(suppressed_id)
         optimized = optimize_labels(
             labels,
             chart_context.scene,
@@ -603,15 +568,14 @@ def _build_main_chart(
         neighbours=definition.neighbours,
         fallback_label_ids=tuple(
             (
-                code,
+                detail_code,
                 tuple(
                     item["label_id"]
                     for item in permitted_suppressions
-                    if item["detail_chart"] == code
+                    if item["detail_chart"] == detail_code
                 ),
             )
-            for code, _label_ids in fallback_eligible
-            if any(item["detail_chart"] == code for item in permitted_suppressions)
+            for detail_code in sorted({item["detail_chart"] for item in permitted_suppressions})
         ),
         layout_issues=(
             *_layout_issue_records(validation.issues),
@@ -1060,13 +1024,14 @@ def _build_atlas_impl(
         charts = charts[:limit]
     if not charts:
         raise ValueError("no charts selected")
-    missing_detail_parents = {detail.parent_chart_id for detail in atlas.detail_charts} - {
-        chart.id for chart in all_charts
-    }
-    if missing_detail_parents:
+    all_detail_parent_chart_ids = detail_chart_parent_ids(atlas.detail_charts, all_charts)
+    details_without_overlap = sorted(
+        detail.id for detail in atlas.detail_charts if not all_detail_parent_chart_ids[detail.id]
+    )
+    if details_without_overlap:
         raise ValueError(
-            "detail charts reference unknown parent chart(s): "
-            + ", ".join(sorted(missing_detail_parents))
+            "detail chart fields do not overlap any main chart: "
+            + ", ".join(details_without_overlap)
         )
     main_codes = {presentation_from_edition(chart, edition).chart_code for chart in all_charts}
     duplicate_detail_codes = main_codes & {detail.code for detail in atlas.detail_charts}
@@ -1078,8 +1043,14 @@ def _build_atlas_impl(
     detail_charts = tuple(
         detail
         for detail in atlas.detail_charts
-        if detail.parent_chart_id in {chart.id for chart in charts}
+        if any(
+            chart_id in {chart.id for chart in charts}
+            for chart_id in all_detail_parent_chart_ids[detail.id]
+        )
     )
+    selected_detail_parent_chart_ids = {
+        detail.id: all_detail_parent_chart_ids[detail.id] for detail in detail_charts
+    }
     detail_star_profiles: dict[str, tuple[float, StyleConfig]] = {}
     for profile_name in sorted({detail.star_profile for detail in detail_charts}):
         profile_atlas_path = Path(atlas_path).with_name(f"{profile_name}.yaml")
@@ -1099,9 +1070,7 @@ def _build_atlas_impl(
             profile_atlas.stellar_limit_magnitude,
             _style_with_star_profile(style, profile_style),
         )
-    main_faint_star_store = (
-        faint_star_store if atlas.id in {"eyepiece", "eyepieceDeep"} else None
-    )
+    main_faint_star_store = faint_star_store if atlas.id in {"eyepiece", "eyepieceDeep"} else None
     main_faint_star_limit = faint_star_limit if main_faint_star_store is not None else None
     if publication:
         if not optimize:
@@ -1129,9 +1098,7 @@ def _build_atlas_impl(
         "star_names": (
             None if star_names_dir is False else str(star_names_dir or STAR_NAMES_FIXTURE_DIR)
         ),
-        "milky_way": (
-            "data/third_party/d3-celestial/mw.json" if style.milky_way.enabled else None
-        ),
+        "milky_way": ("data/third_party/d3-celestial/mw.json" if style.milky_way.enabled else None),
     }
     input_paths = {
         "atlas_config": atlas_path,
@@ -1202,16 +1169,12 @@ def _build_atlas_impl(
         star_systems = load_star_systems(double_stars_path)
 
     prepared_details: dict[str, _PreparedDetail] = {}
-    fallback_ids_by_detail: dict[str, frozenset[str]] = {}
+    detail_labelled_dso_ids: dict[str, frozenset[str]] = {}
     for detail in detail_charts:
-        if not detail.fallback_parent_galaxy_labels:
-            continue
         definition = detail.to_definition(atlas_id=atlas.id)
         stellar_limit_magnitude, detail_style = detail_star_profiles[detail.star_profile]
         detail_faint_limit = (
-            min(faint_star_limit, stellar_limit_magnitude)
-            if faint_star_limit is not None
-            else None
+            min(faint_star_limit, stellar_limit_magnitude) if faint_star_limit is not None else None
         )
         detail_context = build_chart_context(
             atlas_path=atlas_path,
@@ -1249,6 +1212,7 @@ def _build_atlas_impl(
             detail,
             edition=edition,
             main_charts=all_charts,
+            parent_chart_ids=selected_detail_parent_chart_ids[detail.id],
             stellar_limit_magnitude=stellar_limit_magnitude,
         )
         detail_furniture = furniture_obstacles(
@@ -1284,6 +1248,21 @@ def _build_atlas_impl(
             furniture=detail_furniture,
         )
         _require_mandatory_labels(definition.id, detail_labels)
+        placed_label_ids = {
+            label.id
+            for label in detail_labels
+            if not label.hidden and label.effective_candidate() is not None
+        }
+        problematic_label_ids = {
+            element_id for issue in detail_validation.issues for element_id in issue.element_ids
+        }
+        detail_labelled_dso_ids[detail.id] = frozenset(
+            scene_dso.dso.id
+            for scene_dso in detail_context.scene.deep_sky_objects
+            if scene_dso.symbol_visible
+            and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
+            and f"label:dso:{scene_dso.dso.id}" not in problematic_label_ids
+        )
         prepared_details[detail.id] = _PreparedDetail(
             context=detail_context,
             style=detail_style,
@@ -1292,25 +1271,6 @@ def _build_atlas_impl(
             cost_after=detail_cost_after,
             validation=detail_validation,
         )
-        placed_label_ids = {
-            label.id
-            for label in detail_labels
-            if not label.hidden and label.effective_candidate() is not None
-        }
-        problematic_detail_labels = {
-            element_id
-            for issue in detail_validation.issues
-            for element_id in issue.element_ids
-            if element_id.startswith("label:dso:")
-        }
-        fallback_ids_by_detail[detail.id] = frozenset(
-            scene_dso.dso.id
-            for scene_dso in detail_context.scene.deep_sky_objects
-            if scene_dso.symbol_visible
-            and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
-            and f"label:dso:{scene_dso.dso.id}" not in problematic_detail_labels
-        )
-
     page = atlas.page.to_geometry()
     outroot = Path(outdir) / atlas.id
     outroot.mkdir(parents=True, exist_ok=True)
@@ -1453,7 +1413,8 @@ def _build_atlas_impl(
         star_names=star_names,
         library=library,
         detail_charts=detail_charts,
-        fallback_ids_by_detail=fallback_ids_by_detail,
+        detail_parent_chart_ids=selected_detail_parent_chart_ids,
+        detail_labelled_dso_ids=detail_labelled_dso_ids,
         edition=edition,
         overviews=overviews if style.locator.enabled else {},
         variable_star_hips=variable_star_hips,
@@ -1598,6 +1559,7 @@ def _build_atlas_impl(
                 detail,
                 edition=edition,
                 main_charts=all_charts,
+                parent_chart_ids=selected_detail_parent_chart_ids[detail.id],
                 stellar_limit_magnitude=stellar_limit_magnitude,
             )
             furniture = furniture_obstacles(
@@ -1641,6 +1603,7 @@ def _build_atlas_impl(
                 detail,
                 edition=edition,
                 main_charts=all_charts,
+                parent_chart_ids=selected_detail_parent_chart_ids[detail.id],
                 stellar_limit_magnitude=stellar_limit_magnitude,
             )
         _require_mandatory_labels(definition.id, labels)
@@ -1830,9 +1793,20 @@ def _build_atlas_impl(
                 "id": detail.id,
                 "code": detail.code,
                 "name": detail.name,
-                "parent_chart_id": detail.parent_chart_id,
+                "parent_chart_ids": list(all_detail_parent_chart_ids[detail.id]),
+                "parent_chart_codes": [
+                    presentation_from_edition(
+                        next(chart for chart in all_charts if chart.id == chart_id),
+                        edition,
+                    ).chart_code
+                    for chart_id in all_detail_parent_chart_ids[detail.id]
+                ],
                 "parent_chart_code": presentation_from_edition(
-                    next(chart for chart in all_charts if chart.id == detail.parent_chart_id),
+                    next(
+                        chart
+                        for chart in all_charts
+                        if chart.id == all_detail_parent_chart_ids[detail.id][0]
+                    ),
                     edition,
                 ).chart_code,
                 "center_ra_deg": detail.center_ra_deg,
@@ -1846,9 +1820,6 @@ def _build_atlas_impl(
                     if faint_star_store is not None and faint_star_limit is not None
                     else None
                 ),
-                "fallback_parent_galaxy_labels": detail.fallback_parent_galaxy_labels,
-                "fallback_parent_min_magnitude": detail.fallback_parent_min_magnitude,
-                "fallback_parent_min_nearby_galaxies": detail.fallback_parent_min_nearby_galaxies,
                 "parent_marker_label": detail.parent_marker_label,
                 "stellar_limit_magnitude": detail_star_profiles[detail.star_profile][0],
             }

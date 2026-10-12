@@ -193,33 +193,50 @@ def draw_detail_chart_directory_pages(
                 family,
                 6.5,
             )
-            parent_text = f"Main chart {entry.parent_chart_code}"
-            parent_metrics = TextMeasurer(family, 6.5).measure_mm(parent_text)
-            parent_rect = PageRect(
-                x + column_width - parent_metrics.width_mm - 2.0,
-                y + 3.2,
-                parent_metrics.width_mm,
-                parent_metrics.height_mm,
+            parent_prefix = "Main chart " if len(entry.parent_chart_codes) == 1 else "Main charts "
+            parent_parts = [parent_prefix]
+            for index, chart_code in enumerate(entry.parent_chart_codes):
+                if index:
+                    parent_parts.append(", ")
+                parent_parts.append(chart_code)
+            parent_width = sum(
+                TextMeasurer(family, 6.5).measure_mm(part).width_mm for part in parent_parts
             )
-            if pdf_navigation is None:
-                draw_text(
-                    cr,
-                    parent_text,
-                    mm_to_pt(parent_rect.left_mm),
-                    mm_to_pt(parent_rect.top_mm),
-                    family,
-                    6.5,
+            cursor_x = x + column_width - parent_width - 2.0
+            parent_y = y + 3.2
+            for index, part in enumerate(parent_parts):
+                part_metrics = TextMeasurer(family, 6.5).measure_mm(part)
+                part_rect = PageRect(
+                    cursor_x,
+                    parent_y,
+                    part_metrics.width_mm,
+                    part_metrics.height_mm,
                 )
-            else:
-                with pdf_navigation.link(cr, entry.parent_chart_code, parent_rect):
+                chart_code = (
+                    entry.parent_chart_codes[(index - 1) // 2]
+                    if index % 2 == 1 and index > 0
+                    else None
+                )
+                if pdf_navigation is not None and chart_code is not None:
+                    with pdf_navigation.link(cr, chart_code, part_rect):
+                        draw_text(
+                            cr,
+                            part,
+                            mm_to_pt(part_rect.left_mm),
+                            mm_to_pt(part_rect.top_mm),
+                            family,
+                            6.5,
+                        )
+                else:
                     draw_text(
                         cr,
-                        parent_text,
-                        mm_to_pt(parent_rect.left_mm),
-                        mm_to_pt(parent_rect.top_mm),
+                        part,
+                        mm_to_pt(part_rect.left_mm),
+                        mm_to_pt(part_rect.top_mm),
                         family,
                         6.5,
                     )
+                cursor_x += part_metrics.width_mm
         draw_text(
             cr,
             f"NightSky Atlas — {edition.name} · Detail chart directory · {page_number}",

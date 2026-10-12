@@ -12,7 +12,7 @@ import yaml
 from nightsky_atlas.atlas.config import load_atlas_config
 from nightsky_atlas.build.atlas import (
     AtlasBuildResult,
-    _detail_fallback_suppression_candidate,
+    _detail_label_suppression_candidate,
     _require_mandatory_labels,
     build_atlas,
     chart_definitions,
@@ -73,7 +73,7 @@ def make_dso_json(tmp_path: Path) -> Path:
     return path
 
 
-def test_detail_fallback_only_suppresses_lowest_priority_conflicting_label() -> None:
+def test_detail_suppression_selects_lowest_priority_eligible_collision() -> None:
     def make_label(label_id: str, priority: int) -> Label:
         candidate = LabelCandidate(
             id=f"{label_id}:N",
@@ -90,39 +90,83 @@ def test_detail_fallback_only_suppresses_lowest_priority_conflicting_label() -> 
             candidates=(candidate,),
         )
 
-    low = make_label("label:dso:low", 30)
-    high = make_label("label:dso:high", 100)
+    lower = make_label("label:dso:lower", 30)
+    higher = make_label("label:dso:higher", 100)
     issue = LayoutIssue(
-        id="issue:label_label:low:high",
+        id="issue:label_label:lower:higher",
         issue_type=IssueType.LABEL_LABEL,
-        element_ids=(low.id, high.id),
+        element_ids=(lower.id, higher.id),
         message="labels overlap",
     )
-    result = _detail_fallback_suppression_candidate(
-        (high, low),
+    result = _detail_label_suppression_candidate(
+        (higher, lower),
         ValidationResult(issues=(issue,)),
-        {low.id: "PD01", high.id: "PD01"},
+        {lower.id: "PD01", higher.id: "PD01"},
     )
 
     assert result is not None
-    assert result[0].id == low.id
+    assert result[0].id == lower.id
     assert result[1] == "PD01"
     assert result[2] == (issue,)
 
 
-def test_detail_fallback_does_not_suppress_a_clear_label() -> None:
-    label = Label(
+def test_detail_suppression_does_not_remove_clear_or_uncovered_labels() -> None:
+    clear = Label(
         id="label:dso:clear",
+        target_id="clear",
+        text="clear",
+        priority=30,
+        mandatory=True,
+        candidates=(),
+    )
+    covered_but_clear = _detail_label_suppression_candidate(
+        (clear,), ValidationResult(issues=()), {clear.id: "PD01"}
+    )
+    uncovered_collision = _detail_label_suppression_candidate(
+        (clear,),
+        ValidationResult(
+            issues=(
+                LayoutIssue(
+                    id="issue:label_dso:clear",
+                    issue_type=IssueType.LABEL_DSO,
+                    element_ids=(clear.id, "NGC 1"),
+                    message="label overlaps symbol",
+                ),
+            )
+        ),
+        {},
+    )
+
+    assert covered_but_clear is None
+    assert uncovered_collision is None
+
+
+def test_detail_suppression_preserves_manually_overridden_labels() -> None:
+    label_id = "label:dso:NGC1"
+    label = Label(
+        id=label_id,
         target_id="NGC1",
         text="1",
         priority=30,
         mandatory=True,
         candidates=(),
     )
+    issue = LayoutIssue(
+        id="issue:label_dso:NGC1",
+        issue_type=IssueType.LABEL_DSO,
+        element_ids=(label_id, "NGC2"),
+        message="label overlaps symbol",
+    )
 
-    assert _detail_fallback_suppression_candidate(
-        (label,), ValidationResult(issues=()), {label.id: "PD01"}
-    ) is None
+    assert (
+        _detail_label_suppression_candidate(
+            (label,),
+            ValidationResult(issues=(issue,)),
+            {label_id: "PD01"},
+            protected_ids=frozenset({label_id}),
+        )
+        is None
+    )
 
 
 def test_missing_mandatory_label_fails_chart_build() -> None:
@@ -217,13 +261,21 @@ def test_atlas_validate_detects_changed_output(tmp_path: Path) -> None:
         render_png=False,
         write_draft_report=False,
     )
-    assert main([
-        "atlas", "validate", "--atlas", str(atlas_path), "--outdir", str(tmp_path)
-    ]) == 0
-    assert main([
-        "atlas", "validate", "--atlas", str(atlas_path), "--outdir", str(tmp_path),
-        "--publication",
-    ]) == 1
+    assert main(["atlas", "validate", "--atlas", str(atlas_path), "--outdir", str(tmp_path)]) == 0
+    assert (
+        main(
+            [
+                "atlas",
+                "validate",
+                "--atlas",
+                str(atlas_path),
+                "--outdir",
+                str(tmp_path),
+                "--publication",
+            ]
+        )
+        == 1
+    )
     atlas_path.write_text(atlas_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     assert "atlas input fingerprints are stale" in validate_atlas_output(
         tmp_path / "test", publication=True
@@ -277,8 +329,10 @@ def test_failed_publication_preserves_previous_atlas(
     monkeypatch.setattr("nightsky_atlas.build.atlas._build_atlas_impl", fail_build)
     with pytest.raises(ValueError, match="render failed"):
         build_atlas(
-            atlas_path=SHIPPED_ATLAS, style_path=STYLE,
-            outdir=tmp_path, publication=True,
+            atlas_path=SHIPPED_ATLAS,
+            style_path=STYLE,
+            outdir=tmp_path,
+            publication=True,
         )
     assert (published / "atlas.pdf").read_bytes() == b"old publication"
     assert list(tmp_path.glob(".standard-staging-*")) == []
@@ -297,14 +351,18 @@ def test_successful_publication_swaps_complete_directory(
         (staged / "atlas.pdf").write_bytes(b"new publication")
         (staged / "manifest.json").write_text("{}", encoding="utf-8")
         return AtlasBuildResult(
-            atlas_id="standard", pages=(), combined_pdf=staged / "atlas.pdf",
+            atlas_id="standard",
+            pages=(),
+            combined_pdf=staged / "atlas.pdf",
             manifest_path=staged / "manifest.json",
         )
 
     monkeypatch.setattr("nightsky_atlas.build.atlas._build_atlas_impl", stage_build)
     result = build_atlas(
-        atlas_path=SHIPPED_ATLAS, style_path=STYLE,
-        outdir=tmp_path, publication=True,
+        atlas_path=SHIPPED_ATLAS,
+        style_path=STYLE,
+        outdir=tmp_path,
+        publication=True,
     )
     assert result.combined_pdf == published / "atlas.pdf"
     assert result.combined_pdf.read_bytes() == b"new publication"

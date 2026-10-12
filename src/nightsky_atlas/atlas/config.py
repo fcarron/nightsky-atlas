@@ -145,12 +145,11 @@ class ChartConfig(_StrictModel):
 
 
 class DetailChartConfig(_StrictModel):
-    """A supplementary zoom chart with its own scale and edition star profile."""
+    """A supplementary zoom chart related to main charts by sky-footprint overlap."""
 
     id: str
     code: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
     name: str
-    parent_chart_id: str
     center_ra_deg: float
     center_dec_deg: float
     width_deg: PositiveFloat
@@ -165,16 +164,13 @@ class DetailChartConfig(_StrictModel):
         "eyepiece",
         "eyepiece_deep",
     ] = "deep"
-    fallback_parent_galaxy_labels: bool = False
-    fallback_parent_min_magnitude: float | None = None
-    fallback_parent_min_nearby_galaxies: int = Field(default=0, ge=0)
     parent_marker_label: str | None = None
 
-    @field_validator("id", "name", "parent_chart_id")
+    @field_validator("id", "name")
     @classmethod
     def _not_blank(cls, value: str) -> str:
         if not value.strip():
-            raise ValueError("detail-chart id, name and parent chart must not be blank")
+            raise ValueError("detail-chart id and name must not be blank")
         return value
 
     @field_validator("center_ra_deg", "center_dec_deg")
@@ -1130,9 +1126,7 @@ class MilkyWayStyle(_StrictModel):
 
     @field_validator("levels")
     @classmethod
-    def _levels_are_unique_and_ordered(
-        cls, value: tuple[int, ...]
-    ) -> tuple[int, ...]:
+    def _levels_are_unique_and_ordered(cls, value: tuple[int, ...]) -> tuple[int, ...]:
         if value != tuple(sorted(set(value))):
             raise ValueError("Milky Way levels must be unique and sorted ascending")
         return value

@@ -270,11 +270,11 @@ Sans 3 for editorial/index pages. Register package assets through
   to the higher priority, then the brighter target, then the stable id). Every
   selected star and DSO label is retained for geometric placement, regardless
   of local density. The optimizer tries alternate candidates and reports any
-  remaining conflicts rather than hiding selected labels. A DSO label may be
-  suppressed from a main chart only after optimization when a configured detail
-  chart covers the object and visibly labels it. Density selection remains for
-  other optional presentation labels. Manual overrides are protected from
-  selection.
+  remaining conflicts rather than hiding selected labels. After optimization,
+  a DSO label may be suppressed only when a geometrically overlapping detail
+  chart covers the object and prints that same label without a hard issue; the
+  DSO symbol remains on the main chart. Density selection remains for other
+  optional presentation labels. Manual overrides are protected from selection.
 
 ## 15. Deterministic layout optimizer
 

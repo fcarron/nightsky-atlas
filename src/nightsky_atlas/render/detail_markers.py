@@ -7,16 +7,19 @@ from dataclasses import dataclass
 import cairo
 
 from nightsky_atlas.atlas.config import DetailChartConfig, StyleConfig
+from nightsky_atlas.atlas.detail_geometry import (
+    detail_chart_overlaps_main_chart,
+    detail_footprint_in_chart,
+)
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
-from nightsky_atlas.projection.stereographic import StereographicProjection
+from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.render.text import TextMeasurer, draw_text
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = ["DetailMapMarker", "build_detail_marker", "draw_detail_markers"]
 
-_BOUNDARY_SAMPLES_PER_EDGE = 12
 _FRAME_WIDTH_MM = 0.17
 _FRAME_GRAY = 0.62
 _LABEL_SIZE_FACTOR = 0.9
@@ -28,48 +31,39 @@ _TAG_OBSTACLE_GAP_MM = 0.6
 
 @dataclass(frozen=True, slots=True)
 class DetailMapMarker:
-    """Projected detail-field outline and its linked parent-chart label."""
+    """Projected, clipped detail-field outline and its linked chart label."""
 
     chart_code: str
     label: str
     boundary: tuple[PagePoint, ...]
+    visible_boundary: tuple[PagePoint, ...]
+    overlap_area_deg2: float
+    detail_area_fraction: float
 
 
 def build_detail_marker(
     detail: DetailChartConfig,
     parent: ChartDefinition,
     parent_transform: PageTransform,
-) -> DetailMapMarker:
-    """Project the detail chart's actual stereographic footprint on its parent."""
-    detail_projection = StereographicProjection(detail.center_ra_deg, detail.center_dec_deg)
-    parent_projection = StereographicProjection(parent.center_ra_deg, parent.center_dec_deg)
-    offsets: list[tuple[float, float]] = []
-    half_width = detail.width_deg / 2.0
-    half_height = detail.height_deg / 2.0
-    samples = _BOUNDARY_SAMPLES_PER_EDGE
-    for index in range(samples):
-        fraction = index / samples
-        offsets.append((-half_width + 2.0 * half_width * fraction, half_height))
-    for index in range(samples):
-        fraction = index / samples
-        offsets.append((half_width, half_height - 2.0 * half_height * fraction))
-    for index in range(samples):
-        fraction = index / samples
-        offsets.append((half_width - 2.0 * half_width * fraction, -half_height))
-    for index in range(samples):
-        fraction = index / samples
-        offsets.append((-half_width, -half_height + 2.0 * half_height * fraction))
-
+) -> DetailMapMarker | None:
+    """Project a detail footprint when it meaningfully overlaps this chart."""
+    overlap = detail_chart_overlaps_main_chart(detail, parent)
+    if overlap is None:
+        return None
     boundary = tuple(
-        parent_transform.to_page(
-            parent_projection.project(*detail_projection.inverse(xi, eta))
-        )
-        for xi, eta in offsets
+        parent_transform.to_page(ChartPoint(xi_deg, eta_deg))
+        for xi_deg, eta_deg in detail_footprint_in_chart(detail, parent)
     )
+    visible_boundary = _clip_page_boundary(boundary, parent_transform.chart_rect)
+    if len(visible_boundary) < 3:
+        return None
     return DetailMapMarker(
         chart_code=detail.code,
         label=detail.name if detail.parent_marker_label is None else detail.parent_marker_label,
         boundary=boundary,
+        visible_boundary=visible_boundary,
+        overlap_area_deg2=overlap.area_deg2,
+        detail_area_fraction=overlap.detail_area_fraction,
     )
 
 
@@ -111,19 +105,15 @@ def draw_detail_markers(
 
         if not draw_labels:
             continue
-        text = (
-            f"{marker.label} · {marker.chart_code}"
-            if marker.label
-            else marker.chart_code
-        )
+        text = f"{marker.label} · {marker.chart_code}" if marker.label else marker.chart_code
         font_size_pt = style.label.font_size_pt * _LABEL_SIZE_FACTOR
         metrics = TextMeasurer(style.label.font_family, font_size_pt).measure_mm(text)
         tag_width = metrics.width_mm + 2.0 * _LABEL_PAD_X_MM
         tag_height = metrics.height_mm + 2.0 * _LABEL_PAD_Y_MM
-        min_x = min(point.x_mm for point in marker.boundary)
-        min_y = min(point.y_mm for point in marker.boundary)
-        max_x = max(point.x_mm for point in marker.boundary)
-        max_y = max(point.y_mm for point in marker.boundary)
+        min_x = min(point.x_mm for point in marker.visible_boundary)
+        min_y = min(point.y_mm for point in marker.visible_boundary)
+        max_x = max(point.x_mm for point in marker.visible_boundary)
+        max_y = max(point.y_mm for point in marker.visible_boundary)
         tag = _marker_tag_rect(
             min_x=min_x,
             min_y=min_y,
@@ -164,6 +154,62 @@ def draw_detail_markers(
                     font_size_pt,
                 )
     cr.restore()
+
+
+def _clip_page_boundary(points: tuple[PagePoint, ...], rect: PageRect) -> tuple[PagePoint, ...]:
+    clipped = tuple((point.x_mm, point.y_mm) for point in points)
+    edges = (
+        (
+            lambda point: point[0] >= rect.left_mm,
+            lambda start, end: _intersect_x(start, end, rect.left_mm),
+        ),
+        (
+            lambda point: point[0] <= rect.right_mm,
+            lambda start, end: _intersect_x(start, end, rect.right_mm),
+        ),
+        (
+            lambda point: point[1] >= rect.top_mm,
+            lambda start, end: _intersect_y(start, end, rect.top_mm),
+        ),
+        (
+            lambda point: point[1] <= rect.bottom_mm,
+            lambda start, end: _intersect_y(start, end, rect.bottom_mm),
+        ),
+    )
+    for inside, intersection in edges:
+        if not clipped:
+            break
+        output: list[tuple[float, float]] = []
+        previous = clipped[-1]
+        previous_inside = inside(previous)
+        for current in clipped:
+            current_inside = inside(current)
+            if current_inside:
+                if not previous_inside:
+                    output.append(intersection(previous, current))
+                output.append(current)
+            elif previous_inside:
+                output.append(intersection(previous, current))
+            previous = current
+            previous_inside = current_inside
+        clipped = tuple(output)
+    return tuple(PagePoint(x, y) for x, y in clipped)
+
+
+def _intersect_x(
+    start: tuple[float, float], end: tuple[float, float], x: float
+) -> tuple[float, float]:
+    dx = end[0] - start[0]
+    fraction = 0.0 if abs(dx) < 1e-15 else (x - start[0]) / dx
+    return x, start[1] + fraction * (end[1] - start[1])
+
+
+def _intersect_y(
+    start: tuple[float, float], end: tuple[float, float], y: float
+) -> tuple[float, float]:
+    dy = end[1] - start[1]
+    fraction = 0.0 if abs(dy) < 1e-15 else (y - start[1]) / dy
+    return start[0] + fraction * (end[0] - start[0]), y
 
 
 def _marker_tag_rect(

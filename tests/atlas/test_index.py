@@ -172,6 +172,8 @@ def test_detail_directory_codes_and_parent_codes_are_independent_and_linkable() 
     )
     assert [entry.chart_code for entry in details] == [f"SD{i:02d}" for i in range(1, 10)]
     assert details[0].parent_chart_code == "S051"
+    assert details[0].parent_chart_codes == ("S051", "S050", "S066", "S065")
     assert details[0].name == "Virgo Cluster"
     assert details[0].scale_mm_per_degree == 20.0
     assert details[0].to_dict()["parent_chart_code"] == "S051"
+    assert details[0].to_dict()["parent_chart_codes"] == ["S051", "S050", "S066", "S065"]
