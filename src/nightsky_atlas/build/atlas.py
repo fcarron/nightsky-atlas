@@ -1775,6 +1775,7 @@ def _build_atlas_impl(
     results: list[ChartPageResult] = []
     index_dsos: dict[str, tuple[SceneDso, ...]] = {}
     index_stars: dict[str, tuple[Star, ...]] = {}
+    index_label_targets: dict[str, frozenset[str]] = {}
     index_constellations: dict[str, frozenset[str]] = {}
     boundary_constellations = {
         segment.id: segment.constellation_id
@@ -1833,6 +1834,11 @@ def _build_atlas_impl(
                 forced_lists = list(built.forced_lists)
             index_dsos[definition.id] = tuple(built.scene.deep_sky_objects)
             index_stars[definition.id] = tuple(item.star for item in built.scene.stars)
+            index_label_targets[definition.id] = frozenset(
+                label.target_id
+                for label in built.labels
+                if not label.hidden and label.effective_candidate() is not None
+            )
             index_constellations[definition.id] = frozenset(
                 boundary_constellations[segment.source_id]
                 for segment in built.scene.constellation_boundaries
@@ -1901,13 +1907,29 @@ def _build_atlas_impl(
             f"included detail chart ({detail_codes}): {missing}"
         )
 
+    detail_definitions = tuple(
+        detail.to_definition(atlas_id=atlas.id) for detail in detail_charts
+    )
+    detail_codes = {detail.id: detail.code for detail in detail_charts}
+    for detail, definition in zip(detail_charts, detail_definitions, strict=True):
+        prepared = prepared_details[detail.id]
+        index_dsos[definition.id] = tuple(prepared.context.scene.deep_sky_objects)
+        index_stars[definition.id] = tuple(item.star for item in prepared.context.scene.stars)
+        index_label_targets[definition.id] = frozenset(
+            label.target_id
+            for label in prepared.labels
+            if not label.hidden and label.effective_candidate() is not None
+        )
+
     atlas_index = build_atlas_index(
         index_dsos,
         index_constellations,
-        charts,
+        (*charts, *detail_definitions),
         edition,
         chart_stars=index_stars,
         star_names=star_names,
+        chart_label_targets=index_label_targets,
+        chart_code_by_id=detail_codes,
     )
     detail_outline = None
     if detail_charts:

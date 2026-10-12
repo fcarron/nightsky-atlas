@@ -73,6 +73,8 @@ overview:
   star_gray: 0.18
 label:
   font_family: "Lato"
+  dso_placement:
+    label_label_ink_clearance_mm: 0.7
   star_labels:
     proper_names: {core: true, standard: true, extended: false}
     bayer: {enabled: true, max_magnitude: 5.5}

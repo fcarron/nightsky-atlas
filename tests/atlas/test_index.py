@@ -77,6 +77,25 @@ def test_primary_chart_is_nearest_centre_and_secondaries_are_retained() -> None:
     assert index.dso_entries[0].secondary_charts == ("S041",)
 
 
+def test_dso_index_prefers_chart_with_printed_label_but_keeps_main_reference() -> None:
+    charts = (_chart("pocket-015", 10.0), _chart("pocket-detail-pleiades", 25.0))
+    dso = _dso("NGC1432", ra_deg=11.0, constellation="Tau")
+    index = build_atlas_index(
+        {"pocket-015": (dso,), "pocket-detail-pleiades": (dso,)},
+        {},
+        charts,
+        EditionConfig(name="Pocket", code="P"),
+        chart_label_targets={
+            "pocket-015": frozenset(),
+            "pocket-detail-pleiades": frozenset({dso.dso.id}),
+        },
+        chart_code_by_id={"pocket-detail-pleiades": "PD02"},
+    )
+    entry = index.dso_entries[0]
+    assert entry.primary_chart == "PD02"
+    assert entry.secondary_charts == ("P015",)
+
+
 def test_constellation_codes_follow_edition_and_footprint_mapping() -> None:
     charts = (_chart("pocket-001", 10.0), _chart("pocket-002", 20.0))
     index = build_atlas_index(
@@ -138,6 +157,30 @@ def test_named_star_index_uses_visible_stars_and_nearest_chart() -> None:
         "α Com",
         "S040",
         ("S041",),
+    )
+
+
+def test_named_star_index_prefers_chart_with_printed_name_and_keeps_main_reference() -> None:
+    charts = (_chart("pocket-015", 10.0), _chart("pocket-detail-pleiades", 25.0))
+    star = Star("HIP 17489", 11.0, 20.0, 1.0, Provenance("test", "17489"), hip_id="HIP 17489")
+    index = build_atlas_index(
+        {},
+        {},
+        charts,
+        EditionConfig(name="Pocket", code="P"),
+        chart_stars={"pocket-015": (star,), "pocket-detail-pleiades": (star,)},
+        star_names={17489: StarName(17489, name="Alcyone", bayer="η", constellation="Tau")},
+        chart_label_targets={
+            "pocket-015": frozenset(),
+            "pocket-detail-pleiades": frozenset({star.id}),
+        },
+        chart_code_by_id={"pocket-detail-pleiades": "PD02"},
+    )
+    entry = index.named_star_entries[0]
+    assert (entry.name, entry.primary_chart, entry.secondary_charts) == (
+        "Alcyone",
+        "PD02",
+        ("P015",),
     )
 
 

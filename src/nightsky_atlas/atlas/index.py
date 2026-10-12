@@ -192,9 +192,13 @@ def build_atlas_index(
     edition: EditionConfig,
     chart_stars: dict[str, Iterable[Star | FaintStar]] | None = None,
     star_names: dict[int, StarName] | None = None,
+    chart_label_targets: dict[str, frozenset[str]] | None = None,
+    chart_code_by_id: dict[str, str] | None = None,
 ) -> AtlasIndex:
     """Build all index content from the exact set of charts being published."""
     definitions = {chart.id: chart for chart in charts}
+    printed_labels = chart_label_targets or {}
+    codes = chart_code_by_id or {}
     objects: dict[str, DeepSkyObject] = {}
     memberships: dict[str, set[str]] = {}
     locations: dict[str, set[str]] = {}
@@ -216,12 +220,14 @@ def build_atlas_index(
         chart_ids = sorted(
             locations[dso_id],
             key=lambda chart_id: (
+                dso_id not in printed_labels.get(chart_id, frozenset()),
                 _angular_distance(definitions[chart_id], dso.ra_deg, dso.dec_deg),
                 chart_id,
             ),
         )
-        chart_codes = tuple(
-            presentation_from_edition(definitions[item], edition).chart_code for item in chart_ids
+        object_chart_codes = tuple(
+            codes.get(item, presentation_from_edition(definitions[item], edition).chart_code)
+            for item in chart_ids
         )
         entries.append(
             DsoIndexEntry(
@@ -231,8 +237,8 @@ def build_atlas_index(
                 dso.dec_deg,
                 _type_name(dso),
                 _constellation_abbreviation(dso),
-                chart_codes[0],
-                chart_codes[1:],
+                object_chart_codes[0],
+                object_chart_codes[1:],
                 (curated.name,) if curated is not None else (),
                 tuple(sorted(memberships.get(dso_id, set()))),
             )
@@ -240,13 +246,15 @@ def build_atlas_index(
     constellation_entries = []
     abbreviations = {item for items in chart_constellations.values() for item in items if item}
     for abbreviation in sorted(abbreviations, key=lambda item: constellation_name(item).casefold()):
-        codes = tuple(
+        constellation_codes = tuple(
             presentation_from_edition(chart, edition).chart_code
             for chart in charts
             if abbreviation in chart_constellations.get(chart.id, frozenset())
         )
         constellation_entries.append(
-            ConstellationIndexEntry(constellation_name(abbreviation), abbreviation, codes)
+            ConstellationIndexEntry(
+                constellation_name(abbreviation), abbreviation, constellation_codes
+            )
         )
     named_star_entries: list[NamedStarIndexEntry] = []
     if chart_stars and star_names:
@@ -266,12 +274,15 @@ def build_atlas_index(
             chart_ids = sorted(
                 star_locations[number],
                 key=lambda chart_id: (
+                    star.id not in printed_labels.get(chart_id, frozenset()),
                     _angular_distance_to_star(definitions[chart_id], star),
                     chart_id,
                 ),
             )
-            codes = tuple(
-                presentation_from_edition(definitions[item], edition).chart_code
+            star_chart_codes = tuple(
+                codes.get(
+                    item, presentation_from_edition(definitions[item], edition).chart_code
+                )
                 for item in chart_ids
             )
             named_star_entries.append(
@@ -280,8 +291,8 @@ def build_atlas_index(
                     name.name or "",
                     _star_designation(name),
                     name.constellation or "",
-                    codes[0],
-                    codes[1:],
+                    star_chart_codes[0],
+                    star_chart_codes[1:],
                 )
             )
 
