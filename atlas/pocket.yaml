@@ -21,10 +21,19 @@ detail_charts:
     name: Pleiades · M45
     center_ra_deg: 56.75
     center_dec_deg: 24.1167
-    width_deg: 13.0
-    height_deg: 8.5
-    mm_per_degree: 20.0
-    star_profile: deep
+    width_deg: 6.5
+    height_deg: 4.25
+    mm_per_degree: 40.0
+    star_profile: eyepiece
+    stars:
+      magnitude_limit: 11.25
+      include_ucac4: true
+      named_labels: [17489, 17499, 17531, 17573, 17608, 17702, 17847, 17851]
+    show_constellation_names: false
+    objects:
+      Mel022:
+        show_symbol: false
+        show_label: true
 tiling:
   width_deg: 54.0
   height_deg: 36.0

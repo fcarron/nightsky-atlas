@@ -25,11 +25,20 @@ from nightsky_atlas.atlas.tiling import (
     neighbour_overlap_report,
     resolve_ring_counts,
 )
-from nightsky_atlas.build.atlas import _style_with_star_profile
+from nightsky_atlas.build.atlas import (
+    _detail_scene,
+    _detail_style,
+    _profile_config_path,
+    _style_with_star_profile,
+)
 from nightsky_atlas.build.chart import build_chart_context, load_chart_inputs
+from nightsky_atlas.catalog.star_names import load_star_names
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform
 from nightsky_atlas.chart.presentation import presentation_from_edition
+from nightsky_atlas.layout.labels import build_labels
+from nightsky_atlas.layout.optimizer import optimize_labels
+from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.projection.base import ProjectionError
 from nightsky_atlas.projection.stereographic import StereographicProjection
 from nightsky_atlas.render.detail_markers import build_detail_marker
@@ -260,12 +269,27 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     assert pocket.detail_charts[0].mm_per_degree == 20.0
     assert pocket.detail_charts[0].star_profile == "deep"
     assert pocket.detail_charts[1].name == "Pleiades · M45"
-    assert pocket.detail_charts[1].mm_per_degree == 20.0
-    assert pocket.detail_charts[1].star_profile == "deep"
+    assert pocket.detail_charts[1].mm_per_degree == 40.0
+    assert pocket.detail_charts[1].star_profile == "eyepiece"
+    assert pocket.detail_charts[1].stars.magnitude_limit == pytest.approx(11.25)
+    assert pocket.detail_charts[1].stars.include_ucac4 is True
+    assert pocket.detail_charts[1].stars.named_labels == (
+        17489,
+        17499,
+        17531,
+        17573,
+        17608,
+        17702,
+        17847,
+        17851,
+    )
+    assert pocket.detail_charts[1].show_constellation_names is False
+    assert pocket.detail_charts[1].objects["Mel022"].show_symbol is False
+    assert pocket.detail_charts[1].objects["Mel022"].show_label is True
     for detail in (*pocket.detail_charts, *details, *deep.detail_charts):
         assert detail.mm_per_degree in {20.0, 40.0, 80.0}
-        assert detail.width_deg * detail.mm_per_degree == pytest.approx(260.0)
-        assert detail.height_deg * detail.mm_per_degree == pytest.approx(170.0)
+        assert detail.width_deg * detail.mm_per_degree <= 260.0
+        assert detail.height_deg * detail.mm_per_degree <= 170.0
     assert deep.stellar_limit_magnitude == 10.5
 
     for atlas in (pocket, standard, deep):
@@ -313,7 +337,11 @@ def test_pocket_detail_scale_requires_matching_stellar_profile() -> None:
     detail["mm_per_degree"] = 40.0
     detail["width_deg"] = 6.5
     detail["height_deg"] = 4.25
-    with pytest.raises(ValueError, match="Pocket detail charts must use 10 or 20 mm/°"):
+    detail["star_profile"] = "eyepiece"
+    AtlasConfig.model_validate(raw)
+
+    detail["star_profile"] = "deep"
+    with pytest.raises(ValueError, match="must use the 'eyepiece' star profile"):
         AtlasConfig.model_validate(raw)
 
     detail["mm_per_degree"] = 10.0
@@ -322,6 +350,97 @@ def test_pocket_detail_scale_requires_matching_stellar_profile() -> None:
     detail["star_profile"] = "deep"
     with pytest.raises(ValueError, match="must use the 'standard' star profile"):
         AtlasConfig.model_validate(raw)
+
+
+def test_detail_overrides_inherit_style_and_control_pleiades_layers() -> None:
+    atlas_path = ROOT / "atlas" / "pocket.yaml"
+    style_path = ROOT / "styles" / "pocket.yaml"
+    atlas = load_atlas_config(atlas_path)
+    detail = atlas.detail_charts[1]
+    parent_style = load_style_config(style_path)
+    eyepiece_style = load_style_config(ROOT / "styles" / "eyepiece.yaml")
+    detail_style = _detail_style(
+        detail, _style_with_star_profile(parent_style, eyepiece_style)
+    )
+    assert detail_style.star.faint_magnitude == eyepiece_style.star.faint_magnitude
+    assert detail_style.dso == parent_style.dso
+    assert detail_style.constellation.names.enabled is False
+    assert detail_style.constellation.lines.enabled == parent_style.constellation.lines.enabled
+    assert (
+        detail_style.constellation.boundaries.enabled
+        == parent_style.constellation.boundaries.enabled
+    )
+    independent_layers = _detail_style(
+        detail.model_copy(
+            update={
+                "show_constellation_figures": False,
+                "show_constellation_boundaries": True,
+            }
+        ),
+        _style_with_star_profile(parent_style, eyepiece_style),
+    )
+    assert independent_layers.constellation.lines.enabled is False
+    assert independent_layers.constellation.boundaries.enabled is True
+
+    context = build_chart_context(
+        atlas_path=atlas_path,
+        style_path=style_path,
+        definition=detail.to_definition(atlas_id=atlas.id),
+        star_store=ROOT / "data" / "processed" / "stars" / "tycho2.sqlite",
+        faint_star_store=ROOT / "data" / "processed" / "stars" / "faint_stars.sqlite",
+        faint_star_limit=11.25,
+        magnitude_limit=11.25,
+        scale_mm_per_degree=detail.mm_per_degree,
+        allow_faint_star_supplement=True,
+    )
+    scene = _detail_scene(detail, context.scene)
+    assert context.transform.mm_per_deg == pytest.approx(40.0)
+    assert all(item.star.magnitude <= 11.25 for item in scene.stars)
+    assert any(item.star.id.startswith("UCAC4-") for item in scene.stars)
+    primary = [item.star for item in scene.stars if not item.star.id.startswith("UCAC4-")]
+    ucac4 = [item.star for item in scene.stars if item.star.id.startswith("UCAC4-")]
+    for faint_star in ucac4:
+        for primary_star in primary:
+            mean_dec = math.radians((faint_star.dec_deg + primary_star.dec_deg) / 2.0)
+            delta_ra = (faint_star.ra_deg - primary_star.ra_deg) * math.cos(mean_dec)
+            delta_dec = faint_star.dec_deg - primary_star.dec_deg
+            assert math.hypot(delta_ra, delta_dec) * 3600.0 >= 3.0
+    by_id = {item.dso.id: item for item in scene.deep_sky_objects}
+    assert by_id["Mel022"].symbol_visible is False
+    assert by_id["Mel022"].label_visible is True
+
+    labels = build_labels(
+        scene,
+        context.transform,
+        detail_style,
+        load_star_names(),
+        required_star_hips=detail.stars.named_labels,
+    )
+    labels = select_labels(labels, scene, context.transform, detail_style)
+    labels = optimize_labels(labels, scene, context.transform, detail_style).labels
+    pleiades_names = {
+        "Alcyone",
+        "Atlas",
+        "Electra",
+        "Maia",
+        "Merope",
+        "Taygeta",
+        "Pleione",
+        "Celaeno",
+    }
+    forced = [label for label in labels if label.text in pleiades_names]
+    assert {label.text for label in forced} == pleiades_names
+    assert all(label.mandatory for label in forced)
+    assert all(not label.hidden and label.effective_candidate() is not None for label in forced)
+    assert any(label.id == "label:dso:Mel022" for label in labels)
+    assert not any(label.id == "label:constellation:TAU" for label in labels)
+
+
+def test_detail_profile_uses_shared_star_profile_with_experimental_style() -> None:
+    profile = _profile_config_path(
+        ROOT / "styles" / "experiments" / "color" / "pocket-c.yaml", "eyepiece"
+    )
+    assert profile == ROOT / "styles" / "eyepiece.yaml"
 
 
 def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:

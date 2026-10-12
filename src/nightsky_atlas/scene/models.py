@@ -68,6 +68,7 @@ class SceneDso:
     chart_point: ChartPoint
     metadata: DsoMetadata | None = None
     symbol_visible: bool = True
+    label_visible: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

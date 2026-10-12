@@ -144,6 +144,24 @@ class ChartConfig(_StrictModel):
         )
 
 
+class DetailStarConfig(_StrictModel):
+    magnitude_limit: PositiveFloat | None = None
+    include_ucac4: bool | None = None
+    named_labels: tuple[int, ...] = ()
+
+    @field_validator("named_labels")
+    @classmethod
+    def _positive_hip_ids(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+        if any(hip <= 0 for hip in value) or len(value) != len(set(value)):
+            raise ValueError("detail-chart named_labels must contain unique positive HIP IDs")
+        return value
+
+
+class DetailObjectConfig(_StrictModel):
+    show_symbol: bool | None = None
+    show_label: bool | None = None
+
+
 class DetailChartConfig(_StrictModel):
     """A supplementary zoom chart related to main charts by sky-footprint overlap."""
 
@@ -164,6 +182,11 @@ class DetailChartConfig(_StrictModel):
         "eyepiece",
         "eyepiece_deep",
     ] = "deep"
+    stars: DetailStarConfig = Field(default_factory=DetailStarConfig)
+    show_constellation_names: bool | None = None
+    show_constellation_figures: bool | None = None
+    show_constellation_boundaries: bool | None = None
+    objects: dict[str, DetailObjectConfig] = Field(default_factory=dict)
     parent_marker_label: str | None = None
 
     @field_validator("id", "name")
@@ -418,11 +441,11 @@ class AtlasConfig(_StrictModel):
             raise ValueError("detail chart PDF codes must be unique")
         if self.id == "pocket":
             for detail in self.detail_charts:
-                expected_profile = {10.0: "standard", 20.0: "deep"}.get(
+                expected_profile = {10.0: "standard", 20.0: "deep", 40.0: "eyepiece"}.get(
                     detail.mm_per_degree
                 )
                 if expected_profile is None:
-                    raise ValueError("Pocket detail charts must use 10 or 20 mm/°")
+                    raise ValueError("Pocket detail charts must use 10, 20 or 40 mm/°")
                 if detail.star_profile != expected_profile:
                     raise ValueError(
                         f"Pocket detail charts at {detail.mm_per_degree:g} mm/° "

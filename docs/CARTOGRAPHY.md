@@ -198,13 +198,18 @@ style; the base edition continues to supply DSO styling and selection. An
 optional UCAC4 supplement may be enabled for detail charts without adding it to
 the parent charts.
 
-Pocket detail charts use either 10 mm/° with the Standard star profile or
-20 mm/° with the Deep star profile. Their DSO selection remains Pocket-level.
+Pocket detail charts use 10 mm/° with the Standard star profile, 20 mm/° with
+the Deep star profile, or 40 mm/° with the Eyepiece star profile. Detail-level
+settings may override the profile magnitude limit, opt into UCAC4, require
+named stars by HIP identifier,
+toggle constellation names, figures and boundaries independently, and control
+an object's symbol and label separately. Unset fields inherit the parent style
+and the normal edition defaults.
 
 | Edition and detail | Code | Scale | Stars to | Related main charts |
 | --- | --- | ---: | ---: | --- |
 | Pocket — Virgo core | PD01 | 20 mm/° | 10.5 | P21, P20, P12, P11 |
-| Pocket — Pleiades · M45 | PD02 | 20 mm/° | 10.5 | P15, P14 |
+| Pocket — Pleiades · M45 | PD02 | 40 mm/° | 11.25 | P15 |
 | Standard — Virgo Cluster | SD01 | 20 mm/° | 10.5 | S051, S050, S066, S065 |
 | Standard — Virgo core | SD02 | 80 mm/° | 13.5 | S051 |
 | Standard — South Virgo | SD03 | 40 mm/° | 12.25 | S066, S051 |

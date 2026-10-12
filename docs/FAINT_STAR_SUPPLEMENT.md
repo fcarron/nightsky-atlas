@@ -1,9 +1,14 @@
 # Optional UCAC4 faint-star supplement
 
-The optional faint layer is intended for a future Eyepiece build. The existing
-Tycho-2 + Hipparcos store remains the named-star and WDS layer. Pocket,
-Standard, and Deep do not query the supplement unless a caller explicitly
-passes both a faint store and its magnitude limit.
+The optional faint layer supplements the Tycho-2 + Hipparcos store, which
+remains the named-star and WDS layer. Pocket, Standard, and Deep main charts do
+not query the supplement. A detail chart may opt in through its own `stars`
+configuration; its DSO selection still comes from its parent edition.
+
+For example, Pocket PD02 uses this supplement to reach its configured 11.25
+magnitude limit. This is an approximate cartographic limit, not precision
+photometry; the catalogue's magnitude sources and calibration limitations are
+described below.
 
 ## Source and format
 

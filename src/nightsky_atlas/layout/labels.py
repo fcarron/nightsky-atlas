@@ -7,6 +7,7 @@ Priority and mandatory status follow the conceptual ordering in section 14.3.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import replace
 from math import hypot
 
@@ -111,7 +112,10 @@ def build_dso_labels(
     anchors = {item.dso.id: transform.to_page(item.chart_point) for item in scene.deep_sky_objects}
     for scene_dso in scene.deep_sky_objects:
         dso = scene_dso.dso
+        if scene_dso.label_visible is False:
+            continue
         always_label = dso.object_type in style.label.selection.always_label_object_types
+        always_label = always_label or scene_dso.label_visible is True
         memberships: frozenset[str] = frozenset()
         if scene_dso.metadata is not None:
             priority = scene_dso.metadata.label_priority
@@ -249,6 +253,7 @@ def build_star_labels(
     transform: PageTransform,
     style: StyleConfig,
     star_names: dict[int, StarName],
+    required_hip_ids: Iterable[int] = (),
 ) -> tuple[Label, ...]:
     """Build one label per named or designated bright star in the scene.
 
@@ -258,7 +263,10 @@ def build_star_labels(
     elsewhere, not printed). Selected labels are mandatory; collisions are
     reported rather than silently hiding a selected designation.
     """
+    required = frozenset(required_hip_ids)
     if not star_names:
+        if required:
+            raise ValueError("required named-star labels need a star-name catalogue")
         return ()
     model = StarSizeModel.from_style(style.star)
     printed_obstacle_by_star = {
@@ -276,11 +284,10 @@ def build_star_labels(
     )
     labels: list[Label] = []
     seen_hips: set[int] = set()
+    found_required: set[int] = set()
     for scene_star in sorted(scene.stars, key=lambda item: (item.star.magnitude, item.star.id)):
         star = scene_star.star
         if not isinstance(star, Star):
-            continue
-        if star.magnitude > limit:
             continue
         number = hip_number(star.hip_id)
         if number is None or number in seen_hips:
@@ -288,19 +295,29 @@ def build_star_labels(
         star_name = star_names.get(number)
         if star_name is None:
             continue
-        canonical = star_name.canonical_display_variant()
-        if canonical is None:
-            continue
-        text, kind = canonical
-        if not star_name.display_variant_enabled(
-            kind,
-            policy,
-            star.magnitude,
-            proper_magnitude_limit=style.star.label_magnitude_limit,
-        ):
-            continue
+        if number in required and star_name.name:
+            text, kind = star_name.name, "proper_standard"
+            found_required.add(number)
+        else:
+            if star.magnitude > limit:
+                continue
+            canonical = star_name.canonical_display_variant()
+            if canonical is None:
+                continue
+            text, kind = canonical
+            if not star_name.display_variant_enabled(
+                kind,
+                policy,
+                star.magnitude,
+                proper_magnitude_limit=style.star.label_magnitude_limit,
+            ):
+                continue
         seen_hips.add(number)
-        semantic_key = _star_semantic_key(star_name, text, kind)
+        semantic_key = (
+            f"star:name:{star_name.name}"
+            if number in required and star_name.name
+            else _star_semantic_key(star_name, text, kind)
+        )
         label_id = f"label:star:{star.id}"
         obstacle = printed_obstacle_by_star.get(star.id)
         anchor = (
@@ -356,12 +373,20 @@ def build_star_labels(
                 text=text,
                 priority=priority,
                 mandatory=(
-                    mandatory or (has_proper_name and policy.proper_names_always_visible)
+                    number in required
+                    or mandatory
+                    or (has_proper_name and policy.proper_names_always_visible)
                 ),
                 candidates=candidates,
                 selected_candidate_id=candidates[0].id if candidates else None,
                 semantic_key=semantic_key,
             )
+        )
+    missing_required = sorted(required - found_required)
+    if missing_required:
+        missing_text = ", ".join(str(number) for number in missing_required)
+        raise ValueError(
+            f"required named-star HIP IDs are unavailable in the chart: {missing_text}"
         )
     return tuple(labels)
 
@@ -517,6 +542,7 @@ def build_labels(
     transform: PageTransform,
     style: StyleConfig,
     star_names: dict[int, StarName] | None = None,
+    required_star_hips: Iterable[int] = (),
 ) -> tuple[Label, ...]:
     """Build deep-sky, constellation and star labels for a scene.
 
@@ -526,7 +552,13 @@ def build_labels(
     dso_labels = build_dso_labels(scene, transform, style)
     constellation_labels = build_constellation_labels(scene, transform, style)
     if star_names is None:
+        if tuple(required_star_hips):
+            raise ValueError("required named-star labels need a star-name catalogue")
         return dso_labels + constellation_labels
     return (
-        dso_labels + constellation_labels + build_star_labels(scene, transform, style, star_names)
+        dso_labels
+        + constellation_labels
+        + build_star_labels(
+            scene, transform, style, star_names, required_hip_ids=required_star_hips
+        )
     )

@@ -127,6 +127,8 @@ __all__ = [
     "chart_definitions",
 ]
 
+DEFAULT_FAINT_STAR_STORE = Path("data/processed/stars/faint_stars.sqlite")
+
 
 def _style_with_star_profile(base_style: StyleConfig, star_profile: StyleConfig) -> StyleConfig:
     """Use one edition's star appearance while preserving the base DSO style."""
@@ -139,6 +141,83 @@ def _style_with_star_profile(base_style: StyleConfig, star_profile: StyleConfig)
             ),
         }
     )
+
+
+def _profile_config_path(source_path: str | Path, profile_name: str) -> Path:
+    source = Path(source_path)
+    sibling = source.with_name(f"{profile_name}.yaml")
+    if sibling.is_file():
+        return sibling
+    config_family = "atlas" if source.parent.name == "atlas" else "styles"
+    shared = Path(__file__).resolve().parents[3] / config_family / f"{profile_name}.yaml"
+    if shared.is_file():
+        return shared
+    return sibling
+
+
+def _detail_style(detail: DetailChartConfig, style: StyleConfig) -> StyleConfig:
+    constellation = {}
+    for key, value in (
+        ("names", detail.show_constellation_names),
+        ("lines", detail.show_constellation_figures),
+        ("boundaries", detail.show_constellation_boundaries),
+    ):
+        if value is not None:
+            current = getattr(style.constellation, key)
+            constellation[key] = current.model_copy(update={"enabled": value})
+    if not constellation:
+        return style
+    return style.model_copy(
+        update={
+            "constellation": style.constellation.model_copy(update=constellation)
+        }
+    )
+
+
+def _detail_scene(detail: DetailChartConfig, scene: ChartScene) -> ChartScene:
+    if not detail.objects:
+        return scene
+    dsos = []
+    for scene_dso in scene.deep_sky_objects:
+        config = detail.objects.get(scene_dso.dso.id)
+        if config is None:
+            dsos.append(scene_dso)
+            continue
+        updates = {}
+        if config.show_symbol is not None:
+            updates["symbol_visible"] = config.show_symbol
+        if config.show_label is not None:
+            updates["label_visible"] = config.show_label
+        if updates:
+            scene_dso = replace(scene_dso, **updates)
+        dsos.append(scene_dso)
+    return replace(scene, deep_sky_objects=tuple(dsos))
+
+
+def _detail_faint_star_inputs(
+    detail: DetailChartConfig,
+    *,
+    profile_limit: float,
+    faint_star_store: str | Path | None,
+    faint_star_limit: float | None,
+) -> tuple[str | Path | None, float | None]:
+    include_ucac4 = (
+        faint_star_store is not None
+        if detail.stars.include_ucac4 is None
+        else detail.stars.include_ucac4
+    )
+    if not include_ucac4:
+        return None, None
+    store = faint_star_store if faint_star_store is not None else DEFAULT_FAINT_STAR_STORE
+    if not Path(store).is_file():
+        raise FileNotFoundError(
+            f"detail chart {detail.code} requests UCAC4 stars, but {store} is missing; "
+            "provide --faint-star-store or create the local UCAC4 supplement"
+        )
+    limit = detail.stars.magnitude_limit or profile_limit
+    if faint_star_limit is not None:
+        limit = min(limit, faint_star_limit)
+    return store, limit
 
 
 def _detail_presentation(
@@ -1017,6 +1096,11 @@ def _build_atlas_impl(
         )
     atlas = inputs.atlas
     style = inputs.style
+    if (
+        faint_star_store is None
+        and any(detail.stars.include_ucac4 is True for detail in atlas.detail_charts)
+    ):
+        faint_star_store = DEFAULT_FAINT_STAR_STORE
     edition = atlas.resolved_edition()
     with progress.step("resolve chart definitions"):
         all_charts = chart_definitions(atlas)
@@ -1067,8 +1151,8 @@ def _build_atlas_impl(
     }
     detail_star_profiles: dict[str, tuple[float, StyleConfig]] = {}
     for profile_name in sorted({detail.star_profile for detail in detail_charts}):
-        profile_atlas_path = Path(atlas_path).with_name(f"{profile_name}.yaml")
-        profile_style_path = Path(style_path).with_name(f"{profile_name}.yaml")
+        profile_atlas_path = _profile_config_path(atlas_path, profile_name)
+        profile_style_path = _profile_config_path(style_path, profile_name)
         profile_atlas = load_atlas_config(profile_atlas_path)
         profile_style = load_style_config(profile_style_path)
         if not math.isclose(
@@ -1137,11 +1221,11 @@ def _build_atlas_impl(
         "overrides": overrides_path,
     }
     for profile_name in detail_star_profiles:
-        input_paths[f"detail_star_profile_{profile_name}_atlas"] = Path(atlas_path).with_name(
-            f"{profile_name}.yaml"
+        input_paths[f"detail_star_profile_{profile_name}_atlas"] = _profile_config_path(
+            atlas_path, profile_name
         )
-        input_paths[f"detail_star_profile_{profile_name}_style"] = Path(style_path).with_name(
-            f"{profile_name}.yaml"
+        input_paths[f"detail_star_profile_{profile_name}_style"] = _profile_config_path(
+            style_path, profile_name
         )
     input_fingerprints = collect_build_inputs(input_paths)
     geometry_catalogues = {
@@ -1186,16 +1270,21 @@ def _build_atlas_impl(
     detail_labelled_dso_ids: dict[str, frozenset[str]] = {}
     for detail in detail_charts:
         definition = detail.to_definition(atlas_id=atlas.id)
-        stellar_limit_magnitude, detail_style = detail_star_profiles[detail.star_profile]
-        detail_faint_limit = (
-            min(faint_star_limit, stellar_limit_magnitude) if faint_star_limit is not None else None
+        profile_limit, profile_style = detail_star_profiles[detail.star_profile]
+        stellar_limit_magnitude = detail.stars.magnitude_limit or profile_limit
+        detail_style = _detail_style(detail, profile_style)
+        detail_faint_star_store, detail_faint_limit = _detail_faint_star_inputs(
+            detail,
+            profile_limit=stellar_limit_magnitude,
+            faint_star_store=faint_star_store,
+            faint_star_limit=faint_star_limit,
         )
         detail_context = build_chart_context(
             atlas_path=atlas_path,
             style_path=style_path,
             definition=definition,
             star_store=star_store,
-            faint_star_store=faint_star_store,
+            faint_star_store=detail_faint_star_store,
             faint_star_limit=detail_faint_limit,
             stars_csv=stars_csv,
             double_stars_path=double_stars_path,
@@ -1206,11 +1295,15 @@ def _build_atlas_impl(
             progress=progress,
             inputs=inputs,
         )
+        detail_context = replace(
+            detail_context, scene=_detail_scene(detail, detail_context.scene)
+        )
         detail_labels = build_labels(
             detail_context.scene,
             detail_context.transform,
             detail_style,
             star_names,
+            required_star_hips=detail.stars.named_labels,
         )
         detail_labels = select_labels(
             detail_labels,
@@ -1590,7 +1683,15 @@ def _build_atlas_impl(
     for detail_index, detail in enumerate(detail_charts, start=1):
         detail_start = time.perf_counter()
         definition = detail.to_definition(atlas_id=atlas.id)
-        stellar_limit_magnitude, detail_style = detail_star_profiles[detail.star_profile]
+        profile_limit, profile_style = detail_star_profiles[detail.star_profile]
+        stellar_limit_magnitude = detail.stars.magnitude_limit or profile_limit
+        detail_style = _detail_style(detail, profile_style)
+        detail_faint_star_store, detail_faint_limit = _detail_faint_star_inputs(
+            detail,
+            profile_limit=stellar_limit_magnitude,
+            faint_star_store=faint_star_store,
+            faint_star_limit=faint_star_limit,
+        )
         progress.detail(f"[{detail_index}/{len(detail_charts)}] {detail.id}: detail chart start")
         chart_overrides = library.for_chart(definition.id) if library is not None else None
         prepared = prepared_details.get(detail.id)
@@ -1600,12 +1701,8 @@ def _build_atlas_impl(
                 style_path=style_path,
                 definition=definition,
                 star_store=star_store,
-                faint_star_store=faint_star_store,
-                faint_star_limit=(
-                    min(faint_star_limit, stellar_limit_magnitude)
-                    if faint_star_limit is not None
-                    else None
-                ),
+                faint_star_store=detail_faint_star_store,
+                faint_star_limit=detail_faint_limit,
                 stars_csv=stars_csv,
                 double_stars_path=double_stars_path,
                 star_systems=star_systems,
@@ -1615,8 +1712,15 @@ def _build_atlas_impl(
                 progress=progress,
                 inputs=inputs,
             )
+            chart_context = replace(
+                chart_context, scene=_detail_scene(detail, chart_context.scene)
+            )
             labels = build_labels(
-                chart_context.scene, chart_context.transform, detail_style, star_names
+                chart_context.scene,
+                chart_context.transform,
+                detail_style,
+                star_names,
+                required_star_hips=detail.stars.named_labels,
             )
             labels = select_labels(
                 labels,
@@ -1893,12 +1997,21 @@ def _build_atlas_impl(
                 "mm_per_degree": detail.mm_per_degree,
                 "star_profile": detail.star_profile,
                 "faint_star_limit": (
-                    min(faint_star_limit, detail_star_profiles[detail.star_profile][0])
-                    if faint_star_store is not None and faint_star_limit is not None
-                    else None
+                    _detail_faint_star_inputs(
+                        detail,
+                        profile_limit=(
+                            detail.stars.magnitude_limit
+                            or detail_star_profiles[detail.star_profile][0]
+                        ),
+                        faint_star_store=faint_star_store,
+                        faint_star_limit=faint_star_limit,
+                    )[1]
                 ),
                 "parent_marker_label": detail.parent_marker_label,
-                "stellar_limit_magnitude": detail_star_profiles[detail.star_profile][0],
+                "stellar_limit_magnitude": (
+                    detail.stars.magnitude_limit
+                    or detail_star_profiles[detail.star_profile][0]
+                ),
             }
             for detail in detail_charts
         ],
