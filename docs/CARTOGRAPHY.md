@@ -227,6 +227,7 @@ and the normal edition defaults.
 | Deep — 30 Doradus | DD07 | 80 mm/° | 13.5 | D473, D474, D485, D484 |
 | Deep — LMC bar | DD08 | 80 mm/° | 13.5 | D474, D473 |
 | Deep — NGC 346 / SMC | DD09 | 40 mm/° | 12.25 | D477, D486, D476, D462 |
+| Deep — Perseus Cluster / NGC 1275 | DD10 | 80 mm/° | 13.5 | D089, D088, D114, D113 |
 
 Star profiles are existing edition presets: Standard detail stars use the
 Standard profile, Deep detail stars use Deep, and the denser detail fields use

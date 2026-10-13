@@ -277,7 +277,7 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         "SD09",
     ]
     assert "SD06" not in {detail.code for detail in details}
-    assert [detail.code for detail in deep.detail_charts] == [f"DD{i:02d}" for i in range(1, 10)]
+    assert [detail.code for detail in deep.detail_charts] == [f"DD{i:02d}" for i in range(1, 11)]
     assert all(
         not hasattr(detail, "fallback_parent_galaxy_labels")
         and not hasattr(detail, "parent_chart_id")
@@ -314,15 +314,7 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     assert standard_pleiades.show_constellation_names is False
     assert standard_pleiades.objects == pocket_pleiades.objects
     assert [detail.mm_per_degree for detail in deep.detail_charts] == [
-        40,
-        40,
-        80,
-        80,
-        80,
-        40,
-        80,
-        80,
-        40,
+        40, 40, 80, 80, 80, 40, 80, 80, 40, 80
     ]
     assert [detail.star_profile for detail in deep.detail_charts] == [
         "eyepiece",
@@ -334,7 +326,17 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         "eyepiece_deep",
         "eyepiece_deep",
         "eyepiece",
+        "eyepiece_deep",
     ]
+    perseus = deep.detail_charts[-1]
+    assert perseus.name == "Perseus Cluster · NGC 1275"
+    assert perseus.center_ra_deg == pytest.approx(49.9507)
+    assert perseus.center_dec_deg == pytest.approx(41.5117)
+    assert (perseus.width_deg, perseus.height_deg, perseus.mm_per_degree) == (
+        3.25,
+        2.125,
+        80.0,
+    )
     assert pocket.detail_charts[0].mm_per_degree == 20.0
     assert pocket.detail_charts[0].star_profile == "deep"
     assert pocket.detail_charts[1].name == "Pleiades · M45"
@@ -370,6 +372,9 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
             for parent_ids in relations.values()
             for chart_id in parent_ids
         )
+    assert detail_chart_parent_ids(deep.detail_charts, tuple(chart_definitions(deep)))[
+        "detail-deep-perseus-cluster"
+    ] == ("deep-089", "deep-088", "deep-114", "deep-113")
 
 
 def test_detail_chart_rejects_intermediate_scales() -> None:

@@ -93,6 +93,15 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+  - id: detail-deep-perseus-cluster
+    code: DD10
+    name: Perseus Cluster · NGC 1275
+    center_ra_deg: 49.9507
+    center_dec_deg: 41.5117
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
 # Experimental aligned tiling: 23 symmetric declination rings, with small
 # shifts at ±53° and ±83° to improve the weakest sampled edge margin and polar
 # overlap. RA starts at 0° in every ring; see docs/CARTOGRAPHY.md.

@@ -227,7 +227,16 @@ def test_detail_directory_codes_and_parent_codes_are_independent_and_linkable() 
         chart_definitions(atlas),
         atlas.resolved_edition(),
     )
-    assert [entry.chart_code for entry in details] == [f"SD{i:02d}" for i in range(1, 10)]
+    assert [entry.chart_code for entry in details] == [
+        "SD01",
+        "SD02",
+        "SD03",
+        "SD04",
+        "SD05",
+        "SD07",
+        "SD08",
+        "SD09",
+    ]
     assert details[0].parent_chart_code == "S051"
     assert details[0].parent_chart_codes == ("S051", "S050", "S066", "S065")
     assert details[0].name == "Virgo Cluster"
