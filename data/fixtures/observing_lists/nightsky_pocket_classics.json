@@ -1,7 +1,33 @@
 {
   "id": "nightsky_pocket_classics",
   "name": "NightSkyAtlas Pocket visual classics",
-  "source": "NightSkyAtlas editorial selection; docs/POCKET_DSO_AUDIT.md",
+  "source": "NightSkyAtlas editorial selection informed by the DeepskyLog visual-use review; docs/POCKET_DSO_CANDIDATE_REVIEW.md",
   "license": "MIT",
-  "objects": ["Mel 20", "NGC 281", "NGC 2359"]
+  "objects": [
+    "Stock 2",
+    "Mel 20",
+    "NGC 281",
+    "NGC 2359",
+    "Trumpler 2",
+    "Stock 23",
+    "Cr 69",
+    "Cr 70",
+    "Stephenson 1",
+    "Cr 65",
+    "Cr 89",
+    "B 142",
+    "Stock 1",
+    "Cr 350",
+    "Cr 140",
+    "B 103",
+    "Cr 316",
+    "Mel 186",
+    "Cr 463",
+    "Stock 7",
+    "Cr 121",
+    "Cr 135",
+    "Cr 367",
+    "B 143",
+    "NGC 1977"
+  ]
 }

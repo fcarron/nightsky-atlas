@@ -104,10 +104,10 @@ def test_production_selection_hierarchy_and_type_counts(production_state) -> Non
     assert decisions["pocket"] <= decisions["standard"] <= decisions["deep"]
     assert decisions["deep"] == decisions["eyepiece"]
     assert report["edition_totals"] == {
-        "pocket": 1111,
-        "standard": 2999,
-        "deep": 10480,
-        "eyepiece": 10480,
+        "pocket": 1133,
+        "standard": 3017,
+        "deep": 10483,
+        "eyepiece": 10483,
         "reference": 14866,
     }
     assert not {
@@ -278,11 +278,48 @@ def test_pocket_caldwell_double_cluster_has_only_component_objects(production_st
 
 def test_production_selection_matches_alpha_and_reference_counts(production_state) -> None:
     report = build_selection_report()
-    assert report["edition_totals"]["pocket"] == 1111
-    assert report["edition_totals"]["standard"] == 2999
-    assert report["edition_totals"]["deep"] == 10480
-    assert report["edition_totals"]["eyepiece"] == 10480
+    assert report["edition_totals"]["pocket"] == 1133
+    assert report["edition_totals"]["standard"] == 3017
+    assert report["edition_totals"]["deep"] == 10483
+    assert report["edition_totals"]["eyepiece"] == 10483
     assert report["edition_totals"]["reference"] == 14866
+
+
+def test_re_reviewed_pocket_candidates_are_curated_and_inherited() -> None:
+    report = build_selection_report()
+    additions = {
+        "Stock 2",
+        "Trumpler 2",
+        "Stock 23",
+        "Cr 69",
+        "Cr 70",
+        "Stephenson 1",
+        "Cr 65",
+        "Cr 89",
+        "B 142",
+        "Stock 1",
+        "Cr 350",
+        "Cr 140",
+        "B 103",
+        "Cr 316",
+        "Mel 186",
+        "Cr 463",
+        "Stock 7",
+        "Cr 121",
+        "Cr 135",
+        "Cr 367",
+    }
+    for object_id in additions:
+        decisions = report["objects"][object_id]["decisions"]
+        assert decisions["pocket"]["selected"]
+        assert decisions["pocket"]["status"] == "forced"
+        assert any(
+            reason["code"] == "forced_observing_list"
+            and reason["explanation"] == "nightsky_pocket_classics"
+            for reason in decisions["pocket"]["reasons"]
+        )
+        assert decisions["standard"]["selected"]
+        assert decisions["deep"]["selected"]
 
 
 def test_open_cluster_alpha_selection_and_double_cluster_aggregate(production_state) -> None:
@@ -293,10 +330,10 @@ def test_open_cluster_alpha_selection_and_double_cluster_aggregate(production_st
         edition: oc_counts[edition] for edition in ("pocket", "standard", "deep", "eyepiece")
     }
     assert simulated_counts == {
-        "pocket": 272,
-        "standard": 303,
-        "deep": 812,
-        "eyepiece": 812,
+        "pocket": 290,
+        "standard": 321,
+        "deep": 815,
+        "eyepiece": 815,
     }
     selected = {
         edition: {

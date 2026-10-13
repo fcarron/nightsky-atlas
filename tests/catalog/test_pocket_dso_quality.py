@@ -219,6 +219,52 @@ def test_classic_targets_selected_with_explicit_pocket_reason(name, code):
         assert inherited.visible or inherited.forced
 
 
+def test_pocket_candidate_additions_do_not_change_standard_or_deep_selection():
+    from nightsky_atlas.catalog.dso_store import load_dso_catalog
+
+    config = load_observing_lists_config(ROOT / "config/observing_lists.yaml")
+    observing_lists = load_observing_lists(ROOT / "data/fixtures/observing_lists")
+    catalogue = load_dso_catalog(ROOT / "data/processed/dso/catalogue.json")
+    objects = {obj.id: obj for obj in catalogue}
+    ids = ("B 143", "NGC1977")
+    assert all(object_id in objects for object_id in ids)
+    assert len({objects[object_id].id for object_id in ids}) == len(ids)
+
+    before_lists = dict(observing_lists)
+    before_lists.pop("nightsky_pocket_classics")
+    before_index = build_membership_index(before_lists, catalogue)
+    after_index = build_membership_index(observing_lists, catalogue)
+    pocket = pocket_policy()
+    standard = resolve_edition(config, "standard")
+    deep = resolve_edition(config, "deep")
+
+    for object_id in ids:
+        obj = objects[object_id]
+        before_pocket = select_dso(obj, index=before_index, policy=pocket)
+        assert not (before_pocket.visible or before_pocket.forced)
+        pocket_result = select_dso(obj, index=after_index, policy=pocket)
+        assert pocket_result.forced
+        assert "nightsky_pocket_classics" in pocket_result.list_memberships
+
+        for policy in (standard, deep):
+            before = select_dso(obj, index=before_index, policy=policy)
+            after = select_dso(obj, index=after_index, policy=policy)
+            before_state = (
+                before.visible,
+                before.forced,
+                before.render_priority,
+                before.label_priority,
+            )
+            after_state = (
+                after.visible,
+                after.forced,
+                after.render_priority,
+                after.label_priority,
+            )
+            assert before_state == after_state
+            assert before.visible or before.forced
+
+
 def test_pocket_target_inclusion_is_inherited_by_standard_and_deep():
     config = load_observing_lists_config(ROOT / "config/observing_lists.yaml")
     visibility = {

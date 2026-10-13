@@ -111,6 +111,57 @@ source requires:
 4. duplicate/cross-ID strategy;
 5. explicit visual-observing value.
 
+### Unified Cluster Catalogue (UCC)
+
+The optional UCC importer is pinned to release **260615** (published
+2026-06-15), DOI [10.5281/zenodo.20705026](https://doi.org/10.5281/zenodo.20705026).
+The source files are fetched by `nightsky data fetch-ucc` into
+`data/raw/ucc/260615/`; the import command is
+`nightsky data import-ucc`. Only `UCC_cat.csv` is used. The 97 MB
+`UCC_members.parquet` is not downloaded or required. The versioned README is
+downloaded first and checksum-verified alongside the CSV.
+
+| File | Pinned download | Zenodo MD5 |
+| --- | --- | --- |
+| `README.txt` | `https://zenodo.org/records/20705026/files/README.txt?download=1` | `2b7ee76fb08e7f21976ee03f81ad4b83` |
+| `UCC_cat.csv` | `https://zenodo.org/records/20705026/files/UCC_cat.csv?download=1` | `b09c51f12865df0233df8fd90e4a8443` |
+
+The README describes 18,299 clusters and asks users of the data to cite
+Perren, Pera, Navone & Vázquez (2023), *The Unified Cluster Catalogue: towards
+a comprehensive and homogeneous data base of stellar clusters*, MNRAS 526,
+4107–4119, [doi:10.1093/mnras/stad2826](https://doi.org/10.1093/mnras/stad2826).
+The README also suggests acknowledging use of the Unified Cluster Catalogue
+at `https://ucc.ar` and citing Perren et al. (2023). The Zenodo record's rights
+section does not state a data licence, and the README does not grant one. The
+GPL-3.0 licence shown for the UCC software repository is not a data licence.
+Accordingly, the importer records the rights as unresolved; do not redistribute
+raw UCC files or derived UCC catalogue rows until the data terms are clarified.
+
+The importer retains the UCC main `name` as source identity and every parsed
+`Name(s)` designation as identifiers. It preserves source fields in the
+`CatalogSourceRecord.raw_fields` provenance. In particular, `r_50` is the
+radius containing half the identified members, not an observed cluster
+diameter, so it is not mapped to the atlas model's visual major/minor axes.
+`N_membs` is the estimated member count with membership probability above 50%;
+`C3` combines the catalogue's photometric and density quality classes;
+`P_dup` is the probability of duplication; `UTI` is the UCC Trust Index on
+0–1; and `bad_oc` flags likely asterisms, moving groups or artifacts. The
+importer retains `C3`, `UTI`, `P_dup`, and `bad_oc` without treating Gaia
+membership as visual extent. Rows marked `bad_oc` are not added as physical
+open clusters; rows with `P_dup >= 0.5`, ambiguous exact aliases, or positional
+matches without identity evidence are held for review. No `C3` or `UTI` value
+alone is treated as proof of visual observability. The [UCC FAQ](https://ucc.ar/faq/)
+defines C3 as the combination of its density and photometric quality classes;
+the two letter grades each range from A (best) to D (worst).
+
+Import and edition selection remain separate. UCC is not added to any edition's
+`included_catalogues`; its rows therefore do not become chart content merely
+because the catalogue has been imported. A future curated selection can use
+the canonical object/alias while retaining the existing edition inheritance
+rules. Each import writes `data/processed/dso/ucc-crossmatch.json` with matched,
+new, uncertain and rejected records and updates the processed DSO manifest
+with the release checksums and rights status.
+
 ## Licensing
 
 Never assume that data visible through an astronomy service can be freely

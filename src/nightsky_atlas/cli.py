@@ -111,6 +111,12 @@ from nightsky_atlas.catalog.tycho import (
 from nightsky_atlas.catalog.tycho_density import build_report as build_tycho_density_report
 from nightsky_atlas.catalog.tycho_density import write_csv as write_tycho_density_csv
 from nightsky_atlas.catalog.tycho_density import write_json as write_tycho_density_json
+from nightsky_atlas.catalog.ucc import (
+    UCC_VERSION,
+    crossmatch_ucc_objects,
+    download_ucc,
+    iter_ucc_objects,
+)
 from nightsky_atlas.catalog.vizier_dso import (
     VIZIER_ACKNOWLEDGEMENT,
     VIZIER_CATALOGUES,
@@ -644,6 +650,24 @@ def _add_data_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     vizier_import.set_defaults(handler=_command_import_vizier_dsos)
 
+    ucc_fetch = data_subparsers.add_parser(
+        "fetch-ucc", help="download the pinned Unified Cluster Catalogue release"
+    )
+    ucc_fetch.add_argument("--dest", type=Path, default=Path("data/raw/ucc/260615"))
+    ucc_fetch.set_defaults(handler=_command_fetch_ucc)
+
+    ucc_import = data_subparsers.add_parser(
+        "import-ucc", help="conservatively merge cached UCC clusters into the DSO catalogue"
+    )
+    ucc_import.add_argument("--raw", type=Path, default=Path("data/raw/ucc/260615"))
+    ucc_import.add_argument("--base", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    ucc_import.add_argument("--out", type=Path, default=_DEFAULT_COMBINED_DSO_OUT)
+    ucc_import.add_argument("--manifest", type=Path, default=_DEFAULT_COMBINED_DSO_MANIFEST)
+    ucc_import.add_argument(
+        "--report", type=Path, default=Path("data/processed/dso/ucc-crossmatch.json")
+    )
+    ucc_import.set_defaults(handler=_command_import_ucc)
+
     dso_info = data_subparsers.add_parser(
         "dso-info",
         aliases=["catalog-object"],
@@ -1098,9 +1122,7 @@ def _command_chart_render(args: argparse.Namespace) -> int:
         labels = _apply_chart_overrides(args, definition, labels)
     else:
         labels = ()
-    presentation = presentation_from_edition(
-        definition, atlas.resolved_edition(), scene=scene
-    )
+    presentation = presentation_from_edition(definition, atlas.resolved_edition(), scene=scene)
     furniture = furniture_obstacles(transform, definition, style, presentation)
     result: OptimizationResult | None = None
     if args.optimize:
@@ -1146,9 +1168,7 @@ def _command_chart_review(args: argparse.Namespace) -> int:
     labels = build_labels(scene, transform, style, _star_names(args))
     labels = _select_labels(args, definition, labels, scene, transform, style)
     labels = _apply_chart_overrides(args, definition, labels)
-    presentation = presentation_from_edition(
-        definition, atlas.resolved_edition(), scene=scene
-    )
+    presentation = presentation_from_edition(definition, atlas.resolved_edition(), scene=scene)
     furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style, furniture=furniture)
@@ -1250,9 +1270,7 @@ def _command_chart_validate(args: argparse.Namespace) -> int:
     labels = build_labels(scene, transform, style, _star_names(args))
     labels = _select_labels(args, definition, labels, scene, transform, style)
     labels = _apply_chart_overrides(args, definition, labels)
-    presentation = presentation_from_edition(
-        definition, atlas.resolved_edition(), scene=scene
-    )
+    presentation = presentation_from_edition(definition, atlas.resolved_edition(), scene=scene)
     furniture = furniture_obstacles(transform, definition, style, presentation)
     if args.optimize:
         result = optimize_labels(labels, scene, transform, style, furniture=furniture)
@@ -1597,6 +1615,88 @@ def _command_fetch_vizier_dsos(args: argparse.Namespace) -> int:
     paths = download_vizier_catalogues(args.dest, catalogue_ids=args.catalogues)
     print(f"downloaded {len(paths)} VizieR catalogue tables -> {args.dest}")
     print(f"source manifest -> {args.dest / 'manifest.json'}")
+    return 0
+
+
+def _command_fetch_ucc(args: argparse.Namespace) -> int:
+    path = download_ucc(args.dest)
+    print(f"downloaded and checksum-verified UCC {UCC_VERSION} -> {path}")
+    print(f"source manifest -> {args.dest / 'manifest.json'}")
+    return 0
+
+
+def _command_import_ucc(args: argparse.Namespace) -> int:
+    if not args.base.exists():
+        raise ConfigError(
+            f"missing base DSO catalogue {args.base}; run 'nightsky data import-vizier-dsos' first"
+        )
+    base_sha256 = file_sha256(args.base)
+    prior_manifest = (
+        json.loads(args.manifest.read_text(encoding="utf-8")) if args.manifest.exists() else {}
+    )
+    prior_ucc_import = prior_manifest.get("ucc_import", {})
+    if (
+        args.base.resolve() == args.out.resolve()
+        and prior_ucc_import.get("version") == UCC_VERSION
+        and prior_ucc_import.get("base_file") == str(args.base)
+    ):
+        base_sha256 = prior_ucc_import.get("base_sha256", base_sha256)
+    base_objects = load_dso_catalog(args.base)
+    source_objects = tuple(iter_ucc_objects(args.raw))
+    result = crossmatch_ucc_objects(base_objects, source_objects)
+    count = write_dso_catalog(args.out, result.objects)
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(
+        json.dumps(
+            {
+                "catalogue": "Unified Cluster Catalogue",
+                "version": UCC_VERSION,
+                "counts": result.summary,
+                "decisions": list(result.decisions),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    source_manifest = json.loads((args.raw / "manifest.json").read_text(encoding="utf-8"))
+    manifest = prior_manifest
+    manifest.update(
+        {
+            "source": "OpenNGC, selected VizieR catalogues, and Unified Cluster Catalogue",
+            "license": "Mixed per source; no blanket redistribution licence asserted",
+            "ucc_source": source_manifest,
+            "ucc_import": {
+                "base_file": str(args.base),
+                "base_sha256": base_sha256,
+                "version": UCC_VERSION,
+                "raw_rows": result.summary["raw"],
+                "matched_existing": result.summary["matched"],
+                "new_objects": result.summary["new"],
+                "uncertain_or_rejected": (
+                    result.summary["uncertain"]
+                    + result.summary["rejected_bad_oc"]
+                    + result.summary["rejected_duplicate_risk"]
+                ),
+                "selection_policy_changed": False,
+                "crossmatch_report": str(args.report),
+            },
+            "object_count": count,
+            "processed_file": args.out.name,
+            "processed_sha256": file_sha256(args.out),
+        }
+    )
+    write_manifest(args.manifest, manifest)
+    print(
+        f"UCC rows {result.summary['raw']}; matched {result.summary['matched']}; "
+        f"new {result.summary['new']}; uncertain {result.summary['uncertain']}; "
+        f"bad_oc rejected {result.summary['rejected_bad_oc']}; "
+        f"duplicate-risk held {result.summary['rejected_duplicate_risk']}"
+    )
+    print(f"merged {count} physical-object records -> {args.out}")
+    print(f"cross-match report -> {args.report}")
+    print(f"manifest -> {args.manifest}")
     return 0
 
 
@@ -2078,8 +2178,8 @@ def _command_why_object(args: argparse.Namespace) -> int:
     sources = sorted(
         {obj.provenance.catalogue} | {record.catalogue_id for record in obj.catalogue_records}
     )
-    editions = (args.edition,) if args.edition else (
-        "pocket", "standard", "deep", "eyepiece", "reference"
+    editions = (
+        (args.edition,) if args.edition else ("pocket", "standard", "deep", "eyepiece", "reference")
     )
     visibility_by_edition = {
         edition: load_atlas_config(Path("atlas") / f"{edition}.yaml").visibility.to_limits()
