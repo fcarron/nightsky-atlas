@@ -4,24 +4,30 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import yaml
 
-from nightsky_atlas.atlas.config import load_atlas_config
+from nightsky_atlas.atlas.config import DetailChartConfig, load_atlas_config
 from nightsky_atlas.build.atlas import (
     AtlasBuildResult,
+    _detail_fallback_labels_for_parent,
+    _detail_fallback_protected_ids,
     _detail_label_suppression_candidate,
     _detail_label_suppression_group,
     _require_mandatory_labels,
+    _verified_detail_dso_label_ids,
     build_atlas,
     chart_definitions,
 )
 from nightsky_atlas.build.chart import field_query_box, find_chart
 from nightsky_atlas.build.preflight import validate_atlas_output
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
 from nightsky_atlas.catalog.openngc import iter_openngc_objects
+from nightsky_atlas.catalog.selection import DsoMetadata
 from nightsky_atlas.catalog.store import chart_query_box
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PagePoint, PageRect
@@ -29,6 +35,8 @@ from nightsky_atlas.cli import main
 from nightsky_atlas.layout.collision import IssueType, LayoutIssue
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.validation import ValidationResult
+from nightsky_atlas.projection.base import ChartPoint
+from nightsky_atlas.scene.models import ChartScene, SceneDso
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = REPO_ROOT / "styles" / "standard.yaml"
@@ -168,6 +176,236 @@ def test_detail_suppression_preserves_manually_overridden_labels() -> None:
         )
         is None
     )
+
+
+def test_detail_suppression_allows_herschel_400_label_when_detail_is_clean() -> None:
+    label_id = "label:dso:NGC1234"
+    label = Label(
+        id=label_id,
+        target_id="NGC1234",
+        text="1234",
+        priority=60,
+        mandatory=True,
+        candidates=(
+            LabelCandidate(
+                id=f"{label_id}:E",
+                position=CompassPosition.E,
+                anchor=PagePoint(100.0, 100.0),
+                bounds=PageRect(100.0, 100.0, 8.0, 3.0),
+            ),
+        ),
+    )
+    dso = DeepSkyObject(
+        id="NGC1234",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance("test", "NGC1234"),
+    )
+    scene = ChartScene(
+        definition=ChartDefinition(
+            id="parent", center_ra_deg=187.5, center_dec_deg=12.0,
+            width_deg=27.0, height_deg=18.5,
+        ),
+        deep_sky_objects=(
+            SceneDso(
+                dso=dso,
+                chart_point=ChartPoint(0.0, 0.0),
+                metadata=DsoMetadata(dso_id=dso.id, list_memberships=frozenset({"herschel400"})),
+            ),
+        ),
+    )
+    issue = LayoutIssue(
+        id="issue:label_dso:NGC1234",
+        issue_type=IssueType.LABEL_DSO,
+        element_ids=(label_id, "NGC5678"),
+        message="label overlaps a DSO symbol",
+    )
+    protected_ids = _detail_fallback_protected_ids(scene, frozenset())
+
+    result = _detail_label_suppression_candidate(
+        (label,), ValidationResult(issues=(issue,)), {label_id: "SD02"}, protected_ids
+    )
+
+    assert protected_ids == frozenset()
+    assert result is not None
+    assert result[0].id == label_id
+    assert result[1] == "SD02"
+
+
+def test_detail_suppression_protects_messier_even_with_herschel_membership() -> None:
+    label_id = "label:dso:NGC4486"
+    label = Label(
+        id=label_id,
+        target_id="NGC4486",
+        text="87",
+        priority=100,
+        mandatory=True,
+        candidates=(
+            LabelCandidate(
+                id=f"{label_id}:E",
+                position=CompassPosition.E,
+                anchor=PagePoint(100.0, 100.0),
+                bounds=PageRect(100.0, 100.0, 8.0, 3.0),
+            ),
+        ),
+    )
+    dso = DeepSkyObject(
+        id="NGC4486",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance("test", "NGC4486"),
+        cross_ids=("M87",),
+    )
+    scene = ChartScene(
+        definition=ChartDefinition(
+            id="parent", center_ra_deg=187.5, center_dec_deg=12.0,
+            width_deg=27.0, height_deg=18.5,
+        ),
+        deep_sky_objects=(
+            SceneDso(
+                dso=dso,
+                chart_point=ChartPoint(0.0, 0.0),
+                metadata=DsoMetadata(dso_id=dso.id, list_memberships=frozenset({"herschel400"})),
+            ),
+        ),
+    )
+    issue = LayoutIssue(
+        id="issue:label_dso:NGC4486",
+        issue_type=IssueType.LABEL_DSO,
+        element_ids=(label_id, "NGC4478"),
+        message="label overlaps a DSO symbol",
+    )
+    protected_ids = _detail_fallback_protected_ids(scene, frozenset())
+
+    result = _detail_label_suppression_candidate(
+        (label,), ValidationResult(issues=(issue,)), {label_id: "SD02"}, protected_ids
+    )
+
+    assert protected_ids == frozenset({label_id})
+    assert result is None
+
+
+def test_detail_suppression_requires_a_clean_detail_match_and_enabled_fallback() -> None:
+    label_id = "label:dso:NGC1234"
+    label = Label(
+        id=label_id,
+        target_id="NGC1234",
+        text="1234",
+        priority=30,
+        mandatory=True,
+        candidates=(
+            LabelCandidate(
+                id=f"{label_id}:E",
+                position=CompassPosition.E,
+                anchor=PagePoint(100.0, 100.0),
+                bounds=PageRect(100.0, 100.0, 8.0, 3.0),
+            ),
+        ),
+    )
+    issue = LayoutIssue(
+        id="issue:label_dso:NGC1234",
+        issue_type=IssueType.LABEL_DSO,
+        element_ids=(label_id, "NGC5678"),
+        message="label overlaps a DSO symbol",
+    )
+    validation = ValidationResult(issues=(issue,))
+
+    dso = DeepSkyObject(
+        id="NGC1234",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance("test", "NGC1234"),
+    )
+    detail_scene = ChartScene(
+        definition=ChartDefinition(
+            id="detail", center_ra_deg=187.5, center_dec_deg=12.0,
+            width_deg=27.0, height_deg=18.5,
+        ),
+        deep_sky_objects=(SceneDso(dso=dso, chart_point=ChartPoint(0.0, 0.0)),),
+    )
+    clean_detail_ids = _verified_detail_dso_label_ids(
+        detail_scene, (label,), ValidationResult(issues=())
+    )
+    assert clean_detail_ids == frozenset({"NGC1234"})
+    clean_detail_mapping = {label_id: "SD02"}
+    assert _detail_label_suppression_candidate(
+        (label,), validation, clean_detail_mapping
+    ) is not None
+
+    # Missing, hidden, unplaced, or hard-issue detail labels are not verified.
+    assert (
+        _verified_detail_dso_label_ids(detail_scene, (), ValidationResult(issues=()))
+        == frozenset()
+    )
+    detail_issue = LayoutIssue(
+        id="issue:label_dso:detail",
+        issue_type=IssueType.LABEL_DSO,
+        element_ids=(label_id, "NGC5678"),
+        message="detail label overlaps a DSO symbol",
+    )
+    assert (
+        _verified_detail_dso_label_ids(
+            detail_scene, (label,), ValidationResult(issues=(detail_issue,))
+        )
+        == frozenset()
+    )
+    assert _detail_label_suppression_candidate((label,), validation, {}) is None
+
+
+def test_detail_fallback_skips_invisible_symbols_and_selects_one_detail_deterministically() -> None:
+    dso = DeepSkyObject(
+        id="NGC1234",
+        ra_deg=187.5,
+        dec_deg=12.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance("test", "NGC1234"),
+    )
+    scene = ChartScene(
+        definition=ChartDefinition(
+            id="parent", center_ra_deg=187.5, center_dec_deg=12.0,
+            width_deg=27.0, height_deg=18.5,
+        ),
+        deep_sky_objects=(
+            SceneDso(
+                dso=dso,
+                chart_point=ChartPoint(0.0, 0.0),
+                symbol_visible=False,
+            ),
+        ),
+    )
+    details = (
+        DetailChartConfig(
+            id="detail-z", code="SD02", name="Later detail",
+            center_ra_deg=187.5, center_dec_deg=12.0,
+            width_deg=13.0, height_deg=8.5, mm_per_degree=20.0,
+        ),
+        DetailChartConfig(
+            id="detail-a", code="SD01", name="First detail",
+            center_ra_deg=187.5, center_dec_deg=12.0,
+            width_deg=13.0, height_deg=8.5, mm_per_degree=20.0,
+        ),
+    )
+    parents = {detail.id: ("parent",) for detail in details}
+    verified = {detail.id: frozenset({dso.id}) for detail in details}
+
+    assert _detail_fallback_labels_for_parent(
+        scene, "parent", details, parents, verified
+    ) == {}
+
+    visible_scene = replace(
+        scene,
+        deep_sky_objects=(replace(scene.deep_sky_objects[0], symbol_visible=True),),
+    )
+    result = _detail_fallback_labels_for_parent(
+        visible_scene, "parent", details, parents, verified
+    )
+    assert result == {"label:dso:NGC1234": "SD01"}
+    assert _detail_fallback_labels_for_parent(
+        visible_scene, "parent", tuple(reversed(details)), parents, verified
+    ) == result
 
 
 def test_detail_suppression_group_uses_minimum_deterministic_issue_cover() -> None:

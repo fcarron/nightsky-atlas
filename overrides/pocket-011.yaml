@@ -1,0 +1,8 @@
+chart: pocket-011
+labels:
+  label:dso:NGC4374:
+    candidate: 'label:dso:NGC4374:N:8'
+    locked: true
+  label:dso:NGC4406:
+    candidate: 'label:dso:NGC4406:NE:8'
+    locked: true

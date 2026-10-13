@@ -70,6 +70,7 @@ from nightsky_atlas.catalog.observing_lists import (
     DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
 )
 from nightsky_atlas.catalog.observing_lists import build_membership_index
+from nightsky_atlas.catalog.priority import messier_id
 from nightsky_atlas.catalog.sample import load_sample_stars
 from nightsky_atlas.catalog.selection import select_dso
 from nightsky_atlas.catalog.star_names import (
@@ -390,6 +391,65 @@ def _require_mandatory_labels(chart_id: str, labels: tuple[Label, ...]) -> None:
         raise ValueError(f"chart {chart_id} has missing mandatory labels: {', '.join(missing)}")
 
 
+def _detail_fallback_protected_ids(
+    scene: ChartScene, manually_protected_ids: frozenset[str]
+) -> frozenset[str]:
+    """Keep manually protected labels and Messier labels on their parent charts."""
+    return manually_protected_ids | frozenset(
+        f"label:dso:{scene_dso.dso.id}"
+        for scene_dso in scene.deep_sky_objects
+        if messier_id(scene_dso.dso) is not None
+    )
+
+
+def _verified_detail_dso_label_ids(
+    scene: ChartScene,
+    labels: tuple[Label, ...],
+    validation: ValidationResult,
+) -> frozenset[str]:
+    """Return visible DSO IDs whose detail labels are placed and hard-clean."""
+    placed_label_ids = {
+        label.id
+        for label in labels
+        if not label.hidden and label.effective_candidate() is not None
+    }
+    problematic_label_ids = {
+        element_id for issue in validation.issues for element_id in issue.element_ids
+    }
+    return frozenset(
+        scene_dso.dso.id
+        for scene_dso in scene.deep_sky_objects
+        if scene_dso.symbol_visible
+        and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
+        and f"label:dso:{scene_dso.dso.id}" not in problematic_label_ids
+    )
+
+
+def _detail_fallback_labels_for_parent(
+    scene: ChartScene,
+    parent_chart_id: str,
+    detail_charts: tuple[DetailChartConfig, ...],
+    detail_parent_chart_ids: dict[str, tuple[str, ...]],
+    detail_labelled_dso_ids: dict[str, frozenset[str]],
+) -> dict[str, str]:
+    """Map eligible parent labels to one deterministic, verified detail chart."""
+    detail_by_label: dict[str, str] = {}
+    for detail in sorted(detail_charts, key=lambda item: (item.code, item.id)):
+        if parent_chart_id not in detail_parent_chart_ids[detail.id]:
+            continue
+        labelled_dso_ids = detail_labelled_dso_ids.get(detail.id, frozenset())
+        for scene_dso in scene.deep_sky_objects:
+            if (
+                scene_dso.symbol_visible
+                and scene_dso.dso.id in labelled_dso_ids
+                and detail_chart_contains_position(
+                    detail, scene_dso.dso.ra_deg, scene_dso.dso.dec_deg
+                )
+            ):
+                detail_by_label.setdefault(f"label:dso:{scene_dso.dso.id}", detail.code)
+    return detail_by_label
+
+
 def _exclude_star_labels(
     labels: tuple[Label, ...], scene: ChartScene, excluded_hips: tuple[int, ...]
 ) -> tuple[tuple[Label, ...], tuple[dict[str, Any], ...]]:
@@ -653,6 +713,9 @@ def _build_main_chart(
         if chart_overrides is not None
         else frozenset()
     )
+    detail_fallback_protected_ids = _detail_fallback_protected_ids(
+        chart_context.scene, protected_ids
+    )
     labels = select_labels(
         labels,
         chart_context.scene,
@@ -706,21 +769,17 @@ def _build_main_chart(
         furniture=furniture,
     )
     _require_mandatory_labels(definition.id, labels)
-    detail_by_label: dict[str, str] = {}
-    if shared.optimize:
-        for detail in shared.detail_charts:
-            if definition.id not in shared.detail_parent_chart_ids[detail.id]:
-                continue
-            detail_labelled_dso_ids = shared.detail_labelled_dso_ids.get(detail.id, frozenset())
-            for scene_dso in chart_context.scene.deep_sky_objects:
-                if (
-                    scene_dso.symbol_visible
-                    and scene_dso.dso.id in detail_labelled_dso_ids
-                    and detail_chart_contains_position(
-                        detail, scene_dso.dso.ra_deg, scene_dso.dso.dec_deg
-                    )
-                ):
-                    detail_by_label.setdefault(f"label:dso:{scene_dso.dso.id}", detail.code)
+    detail_by_label = (
+        _detail_fallback_labels_for_parent(
+            chart_context.scene,
+            definition.id,
+            shared.detail_charts,
+            shared.detail_parent_chart_ids,
+            shared.detail_labelled_dso_ids,
+        )
+        if shared.optimize
+        else {}
+    )
     permitted_suppressions: list[dict[str, Any]] = []
     if detail_by_label:
         original_labels = labels
@@ -730,7 +789,10 @@ def _build_main_chart(
         while detail_by_label and validation.issues:
             previous_issue_count = len(validation.issues)
             group = _detail_label_suppression_group(
-                labels, validation, detail_by_label, protected_ids=protected_ids
+                labels,
+                validation,
+                detail_by_label,
+                protected_ids=detail_fallback_protected_ids,
             )
             if not group:
                 break
@@ -779,7 +841,10 @@ def _build_main_chart(
             permitted_suppressions.clear()
             while detail_by_label:
                 choice = _detail_label_suppression_candidate(
-                    labels, validation, detail_by_label, protected_ids=protected_ids
+                    labels,
+                    validation,
+                    detail_by_label,
+                    protected_ids=detail_fallback_protected_ids,
                 )
                 if choice is None:
                     break
@@ -1560,20 +1625,13 @@ def _build_atlas_impl(
             furniture=detail_furniture,
         )
         _require_mandatory_labels(definition.id, detail_labels)
-        placed_label_ids = {
-            label.id
-            for label in detail_labels
-            if not label.hidden and label.effective_candidate() is not None
-        }
         problematic_label_ids = {
-            element_id for issue in detail_validation.issues for element_id in issue.element_ids
+            element_id
+            for issue in detail_validation.issues
+            for element_id in issue.element_ids
         }
-        detail_labelled_dso_ids[detail.id] = frozenset(
-            scene_dso.dso.id
-            for scene_dso in detail_context.scene.deep_sky_objects
-            if scene_dso.symbol_visible
-            and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
-            and f"label:dso:{scene_dso.dso.id}" not in problematic_label_ids
+        detail_labelled_dso_ids[detail.id] = _verified_detail_dso_label_ids(
+            detail_context.scene, detail_labels, detail_validation
         )
         placed_targets = {
             label.target_id

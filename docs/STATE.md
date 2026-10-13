@@ -144,21 +144,25 @@ not check their inputs against subsequent code/configuration changes.
   no valid candidate in the dense field. Review previews for the acceptance
   fields: `build/label-selection/standard/charts/{standard-001,021,031,053,
   063,083,116}/preview.png`.
-- Standard detail-map label fallback is enabled for Virgo core (`SD053A`),
-  southern Virgo (`SD053B`) and Fornax (`SD089`). An ordinary galaxy number is
-  omitted from the parent only when that stable DSO ID has a placed, hard-clean
-  label on the detail page. Symbols remain on both pages; Messier and H400
-  labels remain on the parent. The build manifest records omitted label IDs by
-  parent chart and detail code.
+- Detail-map label fallback is geometry based and applies to every successfully
+  labelled DSO inside an overlapping detail chart. A parent label is omitted
+  only when it still has a suppressible hard layout issue after optimization;
+  the matching detail label must be placed and free of hard validation issues.
+  Messier labels and manually protected parent labels remain on the parent.
+  Herschel 400 labels follow the same fallback conditions as other DSO labels;
+  their priority and mandatory-selection status are unchanged outside this
+  targeted fallback. Symbols remain on both pages, and the build manifest
+  records each permitted omission by parent chart and detail code. Pocket P11
+  uses locked candidate placements for M84 and M86 to keep both Messier labels
+  while avoiding new hard overlaps; pass `--overrides overrides` to apply it.
 - Pocket uses the same three label-transfer fields on `P025` and `P032`, with
   compact parent-frame tags (`PD025A`, `PD025B`, `PD032`) to fit the smaller
   field footprints.
-- Deep now has nine detail maps: NGC 7331/Stephan's Quintet, Pleiades, Coma
-  core, Markarian chain, M42, Fornax core, 30 Doradus, LMC bar and NGC 346.
-  Its ordinary-galaxy label fallback is limited to the four galaxy fields,
-  catalogue magnitude 12.5 or fainter, and three neighbouring galaxies within
-  15 mm on the parent. The detail label must still be placed and hard-clean;
-  Messier and H400 labels remain on the parent. Chart footers use a shared
+- Deep now has ten detail maps: NGC 7331/Stephan's Quintet, Pleiades, Coma
+  core, Markarian chain, M42, Fornax core, 30 Doradus, LMC bar, NGC 346 and the
+  Perseus Cluster. The same geometry- and validation-gated label fallback
+  applies there; Messier labels remain protected, while H400 labels may use it
+  when its conditions are met. Chart footers use a shared
   one-line format across editions; scale bars are omitted from chart pages.
 - A standalone local blind-review tool for label variants lives in
   `tools/label_review/`. Its curated 23-case set uses crops from assembled

@@ -232,10 +232,13 @@ and the normal edition defaults.
 Star profiles are existing edition presets: Standard detail stars use the
 Standard profile, Deep detail stars use Deep, and the denser detail fields use
 Eyepiece or Eyepiece Deep profiles. These profiles do not replace the parent's
-DSO selection policy. Parent-chart galaxy-label fallback remains a presentation
-rule: it may transfer only labels for selected objects that are present on both
-the detail field and its parent, and it never removes Messier or Herschel 400
-labels.
+DSO selection policy. Parent-chart label fallback is a presentation rule: a
+label may be omitted only when the object is inside the actual detail footprint,
+its detail label is placed and hard-clean, and the parent label still has a
+suppressible hard layout issue after optimization. Messier labels and manually
+protected parent labels are retained. H400 labels follow the same fallback
+conditions as other DSO labels; their priority and mandatory-selection status
+are unchanged outside this targeted fallback. Symbols remain on both charts.
 
 Old public codes map to the stable codes as follows:
 
