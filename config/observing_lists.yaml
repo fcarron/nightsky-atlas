@@ -34,6 +34,8 @@ lists:
     name: NightSkyAtlas curated planetary nebulae
   nightsky_pocket_classics:
     name: NightSkyAtlas Pocket visual classics
+  nightsky_standard_visual_targets_v1:
+    name: NightSkyAtlas Standard visual targets v1
   nightsky_curated_bright_nebulae_v1:
     name: NightSkyAtlas curated bright nebulae v1
   nightsky_curated_dark_nebulae_v1:
@@ -122,10 +124,12 @@ editions:
       - herschel400
       - nightsky_curated_bright_nebulae_v1
       - nightsky_curated_dark_nebulae_v1
+      - nightsky_standard_visual_targets_v1
     forced_list_reason_codes:
       herschel400: standard_herschel400
       nightsky_curated_bright_nebulae_v1: standard_curated_bright_nebula
       nightsky_curated_dark_nebulae_v1: standard_curated_dark_nebula
+      nightsky_standard_visual_targets_v1: standard_deepskylog_visual_target
     list_weights:
       messier: 60
       herschel400: 50

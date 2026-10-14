@@ -51,6 +51,7 @@ _COMPACT_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^(?:BARNARD|B)0*(\d+)$"), r"B\1"),
     (re.compile(r"^(?:MELOTTE|MEL)0*(\d+)$"), r"Mel \1"),
     (re.compile(r"^STOCK0*(\d+)$"), r"Stock \1"),
+    (re.compile(r"^STEPHENSON0*(\d+)$"), r"Steph. \1"),
     (re.compile(r"^ABELLPN0*(\d+)$"), r"Abell \1"),
     (re.compile(r"^ABELL0*(\d+)$"), r"Abell \1"),
     (re.compile(r"^(?:HICKSON(?:COMPACTGROUP)?|HCG)0*(\d+)$"), r"HCG \1"),

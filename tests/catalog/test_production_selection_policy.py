@@ -36,7 +36,8 @@ def production_state():
     config = load_observing_lists_config()
     index = build_membership_index(load_observing_lists())
     policies = {
-        edition: resolve_edition(config, edition) for edition in ("standard", "deep", "reference")
+        edition: resolve_edition(config, edition)
+        for edition in ("pocket", "standard", "deep", "reference")
     }
     return objects, index, policies
 
@@ -46,10 +47,10 @@ def _decisions(query, objects, index, policies):
     assert obj is not None, query
     return obj, {
         edition: (
-            select_dso(obj, index=index, policy=policy).visible
-            or select_dso(obj, index=index, policy=policy).forced
+            select_dso(obj, index=index, policy=policies[edition]).visible
+            or select_dso(obj, index=index, policy=policies[edition]).forced
         )
-        for edition, policy in policies.items()
+        for edition in ("standard", "deep", "reference")
     }
 
 
@@ -105,7 +106,7 @@ def test_production_selection_hierarchy_and_type_counts(production_state) -> Non
     assert decisions["deep"] == decisions["eyepiece"]
     assert report["edition_totals"] == {
         "pocket": 1133,
-        "standard": 3017,
+        "standard": 3093,
         "deep": 10483,
         "eyepiece": 10483,
         "reference": 14866,
@@ -121,6 +122,23 @@ def test_production_selection_hierarchy_and_type_counts(production_state) -> Non
             "eyepiece_not_deep",
         }
     }
+
+
+def test_standard_visual_targets_are_added_to_standard_and_deep_only(production_state) -> None:
+    objects, index, policies = production_state
+    curated = load_observing_lists()["nightsky_standard_visual_targets_v1"]
+    assert len(curated.objects) == 76
+    assert "NGC 1435" not in curated.objects
+    assert "NGC 4425" not in curated.objects
+    for designation in curated.objects:
+        obj = find_object(objects, designation)
+        assert obj is not None, designation
+        standard = select_dso(obj, index=index, policy=policies["standard"])
+        deep = select_dso(obj, index=index, policy=policies["deep"])
+        pocket = select_dso(obj, index=index, policy=policies["pocket"])
+        assert standard.forced, designation
+        assert deep.visible or deep.forced, designation
+        assert not (pocket.visible or pocket.forced), designation
 
 
 def test_rc3_only_galaxies_are_ingested_but_not_enabled(production_state) -> None:
@@ -279,7 +297,7 @@ def test_pocket_caldwell_double_cluster_has_only_component_objects(production_st
 def test_production_selection_matches_alpha_and_reference_counts(production_state) -> None:
     report = build_selection_report()
     assert report["edition_totals"]["pocket"] == 1133
-    assert report["edition_totals"]["standard"] == 3017
+    assert report["edition_totals"]["standard"] == 3093
     assert report["edition_totals"]["deep"] == 10483
     assert report["edition_totals"]["eyepiece"] == 10483
     assert report["edition_totals"]["reference"] == 14866
@@ -331,7 +349,7 @@ def test_open_cluster_alpha_selection_and_double_cluster_aggregate(production_st
     }
     assert simulated_counts == {
         "pocket": 290,
-        "standard": 321,
+        "standard": 360,
         "deep": 815,
         "eyepiece": 815,
     }

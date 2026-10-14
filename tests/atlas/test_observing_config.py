@@ -31,6 +31,7 @@ def test_load_shipped_config_and_resolve_standard() -> None:
             "herschel400",
             "nightsky_curated_bright_nebulae_v1",
             "nightsky_curated_dark_nebulae_v1",
+            "nightsky_standard_visual_targets_v1",
         }
     )
     assert dict(policy.list_weights)["messier"] == 60

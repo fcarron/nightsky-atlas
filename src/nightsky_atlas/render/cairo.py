@@ -189,11 +189,11 @@ def draw_chart_page(
     _draw_leader_lines(cr, label_list, scene, transform, style)
     _draw_stars(cr, transform, scene, size_model, style)
     _draw_dsos(cr, transform, scene, size_model, style, bold_symbol_ids)
+    _draw_filled_dso_outlines(cr, transform, scene, style, bold_symbol_ids)
     _draw_stars_over_dso_symbols(cr, transform, scene, size_model, style)
     _draw_variable_star_marks(
         cr, scene, transform, size_model, style, variable_star_hips
     )
-    _draw_filled_dso_outlines(cr, transform, scene, style, bold_symbol_ids)
     _draw_grid_labels(cr, grid_lines, transform, style, scene.definition, obstacles=plan.obstacles)
     _draw_labels(cr, foreground_labels, style)
     if locator is not None:
@@ -736,8 +736,9 @@ def _dso_marks_requiring_foreground(
         if not item.symbol_visible:
             continue
         extent = dso_symbol_extent(item.dso, mm_per_deg=transform.mm_per_deg, style=style)
-        if _dso_fill_color(style, item) is None and _dso_overlaps_bright_star(
-            item, scene, transform, size_model, extent, style
+        color = _dso_fill_color(style, item)
+        if _dso_overlaps_bright_star(item, scene, transform, size_model, extent, style) and (
+            color is None or item.dso.object_type == DsoType.GALAXY
         ):
             continue
         marks.append((transform.to_page(item.chart_point), extent))
@@ -1055,6 +1056,16 @@ def _draw_dsos(
     for _, scene_dso, color, point, extent in sorted(
         filled, key=lambda item: item[0], reverse=True
     ):
+        if scene_dso.dso.object_type == DsoType.GALAXY and _dso_overlaps_bright_star(
+            scene_dso, scene, transform, size_model, extent, style
+        ):
+            _draw_dso_knockout(
+                cr,
+                mm_to_pt(point.x_mm),
+                mm_to_pt(point.y_mm),
+                extent,
+                style.dso.star_overlap_halo_mm,
+            )
         cr.set_source_rgb(0.0, 0.0, 0.0)
         cr.set_line_width(mm_to_pt(_dso_contour(scene_dso, style, bold_symbol_ids)[0]))
         draw_dso_symbol(
@@ -1111,7 +1122,7 @@ def _draw_filled_dso_outlines(
     style: StyleConfig,
     bold_symbol_ids: frozenset[str] = frozenset(),
 ) -> None:
-    """Restore filled DSO contours above star marks and their knockout halos."""
+    """Redraw filled DSO contours after their fills and before foreground stars."""
     rect = transform.chart_rect
     cr.save()
     cr.rectangle(

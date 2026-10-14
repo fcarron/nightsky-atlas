@@ -604,7 +604,7 @@ def _dso_conflict_components(
 ) -> tuple[tuple[str, ...], ...]:
     """Connect DSO labels whose legal candidate regions can compete for space."""
     dso_labels = tuple(sorted(
-        (label for label in labels if label.id.startswith("label:dso:")),
+        (label for label in labels if label.id.startswith("label:dso:") and not label.locked),
         key=lambda label: label.id,
     ))
     adjacency = {label.id: set() for label in dso_labels}

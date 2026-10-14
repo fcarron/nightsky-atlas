@@ -18,6 +18,7 @@ from nightsky_atlas.layout.optimizer import (
     _build_star_index,
     _build_symbol_index,
     _CandidateScoreCache,
+    _dso_conflict_components,
     _dso_placement_metrics,
     _is_valid,
     _repair_dso_hard_conflicts,
@@ -371,6 +372,38 @@ def test_dso_conflict_component_is_optimized_jointly_without_culling() -> None:
         and selected[0].top_mm < selected[1].bottom_mm
         and selected[1].top_mm < selected[0].bottom_mm
     )
+
+
+def test_joint_dso_optimizer_preserves_locked_override() -> None:
+    first_candidates = (
+        make_candidate("label:dso:A", CompassPosition.N, 100.0, 100.0),
+        make_candidate("label:dso:A", CompassPosition.E, 120.0, 100.0),
+    )
+    first = replace(
+        make_label("label:dso:A", first_candidates),
+        target_id="A",
+        selected_candidate_id=first_candidates[1].id,
+        locked=True,
+    )
+    second = replace(
+        make_label(
+            "label:dso:B",
+            (
+                make_candidate("label:dso:B", CompassPosition.N, 100.0, 100.0),
+                make_candidate("label:dso:B", CompassPosition.W, 108.0, 100.0),
+            ),
+        ),
+        target_id="B",
+    )
+
+    components = _dso_conflict_components((first, second), STYLE)
+    result = optimize_labels((first, second), EMPTY_SCENE, TRANSFORM, STYLE)
+    by_id = {label.id: label for label in result.labels}
+
+    assert all(first.id not in component for component in components)
+    assert any(second.id in component for component in components)
+    assert by_id[first.id].locked is True
+    assert by_id[first.id].selected_candidate_id == first_candidates[1].id
 
 
 def test_optimization_is_deterministic() -> None:

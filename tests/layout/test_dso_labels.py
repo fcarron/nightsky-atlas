@@ -63,6 +63,8 @@ def make_dso(
         ("Melotte 111", "Mel 111"),
         ("Mel 025", "Mel 25"),
         ("Stock 2", "Stock 2"),
+        ("Stephenson 1", "Steph. 1"),
+        ("STEPHENSON01", "Steph. 1"),
         ("Abell 426", "Abell 426"),
         ("HCG 92", "HCG 92"),
         ("Hickson Compact Group 92", "HCG 92"),

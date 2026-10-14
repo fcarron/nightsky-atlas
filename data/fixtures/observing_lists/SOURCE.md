@@ -76,6 +76,14 @@ an explicit source-version difference, not a coordinate or catalogue rewrite.
 - **License:** Original NightSkyAtlas membership decision (MIT); no copied descriptions, ratings or photometry.
 - **Edition use:** Forced only in Pocket, with the reason `pocket_curated_visual_target`; it does not enable the full Melotte catalogue.
 
+## nightsky_standard_visual_targets_v1.json
+
+- **List:** 76 NightSkyAtlas-selected targets from the 81-candidate Standard review.
+- **Source and method:** Candidate priority was informed by the user-provided DeepskyLog observation counts through 210 mm. Physical identities and object types were matched against the normalized OpenNGC, VizieR and UCC-backed catalogue. The complete decisions and deferrals are in [`docs/STANDARD_DSO_CANDIDATE_REVIEW.md`](../../../docs/STANDARD_DSO_CANDIDATE_REVIEW.md).
+- **License:** Original NightSkyAtlas selection (MIT); the fixture stores designations only and does not reproduce observing logs or catalogue measurements.
+- **Edition use:** Forced in Standard and included in Deep through the existing Standard-to-Deep hierarchy. It is not part of Pocket's policy.
+- **Identity and layout safeguards:** IC 5067 is held because the alias resolves both to an unclassified OpenNGC record and to selected IC 5070; NGC 206 is deferred because a point symbol inside M31 would not communicate its stellar-cloud extent reliably. NGC 1435 is deferred because its 30′ outline creates hard overlaps with existing stellar labels on the Pleiades charts. NGC 4425 is deferred because adding its Virgo label creates a hard overlap between existing labels/symbols on S051. NGC 6874 is excluded by UCC `bad_oc=y`. Lower UCC confidence values alone do not override the supplied observing history when `bad_oc=n`. UCC `r_50` values are never used as visual diameters.
+
 ## nightsky_curated_dark_nebulae_v1.json
 
 - **List:** 47 canonical object IDs from the included entries in `config/curated_dark_nebulae_v1.yaml`.

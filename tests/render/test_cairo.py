@@ -308,7 +308,31 @@ def test_star_halos_do_not_cut_holes_in_colored_dso_fills(monkeypatch) -> None:
     assert disk_calls
 
 
-def test_final_filled_dso_outline_pass_follows_star_overlays(monkeypatch) -> None:
+def test_open_cluster_fill_and_outline_do_not_cover_a_star() -> None:
+    color_style = load_style_config(
+        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-b.yaml"
+    )
+    cluster = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
+    star = Star("cluster-star", 187.5, 12.0, 1.0, Provenance("TEST", "cluster-star"))
+    scene = ChartScene(
+        definition=CHART,
+        stars=(SceneStar(star, ChartPoint(0.0, 0.0)),),
+        deep_sky_objects=(cluster,),
+    )
+    transform = PageTransform(CHART, PAGE)
+    surface = cairo.ImageSurface(
+        cairo.FORMAT_ARGB32,
+        round(mm_to_pt(PAGE.width_mm)),
+        round(mm_to_pt(PAGE.height_mm)),
+    )
+
+    draw_chart_page(cairo.Context(surface), scene, transform, color_style)
+
+    point = transform.to_page(ChartPoint(0.0, 0.0))
+    assert sum(_pixel_rgb(surface, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))) < 100
+
+
+def test_filled_dso_outline_pass_precedes_foreground_stars(monkeypatch) -> None:
     import nightsky_atlas.render.cairo as renderer
 
     events = []
@@ -337,14 +361,14 @@ def test_final_filled_dso_outline_pass_follows_star_overlays(monkeypatch) -> Non
         cairo.Context(surface), ChartScene(definition=CHART), PageTransform(CHART, PAGE), STYLE
     )
 
-    assert events.index("_draw_dsos") < events.index("_draw_stars_over_dso_symbols")
+    assert events.index("_draw_dsos") < events.index("_draw_filled_dso_outlines")
+    assert events.index("_draw_filled_dso_outlines") < events.index(
+        "_draw_stars_over_dso_symbols"
+    )
     assert events.index("_draw_stars_over_dso_symbols") < events.index(
-        "_draw_filled_dso_outlines"
+        "_draw_variable_star_marks"
     )
-    assert events.index("_draw_variable_star_marks") < events.index(
-        "_draw_filled_dso_outlines"
-    )
-    assert events.index("_draw_filled_dso_outlines") < events.index("draw_furniture")
+    assert events.index("_draw_variable_star_marks") < events.index("draw_furniture")
     assert events[-1] == "_draw_chart_border"
 
 
@@ -432,6 +456,35 @@ def test_compact_dso_overlapping_bright_star_keeps_its_knockout() -> None:
 
     dso_point = transform.to_page(scene.deep_sky_objects[0].chart_point)
     assert sum(_pixel_rgb(surface, mm_to_pt(dso_point.x_mm), mm_to_pt(dso_point.y_mm))) > 700
+
+
+def test_compact_colored_galaxy_remains_visible_over_bright_star() -> None:
+    color_style = load_style_config(
+        REPO_ROOT / "styles" / "experiments" / "color" / "standard-b.yaml"
+    )
+    star = Star("bright", 187.5, 12.0, 2.0, Provenance("TEST", "bright"))
+    dso = DeepSkyObject(
+        id="NGC0404",
+        ra_deg=187.55,
+        dec_deg=12.0,
+        object_type=DsoType.GALAXY,
+        provenance=Provenance("TEST", "NGC0404"),
+        major_axis_arcmin=3.4,
+        minor_axis_arcmin=3.37,
+    )
+    scene = build_scene(CHART, (star,), (dso,))
+    transform = PageTransform(chart=CHART, page=PAGE)
+    surface = cairo.ImageSurface(
+        cairo.FORMAT_ARGB32,
+        round(mm_to_pt(PAGE.width_mm)),
+        round(mm_to_pt(PAGE.height_mm)),
+    )
+
+    draw_chart_page(cairo.Context(surface), scene, transform, color_style)
+
+    point = transform.to_page(scene.deep_sky_objects[0].chart_point)
+    pixel = _pixel_rgb(surface, mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+    assert 200 < sum(pixel) < 700
 
 
 def test_star_overlapping_large_nebula_symbol_is_redrawn_in_foreground() -> None:
