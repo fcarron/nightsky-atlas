@@ -1,8 +1,47 @@
 # Data sources and storage
 
 Catalogue strategy, storage and licensing. `AGENTS.md` links here. This is the
-authoritative provenance record required before any public distribution (plan
-item M16.4).
+authoritative provenance record; the current non-commercial beta status is
+summarized below and in `docs/STATE.md`.
+
+## Public beta licence model and Pocket source status
+
+The generator code is MIT-licensed. Project-authored cartographic design and
+artwork are CC BY 4.0 only where explicitly identified. A generated atlas PDF
+has no single blanket licence: third-party data retain their source terms. The
+current target is a free, non-commercial public beta; this is not a formal legal
+clearance and does not grant commercial rights.
+
+The table covers data and assets actually used by the current Pocket build,
+including the optional UCAC4 faint-star layer used on detail chart PD02.
+`documented` means the applicable notice/conditions are recorded for this use;
+`accepted with caveat` identifies a known term or evidence limitation without
+claiming either permission or a concrete prohibition; `action required` is
+reserved for a specific unmet condition.
+
+| Source | Licence / basis | Attribution fulfilled in PDF/repository | Status |
+| --- | --- | --- | --- |
+| Tycho-2 | CC BY-NC 3.0 IGO | Høg et al., ESA, licence, transformations and source manifest | documented |
+| Hipparcos | CC BY-NC 3.0 IGO | ESA and catalogue teams, licence and source manifest | documented |
+| OpenNGC | CC BY-SA 4.0 | Mattia Verga & contributors; adaptation and source terms recorded | documented |
+| VizieR catalogues | Source-specific publication/catalogue terms; no blanket VizieR licence | Source authors, tables and CDS acknowledgement | accepted with caveat |
+| UCAC4 / APASS | No explicit redistribution terms established for the imported subset | Zacharias et al., USNO, APASS use and uncertainty disclosed | accepted with caveat |
+| UCC | Zenodo record/README request citation; no data licence stated | Perren et al. (2023), release and missing licence disclosed | accepted with caveat |
+| Gaia LMC/SMC contours | ODbL 1.0 derivative GeoJSON; PDF is a Produced Work | ESA/Gaia/DPAC, CDS/CNRS, product and licence notices | documented |
+| Milky Way contours | BSD-3-Clause as distributed by d3-celestial; Vieira original source cited | Olaf Frohn and José R. Vieira, notice retained | accepted with caveat |
+| WDS | USNO-maintained; no explicit reuse licence identified on current source page | Mason et al.; requested USNO acknowledgement | accepted with caveat |
+| Observing-list metadata | Herschel 400 snapshot CC BY-SA 4.0; Messier/Caldwell fixtures are designation membership only | Wikipedia/Herschel source and list-specific provenance retained; displayed list names are credited | documented |
+| Stellarium Western figures | CC BY-SA 2.0 | Krizak, Piskor, Stellarium Team; source notice retained | documented |
+| IAU boundaries and d3-celestial star names | BSD-3-Clause as distributed by d3-celestial | Olaf Frohn; licence notices retained | documented |
+| IAU Catalog of Star Names snapshot | CC Attribution (snapshot version unspecified); used to check curated spellings, not redistributed | IAU source and snapshot reference recorded | accepted with caveat |
+| Project-authored nebula outlines | CC BY 4.0 | NightSky Atlas attribution and scope recorded | documented |
+| Bundled fonts | SIL Open Font License 1.1 | Full notices retained beside font assets | documented |
+
+No known explicit licence condition is identified here as an unmet beta
+requirement. The UCAC4/APASS, UCC, WDS and historical-catalogue notes are
+evidence/terms caveats, not findings of a legal conflict. They do not provide
+commercial permission. Reassess before commercial distribution or standalone
+redistribution of source-derived databases.
 
 ## Strategy
 
@@ -15,7 +54,10 @@ Initial preferred source: **Tycho-2**, supplemented by the **Hipparcos** main
 catalogue for the brightest stars. Tycho's star mapper saturated on stars
 brighter than roughly V=2.5, so Tycho-2 omits Deneb, Vega, Altair, Sirius and
 other bright stars that are essential to a usable star atlas. Hipparcos (the
-companion mission) contains them and shares the same license.
+companion mission) contains them and shares the same licence. ESA's catalogue
+terms specify CC BY-NC 3.0 IGO and request ESA credit; the catalogue teams are
+Høg et al. for Tycho-2 and the NDAC/FAST teams led by Lindegren and Kovalevsky
+for Hipparcos.
 
 Required normalized fields:
 
@@ -151,13 +193,16 @@ log-density field before contour extraction; the normal NGC 104 DSO symbol and
 label remain visible. The center and taper radii are recorded in the GeoJSON
 processing metadata and `SOURCE.md`.
 
-The derived GeoJSON is redistributed under the source product's ODbL-1.0
-conditions, with the Gaia/DPAC and CDS attribution retained in its metadata and
-build credits. Any redistribution of the derived database must preserve the
-ODbL notice and attribution and comply with its share-alike requirements. The
-project's MIT software license does not replace those data terms. Review
-`data/third_party/gaia_dr3_magellanic/SOURCE.md` before redistributing the
-cutouts or derivative.
+The derived GeoJSON is offered under ODbL 1.0, with Gaia/DPAC and CDS/CNRS
+attribution retained in its metadata, adjacent notice and build credits. We
+conservatively treat the polygons as a derivative database: redistribute them
+under ODbL with the attribution and documented changes. ODbL distinguishes a
+Derivative Database from a Produced Work; a chart PDF displaying these contours
+is not thereby licensed as a whole under ODbL. When distributing the PDF with
+the contours, retain the source/licence notice and make the derivative GeoJSON
+available under ODbL. See the [ODbL 1.0 terms](https://opendatacommons.org/licenses/odbl/1-0/)
+and `data/third_party/gaia_dr3_magellanic/{LICENSE,SOURCE.md}`. This is a
+documented compliance approach, not a formal legal opinion.
 
 ### Unified Cluster Catalogue (UCC)
 
@@ -182,8 +227,10 @@ The README also suggests acknowledging use of the Unified Cluster Catalogue
 at `https://ucc.ar` and citing Perren et al. (2023). The Zenodo record's rights
 section does not state a data licence, and the README does not grant one. The
 GPL-3.0 licence shown for the UCC software repository is not a data licence.
-Accordingly, the importer records the rights as unresolved; do not redistribute
-raw UCC files or derived UCC catalogue rows until the data terms are clarified.
+The free non-commercial beta uses selected UCC-backed object targets, not the
+raw catalogue or a complete structured UCC extract. This is an accepted rights
+caveat rather than a claim of permission. Do not distribute the raw catalogue
+or structured derived UCC rows until terms are clarified.
 
 The importer retains the UCC main `name` as source identity and every parsed
 `Name(s)` designation as identifiers. It preserves source fields in the
@@ -292,9 +339,14 @@ data-source condition and does not alter the MIT licence on the generator.
 | Transformations | sexagesimal RA/Dec to degrees; V-Mag preferred, B-Mag fallback; `B-Mag`, `V-Mag`, `SurfBr`, `Hubble` and `Sources` retained for the galaxy visibility model |
 | Import | `nightsky data fetch-openngc` then `nightsky data import-openngc` |
 
-OpenNGC attribution and share-alike terms apply to OpenNGC-derived catalogue
-material. The project does not apply them to unrelated source code or
-third-party data.
+OpenNGC attribution and CC BY-SA 4.0 terms are retained for the adapted
+OpenNGC-derived catalogue material, including its source-specific corrections.
+Any redistribution of that adapted catalogue material must preserve the
+attribution, indicate changes, and comply with share-alike. This documentation
+does not claim that share-alike is irrelevant to a chart PDF or its object
+index, nor does it apply CC BY-SA to unrelated code or third-party data. The
+PDF credits identify OpenNGC and the licence; the licence of the assembled PDF
+is not stated as a blanket licence.
 
 ### UCAC4 faint-star supplement and APASS photometry
 
@@ -341,14 +393,15 @@ influence the printed chart.
 | Raw | `data/raw/wds/wds.dat.gz` (~6.5 MB, 157,917 records) |
 | Processed | `data/processed/double_stars/wds.json` (157,644 systems, ~57 MB) |
 | Manifest | `data/processed/double_stars/wds.manifest.json` |
-| License | **Public domain** (U.S. Naval Observatory); acknowledgement requested |
+| License | No explicit reuse licence identified on the current USNO source page; acknowledgement requested |
 | Transformations | sexagesimal RA/Dec to degrees; latest-epoch separation/position angle (first-epoch fallback, negative sentinels dropped); component magnitudes `mag1`/`mag2`, combined as `-2.5*log10(sum(10**(-0.4*m_i)))` |
 | Fixture | `data/fixtures/double_stars/wds_subset.dat` (nine verbatim records) + `SOURCE.md` |
 | Import | `nightsky data fetch-wds` then `nightsky data import-wds` |
 
 The USNO requests the acknowledgement: *"This research has made use of the
 Washington Double Star Catalog maintained at the U.S. Naval Observatory."*
-Linkage is positional (default 2 arcsec primary / 3 arcsec companion tolerance)
+The project preserves this notice and does not rely on an explicit public-domain
+grant. Linkage is positional (default 2 arcsec primary / 3 arcsec companion tolerance)
 and per chart, so the overlay scales with the atlas edition instead of baking a
 fixed angular separation into the data.
 

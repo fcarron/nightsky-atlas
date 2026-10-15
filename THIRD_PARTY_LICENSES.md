@@ -8,11 +8,20 @@ sharing, subject to the applicable terms of all included third-party material.
 These statements do not relicense third-party content or automatically apply
 the MIT License to generated PDFs.
 
+There is no single blanket licence for a generated PDF. OpenNGC-derived
+catalogue material remains subject to CC BY-SA 4.0; Tycho-2 and Hipparcos
+remain subject to CC BY-NC 3.0 IGO; Gaia-derived contour data are separately
+offered under ODbL 1.0. A PDF is a cartographic Produced Work and is not
+therefore itself offered under ODbL. Free non-commercial beta distribution is
+the intended use, not a legal clearance or permission for commercial use.
+
 ## Tycho-2 and Hipparcos
 
 The Tycho-2 catalogue and the Hipparcos catalogue are credited to ESA and their
-catalogue authors (Høg et al. 2000; ESA 1997). The repository's source records
-identify both catalogue datasets as **CC BY-NC 3.0 IGO**; this is a
+catalogue authors (Høg et al. 2000; ESA 1997). The Hipparcos observing teams
+were NDAC, led by Lennart Lindegren, and FAST, led by Jean Kovalevsky. The
+repository's source records identify both catalogue datasets as **CC BY-NC
+3.0 IGO**; this is a
 non-commercial licence. See the [ESA licence text](https://creativecommons.org/licenses/by-nc/3.0/igo/)
 and the detailed transformations in `docs/DATA_SOURCES.md`. This condition
 applies to those catalogue data, not to the atlas generator's MIT licence.
@@ -26,9 +35,10 @@ imported files and transformations.
 
 ## Washington Double Star Catalog
 
-The WDS is maintained by the U.S. Naval Observatory. The repository treats its
-records as U.S. government public-domain material, while preserving the USNO's
-requested acknowledgement:
+The WDS is maintained by the U.S. Naval Observatory. The repository preserves
+the USNO's requested acknowledgement. The current USNO source page does not
+state a separate reuse licence; this repository does not rely on an explicit
+public-domain grant:
 
 > This research has made use of the Washington Double Star Catalog maintained
 > at the U.S. Naval Observatory.
@@ -46,6 +56,42 @@ The project has not established separate usage terms for the incorporated
 APASS photometry. Rights for distributing the faint-star database or derived
 products containing these records therefore remain **unresolved**; no blanket
 redistribution permission is asserted here.
+
+Pocket PD02 can use this optional faint-star layer. This is an accepted
+documentation caveat for the non-commercial beta, not evidence of an explicit
+prohibition or a grant of commercial rights. Do not redistribute the raw or
+processed UCAC4/APASS catalogue as a standalone dataset without clarifying its
+terms.
+
+## Gaia DR3 Magellanic Cloud contours
+
+The LMC/SMC contour GeoJSON is derived from the CDS Gaia DR3 density-map HiPS
+product and G-band-flux HiPS product. Their product records identify
+ESA/Gaia/DPAC and CDS/CNRS and declare ODbL 1.0. NightSky Atlas treats the
+generated GeoJSON as a derivative database and offers that file under ODbL 1.0;
+its attribution and reproducible processing are in
+`data/third_party/gaia_dr3_magellanic/SOURCE.md` and the adjacent `LICENSE`.
+When distributing a PDF that includes these contours, retain the source and
+licence notice and make the corresponding derivative GeoJSON available under
+ODbL 1.0. The PDF is a Produced Work; this does not place the PDF as a whole
+under ODbL. See the [official ODbL 1.0 text](https://opendatacommons.org/licenses/odbl/1-0/),
+especially its attribution, share-alike and Produced Work provisions.
+
+The exact product identifiers, release dates, cutouts and processing are
+recorded in the Gaia `SOURCE.md`. The original d3-celestial Milky Way contours
+remain in use and are separately distributed under BSD-3-Clause as described
+below; no Gaia replacement has been made.
+
+## Unified Cluster Catalogue
+
+The UCC Zenodo record and its README request citation of Perren et al. (2023),
+but do not state a data licence. The GPL licence of the UCC software is not
+treated as a data licence. The beta uses selected UCC-backed object targets in
+the atlas rather than distributing the raw catalogue or a complete structured
+UCC extract. This remains an accepted caveat: no explicit prohibition has
+been identified, but no redistribution permission is asserted. See
+`docs/DATA_SOURCES.md` and the local import report. Clarify terms before
+redistributing raw or structured derived UCC data.
 
 ## Historical VizieR catalogues
 

@@ -1162,15 +1162,19 @@ def _credits_columns(
     star_entries: list[str] = []
     star_source = by_kind.get("stars", {}).get("manifest") or {}
     if star_source.get("catalogue") == "TYC2":
-        star_entries.append("Tycho-2 — Høg et al. (2000), ESA")
+        star_entries.append("Tycho-2 — Høg et al. (2000), ESA; CC BY-NC 3.0 IGO")
         supplement = star_source.get("bright_star_supplement") or {}
         if supplement.get("catalogue") == "HIP":
-            star_entries.append("Hipparcos — ESA (1997)")
+            star_entries.append(
+                "Hipparcos — ESA (1997), Lindegren/Kovalevsky teams; CC BY-NC 3.0 IGO"
+            )
     elif star_source.get("source"):
         star_entries.append(f"Stars — {star_source['source']}")
     faint_source = by_kind.get("faint_stars", {}).get("manifest") or {}
     if faint_source.get("catalogue") == "UCAC4":
-        star_entries.append("UCAC4 — Zacharias et al. (2013), USNO; APASS V where available")
+        star_entries.append(
+            "UCAC4 — Zacharias et al. (2013), USNO; APASS V; terms not specified"
+        )
     elif faint_source.get("source"):
         star_entries.append(f"Faint-star supplement — {faint_source['source']}")
     if star_entries:
@@ -1185,7 +1189,7 @@ def _credits_columns(
     active_ids = set(used_dso_catalogues)
     dso_entries: list[str] = []
     if "OpenNGC" in active_ids:
-        dso_entries.append("OpenNGC — Mattia Verga & contributors")
+        dso_entries.append("OpenNGC — Mattia Verga & contributors; CC BY-SA 4.0; adapted")
 
     group_specs = (
         (
@@ -1206,7 +1210,7 @@ def _credits_columns(
                 "VII/92A:Melotte": "Melotte",
                 "VII/92A:Stock": "Stock",
             },
-            "Open clusters — Lyngå",
+            "Open clusters — Lyngå (1987)",
         ),
         (
             ("IV/24:AbellPN", "IV/24:CuratedPN"),
@@ -1219,7 +1223,7 @@ def _credits_columns(
         (
             ("VII/202:Palomar", "VII/202:Terzan"),
             {"VII/202:Palomar": "Palomar", "VII/202:Terzan": "Terzan"},
-            "Globular clusters — Harris",
+            "Globular clusters — Harris (1996)",
         ),
         (
             ("VII/213", "VII/74A", "VII/155"),
@@ -1234,7 +1238,7 @@ def _credits_columns(
     grouped_ids: set[str] = set()
     for ids, labels, heading in group_specs:
         grouped_ids.update(ids)
-        included = [labels[item] for item in ids if item in active_ids]
+        included = list(dict.fromkeys(labels[item] for item in ids if item in active_ids))
         if included:
             citation = "; ".join(included)
             if " — " in heading:
@@ -1243,9 +1247,17 @@ def _credits_columns(
     for catalogue_id in sorted(active_ids - grouped_ids - {"OpenNGC"}):
         metadata = manifest_sources.get(catalogue_id, {})
         name = metadata.get("name") or catalogue_id
-        dso_entries.append(str(name))
+        if catalogue_id.lower() == "ucc" or "unified cluster" in str(name).lower():
+            dso_entries.append(
+                "Unified Cluster Catalogue — Perren et al. (2023); data licence not stated"
+            )
+        else:
+            dso_entries.append(str(name))
     if not dso_entries and dso_source.get("source"):
         dso_entries.append(f"Deep-sky catalogue — {dso_source['source']}")
+    dso_entries.append(
+        "Herschel 400 — Wikipedia (CC BY-SA 4.0); Messier/Caldwell lists supply designations"
+    )
     if dso_entries:
         left.append(("Deep-sky catalogues", tuple(dso_entries)))
     if has_galaxies:
@@ -1253,8 +1265,7 @@ def _credits_columns(
             (
                 "Galaxy visibility",
                 (
-                    "Classification informed by Crumey (2014); the atlas applies documented "
-                    "visual-observing assumptions and heuristics.",
+                    "Galaxy visibility classes follow a Crumey (2014)-based model.",
                 ),
             )
         )
@@ -1281,26 +1292,28 @@ def _credits_columns(
     if "Stellarium Western (Sky & Telescope)" in line_sources:
         cartography.append(
             "Constellation figures — Stellarium Western (Sky & Telescope); "
-            "Krizak, Piskor & Stellarium Team"
+            "Krizak, Piskor & Stellarium Team; CC BY-SA 2.0"
         )
     elif line_sources:
         cartography.extend(f"Constellation figures — {item}" for item in sorted(line_sources))
     if "d3-celestial" in boundary_sources:
         cartography.append(
-            "Constellation boundaries — IAU definitions; d3-celestial data, Olaf Frohn"
+            "Constellation boundaries — IAU; d3-celestial, Olaf Frohn; BSD-3-Clause"
         )
     elif boundary_sources:
         cartography.extend(
             f"Constellation boundaries — {item}" for item in sorted(boundary_sources)
         )
     if "nightsky-atlas-authored" in outline_sources:
-        cartography.append("Schematic nebula outlines — NightSky Atlas")
+        cartography.append("Schematic nebula outlines — NightSky Atlas; CC BY 4.0")
     if milky_way_sources:
-        cartography.append("Milky Way contours — José R. Vieira, via d3-celestial")
+        cartography.append(
+            "Milky Way contours — d3-celestial, Olaf Frohn; source José R. Vieira; BSD-3-Clause"
+        )
     if magellanic_sources:
         cartography.append(
-            "Magellanic Cloud contours — Gaia DR3 density map, CDS HiPS; "
-            "ESA/Gaia/DPAC and CDS/CNRS, ODbL-1.0"
+            "Magellanic Cloud contours — Gaia DR3 density and G-flux HiPS; "
+            "ESA/Gaia/DPAC, CDS/CNRS via hips2fits; ODbL 1.0"
         )
     if cartography:
         right.append(("Constellations & cartography", tuple(cartography)))
@@ -1309,9 +1322,9 @@ def _credits_columns(
         star_name_source is not None
         and Path(star_name_source).resolve() == STAR_NAMES_FIXTURE_DIR.resolve()
     ):
-        name_sources = ["d3-celestial"]
+        name_sources = ["d3-celestial star-name data (Olaf Frohn), BSD-3-Clause"]
         if has_iau_star_names:
-            name_sources.append("IAU Catalog of Star Names")
+            name_sources.append("spellings checked against IAU Catalog of Star Names")
         right.append(("Star names", ("; ".join(name_sources),)))
     elif star_name_source:
         right.append(("Star names", (f"Star-name input — {Path(star_name_source).name}",)))

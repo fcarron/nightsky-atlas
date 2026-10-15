@@ -51,6 +51,7 @@ def test_credits_show_only_catalogue_families_used_by_this_build() -> None:
     assert "Tycho-2" in left_text and "Hipparcos" in left_text
     assert "OpenNGC" in left_text and "Sharpless" in left_text
     assert "Hickson" in left_text
+    assert "Herschel 400" in left_text and "CC BY-SA 4.0" in left_text
     assert "Lynds LBN" not in left_text
     assert "Arp" not in left_text
     assert "VizieR" in right_text
@@ -88,6 +89,52 @@ def test_optional_sources_appear_only_when_the_build_uses_them() -> None:
     assert "Washington Double Star Catalog" in left_text
     assert "VizieR" not in right_text
     assert "José R. Vieira" in right_text
+
+
+def test_credits_state_source_specific_licences_and_attributions() -> None:
+    left, right = _credits_columns(
+        data_sources=[
+            {
+                "kind": "stars",
+                "manifest": {
+                    "catalogue": "TYC2",
+                    "bright_star_supplement": {"catalogue": "HIP"},
+                },
+            },
+            {"kind": "faint_stars", "manifest": {"catalogue": "UCAC4"}},
+            {
+                "kind": "deep_sky",
+                "manifest": {
+                    "sources": [
+                        {"catalogue_id": "UCC", "name": "Unified Cluster Catalogue"}
+                    ]
+                },
+            },
+        ],
+        geometry_catalogues={
+            "constellation_lines": ["Stellarium Western (Sky & Telescope)"],
+            "constellation_boundaries": ["d3-celestial"],
+            "outlines": ["nightsky-atlas-authored"],
+            "milky_way": ["d3-celestial"],
+            "magellanic_clouds": ["Gaia DR3"],
+        },
+        used_dso_catalogues=frozenset({"OpenNGC", "UCC"}),
+        star_name_source="data/fixtures/starnames",
+        has_iau_star_names=True,
+        has_galaxies=False,
+    )
+    left_text = " ".join(entry for _, entries in left for entry in entries)
+    right_text = " ".join(entry for _, entries in right for entry in entries)
+
+    assert "CC BY-NC 3.0 IGO" in left_text
+    assert "CC BY-SA 4.0" in left_text and "adapted" in left_text
+    assert "terms not specified" in left_text
+    assert "Perren et al. (2023)" in left_text
+    assert "CC BY-SA 2.0" in right_text
+    assert "BSD-3-Clause" in right_text
+    assert "José R. Vieira" in right_text and "Olaf Frohn" in right_text
+    assert "Gaia DR3 density and G-flux" in right_text
+    assert "ODbL 1.0" in right_text and "hips2fits" in right_text
 
 
 def test_credits_reject_a_long_source_list_before_it_overlaps_licence() -> None:

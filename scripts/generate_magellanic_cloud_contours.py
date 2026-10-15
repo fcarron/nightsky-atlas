@@ -404,8 +404,8 @@ def generate(
             "copyright": "ESA/Gaia mission/DPAC; CDS/CNRS/Université de Strasbourg",
             "license": "ODbL-1.0",
             "attribution": (
-                "Gaia DR3 (ESA/Gaia/DPAC); Gaia density HiPS "
-                "(CDS, CNRS/Université de Strasbourg), ODbL-1.0"
+                "Gaia DR3 density and G-band-flux HiPS products "
+                "(ESA/Gaia/DPAC; CDS/CNRS/Université de Strasbourg), ODbL-1.0"
             ),
             "processing": {
                 "background": (

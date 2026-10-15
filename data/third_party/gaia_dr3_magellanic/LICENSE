@@ -1,0 +1,17 @@
+The `contours.geojson` derivative database in this directory is made available
+under the Open Data Commons Open Database License (ODbL) v1.0:
+
+https://opendatacommons.org/licenses/odbl/1-0/
+
+Attribution: Gaia DR3 (ESA/Gaia/DPAC), source density and G-band-flux HiPS
+products provided by CDS/CNRS/Université de Strasbourg. Product identifiers,
+release information, processing methods and checksums are in `SOURCE.md` and
+the GeoJSON metadata.
+
+Changes: NightSky Atlas generated simplified ICRS contour polygons from local
+FITS cutouts of the two HiPS products. The generation procedure is documented
+in `SOURCE.md` and `scripts/generate_magellanic_cloud_contours.py`.
+
+This notice applies to the derivative contour database, not to the NightSky
+Atlas PDF as a whole. The PDF is a Produced Work; see `SOURCE.md` for the
+conditions and attribution to preserve when distributing it with the contours.

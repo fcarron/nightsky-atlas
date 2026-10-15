@@ -1812,7 +1812,7 @@
     }
   ],
   "source": {
-    "attribution": "Gaia DR3 (ESA/Gaia/DPAC); Gaia density HiPS (CDS, CNRS/Universit\u00e9 de Strasbourg), ODbL-1.0",
+    "attribution": "Gaia DR3 density and G-band-flux HiPS products (ESA/Gaia/DPAC; CDS/CNRS/Universit\u00e9 de Strasbourg), ODbL-1.0",
     "catalogue": "Gaia DR3 density and G-band flux maps via CDS HiPS",
     "copyright": "ESA/Gaia mission/DPAC; CDS/CNRS/Universit\u00e9 de Strasbourg",
     "data_provenance_id": "ivo://CDS/I/355/gaiadr3",

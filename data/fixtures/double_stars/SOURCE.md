@@ -19,9 +19,10 @@ Star Catalog (WDS)** used only by the unit tests for
 
 ## Licence
 
-The WDS is a work of the U.S. federal government (U.S. Naval Observatory) and
-is treated as **public domain**. The USNO requests the following
-acknowledgement, which should appear in any derived publication:
+The WDS is maintained by the U.S. Naval Observatory. The USNO source page
+requests the following acknowledgement, which is retained in atlas credits.
+The source page does not state an explicit reuse licence, so this fixture
+documentation does not rely on a separate public-domain grant:
 
 > This research has made use of the Washington Double Star Catalog maintained
 > at the U.S. Naval Observatory.

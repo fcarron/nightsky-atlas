@@ -238,8 +238,11 @@ target creates the virtual environment with access to Ubuntu's `gi` bindings.
 The generator is licensed under the [MIT License](LICENSE). Generated atlases
 also include third-party fonts, constellation geometry and catalogue data with
 their own terms; the MIT license does not automatically cover generated PDFs.
-Tycho-2 and Hipparcos are marked CC-BY-NC-3.0 IGO, OpenNGC is CC-BY-SA-4.0,
-and WDS is public domain with an acknowledgement requested. Review
+Tycho-2 and Hipparcos are CC BY-NC 3.0 IGO, OpenNGC is CC BY-SA 4.0, and the
+Gaia-derived Magellanic contour data are ODbL 1.0. The WDS is USNO-maintained;
+its current source page requests acknowledgement but does not state a separate
+reuse licence. There is no blanket licence for a generated PDF; the intended
+beta use is free and non-commercial, subject to source terms. Review
 [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) and
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) before sharing or
 redistributing outputs.

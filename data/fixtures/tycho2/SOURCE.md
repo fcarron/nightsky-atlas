@@ -4,4 +4,6 @@
 Tycho-2 main catalogue (CDS I/259, Høg et al. 2000). The latter retains the
 four ε Lyrae component rows, including the `P` photocentre flag and the
 component-specific observed positions for C and D. The project records the
-source and CC-BY-NC-3.0 IGO usage terms in `docs/DATA_SOURCES.md`.
+source and CC BY-NC 3.0 IGO usage terms in `docs/DATA_SOURCES.md`. ESA's
+catalogue terms request credit to ESA; the local fixtures remain small test
+excerpts and retain the source attribution and non-commercial condition.

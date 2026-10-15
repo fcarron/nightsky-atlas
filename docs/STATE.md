@@ -14,6 +14,20 @@ Standard and Deep artifacts pass checksum/manifest checks, with 28, 74 and 375
 hard layout issues respectively. They were not publication builds; this does
 not check their inputs against subsequent code/configuration changes.
 
+## Current licensing status (2026-10-15)
+
+The licence and attribution documentation is **provisionally complete for a
+free, non-commercial public beta**. This is a documentation status, not formal
+legal clearance. No concrete unmet licence condition for that stated beta use
+has been identified. Known caveats remain for UCAC4/APASS terms, the UCC data
+licence, USNO WDS reuse terms, historical source-specific catalogue rights, and
+the separate original-source licensing status of the Vieira outlines. They are
+reported as evidence/terms caveats, not as established prohibitions or
+commercial permissions. Gaia-derived contour GeoJSON is separately offered
+under ODbL 1.0; PDFs remain mixed-source Produced Works with source-specific
+terms rather than a blanket project licence. See `docs/DATA_SOURCES.md` and
+`THIRD_PARTY_LICENSES.md`.
+
 ## Progress
 
 - Targeted short DSO leaders (2026-10-07): the observer-reviewed rule is now
@@ -428,7 +442,7 @@ empty paths do not disable them.
 ## Next
 
 1. M15.5 print/field test of representative pages.
-2. M16: M16.2 atlas-wide issue report, M16.3 preflight (`atlas validate --publication`), M16.4 `docs/DATA_SOURCES.md`.
+2. M16: M16.2 atlas-wide issue report, M16.3 preflight (`atlas validate --publication`); M16.4 data-source/licence documentation is provisionally complete for non-commercial beta.
 3. M21.5 integrate further observing lists (license decision first). The
    per-chart label density budget is implemented as local density selection.
 4. M17 Pocket, M18 Deep data expansion, M19 extended structures, M20 Deep atlas.

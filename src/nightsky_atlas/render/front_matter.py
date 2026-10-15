@@ -367,7 +367,7 @@ def draw_credits_page(
     column_width = (right - left - gap) / 2.0
     right_column = left + column_width + gap
     licence_y = page.height_mm - 59.0
-    source_bottom = licence_y - 12.0
+    source_bottom = licence_y - 8.0
 
     _text(cr, "Data Sources & Credits", left, page.margin_mm, family, 15.0, bold=True)
     y = page.margin_mm + 10.0
@@ -412,10 +412,10 @@ def draw_credits_page(
         "identified. Third-party material retains its applicable licences and attribution.",
     )
     right_text = (
-        "The atlas PDFs are freely available for download and printing. Further redistribution "
-        "and modification must respect the applicable licences and notices.",
-        "The MIT License applies to the generator, not automatically to generated atlases. "
-        "No blanket commercial permission is asserted for third-party material.",
+        "The atlas is intended for free download, printing and non-commercial use, subject to "
+        "each source's terms. Tycho-2 and Hipparcos are CC BY-NC 3.0 IGO.",
+        "The MIT License covers the generator, not the PDF. Gaia contour GeoJSON is offered "
+        "separately under ODbL 1.0; the PDF is a Produced Work, not a PDF-wide ODbL licence.",
     )
     metadata_y = page.height_mm - page.margin_mm - 14.0
     documentation_y = page.height_mm - page.margin_mm - 5.0

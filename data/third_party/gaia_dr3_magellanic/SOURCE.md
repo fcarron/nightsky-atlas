@@ -4,24 +4,31 @@
 
 The contours use two CDS Gaia DR3 HiPS products derived from Gaia table I/355:
 
-- Gaia source density: `CDS/P/DM/I/355/gaiadr3`, processed 2022-06-15.
-- Gaia G-band flux: `CDS/P/DM/flux-G/I/355/gaiadr3`, processed 2022-06-16.
+- Gaia source density: `CDS/P/DM/I/355/gaiadr3`, product release
+  `2022-06-15T09:24Z` (HiPS product version 1.4).
+- Gaia G-band flux: `CDS/P/DM/flux-G/I/355/gaiadr3`, product release
+  `2022-06-16T14:31Z` (HiPS product version 1.4).
 - Density HiPS: <https://alasky.cds.unistra.fr/ancillary/GaiaDR3/density-map/>.
 - G-flux HiPS: <https://alasky.cds.unistra.fr/ancillary/GaiaDR3/G-flux-map/>.
 - HiPS product records: <https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDM%2FI%2F355%2Fgaiadr3&fmt=html&get=record>
   and <https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDM%2Fflux-G%2FI%2F355%2Fgaiadr3&fmt=html&get=record>.
-- Both HiPS records declare ODbL-1.0, credit CDS/CNRS/Université de Strasbourg,
-  and identify Gaia DR3 (ESA/Gaia/DPAC) as the underlying data source.
+- Both HiPS records declare ODbL-1.0 and identify CDS/CNRS/Université de
+  Strasbourg and Gaia DR3 (ESA/Gaia/DPAC). The density and flux maps are
+  different products derived from Gaia table I/355.
 - Gaia DR3 release citation: <https://doi.org/10.5270/esa-qa4lep3>.
 - ODbL text: <https://opendatacommons.org/licenses/odbl/1-0/>.
 - The HiPS2FITS service requests acknowledgment of CDS's hips2fits service:
   <https://alasky.cds.unistra.fr/hips-image-services/hips2fits>.
 
-The CDS product metadata, rather than the NightSkyAtlas software license,
-governs these source data and their derivatives. Redistribution of the derived
-contours must retain attribution and comply with ODbL-1.0, including applicable
-share-alike obligations. Obtain legal review before changing the distribution
-context or treating the derivative as separately licensed.
+The machine-readable contour database `contours.geojson` is offered separately
+under ODbL 1.0. It is derived from the CDS HiPS databases; preserve this
+attribution, the ODbL notice and this processing record when redistributing it.
+The reproducible generation method is documented below. The PDF that displays
+these contours is a Produced Work under ODbL terminology; it is not thereby
+licensed as a whole under ODbL. A distributed PDF should retain the Gaia/CDS
+credit and make the corresponding derivative GeoJSON available under ODbL 1.0.
+This project does not claim that the MIT software licence replaces these data
+conditions or grants commercial rights in third-party material.
 
 ## Downloaded cutouts
 
@@ -40,6 +47,9 @@ The request parameters are `format=fits`, `projection=TAN`, `coordsys=icrs`,
 `width=500`, `height=500`, with the product ID and field centers above. The
 files are cutouts of the source HiPS, not new catalogue measurements. Every
 contour vertex is transformed through the source FITS TAN WCS into ICRS RA/Dec.
+The two Gaia products are obtained from the density and G-flux URLs in the
+source list above; the atlas build itself uses only the committed contour
+GeoJSON and does not access the network.
 
 ## Reproduction
 
@@ -92,4 +102,4 @@ direct visual surface-brightness limits.
 
 `contours.geojson` records the source map and threshold per feature, product
 identifiers, filtering values, coordinate method and attribution. Its SHA-256 is
-`f73679f64435d7b6bc72f0ad1a9ba5e4d2f6885622c0206558ade7b05093a5a7`.
+`68e8d3fa79a1deb82bc8ae4569e3817ab256db5eed2667a485f1e81ab68580ce`.
