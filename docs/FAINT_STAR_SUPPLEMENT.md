@@ -136,15 +136,11 @@ The source flags identify the origin catalogue, not a unique HIP/TYC number.
 
 ```sh
 nightsky data faint-star-count --store data/processed/stars/faint_stars.sqlite
-nightsky data faint-star-density-report \
-  --store data/processed/stars/faint_stars.sqlite \
-  --primary-star-store data/processed/stars/tycho2.sqlite
 ```
 
-The density report combines primary and faint counts, reports the standard
-regions, and compares paper density for 40/80 mm per degree against the
-Standard 9.0 and Deep 10.5 baselines. The faint store alone remains queryable at
-any limit through `FaintStarStore`.
+The completed density/performance study commands were retired in the CLI
+cleanup. The store remains queryable at any magnitude limit through
+`FaintStarStore`; import, calibration and rendering support are unchanged.
 
 To opt a single chart or atlas build in, pass `--faint-star-store` and
 `--faint-star-limit`. Both are required together; absent these options, the

@@ -170,8 +170,8 @@ sparse field, in `raw` and `optimized` modes, at magnitude limits 8.5–9.5).
 Known problems are the hard violations of each layout.
 
 ```bash
-nightsky benchmark ai-review --model qwen/qwen3.7-flash
-nightsky benchmark ai-review --recorded <results.json>   # deterministic replay
+.venv/bin/python tools/benchmark_ai_review.py --model qwen/qwen3.7-flash
+.venv/bin/python tools/benchmark_ai_review.py --recorded <results.json>   # deterministic replay
 ```
 
 Measured on 2026-09-16 (12 cases):

@@ -56,25 +56,11 @@ local/research/nebula-lists/al_dark_nebula.csv
 local/research/nebula-lists/al_bright_nebula.csv
 ```
 
-The existing generic adapter accepts CSV/TSV columns such as
-`designation,constellation,RA,Dec,type` (coordinates are optional), or one
-designation per line in a `.txt` file. Run each audit with:
-
-```bash
-nightsky research observing-list-coverage \
-  --source astronomical-league \
-  --input local/research/nebula-lists/al_dark_nebula.csv \
-  --list-name "Astronomical League Dark Nebula Program" \
-  --json build/research/al_dark_coverage.json \
-  --csv build/research/al_dark_coverage.csv
-
-nightsky research observing-list-coverage \
-  --source astronomical-league \
-  --input local/research/nebula-lists/al_bright_nebula.csv \
-  --list-name "Astronomical League Bright Nebula Program" \
-  --json build/research/al_bright_coverage.json \
-  --csv build/research/al_bright_coverage.csv
-```
+The completed local coverage audits used CSV/TSV designation and optional
+coordinate/type fields. Their one-time research adapters and commands have
+since been retired; the resulting curation memberships remain active. Saved
+coverage reports are under `build/research/al_dark_coverage.*` and
+`build/research/al_bright_coverage.*`. See `CLI_CLEANUP_AUDIT.md`.
 
 Keep source files and per-entry reports local. External-list membership is
 validation evidence; it does not automatically select an object for Deep.

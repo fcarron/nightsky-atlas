@@ -265,7 +265,7 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
     details = standard.detail_charts
     assert len(chart_definitions(standard)) == 129
-    assert [detail.code for detail in pocket.detail_charts] == ["PD01", "PD02"]
+    assert [detail.code for detail in pocket.detail_charts] == ["PD01", "PD02", "PD03", "PD04"]
     assert [detail.code for detail in details] == [
         "SD01",
         "SD02",

@@ -331,17 +331,6 @@ def test_special_galaxies_not_blanket_excluded():
         assert name not in policy.excluded_designations
 
 
-def test_pocket_report_counts_forced_targets_like_scene_builder(monkeypatch):
-    from nightsky_atlas.catalog import pocket_selection
-
-    ordinary = source_object("NGC1981", "Cl+N", **{"V-Mag": "4.2", "MajAx": "9"})
-    forced = source_object("NGC2359", "HII", MajAx="10")
-    monkeypatch.setattr(pocket_selection, "load_dso_catalog", lambda path: [ordinary, forced])
-    report = pocket_selection.build_pocket_selection_report()
-    assert report["selected_pocket_physical_objects"] == 2
-    assert sum(row["selected"] for row in report["type_counts"].values()) == 2
-
-
 def test_conflicting_live_catalogue_designation_is_not_imported_as_exact_alias(tmp_path):
     from nightsky_atlas.catalog.openngc import iter_openngc_objects
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import nightsky_atlas.cli as cli
+import nightsky_atlas.cli_data as cli_data
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
 
 
@@ -80,7 +81,7 @@ def test_selection_report_cli_exports_stable_json(monkeypatch, tmp_path, capsys)
         },
         "objects": {},
     }
-    monkeypatch.setattr(cli, "build_selection_report", lambda **kwargs: report)
+    monkeypatch.setattr(cli_data, "build_selection_report", lambda **kwargs: report)
     parser = cli.build_parser()
     output_paths = [tmp_path / "first.json", tmp_path / "second.json"]
     for output_path in output_paths:

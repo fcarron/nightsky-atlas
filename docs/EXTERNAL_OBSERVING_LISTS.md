@@ -1,10 +1,11 @@
 # External observing-list coverage audits
 
-The `nightsky research observing-list-coverage` command compares a locally
-supplied observing list with the normalized DSO catalogue and the current
-Pocket, Standard, Deep and Reference selectors. It is a research audit only:
-external-list membership is evidence for review and never becomes an atlas
-selection rule automatically.
+This is the historical methodology for the completed local NSOG/AL coverage
+study. Its research commands and exclusive adapters were retired in the CLI
+cleanup (see `CLI_CLEANUP_AUDIT.md`). The sections below describe that snapshot,
+not a supported current command. Curated memberships and production catalogue
+matching remain available; use `data selection-report` and `atlas why-object`
+for current edition diagnostics.
 
 ## Keep source files local
 
@@ -41,34 +42,11 @@ Directories are searched recursively for `.csv`, `.tsv` and `.txt` files.
 When several files are provided, they are treated as one audit/list. Set
 `--list-name` to provide a useful aggregate name.
 
-## Run an audit
+## Archived reports
 
-```bash
-nightsky research observing-list-coverage \
-  --source astroplanner \
-  --input local/research/nsog/ \
-  --list-name "NSOG local AstroPlanner export" \
-  --json build/nsog-coverage.json \
-  --csv build/nsog-coverage.csv
-```
-
-For the normalized CSV format used by an AL list:
-
-```bash
-nightsky research observing-list-coverage \
-  --source astronomical-league \
-  --input /path/to/local-list.csv \
-  --list-name "Planetary Nebulae Program" \
-  --json build/al-pn-coverage.json
-```
-
-To compare reports by stable NightSkyAtlas physical-object ID:
-
-```bash
-nightsky research observing-list-compare \
-  build/nsog-coverage.json build/al-pn-coverage.json \
-  --minimum-lists 2 --json build/list-consensus.json
-```
+The study wrote local coverage JSON/CSV and physical-object consensus reports.
+Those saved artifacts describe their original catalogue and policy snapshot;
+keep proprietary source inputs and per-entry reports local.
 
 ## Matching and report metrics
 
@@ -119,16 +97,8 @@ reports as local research artifacts when they contain proprietary designations
 or membership. The optional comparison command computes union, intersection,
 per-object list membership and a thresholded consensus set.
 
-## Add a source adapter
-
-Implement a parser in `research/observing_lists/sources/` that yields
-`ExternalObservingListEntry` values. Keep only fields needed for identity,
-matching and local diagnostics. Register the parser in
-`research/observing_lists/coverage.py`; matching, production selector lookup,
-deduplication and reporting remain source-neutral. Use synthetic fixtures only.
-
 ## Local research status
 
-No local NSOG/AstroPlanner source file was present at implementation time. The
-tool can be run against a user-provided export with the command above; it does
-not download third-party lists.
+The adapters and their synthetic tests have been removed after the study.
+The original snapshot remains in Git at `3fe896a`; this does not grant rights
+to redistribute local third-party list inputs or derived membership reports.

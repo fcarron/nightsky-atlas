@@ -390,7 +390,8 @@ nightsky-atlas/
 ├── Makefile
 ├── ai.yaml                # AI review config
 ├── src/nightsky_atlas/
-│   ├── cli.py
+│   ├── cli.py             # dispatch, chart and atlas commands
+│   ├── cli_data.py        # catalogue command adapters
 │   ├── catalog/           # models, store, tycho, openngc, constellations
 │   ├── astronomy/         # angles, coordinates
 │   ├── projection/        # base, stereographic

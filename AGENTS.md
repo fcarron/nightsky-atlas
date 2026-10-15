@@ -417,7 +417,11 @@ object IDs. Design diagnostics early.
 
 ## 28. Command-line interface
 
-Keep the existing `argparse` CLI. Use `--help` to check current options.
+Keep the existing `argparse` CLI. `cli.py` owns dispatch and chart/atlas
+commands; `cli_data.py` registers catalogue import/inspection commands. Keep
+scientific logic in the existing domain modules. Specialized development
+utilities live in `tools/`, including `benchmark_ai_review.py`.
+Use `--help` to check current options.
 
 ```bash
 nightsky data star-count --help
@@ -426,7 +430,7 @@ nightsky chart render --chart test-virgo --edition standard
 nightsky atlas coverage --edition standard
 nightsky atlas build --edition standard
 nightsky atlas validate --edition standard --publication
-nightsky benchmark ai-review --help
+.venv/bin/python tools/benchmark_ai_review.py --help
 ```
 
 `chart render|validate|review` and `atlas build` accept `--overrides PATH`

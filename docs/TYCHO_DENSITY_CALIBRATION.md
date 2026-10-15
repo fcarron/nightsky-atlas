@@ -1,11 +1,9 @@
 # Tycho-2 magnitude and paper-density calibration
 
-This is a measurement of the production normalized star store, not a theoretical
-star-count model. Regenerate the underlying tables with:
-
-```bash
-nightsky data tycho-density-report --json build/tycho-density.json --csv build/tycho-density.csv
-```
+These historical measurements use the production normalized star store, not a
+theoretical star-count model. The one-time density-report command was retired
+in the CLI cleanup; the recorded calibration results and production magnitude
+conversion remain unchanged. See `CLI_CLEANUP_AUDIT.md`.
 
 The report filters `catalogue='TYC2'` from `data/processed/stars/tycho2.sqlite`.
 That is 2,539,913 Tycho-2 rows, separate from the 1,319 Hipparcos bright-star

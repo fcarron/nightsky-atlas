@@ -83,14 +83,10 @@ terms rather than a blanket project licence. See `docs/DATA_SOURCES.md` and
   without imported magnitude/size. The selection membership takes unflagged
   Abell rows plus the independently confirmed Abell 21 exception; possible or
   misclassified rows are not added wholesale.
-- A source-neutral external observing-list audit is available under
-  `nightsky research observing-list-coverage`. It reads local AstroPlanner
-  CSV/TSV/text exports and normalized Astronomical League CSV/TSV/text, then
-  reports designation matches, physical-target deduplication, production
-  selection by edition, provenance families and unresolved review cases.
-  NSOG/AL list content remains user-supplied and gitignored; this is a validation
-  tool, not a production inclusion source. See
-  `docs/EXTERNAL_OBSERVING_LISTS.md`.
+- The local external observing-list investigation is complete; its one-time
+  NSOG/AL adapters and CLI commands were retired during CLI cleanup. Historical
+  methodology is in `docs/EXTERNAL_OBSERVING_LISTS.md`; current curation and
+  edition diagnostics use `data selection-report` and `atlas why-object`.
 - Deep's first NightSkyAtlas-owned visual-nebula curation is active: 45 dark
   target entries (47 object IDs, including selected LDN targets) and 42 bright
   nebula/SNR IDs. Dark targets render as position markers only; ambiguous LDN
@@ -410,10 +406,11 @@ implemented scale, symbols, grid and selection behavior.
 
 ## CLI
 
-`data fetch-stars|import-stars|fetch-hipparcos|fetch-openngc|import-openngc|fetch-wds|import-wds`,
 `chart render|validate|review|magnitude-scale`,
-`atlas tile|coverage|report|build`,
-`benchmark ai-review`.
+`atlas build|validate|tile|coverage|report|why-object`, and `data` catalogue
+fetch/import and inspection commands. Use `data --help` for the complete list.
+The optional AI benchmark runs via `.venv/bin/python tools/benchmark_ai_review.py`.
+CLI cleanup decisions and before/after checks: `docs/CLI_CLEANUP_AUDIT.md`.
 
 `chart render|validate|review` and `atlas build` accept `--overrides PATH`
 (a single override file or a directory of them), `--constellations DIR`

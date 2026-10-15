@@ -528,7 +528,7 @@ The importer is explicit and offline after acquisition:
 nightsky data fetch-vizier-dsos [--catalogues ...]
 nightsky data import-vizier-dsos
 nightsky data dso-info 'NGC 7000'
-nightsky atlas catalog-object 'HCG 92' --edition reference
+nightsky atlas why-object 'HCG 92' --edition reference
 nightsky data selection-report --json build/selection-report.json
 nightsky atlas why-object 'NGC 891'
 ```

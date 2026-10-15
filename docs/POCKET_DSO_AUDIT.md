@@ -143,16 +143,14 @@ Reproduce imports and the normal selection report:
 ```sh
 .venv/bin/python -m nightsky_atlas data import-openngc
 .venv/bin/python -m nightsky_atlas data import-vizier-dsos
-.venv/bin/python -m nightsky_atlas data pocket-selection-report --json build/research/pocket-dso-audit/current-summary.json
+.venv/bin/python -m nightsky_atlas data selection-report --json build/research/pocket-dso-audit/current-selection.json
 ```
 
 Local audit artifacts in `build/research/pocket-dso-audit/` contain the saved
 baseline, full before/after JSON, selected-object CSV, edition deltas and check
-logs. The saved-baseline comparison can be rerun with:
-
-```sh
-.venv/bin/python build/research/pocket-dso-audit/run_audit.py
-```
+logs. The old Pocket-only report and its local audit runner belong to this
+historical snapshot; the supported command above reports current selection
+across all editions and uses a different JSON schema.
 
 Importer corrections are shared factual metadata. No Standard/Deep/Reference
 selection rules are edited. Reimporting can nevertheless change their selected

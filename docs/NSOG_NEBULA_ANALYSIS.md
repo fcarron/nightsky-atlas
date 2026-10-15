@@ -1,9 +1,10 @@
 # Local NSOG nebula analysis
 
-`nightsky research nsog-nebula-analysis` compares the locally supplied
-AstroPlanner NSOG plans with NightSkyAtlas's normalized DSO pool and the
-production edition-selection diagnostics. It is a research report; NSOG
-membership is not a production selection rule.
+This records the completed comparison of local AstroPlanner NSOG plans with
+the normalized catalogue and edition-selection diagnostics. The one-time
+research generator was retired in the CLI cleanup; these results and curation
+conclusions remain historical evidence. NSOG membership is not a production
+selection rule. See `CLI_CLEANUP_AUDIT.md`.
 
 ## Local inputs and outputs
 
@@ -14,15 +15,9 @@ filename, and the numeric rating only when the plan declares an `NSOG Rating`
 column. Descriptions, notes, ratings from unrelated numeric columns, and other
 plan text are not written to the report.
 
-Run the analysis against one or more local files/directories:
-
-```bash
-nightsky research nsog-nebula-analysis \
-  --input local/research/nsog \
-  --markdown build/research/nsog_nebula_analysis.md \
-  --json build/research/nsog_nebula_analysis.json \
-  --csv build/research/nsog_nebula_targets.csv
-```
+The generated local artifacts were `build/research/nsog_nebula_analysis.md`,
+`build/research/nsog_nebula_analysis.json` and
+`build/research/nsog_nebula_targets.csv`.
 
 The Markdown report includes aggregate results and review queues. JSON and CSV
 include per-target designations, rating aggregates, source identities and

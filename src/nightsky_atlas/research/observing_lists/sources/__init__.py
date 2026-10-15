@@ -1,1 +1,0 @@
-"""Source-specific, sanitized adapters."""

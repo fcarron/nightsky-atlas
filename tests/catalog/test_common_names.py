@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import nightsky_atlas.cli as cli
+import nightsky_atlas.cli_data as cli_data
 from nightsky_atlas.atlas.config import EditionConfig, load_style_config
 from nightsky_atlas.atlas.index import build_atlas_index
 from nightsky_atlas.catalog.common_names import curated_common_name, load_curated_common_names
@@ -98,7 +99,7 @@ def test_duplicate_name_or_missing_provenance_is_rejected(tmp_path: Path) -> Non
         load_curated_common_names(path)
 
 
-def test_why_object_and_catalog_object_accept_curated_name(monkeypatch, capsys) -> None:
+def test_why_object_and_dso_info_accept_curated_name(monkeypatch, capsys) -> None:
     orion = _dso("NGC1976", "M42")
     monkeypatch.setattr(cli, "load_dso_catalog", lambda path: [orion])
     parser = cli.build_parser()
@@ -108,7 +109,8 @@ def test_why_object_and_catalog_object_accept_curated_name(monkeypatch, capsys) 
     assert payload["canonical_designation"] == "NGC1976"
     assert payload["display_designation"] == "M42"
     assert payload["curated_common_name"] == "Orion Nebula"
-    info = parser.parse_args(["atlas", "catalog-object", "Orion Nebula"])
+    monkeypatch.setattr(cli_data, "load_dso_catalog", lambda path: [orion])
+    info = parser.parse_args(["data", "dso-info", "Orion Nebula"])
     assert info.handler(info) == 0
     result = json.loads(capsys.readouterr().out)
     assert result[0]["curated_common_name"] == "Orion Nebula"
