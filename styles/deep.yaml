@@ -50,3 +50,10 @@ milky_way:
   levels: [1, 3, 5]
   line_width_mm: 0.085
   level_gray: {1: 0.85, 2: 0.84, 3: 0.83, 4: 0.82, 5: 0.82}
+
+magellanic_clouds:
+  enabled: true
+  levels: [1, 2, 3]
+  line_width_mm: 0.10
+  level_gray: {1: 0.75, 2: 0.67, 3: 0.59}
+  level_fill_gray: {1: 0.98, 2: 0.95, 3: 0.92}

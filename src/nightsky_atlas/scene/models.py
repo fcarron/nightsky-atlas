@@ -21,6 +21,7 @@ __all__ = [
     "ChartScene",
     "SceneConstellationRegion",
     "SceneDso",
+    "SceneMagellanicPolygon",
     "SceneOutline",
     "SceneMilkyWayContour",
     "SceneMilkyWayPolygon",
@@ -144,6 +145,26 @@ class SceneMilkyWayPolygon:
 
 
 @dataclass(frozen=True, slots=True)
+class SceneMagellanicPolygon:
+    """Projected, chart-clipped fill and source contour for one cloud level."""
+
+    contour_id: str
+    cloud_id: str
+    dso_id: str
+    level: int
+    contour_points: tuple[ChartPoint, ...]
+    fill_points: tuple[ChartPoint, ...]
+
+    def __post_init__(self) -> None:
+        if not self.contour_id.strip() or not self.cloud_id.strip() or not self.dso_id.strip():
+            raise ValueError("Magellanic polygon identifiers must not be blank")
+        if self.level not in (1, 2, 3):
+            raise ValueError("Magellanic polygon level must be between 1 and 3")
+        if len(self.contour_points) < 3 or len(self.fill_points) < 3:
+            raise ValueError("a scene Magellanic polygon needs an outline and clipped fill")
+
+
+@dataclass(frozen=True, slots=True)
 class SceneConstellationRegion:
     """Projected visible part of one constellation footprint on a chart."""
 
@@ -176,6 +197,7 @@ class ChartScene:
     nebula_outlines: tuple[SceneOutline, ...] = ()
     milky_way_contours: tuple[SceneMilkyWayContour, ...] = ()
     milky_way_polygons: tuple[SceneMilkyWayPolygon, ...] = ()
+    magellanic_polygons: tuple[SceneMagellanicPolygon, ...] = ()
     milky_way_fill_available: bool = False
 
     @property

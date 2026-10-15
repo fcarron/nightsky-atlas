@@ -12,6 +12,7 @@ from dataclasses import replace
 
 from nightsky_atlas.catalog.constellations import ConstellationPolygon, ConstellationSegment
 from nightsky_atlas.catalog.faint_stars import FaintStar
+from nightsky_atlas.catalog.magellanic_clouds import MagellanicContour
 from nightsky_atlas.catalog.milky_way import MilkyWayContour
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.observing_lists import canonical_designation
@@ -25,6 +26,7 @@ from nightsky_atlas.scene.models import (
     ChartScene,
     SceneConstellationRegion,
     SceneDso,
+    SceneMagellanicPolygon,
     SceneMilkyWayContour,
     SceneMilkyWayPolygon,
     SceneOutline,
@@ -69,6 +71,7 @@ def build_scene(
     constellation_polygons: Iterable[ConstellationPolygon] = (),
     nebula_outlines: Iterable[NebulaOutline] = (),
     milky_way_contours: Iterable[MilkyWayContour] = (),
+    magellanic_contours: Iterable[MagellanicContour] = (),
     milky_way_levels: Iterable[int] = (),
     milky_way_fill_enabled: bool = False,
     star_systems: Iterable[StarSystem] = (),
@@ -96,6 +99,7 @@ def build_scene(
     """
     projector = projection if projection is not None else default_projection(definition)
     milky_way_sources = tuple(milky_way_contours)
+    magellanic_sources = tuple(magellanic_contours)
 
     scene_stars: list[SceneStar] = []
     for star in stars:
@@ -162,13 +166,20 @@ def build_scene(
         else ()
     )
     outlined_ids = {outline.dso_id for outline in projected_outlines}
+    projected_magellanic = _project_magellanic_contours(
+        magellanic_sources, projector, definition
+    )
+    magellanic_ids = {contour.dso_id for contour in projected_magellanic}
     scene_dsos = [
         replace(
             scene_dso,
             symbol_visible=not (
-                scene_dso.dso.id in outlined_ids
-                and scene_dso.dso.object_type
-                in (DsoType.BRIGHT_NEBULA, DsoType.SUPERNOVA_REMNANT, DsoType.DARK_NEBULA)
+                (
+                    scene_dso.dso.id in outlined_ids
+                    and scene_dso.dso.object_type
+                    in (DsoType.BRIGHT_NEBULA, DsoType.SUPERNOVA_REMNANT, DsoType.DARK_NEBULA)
+                )
+                or scene_dso.dso.id in magellanic_ids
             ),
         )
         for scene_dso in scene_dsos
@@ -191,9 +202,74 @@ def build_scene(
         nebula_outlines=projected_outlines,
         milky_way_contours=projected_milky_way,
         milky_way_polygons=projected_milky_way_polygons,
+        magellanic_polygons=projected_magellanic,
         milky_way_fill_available=milky_way_fill_enabled
         and any(contour.level == 1 for contour in milky_way_sources),
     )
+
+
+def _project_magellanic_contours(
+    sources: tuple[MagellanicContour, ...],
+    projector: StereographicProjection,
+    definition: ChartDefinition,
+) -> tuple[SceneMagellanicPolygon, ...]:
+    half_width = definition.width_deg / 2.0
+    half_height = definition.height_deg / 2.0
+    projected_contours: list[SceneMagellanicPolygon] = []
+    for source in sources:
+        vertices = source.points[:-1]
+        projected: list[tuple[float, float]] = []
+        for index, (ra1, dec1) in enumerate(vertices):
+            ra2, dec2 = vertices[(index + 1) % len(vertices)]
+            for ra_deg, dec_deg in _densify(ra1, dec1, ra2, dec2)[:-1]:
+                try:
+                    point = projector.project(ra_deg % 360.0, dec_deg)
+                except ProjectionError:
+                    projected = []
+                    break
+                projected.append((point.xi_deg, point.eta_deg))
+            if not projected:
+                break
+        if len(projected) < 3:
+            continue
+        clipped = _clip_polygon(projected, -half_width, half_width, -half_height, half_height)
+        if not clipped and _point_in_polygon((0.0, 0.0), projected):
+            clipped = [
+                (-half_width, -half_height),
+                (half_width, -half_height),
+                (half_width, half_height),
+                (-half_width, half_height),
+            ]
+        if abs(_polygon_area(clipped)) <= 1e-12:
+            continue
+        projected_contours.append(
+            SceneMagellanicPolygon(
+                contour_id=source.id,
+                cloud_id=source.cloud_id,
+                dso_id=source.dso_id,
+                level=source.level,
+                contour_points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in projected),
+                fill_points=tuple(ChartPoint(xi_deg=x, eta_deg=y) for x, y in clipped),
+            )
+        )
+    return tuple(projected_contours)
+
+
+def _point_in_polygon(
+    point: tuple[float, float], polygon: list[tuple[float, float]]
+) -> bool:
+    x, y = point
+    inside = False
+    previous = polygon[-1]
+    for current in polygon:
+        x1, y1 = previous
+        x2, y2 = current
+        if (y1 > y) != (y2 > y):
+            crossing_x = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+            if x < crossing_x:
+                inside = not inside
+        previous = current
+    return inside
 
 
 def _densify(

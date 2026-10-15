@@ -274,6 +274,13 @@ milky_way:
   line_width_mm: 0.09
   level_gray: {1: 0.84, 2: 0.83, 3: 0.82, 4: 0.80, 5: 0.78}
 
+magellanic_clouds:
+  enabled: true
+  levels: [1, 2, 3]
+  line_width_mm: 0.10
+  level_gray: {1: 0.72, 2: 0.64, 3: 0.56}
+  level_fill_gray: {1: 0.97, 2: 0.94, 3: 0.91}
+
 furniture:
   title_font_size_pt: 8.5
   title_gray: 0.15

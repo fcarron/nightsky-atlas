@@ -111,6 +111,54 @@ source requires:
 4. duplicate/cross-ID strategy;
 5. explicit visual-observing value.
 
+### Magellanic Cloud density contours
+
+The LMC and SMC chart overlays combine the Gaia DR3 density-map HiPS product
+`CDS/P/DM/I/355/gaiadr3` and G-band flux product
+`CDS/P/DM/flux-G/I/355/gaiadr3`, both sourced from Gaia table I/355. Both CDS
+HiPS product records declare **ODbL-1.0**, credit CNRS/Université de Strasbourg,
+and identify ESA/Gaia/DPAC as the underlying data source. See the [density
+product record](https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDM%2FI%2F355%2Fgaiadr3&fmt=html&get=record)
+and [G-flux product record](https://alasky.cds.unistra.fr/MocServer/query?ID=CDS%2FP%2FDM%2Fflux-G%2FI%2F355%2Fgaiadr3&fmt=html&get=record).
+The flux product reports units of `count.s-1.sr-1`; it is used as a filtered
+stellar-brightness proxy, not as a complete optical image or nebular emission
+map. Source cutouts and detailed processing are documented in
+`data/third_party/gaia_dr3_magellanic/SOURCE.md`.
+
+Four local TAN/ICRS FITS cutouts and their derivative GeoJSON are kept in
+`data/third_party/gaia_dr3_magellanic/`: 500×500 pixels each, with LMC centered
+at (80.9°, −69.75°), 20° field, and SMC at (13.2°, −72.8°), 12° field. Their
+SHA-256 values are in `SOURCE.md`. The generator applies `log1p`, a 0.30° local
+median filter, 5-pixel Gaussian smoothing, robust local background subtraction,
+then extracts source-specific central contours at configured fractions of the
+central excess. LMC uses density 25%, density 50% and G flux 55%; SMC retains
+the density-only 25%, 45% and 65% contours. Contour geometries are extracted
+independently; nesting is not imposed. One-pixel simplification is used before
+converting the FITS pixel boundary through TAN WCS to ICRS.
+
+The Gaia density map gives a stable broad envelope and irregular body; filtered
+G flux traces the asymmetric bright LMC bar better than another density
+threshold. For the SMC, G flux did not provide a convincing improvement to the
+central morphology; a lower flux threshold produced a side lobe and was rejected.
+The SMC therefore retains its density-only contours. Both products remain
+stellar-population proxies, not direct visual surface-brightness or gas
+boundaries.
+
+In the SMC cutout, Gaia density around the separate foreground globular cluster
+NGC 104 (47 Tucanae) otherwise connected it to the SMC's outer low-density
+contour. The generator blends that compact region toward its local smoothed
+log-density field before contour extraction; the normal NGC 104 DSO symbol and
+label remain visible. The center and taper radii are recorded in the GeoJSON
+processing metadata and `SOURCE.md`.
+
+The derived GeoJSON is redistributed under the source product's ODbL-1.0
+conditions, with the Gaia/DPAC and CDS attribution retained in its metadata and
+build credits. Any redistribution of the derived database must preserve the
+ODbL notice and attribution and comply with its share-alike requirements. The
+project's MIT software license does not replace those data terms. Review
+`data/third_party/gaia_dr3_magellanic/SOURCE.md` before redistributing the
+cutouts or derivative.
+
 ### Unified Cluster Catalogue (UCC)
 
 The optional UCC importer is pinned to release **260615** (published

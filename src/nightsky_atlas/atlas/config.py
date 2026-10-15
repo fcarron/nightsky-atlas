@@ -1187,6 +1187,54 @@ class MilkyWayStyle(_StrictModel):
         return self
 
 
+class MagellanicCloudStyle(_StrictModel):
+    """Filled Gaia-density contours used for the LMC and SMC."""
+
+    enabled: bool = True
+    levels: tuple[Literal[1, 2, 3], ...] = (1, 2, 3)
+    line_width_mm: PositiveFloat = 0.10
+    level_gray: dict[int, float] = Field(default_factory=lambda: {1: 0.84, 2: 0.78, 3: 0.72})
+    level_fill_gray: dict[int, float] = Field(default_factory=lambda: {1: 0.97, 2: 0.94, 3: 0.91})
+    level_color: dict[int, str] = Field(
+        default_factory=lambda: {1: "#F3F1EE", 2: "#EBE7E1", 3: "#E0DAD2"}
+    )
+
+    @field_validator("levels")
+    @classmethod
+    def _levels_are_unique_and_ordered(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+        if value != tuple(sorted(set(value))):
+            raise ValueError("Magellanic Cloud levels must be unique and sorted ascending")
+        return value
+
+    @field_validator("level_gray", "level_fill_gray")
+    @classmethod
+    def _gray_values_are_valid(cls, value: dict[int, float]) -> dict[int, float]:
+        if any(level not in (1, 2, 3) for level in value):
+            raise ValueError("Magellanic Cloud gray keys must be levels 1 through 3")
+        if any(not math.isfinite(gray) or not 0.0 <= gray <= 1.0 for gray in value.values()):
+            raise ValueError("Magellanic Cloud gray values must be within [0, 1]")
+        return value
+
+    @field_validator("level_color")
+    @classmethod
+    def _colors_are_valid(cls, value: dict[int, str]) -> dict[int, str]:
+        if any(level not in (1, 2, 3) for level in value):
+            raise ValueError("Magellanic Cloud color keys must be levels 1 through 3")
+        if any(not re.fullmatch(r"#[0-9A-Fa-f]{6}", color) for color in value.values()):
+            raise ValueError("Magellanic Cloud colors must be six-digit hex colors")
+        return value
+
+    @model_validator(mode="after")
+    def _enabled_levels_have_styles(self) -> MagellanicCloudStyle:
+        if self.enabled and (
+            not set(self.levels).issubset(self.level_gray)
+            or not set(self.levels).issubset(self.level_fill_gray)
+            or not set(self.levels).issubset(self.level_color)
+        ):
+            raise ValueError("each enabled Magellanic Cloud level needs fill and outline styles")
+        return self
+
+
 class ColorDSOPalette(_StrictModel):
     galaxies: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     clusters: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
@@ -1438,6 +1486,7 @@ class StyleConfig(_StrictModel):
     grid: GridStyle = Field(default_factory=GridStyle)
     ecliptic: EclipticStyle = Field(default_factory=EclipticStyle)
     milky_way: MilkyWayStyle = Field(default_factory=MilkyWayStyle)
+    magellanic_clouds: MagellanicCloudStyle = Field(default_factory=MagellanicCloudStyle)
     color_atlas: ColorAtlasStyle | None = None
     constellation: ConstellationStyle = Field(default_factory=ConstellationStyle)
     furniture: FurnitureStyle = Field(default_factory=FurnitureStyle)

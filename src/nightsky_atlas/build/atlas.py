@@ -64,6 +64,7 @@ from nightsky_atlas.build.preflight import (
     validate_publication_inputs,
 )
 from nightsky_atlas.build.progress import Progress, null_progress
+from nightsky_atlas.catalog.magellanic_clouds import DEFAULT_DATA_PATH as MAGELLANIC_CLOUD_DATA_PATH
 from nightsky_atlas.catalog.manifest import file_sha256
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.observing_lists import (
@@ -1275,6 +1276,7 @@ def _credits_columns(
     boundary_sources = set(geometry_catalogues.get("constellation_boundaries", ()))
     outline_sources = set(geometry_catalogues.get("outlines", ()))
     milky_way_sources = set(geometry_catalogues.get("milky_way", ()))
+    magellanic_sources = set(geometry_catalogues.get("magellanic_clouds", ()))
     cartography: list[str] = []
     if "Stellarium Western (Sky & Telescope)" in line_sources:
         cartography.append(
@@ -1295,6 +1297,11 @@ def _credits_columns(
         cartography.append("Schematic nebula outlines — NightSky Atlas")
     if milky_way_sources:
         cartography.append("Milky Way contours — José R. Vieira, via d3-celestial")
+    if magellanic_sources:
+        cartography.append(
+            "Magellanic Cloud contours — Gaia DR3 density map, CDS HiPS; "
+            "ESA/Gaia/DPAC and CDS/CNRS, ODbL-1.0"
+        )
     if cartography:
         right.append(("Constellations & cartography", tuple(cartography)))
 
@@ -1466,6 +1473,9 @@ def _build_atlas_impl(
             None if star_names_dir is False else str(star_names_dir or STAR_NAMES_FIXTURE_DIR)
         ),
         "milky_way": ("data/third_party/d3-celestial/mw.json" if style.milky_way.enabled else None),
+        "magellanic_clouds": (
+            str(MAGELLANIC_CLOUD_DATA_PATH) if style.magellanic_clouds.enabled else None
+        ),
     }
     input_paths = {
         "atlas_config": atlas_path,
@@ -1480,6 +1490,7 @@ def _build_atlas_impl(
         ),
         "star_names": geometry_inputs["star_names"],
         "milky_way": geometry_inputs["milky_way"],
+        "magellanic_clouds": geometry_inputs["magellanic_clouds"],
         "faint_star_store": faint_star_store,
         "observing_lists": (
             None
@@ -1506,6 +1517,11 @@ def _build_atlas_impl(
         ),
         "outlines": sorted({item.provenance.catalogue for item in inputs.outlines}),
         "milky_way": ["d3-celestial"] if inputs.milky_way_contours else [],
+        "magellanic_clouds": (
+            ["Gaia DR3 density map via CDS HiPS (ODbL-1.0)"]
+            if inputs.magellanic_contours
+            else []
+        ),
     }
     if publication:
         validate_publication_inputs(

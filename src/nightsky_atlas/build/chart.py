@@ -38,6 +38,10 @@ from nightsky_atlas.catalog.constellations import (
 )
 from nightsky_atlas.catalog.dso_store import load_dso_catalog
 from nightsky_atlas.catalog.faint_stars import FaintStarStore
+from nightsky_atlas.catalog.magellanic_clouds import (
+    MagellanicContour,
+    load_magellanic_contours,
+)
 from nightsky_atlas.catalog.milky_way import MilkyWayContour, load_milky_way_contours
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
 from nightsky_atlas.catalog.observing_lists import (
@@ -184,6 +188,7 @@ class ChartInputs:
     constellations: ConstellationCatalogue
     outlines: tuple[NebulaOutline, ...]
     milky_way_contours: tuple[MilkyWayContour, ...]
+    magellanic_contours: tuple[MagellanicContour, ...]
     observing_lists: dict[str, ObservingList]
     selection_policy: SelectionPolicy
 
@@ -237,6 +242,9 @@ def load_chart_inputs(
             if style.milky_way.enabled
             else ()
         )
+        magellanic_contours = (
+            load_magellanic_contours() if style.magellanic_clouds.enabled else ()
+        )
     with progress.step("observing-list load", detail=True):
         observing_lists = (
             {}
@@ -259,6 +267,7 @@ def load_chart_inputs(
         constellations=constellations,
         outlines=outlines,
         milky_way_contours=milky_way_contours,
+        magellanic_contours=magellanic_contours,
         observing_lists=observing_lists,
         selection_policy=selection_policy,
     )
@@ -419,6 +428,9 @@ def build_chart_context(
             constellation_polygons=constellations.polygons,
             nebula_outlines=outlines,
             milky_way_contours=inputs.milky_way_contours,
+            magellanic_contours=(
+                inputs.magellanic_contours if style.magellanic_clouds.enabled else ()
+            ),
             milky_way_levels=style.milky_way.levels if style.milky_way.enabled else (),
             milky_way_fill_enabled=style.color_atlas is not None,
             star_systems=matched_systems,

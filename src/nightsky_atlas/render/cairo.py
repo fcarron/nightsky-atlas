@@ -31,6 +31,7 @@ from nightsky_atlas.layout.geometry import expand_rect
 from nightsky_atlas.layout.leader_lines import resolve_leader_lines
 from nightsky_atlas.layout.models import Label
 from nightsky_atlas.layout.text_geometry import candidate_ink_bounds
+from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.render.detail_markers import DetailMapMarker, draw_detail_markers
 from nightsky_atlas.render.double_stars import (
@@ -172,6 +173,7 @@ def draw_chart_page(
         color=style.color_atlas.background if style.color_atlas else None,
     )
     _draw_milky_way_contours(cr, transform, scene, style)
+    _draw_magellanic_clouds(cr, transform, scene, style)
     _draw_nebula_outline_fills(cr, transform, scene, style)
     grid_lines = _draw_grid(cr, transform, scene.definition, style)
     draw_detail_markers(
@@ -1628,6 +1630,59 @@ def _draw_nebula_outline_fills(
         cr.set_source_rgba(*_hex_rgb(color), 0.24)
         cr.fill()
     cr.restore()
+
+
+def _draw_magellanic_clouds(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    scene: ChartScene,
+    style: StyleConfig,
+) -> None:
+    magellanic = style.magellanic_clouds
+    if not magellanic.enabled or not scene.magellanic_polygons:
+        return
+    rect = transform.chart_rect
+    cr.save()
+    cr.rectangle(
+        mm_to_pt(rect.left_mm),
+        mm_to_pt(rect.top_mm),
+        mm_to_pt(rect.width_mm),
+        mm_to_pt(rect.height_mm),
+    )
+    cr.clip()
+    for level in magellanic.levels:
+        if style.color_atlas is None:
+            gray = magellanic.level_fill_gray[level]
+            cr.set_source_rgb(gray, gray, gray)
+        else:
+            cr.set_source_rgb(*_hex_rgb(magellanic.level_color[level]))
+        for polygon in scene.magellanic_polygons:
+            if polygon.level != level:
+                continue
+            _append_closed_polygon(cr, transform, polygon.fill_points)
+            cr.fill()
+    cr.set_line_width(mm_to_pt(magellanic.line_width_mm))
+    cr.set_line_join(cairo.LINE_JOIN_ROUND)
+    for polygon in scene.magellanic_polygons:
+        gray = magellanic.level_gray[polygon.level]
+        cr.set_source_rgb(gray, gray, gray)
+        _append_closed_polygon(cr, transform, polygon.contour_points)
+        cr.stroke()
+    cr.restore()
+
+
+def _append_closed_polygon(
+    cr: cairo.Context[cairo.Surface],
+    transform: PageTransform,
+    points: tuple[ChartPoint, ...],
+) -> None:
+    for index, chart_point in enumerate(points):
+        point = transform.to_page(chart_point)
+        if index == 0:
+            cr.move_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+        else:
+            cr.line_to(mm_to_pt(point.x_mm), mm_to_pt(point.y_mm))
+    cr.close_path()
 
 
 def _draw_milky_way_contours(
