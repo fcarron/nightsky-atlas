@@ -13,6 +13,7 @@ from nightsky_atlas.catalog.galaxy_visibility import estimate_galaxy_visibility
 from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.catalog.observing_lists import (
     build_membership_index,
+    canonical_designation,
     load_observing_lists,
 )
 from nightsky_atlas.catalog.selection import select_dso
@@ -107,9 +108,9 @@ def test_production_selection_hierarchy_and_type_counts(production_state) -> Non
     assert report["edition_totals"] == {
         "pocket": 1133,
         "standard": 3093,
-        "deep": 10483,
-        "eyepiece": 10483,
-        "reference": 14866,
+        "deep": 11904,
+        "eyepiece": 11904,
+        "reference": 15561,
     }
     assert not {
         warning["code"]
@@ -139,6 +140,22 @@ def test_standard_visual_targets_are_added_to_standard_and_deep_only(production_
         assert standard.forced, designation
         assert deep.visible or deep.forced, designation
         assert not (pocket.visible or pocket.forced), designation
+
+
+def test_deepskylog_observed_targets_are_added_to_deep_only(production_state) -> None:
+    objects, index, policies = production_state
+    curated = load_observing_lists()["deepskylog_deep_observed_v1"]
+    by_id = {canonical_designation(obj.id): obj for obj in objects}
+    assert len(curated.objects) == 1421
+    assert len(curated.objects) == len(set(curated.objects))
+    for object_id in curated.objects:
+        obj = by_id[object_id]
+        deep = select_dso(obj, index=index, policy=policies["deep"])
+        standard = select_dso(obj, index=index, policy=policies["standard"])
+        pocket = select_dso(obj, index=index, policy=policies["pocket"])
+        assert deep.forced, object_id
+        assert not (standard.visible or standard.forced), object_id
+        assert not (pocket.visible or pocket.forced), object_id
 
 
 def test_rc3_only_galaxies_are_ingested_but_not_enabled(production_state) -> None:
@@ -298,9 +315,9 @@ def test_production_selection_matches_alpha_and_reference_counts(production_stat
     report = build_selection_report()
     assert report["edition_totals"]["pocket"] == 1133
     assert report["edition_totals"]["standard"] == 3093
-    assert report["edition_totals"]["deep"] == 10483
-    assert report["edition_totals"]["eyepiece"] == 10483
-    assert report["edition_totals"]["reference"] == 14866
+    assert report["edition_totals"]["deep"] == 11904
+    assert report["edition_totals"]["eyepiece"] == 11904
+    assert report["edition_totals"]["reference"] == 15561
 
 
 def test_re_reviewed_pocket_candidates_are_curated_and_inherited() -> None:
@@ -350,8 +367,8 @@ def test_open_cluster_alpha_selection_and_double_cluster_aggregate(production_st
     assert simulated_counts == {
         "pocket": 290,
         "standard": 360,
-        "deep": 815,
-        "eyepiece": 815,
+        "deep": 1075,
+        "eyepiece": 1075,
     }
     selected = {
         edition: {

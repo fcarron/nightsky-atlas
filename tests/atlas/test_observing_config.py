@@ -43,6 +43,9 @@ def test_deep_inherits_standard() -> None:
     config = load_observing_lists_config(SHIPPED)
     policy = resolve_edition(config, "deep")
     assert {"herschel400", "herschel2", "planetary_nebula_al"} <= policy.forced_lists
+    assert "deepskylog_deep_observed_v1" in policy.forced_lists
+    assert "deepskylog_deep_observed_v1" not in resolve_edition(config, "standard").forced_lists
+    assert "deepskylog_deep_observed_v1" not in resolve_edition(config, "pocket").forced_lists
     weights = dict(policy.list_weights)
     assert weights["messier"] == 60
     assert weights["hickson"] == 20
