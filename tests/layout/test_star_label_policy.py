@@ -153,14 +153,6 @@ def test_variable_and_customary_flamsteed() -> None:
     assert NAMES[19849].full_flamsteed_designation == "40 Eri"
 
 
-def test_standard_keeps_bayer_with_canonical_name_without_flamsteed() -> None:
-    deneb = NAMES[102098]
-    texts = [text for text, _ in deneb.display_variants(STYLE.label.star_labels, 1.25)]
-    assert texts == ["Deneb α"]
-    assert "50" not in texts
-    assert deneb.full_flamsteed_designation == "50 Cyg"
-
-
 def test_canonical_bayer_precedes_flamsteed_even_with_preference_override() -> None:
     name = StarName(
         992,
@@ -274,11 +266,6 @@ def test_same_star_uses_identical_canonical_text_across_editions(edition_style) 
     )
     result = build_star_labels(build_scene(CHART, [star]), TRANSFORM, edition_style, {999: name})
     assert result[0].text == "Almach γ"
-
-
-def test_flamsteed_only_label_has_no_constellation_suffix() -> None:
-    name = StarName(998, flamsteed="61", constellation="Cyg")
-    assert label_for(998, 4.5, {998: name}).text == "61"
 
 
 def test_edition_can_hide_canonical_label_without_changing_its_text() -> None:

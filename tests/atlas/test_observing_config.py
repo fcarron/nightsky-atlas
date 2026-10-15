@@ -82,7 +82,6 @@ def test_reference_policy_inherits_deep_catalogue_expansion() -> None:
     config = load_observing_lists_config(SHIPPED)
     policy = resolve_edition(config, "reference")
     assert "VII/220A" in policy.included_catalogues
-    assert "VII/220A" in policy.included_catalogues
     assert dict(policy.catalogue_minimum_extent_arcmin)["VII/220A"] == 0
     assert policy.include_uncertain_catalogue_matches is True
     assert "VII/74A" in policy.included_catalogues

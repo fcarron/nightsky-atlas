@@ -82,6 +82,7 @@ def test_star_label_exclusions_are_configured_for_pocket_and_standard() -> None:
     ("edition", "chart_id"),
     (("pocket", "pocket-015"), ("standard", "standard-041")),
 )
+@pytest.mark.integration
 def test_pleiades_main_chart_excludes_two_names_but_keeps_star_symbols(
     edition: str, chart_id: str
 ) -> None:
@@ -150,6 +151,7 @@ def test_pocket_labels_named_stars_through_magnitude_5_5() -> None:
     assert style.label.star_labels.bayer.max_magnitude == pytest.approx(5.5)
 
 
+@pytest.mark.slow
 def test_pocket_symmetric_navigation_tiling() -> None:
     pocket = load_atlas_config(ROOT / "atlas" / "pocket.yaml")
     spec = TilingSpec.from_config(pocket.tiling)
@@ -426,6 +428,7 @@ def test_pocket_detail_scale_requires_matching_stellar_profile() -> None:
         AtlasConfig.model_validate(raw)
 
 
+@pytest.mark.integration
 def test_detail_overrides_inherit_style_and_control_pleiades_layers() -> None:
     atlas_path = ROOT / "atlas" / "pocket.yaml"
     style_path = ROOT / "styles" / "pocket.yaml"
@@ -517,6 +520,7 @@ def test_detail_profile_uses_shared_star_profile_with_experimental_style() -> No
     assert profile == ROOT / "styles" / "eyepiece.yaml"
 
 
+@pytest.mark.slow
 def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:
     standard = load_atlas_config(ROOT / "atlas" / "standard.yaml")
     spec = TilingSpec.from_config(standard.tiling)
@@ -552,6 +556,7 @@ def test_standard_tiling_has_eleven_aligned_symmetric_rings() -> None:
     assert neighbour_overlap_report(charts, step_deg=1.0).is_complete
 
 
+@pytest.mark.slow
 def test_deep_experimental_tiling_has_23_aligned_symmetric_rings() -> None:
     deep = load_atlas_config(ROOT / "atlas" / "deep.yaml")
     spec = TilingSpec.from_config(deep.tiling)
@@ -657,6 +662,7 @@ def test_detail_star_profiles_preserve_parent_dso_styling_and_limit() -> None:
         assert detail_style.label.dso_labels == standard_style.label.dso_labels
 
 
+@pytest.mark.integration
 def test_standard_detail_star_depth_does_not_change_dso_selection() -> None:
     atlas_path = ROOT / "atlas" / "standard.yaml"
     style_path = ROOT / "styles" / "standard.yaml"

@@ -32,22 +32,13 @@ def test_missing_file_raises(tmp_path: Path) -> None:
         load_ai_config(tmp_path / "missing.yaml")
 
 
-def test_unknown_key_fails(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("temperature", 0.5), ("reviewer_model", "   "), ("provider", "anthropic")],
+    ids=["unknown-key", "blank-model", "unknown-provider"],
+)
+def test_invalid_config_rejected(tmp_path: Path, key: str, value: object) -> None:
     data = valid_config()
-    data["temperature"] = 0.5
-    with pytest.raises(AIConfigError):
-        load_ai_config(write_config(tmp_path, data))
-
-
-def test_blank_model_fails(tmp_path: Path) -> None:
-    data = valid_config()
-    data["reviewer_model"] = "   "
-    with pytest.raises(AIConfigError):
-        load_ai_config(write_config(tmp_path, data))
-
-
-def test_unknown_provider_fails(tmp_path: Path) -> None:
-    data = valid_config()
-    data["provider"] = "anthropic"
+    data[key] = value
     with pytest.raises(AIConfigError):
         load_ai_config(write_config(tmp_path, data))

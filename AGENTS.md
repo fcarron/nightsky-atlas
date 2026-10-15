@@ -385,6 +385,10 @@ Rendering is not publishability.
 
 Deterministic geometry over coverage.
 
+Run focused tests under the matching `tests/<area>/` directory. `make test-fast`
+omits `slow` full-sky audits and `integration` local-catalogue checks;
+`make check` always includes both, including the `tests/build/` subtree.
+
 - **24.1 Unit** — coordinate conversion, projection, angular distance, clipping,
   magnitude-to-symbol mapping, ellipse orientation, candidates, collision, cost
   components, AI action validation, serialization round trips.

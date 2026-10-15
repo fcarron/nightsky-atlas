@@ -3,7 +3,7 @@ VENV := .venv
 BIN := $(VENV)/bin
 PY := $(BIN)/python
 
-.PHONY: setup test lint check clean
+.PHONY: setup test test-fast lint check clean
 
 setup: $(VENV)/bin/activate
 
@@ -15,6 +15,9 @@ $(VENV)/bin/activate: pyproject.toml
 
 test:
 	$(PY) -m pytest
+
+test-fast:
+	$(PY) -m pytest -m "not slow and not integration"
 
 lint:
 	$(PY) -m ruff check .

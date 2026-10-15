@@ -219,6 +219,7 @@ def test_classic_targets_selected_with_explicit_pocket_reason(name, code):
         assert inherited.visible or inherited.forced
 
 
+@pytest.mark.integration
 def test_pocket_candidate_additions_do_not_change_standard_or_deep_selection():
     from nightsky_atlas.catalog.dso_store import load_dso_catalog
 

@@ -34,30 +34,39 @@ def test_empty_issues_is_valid() -> None:
     assert result.issues == []
 
 
-def test_unknown_element_rejected() -> None:
+@pytest.mark.parametrize(
+    "changes",
+    [
+        pytest.param({"element_id": "label:dso:UNKNOWN"}, id="unknown-element"),
+        pytest.param({"issue_type": "looks_weird"}, id="unknown-issue-type"),
+        pytest.param({"action": {"type": "delete_object", "candidate": "SW"}}, id="unknown-action"),
+        pytest.param({"severity": 11}, id="severity-out-of-range"),
+        pytest.param({"action": {"type": "select_candidate"}}, id="missing-candidate"),
+        pytest.param(
+            {"action": {"type": "select_candidate", "candidate": "UP"}}, id="invalid-candidate"
+        ),
+        pytest.param(
+            {"severity": 5, "action": {"type": "select_display_name_variant"}},
+            id="missing-display-variant",
+        ),
+        pytest.param(
+            {"action": {"type": "fine_adjust_label", "offset_x_mm": 0.0, "offset_y_mm": 0.0}},
+            id="zero-fine-adjustment",
+        ),
+        pytest.param(
+            {
+                "element_id": "dso:NGC4486",
+                "issue_type": "unreadable_label",
+                "severity": 5,
+                "action": {"type": "hide_optional_label"},
+            },
+            id="visibility-on-non-label",
+        ),
+    ],
+)
+def test_invalid_review_issue_rejected(changes: dict) -> None:
     payload = valid_payload()
-    payload["issues"][0]["element_id"] = "label:dso:UNKNOWN"
-    with pytest.raises(ReviewValidationError):
-        validate_review(payload, known_element_ids=KNOWN)
-
-
-def test_unknown_issue_type_rejected() -> None:
-    payload = valid_payload()
-    payload["issues"][0]["issue_type"] = "looks_weird"
-    with pytest.raises(ReviewValidationError):
-        validate_review(payload, known_element_ids=KNOWN)
-
-
-def test_unknown_action_rejected() -> None:
-    payload = valid_payload()
-    payload["issues"][0]["action"]["type"] = "delete_object"
-    with pytest.raises(ReviewValidationError):
-        validate_review(payload, known_element_ids=KNOWN)
-
-
-def test_severity_out_of_range_rejected() -> None:
-    payload = valid_payload()
-    payload["issues"][0]["severity"] = 11
+    payload["issues"][0].update(changes)
     with pytest.raises(ReviewValidationError):
         validate_review(payload, known_element_ids=KNOWN)
 
@@ -65,62 +74,5 @@ def test_severity_out_of_range_rejected() -> None:
 def test_extra_key_rejected() -> None:
     payload = valid_payload()
     payload["notes"] = "free text"
-    with pytest.raises(ReviewValidationError):
-        validate_review(payload, known_element_ids=KNOWN)
-
-
-def test_select_candidate_requires_candidate() -> None:
-    payload = valid_payload()
-    payload["issues"][0]["action"] = {"type": "select_candidate"}
-    with pytest.raises(ReviewValidationError):
-        validate_review(payload, known_element_ids=KNOWN)
-
-
-def test_invalid_candidate_rejected() -> None:
-    payload = valid_payload()
-    payload["issues"][0]["action"]["candidate"] = "UP"
-    with pytest.raises(ReviewValidationError):
-        validate_review(payload, known_element_ids=KNOWN)
-
-
-def test_display_name_variant_requires_value() -> None:
-    payload = {
-        "page_score": 8.0,
-        "issues": [
-            {
-                "element_id": "label:dso:NGC4486",
-                "issue_type": "ambiguous_association",
-                "severity": 5,
-                "action": {"type": "select_display_name_variant"},
-            }
-        ],
-    }
-    with pytest.raises(ReviewValidationError):
-        validate_review(payload, known_element_ids=KNOWN)
-
-
-def test_fine_adjust_requires_a_nonzero_bounded_intent() -> None:
-    payload = valid_payload()
-    payload["issues"][0]["action"] = {
-        "type": "fine_adjust_label",
-        "offset_x_mm": 0.0,
-        "offset_y_mm": 0.0,
-    }
-    with pytest.raises(ReviewValidationError):
-        validate_review(payload, known_element_ids=KNOWN)
-
-
-def test_visibility_action_requires_label_element() -> None:
-    payload = {
-        "page_score": 8.0,
-        "issues": [
-            {
-                "element_id": "dso:NGC4486",
-                "issue_type": "unreadable_label",
-                "severity": 5,
-                "action": {"type": "hide_optional_label"},
-            }
-        ],
-    }
     with pytest.raises(ReviewValidationError):
         validate_review(payload, known_element_ids=KNOWN)

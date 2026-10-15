@@ -84,22 +84,39 @@ def test_missing_edition_falls_back_to_registry(tmp_path: Path) -> None:
     assert config.resolved_edition().code == "S"
 
 
-def test_edition_rejects_blank_code(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("section", "settings", "error"),
+    [
+        pytest.param(
+            "edition", {"name": "Standard", "code": "  "}, "code", id="edition-rejects-blank-code"
+        ),
+        pytest.param(
+            "edition",
+            {"name": "Standard", "code": "S", "colour": "blue"},
+            "colour",
+            id="edition-rejects-unknown-key",
+        ),
+        pytest.param("tiling", {"strategy": "bands"}, "tiling", id="unknown-top-level-key-fails"),
+        pytest.param("page", {"width_mm": -297.0}, None, id="negative-page-dimension-fails"),
+        pytest.param(
+            "visibility",
+            {"integrated_magnitude_limit": 10.0, "reference_magnitude": 11.0},
+            None,
+            id="visibility-reference-outside-limit-fails",
+        ),
+        pytest.param(
+            "visibility", {"aperture_inches": 12.0}, None, id="visibility-unknown-key-fails"
+        ),
+    ],
+)
+def test_invalid_atlas_configuration(
+    tmp_path: Path, section: str, settings: dict[str, Any], error: str | None
+) -> None:
     data = valid_atlas_dict()
-    data["edition"] = {"name": "Standard", "code": "  "}
+    data.setdefault(section, {}).update(settings)
     path = write_yaml(tmp_path / "atlas.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
+    with pytest.raises(ConfigError, match=error):
         load_atlas_config(path)
-    assert "code" in str(excinfo.value)
-
-
-def test_edition_rejects_unknown_key(tmp_path: Path) -> None:
-    data = valid_atlas_dict()
-    data["edition"] = {"name": "Standard", "code": "S", "colour": "blue"}
-    path = write_yaml(tmp_path / "atlas.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
-        load_atlas_config(path)
-    assert "colour" in str(excinfo.value)
 
 
 def test_shipped_style_fixture_loads() -> None:
@@ -147,37 +164,105 @@ def test_shipped_style_declares_subdued_furniture() -> None:
     assert not furniture.magnitude_legend.enabled
 
 
-def test_magnitude_legend_rejects_manual_magnitudes(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("section", "settings", "error"),
+    [
+        pytest.param(
+            "furniture",
+            {"magnitude_legend": {"magnitudes": []}},
+            "magnitudes",
+            id="magnitude-legend-rejects-manual-magnitudes",
+        ),
+        pytest.param("star", {"colour": "red"}, "colour", id="unknown-nested-key-fails"),
+        pytest.param("star", {"max_diameter_mm": 0.1}, None, id="max-diameter-below-min-fails"),
+        pytest.param(
+            "grid",
+            {"ra_step_deg": 2.0, "label_ra_step_deg": 3.0},
+            "label_ra_step_deg",
+            id="grid-label-step-must-align-with-line-step",
+        ),
+        pytest.param(
+            "label",
+            {"dso_labels": {"messier": {"weight": "heavy"}}},
+            "weight",
+            id="dso-label-invalid-weight-fails",
+        ),
+        pytest.param(
+            "dso",
+            {"line_width_mm": 0.3, "bold_line_width_mm": 0.2},
+            None,
+            id="dso-bold-line-width-must-not-be-thinner",
+        ),
+        pytest.param(
+            "dso",
+            {"globular_cluster": {"fallback_diameter_mm": 1.0, "min_diameter_mm": 2.0}},
+            None,
+            id="dso-extent-min-above-fallback-fails",
+        ),
+        pytest.param(
+            "dso",
+            {
+                "open_cluster": {
+                    "fallback_diameter_mm": 2.0,
+                    "min_diameter_mm": 1.4,
+                    "max_diameter_mm": 1.0,
+                }
+            },
+            None,
+            id="dso-extent-max-below-min-fails",
+        ),
+        pytest.param(
+            "dso",
+            {
+                "globular_cluster": {
+                    "fallback_diameter_mm": 1.5,
+                    "min_diameter_mm": 1.2,
+                    "radius_mm": 1.0,
+                }
+            },
+            "radius_mm",
+            id="dso-extent-unknown-key-fails",
+        ),
+        pytest.param(
+            "label",
+            {"dso_labels": {"messier": {"font_size": 8.0}}},
+            "font_size",
+            id="dso-label-unknown-key-fails",
+        ),
+        pytest.param(
+            "double_stars",
+            {"min_component_separation_mm": 0.7, "colour": "red"},
+            None,
+            id="double-star-style-rejects-unknown-key",
+        ),
+        pytest.param(
+            "double_stars",
+            {"unresolved_clearance_mm": -0.1},
+            None,
+            id="double-star-min-separation-must-be-positive",
+        ),
+        pytest.param(
+            "variable_stars",
+            {"enabled": True, "ring_gap_mm": 0.2, "color": "red"},
+            None,
+            id="variable-star-marker-style-rejects-unknown-keys",
+        ),
+    ],
+)
+def test_invalid_style_configuration(
+    tmp_path: Path, section: str, settings: dict[str, Any], error: str | None
+) -> None:
     data = valid_style_dict()
-    data["furniture"] = {"magnitude_legend": {"magnitudes": []}}
+    data.setdefault(section, {}).update(settings)
     path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
+    with pytest.raises(ConfigError, match=error):
         load_style_config(path)
-    assert "magnitudes" in str(excinfo.value)
 
 
 def test_valid_dict_loads(tmp_path: Path) -> None:
     path = write_yaml(tmp_path / "atlas.yaml", valid_atlas_dict())
     config = load_atlas_config(path)
     assert config.charts[0].rotation_deg == pytest.approx(0.0)
-
-
-def test_unknown_top_level_key_fails(tmp_path: Path) -> None:
-    data = valid_atlas_dict()
-    data["tiling"] = {"strategy": "bands"}
-    path = write_yaml(tmp_path / "atlas.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
-        load_atlas_config(path)
-    assert "tiling" in str(excinfo.value)
-
-
-def test_unknown_nested_key_fails(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["star"]["colour"] = "red"
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
-        load_style_config(path)
-    assert "colour" in str(excinfo.value)
 
 
 def test_missing_required_key_fails(tmp_path: Path) -> None:
@@ -189,37 +274,12 @@ def test_missing_required_key_fails(tmp_path: Path) -> None:
     assert "height_mm" in str(excinfo.value)
 
 
-def test_negative_page_dimension_fails(tmp_path: Path) -> None:
-    data = valid_atlas_dict()
-    data["page"]["width_mm"] = -297.0
-    path = write_yaml(tmp_path / "atlas.yaml", data)
-    with pytest.raises(ConfigError):
-        load_atlas_config(path)
-
-
 def test_unknown_projection_fails(tmp_path: Path) -> None:
     data = valid_atlas_dict()
     data["charts"][0]["projection"] = "mercator"
     path = write_yaml(tmp_path / "atlas.yaml", data)
     with pytest.raises(ConfigError):
         load_atlas_config(path)
-
-
-def test_max_diameter_below_min_fails(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["star"]["max_diameter_mm"] = 0.1
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError):
-        load_style_config(path)
-
-
-def test_grid_label_step_must_align_with_line_step(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["grid"] = {"ra_step_deg": 2.0, "label_ra_step_deg": 3.0}
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
-        load_style_config(path)
-    assert "label_ra_step_deg" in str(excinfo.value)
 
 
 def test_grid_label_step_multiple_is_valid(tmp_path: Path) -> None:
@@ -255,29 +315,12 @@ def test_shipped_style_declares_dso_label_hierarchy() -> None:
     assert labels.normal.weight == "normal"
 
 
-def test_dso_label_invalid_weight_fails(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["label"]["dso_labels"] = {"messier": {"weight": "heavy"}}
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
-        load_style_config(path)
-    assert "weight" in str(excinfo.value)
-
-
 def test_dso_label_regular_weight_alias(tmp_path: Path) -> None:
     data = valid_style_dict()
     data["label"]["dso_labels"] = {"herschel400": {"weight": "regular"}}
     path = write_yaml(tmp_path / "style.yaml", data)
     config = load_style_config(path)
     assert config.label.dso_labels.herschel400.weight == "normal"
-
-
-def test_dso_bold_line_width_must_not_be_thinner(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["dso"] = {"line_width_mm": 0.3, "bold_line_width_mm": 0.2}
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError):
-        load_style_config(path)
 
 
 def test_shipped_style_declares_bold_dso_stroke() -> None:
@@ -295,76 +338,6 @@ def test_shipped_style_declares_dso_extent_classes() -> None:
         config.dso.globular_cluster.min_diameter_mm
         <= config.dso.globular_cluster.fallback_diameter_mm
     )
-
-
-def test_dso_extent_min_above_fallback_fails(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["dso"] = {
-        "globular_cluster": {
-            "fallback_diameter_mm": 1.0,
-            "min_diameter_mm": 2.0,
-        }
-    }
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError):
-        load_style_config(path)
-
-
-def test_dso_extent_max_below_min_fails(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["dso"] = {
-        "open_cluster": {
-            "fallback_diameter_mm": 2.0,
-            "min_diameter_mm": 1.4,
-            "max_diameter_mm": 1.0,
-        }
-    }
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError):
-        load_style_config(path)
-
-
-def test_dso_extent_unknown_key_fails(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["dso"] = {
-        "globular_cluster": {
-            "fallback_diameter_mm": 1.5,
-            "min_diameter_mm": 1.2,
-            "radius_mm": 1.0,
-        }
-    }
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
-        load_style_config(path)
-    assert "radius_mm" in str(excinfo.value)
-
-
-def test_dso_label_unknown_key_fails(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["label"]["dso_labels"] = {"messier": {"font_size": 8.0}}
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError) as excinfo:
-        load_style_config(path)
-    assert "font_size" in str(excinfo.value)
-
-
-def test_visibility_reference_outside_limit_fails(tmp_path: Path) -> None:
-    data = valid_atlas_dict()
-    data["visibility"] = {
-        "integrated_magnitude_limit": 10.0,
-        "reference_magnitude": 11.0,
-    }
-    path = write_yaml(tmp_path / "atlas.yaml", data)
-    with pytest.raises(ConfigError):
-        load_atlas_config(path)
-
-
-def test_visibility_unknown_key_fails(tmp_path: Path) -> None:
-    data = valid_atlas_dict()
-    data["visibility"] = {"aperture_inches": 12.0}
-    path = write_yaml(tmp_path / "atlas.yaml", data)
-    with pytest.raises(ConfigError):
-        load_atlas_config(path)
 
 
 def test_missing_file_fails(tmp_path: Path) -> None:
@@ -390,8 +363,7 @@ def test_shipped_style_declares_double_star_marker() -> None:
     config = load_style_config(STYLE_FIXTURE)
     assert config.double_stars.enabled is True
     actual_limits = [
-        (item.max_sep_arcsec, item.max_secondary_mag)
-        for item in config.double_stars.limits
+        (item.max_sep_arcsec, item.max_secondary_mag) for item in config.double_stars.limits
     ]
     assert actual_limits == [(30.0, 11.5), (120.0, 9.5), (200.0, 9.0)]
     assert config.double_stars.minimum_separation_arcsec == pytest.approx(0.5)
@@ -418,8 +390,7 @@ def test_shipped_style_declares_double_star_marker() -> None:
 def test_double_star_profile_limits_are_configured(edition: str, expected: tuple) -> None:
     config = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     actual = tuple(
-        (limit.max_sep_arcsec, limit.max_secondary_mag)
-        for limit in config.double_stars.limits
+        (limit.max_sep_arcsec, limit.max_secondary_mag) for limit in config.double_stars.limits
     )
     assert actual == expected
     assert config.double_stars.minimum_separation_arcsec == pytest.approx(0.5)
@@ -436,27 +407,3 @@ def test_double_star_style_defaults_when_omitted(tmp_path: Path) -> None:
     config = load_style_config(path)
     assert config.double_stars.enabled is True
     assert config.double_stars.unresolved_clearance_mm == pytest.approx(0.15)
-
-
-def test_double_star_style_rejects_unknown_key(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["double_stars"] = {"min_component_separation_mm": 0.7, "colour": "red"}
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError):
-        load_style_config(path)
-
-
-def test_double_star_min_separation_must_be_positive(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["double_stars"] = {"unresolved_clearance_mm": -0.1}
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError):
-        load_style_config(path)
-
-
-def test_variable_star_marker_style_rejects_unknown_keys(tmp_path: Path) -> None:
-    data = valid_style_dict()
-    data["variable_stars"] = {"enabled": True, "ring_gap_mm": 0.2, "color": "red"}
-    path = write_yaml(tmp_path / "style.yaml", data)
-    with pytest.raises(ConfigError):
-        load_style_config(path)

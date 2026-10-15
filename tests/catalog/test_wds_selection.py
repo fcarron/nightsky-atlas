@@ -24,66 +24,48 @@ def pair(separation: float, primary: float | None, secondary: float | None) -> S
 
 
 @pytest.mark.parametrize(
-    ("separation", "secondary", "expected"),
+    ("edition", "separation", "secondary", "expected"),
     [
-        (0.5, 10.5, True),
-        (0.49, 8.0, False),
-        (20.0, 10.5, True),
-        (20.0, 10.6, False),
-        (30.0, 10.5, True),
-        (30.01, 8.5, True),
-        (100.0, 8.5, True),
-        (100.0, 8.6, False),
-        (180.0, 8.5, True),
-        (200.0, 8.5, True),
-        (201.0, 8.0, False),
+        ("pocket", 0.5, 10.5, True),
+        ("pocket", 0.49, 8.0, False),
+        ("pocket", 20.0, 10.5, True),
+        ("pocket", 20.0, 10.6, False),
+        ("pocket", 30.0, 10.5, True),
+        ("pocket", 30.01, 8.5, True),
+        ("pocket", 100.0, 8.5, True),
+        ("pocket", 100.0, 8.6, False),
+        ("pocket", 180.0, 8.5, True),
+        ("pocket", 200.0, 8.5, True),
+        ("pocket", 201.0, 8.0, False),
+        ("standard", 0.5, 11.5, True),
+        ("standard", 20.0, 11.5, True),
+        ("standard", 20.0, 11.6, False),
+        ("standard", 30.0, 11.5, True),
+        ("standard", 100.0, 9.5, True),
+        ("standard", 100.0, 9.6, False),
+        ("standard", 150.0, 9.0, True),
+        ("standard", 150.0, 9.1, False),
+        ("standard", 200.0, 9.0, True),
+        ("standard", 200.1, 8.0, False),
+        ("deep", 0.5, 12.5, True),
+        ("deep", 20.0, 12.5, True),
+        ("deep", 20.0, 12.6, False),
+        ("deep", 30.0, 12.5, True),
+        ("deep", 100.0, 10.5, True),
+        ("deep", 100.0, 10.6, False),
+        ("deep", 150.0, 10.0, True),
+        ("deep", 150.0, 10.1, False),
+        ("deep", 200.0, 10.0, True),
+        ("deep", 250.0, 9.0, True),
+        ("deep", 250.0, 9.1, False),
+        ("deep", 300.0, 9.0, True),
+        ("deep", 301.0, 8.0, False),
     ],
 )
-def test_pocket_selection_limits(separation: float, secondary: float, expected: bool) -> None:
-    style = load_style_config(ROOT / "styles" / "pocket.yaml")
-    assert pair_passes_profile(pair(separation, 6.0, secondary), style.double_stars) is expected
-
-
-@pytest.mark.parametrize(
-    ("separation", "secondary", "expected"),
-    [
-        (0.5, 11.5, True),
-        (20.0, 11.5, True),
-        (20.0, 11.6, False),
-        (30.0, 11.5, True),
-        (100.0, 9.5, True),
-        (100.0, 9.6, False),
-        (150.0, 9.0, True),
-        (150.0, 9.1, False),
-        (200.0, 9.0, True),
-        (200.1, 8.0, False),
-    ],
-)
-def test_standard_selection_limits(separation: float, secondary: float, expected: bool) -> None:
-    style = load_style_config(ROOT / "styles" / "standard.yaml")
-    assert pair_passes_profile(pair(separation, 6.0, secondary), style.double_stars) is expected
-
-
-@pytest.mark.parametrize(
-    ("separation", "secondary", "expected"),
-    [
-        (0.5, 12.5, True),
-        (20.0, 12.5, True),
-        (20.0, 12.6, False),
-        (30.0, 12.5, True),
-        (100.0, 10.5, True),
-        (100.0, 10.6, False),
-        (150.0, 10.0, True),
-        (150.0, 10.1, False),
-        (200.0, 10.0, True),
-        (250.0, 9.0, True),
-        (250.0, 9.1, False),
-        (300.0, 9.0, True),
-        (301.0, 8.0, False),
-    ],
-)
-def test_deep_selection_limits(separation: float, secondary: float, expected: bool) -> None:
-    style = load_style_config(ROOT / "styles" / "deep.yaml")
+def test_edition_selection_limits(
+    edition: str, separation: float, secondary: float, expected: bool
+) -> None:
+    style = load_style_config(ROOT / "styles" / f"{edition}.yaml")
     assert pair_passes_profile(pair(separation, 6.0, secondary), style.double_stars) is expected
 
 
@@ -100,11 +82,7 @@ def test_selection_hierarchy_is_nested_across_all_configured_bands() -> None:
         for edition in ("pocket", "standard", "deep", "eyepiece", "eyepiece_deep")
     }
     bounds = sorted(
-        {
-            limit.max_sep_arcsec
-            for profile in profiles.values()
-            for limit in profile.limits
-        }
+        {limit.max_sep_arcsec for profile in profiles.values() for limit in profile.limits}
     )
     separations = {0.49, 0.5}
     lower = 0.5
@@ -116,9 +94,7 @@ def test_selection_hierarchy_is_nested_across_all_configured_bands() -> None:
     separations.add(lower + 1.0)
 
     magnitude_limits = {
-        limit.max_secondary_mag
-        for profile in profiles.values()
-        for limit in profile.limits
+        limit.max_secondary_mag for profile in profiles.values() for limit in profile.limits
     }
     magnitudes = {7.0, 14.0}
     for limit in magnitude_limits:

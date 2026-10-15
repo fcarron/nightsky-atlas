@@ -225,11 +225,15 @@ environment described above are needed for development. Run the checks with:
 
 ```bash
 make test
+make test-fast
 make lint
 make check
 ```
 
-The tests use committed small fixtures and do not download full catalogues.
+`make test-fast` omits fine-resolution all-sky audits (`slow`) and checks
+against locally imported full catalogues (`integration`). `make check` always
+runs the complete suite, including `tests/build/` and publication checks.
+Tests do not download catalogues; most use committed small fixtures.
 On Ubuntu, install the system packages above before running `make setup`; the
 target creates the virtual environment with access to Ubuntu's `gi` bindings.
 

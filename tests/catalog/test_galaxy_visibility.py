@@ -298,6 +298,7 @@ def test_reference_objects_match_openngc() -> None:
     not (RAW_NGC.exists() and RAW_ADDENDUM.exists()),
     reason="raw OpenNGC catalogue not available",
 )
+@pytest.mark.integration
 def test_full_catalogue_counts() -> None:
     objects = [
         obj

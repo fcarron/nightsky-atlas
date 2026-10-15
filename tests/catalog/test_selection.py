@@ -260,6 +260,7 @@ def test_every_herschel400_designation_is_forced() -> None:
 
 
 @pytest.mark.skipif(not OPENNGC.exists(), reason="processed OpenNGC catalogue not built")
+@pytest.mark.integration
 def test_all_resolvable_herschel400_objects_are_forced_in_openngc() -> None:
     dsos = load_dso_catalog(OPENNGC)
     index = build_membership_index(load_observing_lists(FIXTURE_DIR))

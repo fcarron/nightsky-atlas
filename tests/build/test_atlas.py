@@ -178,13 +178,20 @@ def test_detail_suppression_preserves_manually_overridden_labels() -> None:
     )
 
 
-def test_detail_suppression_allows_herschel_400_label_when_detail_is_clean() -> None:
-    label_id = "label:dso:NGC1234"
+@pytest.mark.parametrize(
+    ("object_id", "aliases", "priority", "text", "protected"),
+    [("NGC1234", (), 60, "1234", False), ("NGC4486", ("M87",), 100, "87", True)],
+    ids=["h400-can-transfer", "messier-h400-stays-on-main-chart"],
+)
+def test_detail_suppression_respects_catalogue_protection(
+    object_id: str, aliases: tuple[str, ...], priority: int, text: str, protected: bool
+) -> None:
+    label_id = f"label:dso:{object_id}"
     label = Label(
         id=label_id,
-        target_id="NGC1234",
-        text="1234",
-        priority=60,
+        target_id=object_id,
+        text=text,
+        priority=priority,
         mandatory=True,
         candidates=(
             LabelCandidate(
@@ -196,17 +203,15 @@ def test_detail_suppression_allows_herschel_400_label_when_detail_is_clean() -> 
         ),
     )
     dso = DeepSkyObject(
-        id="NGC1234",
+        id=object_id,
         ra_deg=187.5,
         dec_deg=12.0,
         object_type=DsoType.GALAXY,
-        provenance=Provenance("test", "NGC1234"),
+        provenance=Provenance("test", object_id),
+        cross_ids=aliases,
     )
     scene = ChartScene(
-        definition=ChartDefinition(
-            id="parent", center_ra_deg=187.5, center_dec_deg=12.0,
-            width_deg=27.0, height_deg=18.5,
-        ),
+        definition=ChartDefinition("parent", 187.5, 12.0, 27.0, 18.5),
         deep_sky_objects=(
             SceneDso(
                 dso=dso,
@@ -216,75 +221,22 @@ def test_detail_suppression_allows_herschel_400_label_when_detail_is_clean() -> 
         ),
     )
     issue = LayoutIssue(
-        id="issue:label_dso:NGC1234",
+        id=f"issue:label_dso:{object_id}",
         issue_type=IssueType.LABEL_DSO,
-        element_ids=(label_id, "NGC5678"),
+        element_ids=(label_id, "NGC4478" if protected else "NGC5678"),
         message="label overlaps a DSO symbol",
     )
     protected_ids = _detail_fallback_protected_ids(scene, frozenset())
-
+    assert protected_ids == (frozenset({label_id}) if protected else frozenset())
     result = _detail_label_suppression_candidate(
         (label,), ValidationResult(issues=(issue,)), {label_id: "SD02"}, protected_ids
     )
-
-    assert protected_ids == frozenset()
-    assert result is not None
-    assert result[0].id == label_id
-    assert result[1] == "SD02"
-
-
-def test_detail_suppression_protects_messier_even_with_herschel_membership() -> None:
-    label_id = "label:dso:NGC4486"
-    label = Label(
-        id=label_id,
-        target_id="NGC4486",
-        text="87",
-        priority=100,
-        mandatory=True,
-        candidates=(
-            LabelCandidate(
-                id=f"{label_id}:E",
-                position=CompassPosition.E,
-                anchor=PagePoint(100.0, 100.0),
-                bounds=PageRect(100.0, 100.0, 8.0, 3.0),
-            ),
-        ),
-    )
-    dso = DeepSkyObject(
-        id="NGC4486",
-        ra_deg=187.5,
-        dec_deg=12.0,
-        object_type=DsoType.GALAXY,
-        provenance=Provenance("test", "NGC4486"),
-        cross_ids=("M87",),
-    )
-    scene = ChartScene(
-        definition=ChartDefinition(
-            id="parent", center_ra_deg=187.5, center_dec_deg=12.0,
-            width_deg=27.0, height_deg=18.5,
-        ),
-        deep_sky_objects=(
-            SceneDso(
-                dso=dso,
-                chart_point=ChartPoint(0.0, 0.0),
-                metadata=DsoMetadata(dso_id=dso.id, list_memberships=frozenset({"herschel400"})),
-            ),
-        ),
-    )
-    issue = LayoutIssue(
-        id="issue:label_dso:NGC4486",
-        issue_type=IssueType.LABEL_DSO,
-        element_ids=(label_id, "NGC4478"),
-        message="label overlaps a DSO symbol",
-    )
-    protected_ids = _detail_fallback_protected_ids(scene, frozenset())
-
-    result = _detail_label_suppression_candidate(
-        (label,), ValidationResult(issues=(issue,)), {label_id: "SD02"}, protected_ids
-    )
-
-    assert protected_ids == frozenset({label_id})
-    assert result is None
+    if protected:
+        assert result is None
+    else:
+        assert result is not None
+        assert result[0].id == label_id
+        assert result[1] == "SD02"
 
 
 def test_detail_suppression_requires_a_clean_detail_match_and_enabled_fallback() -> None:
@@ -321,8 +273,11 @@ def test_detail_suppression_requires_a_clean_detail_match_and_enabled_fallback()
     )
     detail_scene = ChartScene(
         definition=ChartDefinition(
-            id="detail", center_ra_deg=187.5, center_dec_deg=12.0,
-            width_deg=27.0, height_deg=18.5,
+            id="detail",
+            center_ra_deg=187.5,
+            center_dec_deg=12.0,
+            width_deg=27.0,
+            height_deg=18.5,
         ),
         deep_sky_objects=(SceneDso(dso=dso, chart_point=ChartPoint(0.0, 0.0)),),
     )
@@ -331,14 +286,13 @@ def test_detail_suppression_requires_a_clean_detail_match_and_enabled_fallback()
     )
     assert clean_detail_ids == frozenset({"NGC1234"})
     clean_detail_mapping = {label_id: "SD02"}
-    assert _detail_label_suppression_candidate(
-        (label,), validation, clean_detail_mapping
-    ) is not None
+    assert (
+        _detail_label_suppression_candidate((label,), validation, clean_detail_mapping) is not None
+    )
 
     # Missing, hidden, unplaced, or hard-issue detail labels are not verified.
     assert (
-        _verified_detail_dso_label_ids(detail_scene, (), ValidationResult(issues=()))
-        == frozenset()
+        _verified_detail_dso_label_ids(detail_scene, (), ValidationResult(issues=())) == frozenset()
     )
     detail_issue = LayoutIssue(
         id="issue:label_dso:detail",
@@ -365,8 +319,11 @@ def test_detail_fallback_skips_invisible_symbols_and_selects_one_detail_determin
     )
     scene = ChartScene(
         definition=ChartDefinition(
-            id="parent", center_ra_deg=187.5, center_dec_deg=12.0,
-            width_deg=27.0, height_deg=18.5,
+            id="parent",
+            center_ra_deg=187.5,
+            center_dec_deg=12.0,
+            width_deg=27.0,
+            height_deg=18.5,
         ),
         deep_sky_objects=(
             SceneDso(
@@ -378,34 +335,43 @@ def test_detail_fallback_skips_invisible_symbols_and_selects_one_detail_determin
     )
     details = (
         DetailChartConfig(
-            id="detail-z", code="SD02", name="Later detail",
-            center_ra_deg=187.5, center_dec_deg=12.0,
-            width_deg=13.0, height_deg=8.5, mm_per_degree=20.0,
+            id="detail-z",
+            code="SD02",
+            name="Later detail",
+            center_ra_deg=187.5,
+            center_dec_deg=12.0,
+            width_deg=13.0,
+            height_deg=8.5,
+            mm_per_degree=20.0,
         ),
         DetailChartConfig(
-            id="detail-a", code="SD01", name="First detail",
-            center_ra_deg=187.5, center_dec_deg=12.0,
-            width_deg=13.0, height_deg=8.5, mm_per_degree=20.0,
+            id="detail-a",
+            code="SD01",
+            name="First detail",
+            center_ra_deg=187.5,
+            center_dec_deg=12.0,
+            width_deg=13.0,
+            height_deg=8.5,
+            mm_per_degree=20.0,
         ),
     )
     parents = {detail.id: ("parent",) for detail in details}
     verified = {detail.id: frozenset({dso.id}) for detail in details}
 
-    assert _detail_fallback_labels_for_parent(
-        scene, "parent", details, parents, verified
-    ) == {}
+    assert _detail_fallback_labels_for_parent(scene, "parent", details, parents, verified) == {}
 
     visible_scene = replace(
         scene,
         deep_sky_objects=(replace(scene.deep_sky_objects[0], symbol_visible=True),),
     )
-    result = _detail_fallback_labels_for_parent(
-        visible_scene, "parent", details, parents, verified
-    )
+    result = _detail_fallback_labels_for_parent(visible_scene, "parent", details, parents, verified)
     assert result == {"label:dso:NGC1234": "SD01"}
-    assert _detail_fallback_labels_for_parent(
-        visible_scene, "parent", tuple(reversed(details)), parents, verified
-    ) == result
+    assert (
+        _detail_fallback_labels_for_parent(
+            visible_scene, "parent", tuple(reversed(details)), parents, verified
+        )
+        == result
+    )
 
 
 def test_detail_suppression_group_uses_minimum_deterministic_issue_cover() -> None:
@@ -596,6 +562,7 @@ def test_build_rejects_unknown_or_empty_chart_selection(tmp_path: Path) -> None:
             )
 
 
+@pytest.mark.slow
 def test_publication_rejects_partial_fixture_build(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="publication preflight failed"):
         build_atlas(
@@ -675,6 +642,7 @@ def test_publication_requires_front_matter_and_overviews(tmp_path: Path) -> None
         )
 
 
+@pytest.mark.slow
 def test_build_writes_overview_pages_for_tiled_atlas(tmp_path: Path) -> None:
     result = build_atlas(
         atlas_path=SHIPPED_ATLAS,
@@ -695,6 +663,7 @@ def test_build_writes_overview_pages_for_tiled_atlas(tmp_path: Path) -> None:
     assert all(page["chart_count"] > 0 for page in manifest["overview_pages"])
 
 
+@pytest.mark.slow
 def test_build_can_skip_overview_pages(tmp_path: Path) -> None:
     result = build_atlas(
         atlas_path=SHIPPED_ATLAS,

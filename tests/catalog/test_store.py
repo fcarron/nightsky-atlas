@@ -49,18 +49,15 @@ def test_build_and_count(store_path: Path) -> None:
         assert store.count() == 4
 
 
-def test_query_region_without_wrap(store_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("ra_min_deg", "ra_max_deg", "expected_ids"),
+    [(0.0, 30.0, {"s1", "s2"}), (340.0, 15.0, {"s1", "s3"})],
+    ids=["ordinary-ra", "ra-wrap"],
+)
+def test_query_region(store_path: Path, ra_min_deg: float, ra_max_deg: float, expected_ids) -> None:
     with StarStore.open(store_path) as store:
-        box = QueryBox(ra_min_deg=0.0, ra_max_deg=30.0, dec_min_deg=0.0, dec_max_deg=10.0)
-        found = {star.id for star in store.query_box(box)}
-    assert found == {"s1", "s2"}
-
-
-def test_query_region_with_ra_wrap(store_path: Path) -> None:
-    with StarStore.open(store_path) as store:
-        box = QueryBox(ra_min_deg=340.0, ra_max_deg=15.0, dec_min_deg=0.0, dec_max_deg=10.0)
-        found = {star.id for star in store.query_box(box)}
-    assert found == {"s1", "s3"}
+        box = QueryBox(ra_min_deg, ra_max_deg, 0.0, 10.0)
+        assert {star.id for star in store.query_box(box)} == expected_ids
 
 
 def test_query_respects_magnitude_limit(store_path: Path) -> None:
@@ -149,9 +146,7 @@ def _index_names(path: Path) -> set[str]:
     try:
         return {
             str(row[0])
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'index'"
-            )
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
             if not str(row[0]).startswith("sqlite_autoindex")
         }
     finally:

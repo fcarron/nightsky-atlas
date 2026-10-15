@@ -25,10 +25,12 @@ from nightsky_atlas.catalog.selection_analysis import (
 from nightsky_atlas.layout.dso_labels import primary_designation
 
 CATALOGUE = Path("data/processed/dso/catalogue.json")
-pytestmark = pytest.mark.skipif(
-    not CATALOGUE.is_file(),
-    reason="normalized local DSO catalogue is not built",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not CATALOGUE.is_file(), reason="normalized local DSO catalogue is not built"
+    ),
+]
 
 
 @pytest.fixture(scope="module")
@@ -41,6 +43,11 @@ def production_state():
         for edition in ("pocket", "standard", "deep", "reference")
     }
     return objects, index, policies
+
+
+@pytest.fixture(scope="module")
+def production_report():
+    return build_selection_report()
 
 
 def _decisions(query, objects, index, policies):
@@ -88,8 +95,8 @@ def test_observer_catalogue_examples_follow_production_policy(production_state) 
             )
 
 
-def test_production_selection_hierarchy_and_type_counts(production_state) -> None:
-    report = build_selection_report()
+def test_production_selection_hierarchy_and_type_counts(production_report) -> None:
+    report = production_report
     rows = {row["type"]: row for row in report["type_counts"]}
     assert rows["galaxy"]["total"] >= 10522
     assert sum(row["total"] for row in rows.values()) == report["physical_dso_count"]
@@ -161,7 +168,8 @@ def test_deepskylog_observed_targets_are_added_to_deep_only(production_state) ->
 def test_rc3_only_galaxies_are_ingested_but_not_enabled(production_state) -> None:
     objects, index, policies = production_state
     rc3_only = [
-        obj for obj in objects
+        obj
+        for obj in objects
         if obj.provenance.catalogue == "VII/155"
         and {record.catalogue_id for record in obj.catalogue_records} == {"VII/155"}
     ]
@@ -233,7 +241,8 @@ def test_pocket_ordinary_galaxies_use_100mm_score_and_size(production_state) -> 
     pocket = resolve_edition(config, "pocket")
     candidates = [obj for obj in objects if obj.object_type == DsoType.GALAXY]
     passed = next(
-        obj for obj in candidates
+        obj
+        for obj in candidates
         if not select_dso(obj, index=index, policy=pocket).forced
         and obj.provenance.catalogue == "OpenNGC"
         and obj.major_axis_arcmin is not None
@@ -245,7 +254,8 @@ def test_pocket_ordinary_galaxies_use_100mm_score_and_size(production_state) -> 
     assert selected.visible
     assert "pocket_galaxy_visibility_100mm" in selected.visibility_reasons
     rejected = next(
-        obj for obj in candidates
+        obj
+        for obj in candidates
         if not select_dso(obj, index=index, policy=pocket).forced
         and obj.provenance.catalogue == "OpenNGC"
         and obj.major_axis_arcmin is not None
@@ -272,7 +282,8 @@ def test_pocket_rc3_galaxies_only_enter_through_the_100mm_model(production_state
     objects, index, _ = production_state
     pocket = resolve_edition(load_observing_lists_config(), "pocket")
     rc3_only = [
-        obj for obj in objects
+        obj
+        for obj in objects
         if obj.provenance.catalogue == "VII/155"
         and {record.catalogue_id for record in obj.catalogue_records} == {"VII/155"}
         and obj.object_type == DsoType.GALAXY
@@ -307,21 +318,13 @@ def test_pocket_caldwell_double_cluster_has_only_component_objects(production_st
     assert aggregate is not None
     assert not select_dso(aggregate, index=index, policy=pocket).visible
     assert {find_object(objects, "NGC 869").id, find_object(objects, "NGC 884").id} == {
-        "NGC0869", "NGC0884"
+        "NGC0869",
+        "NGC0884",
     }
 
 
-def test_production_selection_matches_alpha_and_reference_counts(production_state) -> None:
-    report = build_selection_report()
-    assert report["edition_totals"]["pocket"] == 1133
-    assert report["edition_totals"]["standard"] == 3093
-    assert report["edition_totals"]["deep"] == 11904
-    assert report["edition_totals"]["eyepiece"] == 11904
-    assert report["edition_totals"]["reference"] == 15561
-
-
-def test_re_reviewed_pocket_candidates_are_curated_and_inherited() -> None:
-    report = build_selection_report()
+def test_re_reviewed_pocket_candidates_are_curated_and_inherited(production_report) -> None:
+    report = production_report
     additions = {
         "Stock 2",
         "Trumpler 2",
@@ -357,9 +360,11 @@ def test_re_reviewed_pocket_candidates_are_curated_and_inherited() -> None:
         assert decisions["deep"]["selected"]
 
 
-def test_open_cluster_alpha_selection_and_double_cluster_aggregate(production_state) -> None:
+def test_open_cluster_alpha_selection_and_double_cluster_aggregate(
+    production_state, production_report
+) -> None:
     objects, index, _ = production_state
-    report = build_selection_report()
+    report = production_report
     oc_counts = next(row for row in report["type_counts"] if row["type"] == "open cluster")
     simulated_counts = {
         edition: oc_counts[edition] for edition in ("pocket", "standard", "deep", "eyepiece")

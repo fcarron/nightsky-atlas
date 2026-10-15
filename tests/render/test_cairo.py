@@ -362,12 +362,8 @@ def test_filled_dso_outline_pass_precedes_foreground_stars(monkeypatch) -> None:
     )
 
     assert events.index("_draw_dsos") < events.index("_draw_filled_dso_outlines")
-    assert events.index("_draw_filled_dso_outlines") < events.index(
-        "_draw_stars_over_dso_symbols"
-    )
-    assert events.index("_draw_stars_over_dso_symbols") < events.index(
-        "_draw_variable_star_marks"
-    )
+    assert events.index("_draw_filled_dso_outlines") < events.index("_draw_stars_over_dso_symbols")
+    assert events.index("_draw_stars_over_dso_symbols") < events.index("_draw_variable_star_marks")
     assert events.index("_draw_variable_star_marks") < events.index("draw_furniture")
     assert events[-1] == "_draw_chart_border"
 
@@ -610,53 +606,24 @@ def test_bright_nebula_outline_uses_color_fill_beneath_its_contour() -> None:
 
 
 @pytest.mark.parametrize(
-    ("object_type", "expected_shape"),
-    (
-        (DsoType.BRIGHT_NEBULA, DsoShape.SQUARE),
-        (DsoType.DARK_NEBULA, DsoShape.DASHED_SQUARE),
-        (DsoType.GALAXY_CLUSTER, DsoShape.DASHED_CIRCLE),
-    ),
+    ("object_id", "object_type", "expected_shape"),
+    [
+        ("TEST-DSO", DsoType.BRIGHT_NEBULA, DsoShape.SQUARE),
+        ("TEST-DSO", DsoType.DARK_NEBULA, DsoShape.DASHED_SQUARE),
+        ("TEST-DSO", DsoType.GALAXY_CLUSTER, DsoShape.DASHED_CIRCLE),
+        ("M40", DsoType.STAR, DsoShape.X_MARK),
+        ("M40", DsoType.DOUBLE_STAR, DsoShape.X_MARK),
+    ],
 )
 def test_dso_fallback_renderer_uses_requested_symbol(
-    monkeypatch, object_type: DsoType, expected_shape: DsoShape
+    monkeypatch, object_id: str, object_type: DsoType, expected_shape: DsoShape
 ) -> None:
     dso = DeepSkyObject(
-        id="TEST-DSO",
+        id=object_id,
         ra_deg=187.5,
         dec_deg=12.0,
         object_type=object_type,
-        provenance=Provenance("TEST", "TEST-DSO"),
-    )
-    scene = build_scene(CHART, (), (dso,))
-    drawn_shapes = []
-    monkeypatch.setattr(
-        "nightsky_atlas.render.cairo.draw_dso_symbol",
-        lambda _cr, _x, _y, extent, _dash, **_kwargs: drawn_shapes.append(extent.shape),
-    )
-    transform = PageTransform(chart=CHART, page=PAGE)
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 800, 600)
-
-    draw_chart_page(cairo.Context(surface), scene, transform, STYLE)
-
-    assert drawn_shapes == [expected_shape]
-
-
-@pytest.mark.parametrize(
-    ("object_type", "expected_shape"),
-    (
-        (DsoType.STAR, DsoShape.X_MARK),
-        (DsoType.DOUBLE_STAR, DsoShape.X_MARK),
-    ),
-)
-def test_non_dso_fallback_renderer_uses_x_mark(
-    monkeypatch, object_type: DsoType, expected_shape: DsoShape
-) -> None:
-    dso = DeepSkyObject(
-        id="M40",
-        ra_deg=187.5,
-        dec_deg=12.0,
-        object_type=object_type,
-        provenance=Provenance("TEST", "M40"),
+        provenance=Provenance("TEST", object_id),
     )
     scene = build_scene(CHART, (), (dso,))
     drawn_shapes = []
@@ -764,9 +731,7 @@ def test_only_dark_nebula_contours_are_dashed(monkeypatch) -> None:
 
     _draw_outlines(cairo.Context(surface), transform, scene, STYLE)
 
-    solid_ids = {
-        outline.dso_id for outlines, dash in calls if dash is None for outline in outlines
-    }
+    solid_ids = {outline.dso_id for outlines, dash in calls if dash is None for outline in outlines}
     dashed_ids = {
         outline.dso_id for outlines, dash in calls if dash is not None for outline in outlines
     }
@@ -863,16 +828,12 @@ def _scene_dso(
 
 
 def test_galaxy_contour_uses_visibility_class() -> None:
-    width, dash = _dso_contour(
-        _scene_dso(GalaxyContourClass.FINE), STYLE, frozenset()
-    )
+    width, dash = _dso_contour(_scene_dso(GalaxyContourClass.FINE), STYLE, frozenset())
     assert width == pytest.approx(STYLE.dso.galaxy_contours.fine.line_width_mm)
     assert dash is None
 
     dotted = STYLE.dso.galaxy_contours.dotted
-    width, dash = _dso_contour(
-        _scene_dso(GalaxyContourClass.DOTTED), STYLE, frozenset()
-    )
+    width, dash = _dso_contour(_scene_dso(GalaxyContourClass.DOTTED), STYLE, frozenset())
     assert width == pytest.approx(dotted.line_width_mm)
     assert dash == (dotted.dash_mm, dotted.gap_mm)
 

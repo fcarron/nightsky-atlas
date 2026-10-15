@@ -36,9 +36,7 @@ def make_candidate(
     label_id: str, position: CompassPosition, left: float, top: float, *, ring: int = 0
 ) -> LabelCandidate:
     candidate_id = (
-        f"{label_id}:{position.value}"
-        if ring == 0
-        else f"{label_id}:{position.value}:{ring}"
+        f"{label_id}:{position.value}" if ring == 0 else f"{label_id}:{position.value}:{ring}"
     )
     return LabelCandidate(
         id=candidate_id,
@@ -146,30 +144,20 @@ def test_apply_hidden_override(tmp_path: Path) -> None:
     assert labels[0].selected_candidate_id is None
 
 
-def test_unknown_label_rejected(tmp_path: Path) -> None:
-    path = write_override(
-        tmp_path,
-        {"chart": "c1", "labels": {"label:dso:NGC999": {"candidate": "N"}}},
-    )
-    with pytest.raises(OverrideError, match="unknown label"):
-        apply_overrides((make_label(),), load_overrides(path))
-
-
-def test_invalid_candidate_rejected(tmp_path: Path) -> None:
-    path = write_override(
-        tmp_path,
-        {"chart": "c1", "labels": {"label:dso:M87": {"candidate": "label:dso:M87:ZZ"}}},
-    )
-    with pytest.raises(OverrideError, match="not a valid candidate"):
-        apply_overrides((make_label(),), load_overrides(path))
-
-
-def test_locked_without_candidate_rejected(tmp_path: Path) -> None:
-    path = write_override(
-        tmp_path,
-        {"chart": "c1", "labels": {"label:dso:M87": {"locked": True}}},
-    )
-    with pytest.raises(OverrideError, match="must specify a candidate"):
+@pytest.mark.parametrize(
+    ("label_id", "settings", "error"),
+    [
+        ("label:dso:NGC999", {"candidate": "N"}, "unknown label"),
+        ("label:dso:M87", {"candidate": "label:dso:M87:ZZ"}, "not a valid candidate"),
+        ("label:dso:M87", {"locked": True}, "must specify a candidate"),
+    ],
+    ids=["unknown-label", "invalid-candidate", "lock-without-candidate"],
+)
+def test_invalid_override_rejected(
+    tmp_path: Path, label_id: str, settings: dict, error: str
+) -> None:
+    path = write_override(tmp_path, {"chart": "c1", "labels": {label_id: settings}})
+    with pytest.raises(OverrideError, match=error):
         apply_overrides((make_label(),), load_overrides(path))
 
 
@@ -226,12 +214,8 @@ def test_optimizer_respects_locked_placement(tmp_path: Path) -> None:
 
 
 def test_load_overrides_dir(tmp_path: Path) -> None:
-    write_override(
-        tmp_path, {"chart": "c1", "labels": {}}, name="a.yaml"
-    )
-    write_override(
-        tmp_path, {"chart": "c2", "labels": {}}, name="b.yaml"
-    )
+    write_override(tmp_path, {"chart": "c1", "labels": {}}, name="a.yaml")
+    write_override(tmp_path, {"chart": "c2", "labels": {}}, name="b.yaml")
     library = load_overrides_dir(tmp_path)
     assert library.chart_ids() == ("c1", "c2")
     assert library.for_chart("c2") is not None

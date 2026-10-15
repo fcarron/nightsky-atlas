@@ -36,7 +36,12 @@ nightsky_atlas = ["assets/fonts/*.ttf", "assets/fonts/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+norecursedirs = [".*", "__pycache__"]
+addopts = "-ra --ignore=build"
+markers = [
+    "integration: checks locally imported full catalogues or optional stellar stores",
+    "slow: fine-resolution full-sky geometry audit",
+]
 
 [tool.ruff]
 line-length = 100

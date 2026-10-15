@@ -56,6 +56,7 @@ def test_collect_sources_uses_selected_paths_not_repository_defaults(tmp_path: P
     assert sources[1]["manifest"]["source"] == "custom source"
 
 
+@pytest.mark.slow
 def test_publication_requires_full_sky_and_matching_manifests(tmp_path: Path) -> None:
     atlas = load_atlas_config(REPO_ROOT / "atlas" / "standard.yaml")
     charts = chart_definitions(atlas)
@@ -101,6 +102,7 @@ def test_publication_requires_full_sky_and_matching_manifests(tmp_path: Path) ->
         )
 
 
+@pytest.mark.slow
 def test_publication_rejects_changed_catalogue_and_legacy_manifest(tmp_path: Path) -> None:
     atlas = load_atlas_config(REPO_ROOT / "atlas" / "standard.yaml")
     charts = chart_definitions(atlas)

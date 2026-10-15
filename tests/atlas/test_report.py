@@ -4,14 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ATLAS = REPO_ROOT / "atlas" / "standard.yaml"
 
 
-def test_draft_report_structure() -> None:
-    report = build_draft_report(atlas_path=ATLAS, coverage_step_deg=5.0)
+@pytest.fixture(scope="module")
+def draft_report():
+    return build_draft_report(atlas_path=ATLAS, coverage_step_deg=5.0)
+
+
+def test_draft_report_structure(draft_report) -> None:
+    report = draft_report
     assert report["chart_count"] == 129
     assert report["chart_order"] == "north-to-south"
     assert report["coverage"]["covers_all"] is True
@@ -26,8 +33,8 @@ def test_draft_report_structure() -> None:
     assert report["ring_layout"][-1]["center_dec_deg"] == -75.0
 
 
-def test_draft_report_region_review_list() -> None:
-    report = build_draft_report(atlas_path=ATLAS, coverage_step_deg=10.0)
+def test_draft_report_region_review_list(draft_report) -> None:
+    report = draft_report
     names = {region["name"] for region in report["review_regions"]}
     assert "Virgo Cluster" in names
     assert "Cygnus" in names
@@ -52,8 +59,8 @@ def test_draft_report_density_flags_outliers() -> None:
     assert density["lowest_pages"][0] == "c1"
 
 
-def test_text_summary_mentions_key_facts() -> None:
-    report = build_draft_report(atlas_path=ATLAS, coverage_step_deg=10.0)
+def test_text_summary_mentions_key_facts(draft_report) -> None:
+    report = draft_report
     text = render_text_summary(report)
     assert "charts: 129" in text
     assert "gaps=0" in text

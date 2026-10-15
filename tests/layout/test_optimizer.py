@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
 
 import nightsky_atlas.layout.optimizer as optimizer_module
 from nightsky_atlas.atlas.config import load_style_config
@@ -67,19 +70,9 @@ def make_label(
     )
 
 
-def test_candidate_cache_reuses_static_score_for_changed_neighbors(monkeypatch) -> None:
-    candidate = make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0)
-    label = make_label("label:dso:X", (candidate,))
-    calls = 0
-    original = optimizer_module.score_candidate
-
-    def counted(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(optimizer_module, "score_candidate", counted)
-    cache = _CandidateScoreCache(
+@pytest.fixture
+def candidate_cache():
+    return _CandidateScoreCache(
         {"X": PagePoint(98.0, 101.0)},
         PageRect(12.0, 12.0, 273.0, 186.0),
         _build_symbol_index(()),
@@ -90,43 +83,34 @@ def test_candidate_cache_reuses_static_score_for_changed_neighbors(monkeypatch) 
         CostWeights(),
         (),
     )
-    clear_cost = cache.cost(label, candidate, ())
-    occupied_cost = cache.cost(
-        label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),)
-    )
 
-    assert calls == 1
+
+def test_candidate_cache_reuses_static_score_for_changed_neighbors(
+    monkeypatch, candidate_cache
+) -> None:
+    candidate = make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0)
+    label = make_label("label:dso:X", (candidate,))
+    counted = Mock(wraps=optimizer_module.score_candidate)
+    monkeypatch.setattr(optimizer_module, "score_candidate", counted)
+    clear_cost = candidate_cache.cost(label, candidate, ())
+    occupied_cost = candidate_cache.cost(label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),))
+
+    assert counted.call_count == 1
     assert occupied_cost > clear_cost
 
 
-def test_candidate_cache_reuses_static_validity_for_changed_neighbors(monkeypatch) -> None:
+def test_candidate_cache_reuses_static_validity_for_changed_neighbors(
+    monkeypatch, candidate_cache
+) -> None:
     candidate = make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0)
     label = make_label("label:dso:X", (candidate,))
-    calls = 0
-    original = optimizer_module._is_valid
-
-    def counted(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        return original(*args, **kwargs)
-
+    counted = Mock(wraps=optimizer_module._is_valid)
     monkeypatch.setattr(optimizer_module, "_is_valid", counted)
-    cache = _CandidateScoreCache(
-        {"X": PagePoint(98.0, 101.0)},
-        PageRect(12.0, 12.0, 273.0, 186.0),
-        _build_symbol_index(()),
-        (),
-        _build_star_index(()),
-        (),
-        STYLE,
-        CostWeights(),
-        (),
-    )
 
-    assert cache.valid(label, candidate, ())
-    assert not cache.valid(label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),))
-    assert cache.valid(label, candidate, ())
-    assert calls == 1
+    assert candidate_cache.valid(label, candidate, ())
+    assert not candidate_cache.valid(label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),))
+    assert candidate_cache.valid(label, candidate, ())
+    assert counted.call_count == 1
 
 
 def test_greedy_avoids_overlap_between_mandatory_labels() -> None:
@@ -235,9 +219,7 @@ def test_optimizer_preserves_canonical_dso_text() -> None:
 
 
 def test_valid_leader_resolves_ownership_ambiguity_but_keeps_raw_diagnostic() -> None:
-    candidate = make_candidate(
-        "label:dso:NGC1", CompassPosition.E, 100.0, 100.0
-    )
+    candidate = make_candidate("label:dso:NGC1", CompassPosition.E, 100.0, 100.0)
     label = replace(
         make_label("label:dso:NGC1", (candidate,)),
         target_id="NGC1",
@@ -437,9 +419,7 @@ def test_per_label_ownership_diagnostics_are_exposed() -> None:
         "label:dso:X",
         (make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0),),
     )
-    result = optimize_labels(
-        (label,), EMPTY_SCENE, TRANSFORM, STYLE, detailed_diagnostics=True
-    )
+    result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE, detailed_diagnostics=True)
     diagnostic = result.label_diagnostics[label.id]
     assert "source_facing_edge_distance_mm" in diagnostic
     assert "glyph_proximity_cost" in diagnostic
@@ -456,12 +436,8 @@ def test_pair_conflict_repair_reassigns_labels_jointly() -> None:
     first_alt = make_candidate("label:dso:NGC1", CompassPosition.N, 100.0, 90.0)
     second_current = make_candidate("label:dso:NGC2", CompassPosition.W, 102.0, 100.0)
     second_alt = make_candidate("label:dso:NGC2", CompassPosition.E, 110.0, 100.0)
-    first = replace(
-        make_label("label:dso:NGC1", (first_current, first_alt)), target_id="NGC1"
-    )
-    second = replace(
-        make_label("label:dso:NGC2", (second_current, second_alt)), target_id="NGC2"
-    )
+    first = replace(make_label("label:dso:NGC1", (first_current, first_alt)), target_id="NGC1")
+    second = replace(make_label("label:dso:NGC2", (second_current, second_alt)), target_id="NGC2")
     labels = (first, second)
     placements, stats = _repair_dso_hard_conflicts(
         labels,
