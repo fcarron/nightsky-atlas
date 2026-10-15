@@ -1246,6 +1246,33 @@ class ColorDSOPalette(_StrictModel):
     other: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
+class ColorOpenClusterFillStyle(_StrictModel):
+    """Size-dependent fill and contour strength for colored open clusters."""
+
+    small_max_diameter_mm: PositiveFloat = 5.0
+    medium_max_diameter_mm: PositiveFloat = 12.0
+    medium_fill_alpha: float = 0.45
+    large_fill_alpha: float = 0.15
+    medium_outline_alpha: float = 0.85
+    large_outline_alpha: float = 0.65
+
+    @model_validator(mode="after")
+    def _thresholds_and_alpha_are_valid(self) -> ColorOpenClusterFillStyle:
+        if self.medium_max_diameter_mm <= self.small_max_diameter_mm:
+            raise ValueError("open-cluster size thresholds must increase")
+        if any(
+            not 0.0 <= alpha <= 1.0
+            for alpha in (
+                self.medium_fill_alpha,
+                self.large_fill_alpha,
+                self.medium_outline_alpha,
+                self.large_outline_alpha,
+            )
+        ):
+            raise ValueError("open-cluster alpha values must be within [0, 1]")
+        return self
+
+
 class ColorAtlasStyle(_StrictModel):
     background: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
     stars: str = Field(default="#17191C", pattern=r"^#[0-9A-Fa-f]{6}$")
@@ -1256,8 +1283,14 @@ class ColorAtlasStyle(_StrictModel):
     constellation_boundaries: str = Field(default="#C2C6CA", pattern=r"^#[0-9A-Fa-f]{6}$")
     dso: ColorDSOPalette
     dso_fill_white_blend: tuple[float, float, float, float] = (0.0, 0.10, 0.22, 0.34)
+    open_cluster_fill: ColorOpenClusterFillStyle | None = None
     milky_way_fills: dict[int, str]
     milky_way_outline: str = Field(default="#D6E3ED", pattern=r"^#[0-9A-Fa-f]{6}$")
+    magellanic_cloud_fills: dict[int, str] = Field(default_factory=dict)
+    magellanic_cloud_fill_alpha: dict[int, float] = Field(default_factory=dict)
+    magellanic_cloud_outline: str = Field(
+        default="#D6E3ED", pattern=r"^#[0-9A-Fa-f]{6}$"
+    )
 
     @field_validator("dso_fill_white_blend")
     @classmethod
@@ -1277,6 +1310,24 @@ class ColorAtlasStyle(_StrictModel):
             raise ValueError("color Milky Way fills may define levels 1 through 5")
         if any(not re.fullmatch(r"#[0-9A-Fa-f]{6}", color) for color in value.values()):
             raise ValueError("Milky Way fill colors must be six-digit hex colors")
+        return value
+
+    @field_validator("magellanic_cloud_fills")
+    @classmethod
+    def _magellanic_fill_levels_are_valid(cls, value: dict[int, str]) -> dict[int, str]:
+        if any(level not in (1, 2, 3) for level in value):
+            raise ValueError("color Magellanic Cloud fills may define levels 1 through 3")
+        if any(not re.fullmatch(r"#[0-9A-Fa-f]{6}", color) for color in value.values()):
+            raise ValueError("color Magellanic Cloud fills must be six-digit hex colors")
+        return value
+
+    @field_validator("magellanic_cloud_fill_alpha")
+    @classmethod
+    def _magellanic_fill_alpha_is_valid(cls, value: dict[int, float]) -> dict[int, float]:
+        if any(level not in (1, 2, 3) for level in value):
+            raise ValueError("Magellanic Cloud alpha keys must be levels 1 through 3")
+        if any(not math.isfinite(alpha) or not 0.0 <= alpha <= 1.0 for alpha in value.values()):
+            raise ValueError("Magellanic Cloud fill alpha values must be within [0, 1]")
         return value
 
 

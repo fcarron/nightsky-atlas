@@ -22,9 +22,10 @@ from nightsky_atlas.render.cairo import (
     _draw_dso_shape,
     _draw_milky_way_contours,
     _dso_color,
+    _dso_fill_and_outline_alpha,
     _dso_fill_color,
 )
-from nightsky_atlas.render.symbols import DsoShape
+from nightsky_atlas.render.symbols import DsoShape, SymbolExtent
 from nightsky_atlas.scene.builder import build_scene
 from nightsky_atlas.scene.models import ChartScene, SceneMilkyWayPolygon
 from nightsky_atlas.units import mm_to_pt
@@ -103,6 +104,66 @@ def test_experimental_color_styles_inherit_edition_and_select_fill_levels(
 def test_existing_edition_styles_remain_uncolored(edition: str) -> None:
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     assert style.color_atlas is None
+
+
+@pytest.mark.parametrize(
+    ("variant", "medium_alpha", "large_alpha"),
+    (("a", 0.48, 0.18), ("b", 0.28, 0.0)),
+)
+def test_open_cluster_color_variants_reduce_large_symbol_fill_only(
+    variant: str, medium_alpha: float, large_alpha: float
+) -> None:
+    style = load_style_config(
+        REPO_ROOT / f"styles/experiments/color/pocket-open-cluster-cloud-{variant}.yaml"
+    )
+    assert style.color_atlas is not None
+    cluster = Mock(dso=Mock(object_type=DsoType.OPEN_CLUSTER))
+    small = SymbolExtent(DsoShape.DASHED_CIRCLE, 4.0, 4.0)
+    medium = SymbolExtent(DsoShape.DASHED_CIRCLE, 10.0, 10.0)
+    large = SymbolExtent(DsoShape.DASHED_CIRCLE, 20.0, 20.0)
+
+    assert _dso_fill_and_outline_alpha(style, cluster, small) == (1.0, 1.0)
+    assert _dso_fill_and_outline_alpha(style, cluster, medium) == (
+        medium_alpha,
+        style.color_atlas.open_cluster_fill.medium_outline_alpha,
+    )
+    assert _dso_fill_and_outline_alpha(style, cluster, large) == (
+        large_alpha,
+        style.color_atlas.open_cluster_fill.large_outline_alpha,
+    )
+
+
+def test_magellanic_cloud_color_variants_use_milky_way_family() -> None:
+    for variant, expected in (
+        ("a", {1: "#E8F1F8", 2: "#D6E6F3", 3: "#C4D9EC"}),
+        ("b", {1: "#EEF5FA", 2: "#E4EFF7", 3: "#D7E7F3"}),
+    ):
+        style = load_style_config(
+            REPO_ROOT
+            / f"styles/experiments/color/pocket-open-cluster-cloud-{variant}.yaml"
+        )
+        assert style.color_atlas is not None
+        assert style.color_atlas.magellanic_cloud_fills == expected
+        assert set(style.color_atlas.magellanic_cloud_fill_alpha) == {1, 2, 3}
+        assert style.color_atlas.magellanic_cloud_outline in {
+            "#D6E3ED",
+            "#DFEAF2",
+        }
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+@pytest.mark.parametrize("variant", ("a", "b"))
+def test_cluster_and_magellanic_experiment_styles_cover_each_edition(
+    edition: str, variant: str
+) -> None:
+    style = load_style_config(
+        REPO_ROOT
+        / f"styles/experiments/color/{edition}-open-cluster-cloud-{variant}.yaml"
+    )
+    assert style.color_atlas is not None
+    assert style.color_atlas.open_cluster_fill is not None
+    assert set(style.color_atlas.magellanic_cloud_fills) == {1, 2, 3}
+    assert set(style.color_atlas.magellanic_cloud_fill_alpha) == {1, 2, 3}
 
 
 @pytest.mark.parametrize(

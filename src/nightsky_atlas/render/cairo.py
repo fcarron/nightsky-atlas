@@ -512,6 +512,25 @@ def _dso_fill_color(style: StyleConfig, scene_dso: SceneDso) -> str | None:
     )
 
 
+def _dso_fill_and_outline_alpha(
+    style: StyleConfig, scene_dso: SceneDso, extent: SymbolExtent
+) -> tuple[float, float]:
+    palette = style.color_atlas
+    if (
+        palette is None
+        or palette.open_cluster_fill is None
+        or scene_dso.dso.object_type != DsoType.OPEN_CLUSTER
+    ):
+        return 1.0, 1.0
+    rule = palette.open_cluster_fill
+    diameter_mm = max(extent.width_mm, extent.height_mm)
+    if diameter_mm <= rule.small_max_diameter_mm:
+        return 1.0, 1.0
+    if diameter_mm <= rule.medium_max_diameter_mm:
+        return rule.medium_fill_alpha, rule.medium_outline_alpha
+    return rule.large_fill_alpha, rule.large_outline_alpha
+
+
 def _draw_chart_border(
     cr: cairo.Context[cairo.Surface], transform: PageTransform, style: StyleConfig
 ) -> None:
@@ -1053,9 +1072,12 @@ def _draw_dsos(
         point = transform.to_page(scene_dso.chart_point)
         extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
         if color is not None:
-            filled.append((extent.width_mm * extent.height_mm, scene_dso, color, point, extent))
+            fill_alpha, _ = _dso_fill_and_outline_alpha(style, scene_dso, extent)
+            filled.append(
+                (extent.width_mm * extent.height_mm, scene_dso, color, point, extent, fill_alpha)
+            )
 
-    for _, scene_dso, color, point, extent in sorted(
+    for _, scene_dso, color, point, extent, fill_alpha in sorted(
         filled, key=lambda item: item[0], reverse=True
     ):
         if scene_dso.dso.object_type == DsoType.GALAXY and _dso_overlaps_bright_star(
@@ -1077,6 +1099,7 @@ def _draw_dsos(
             extent,
             style.dso.dash_mm,
             fill_color=_hex_rgb(color),
+            fill_alpha=fill_alpha,
             fill_only=True,
         )
 
@@ -1085,15 +1108,16 @@ def _draw_dsos(
             continue
         dso = scene_dso.dso
         color = _dso_fill_color(style, scene_dso)
-        cr.set_source_rgb(0.0, 0.0, 0.0)
         width_mm, dash = _dso_contour(scene_dso, style, bold_symbol_ids)
+        extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
+        _, outline_alpha = _dso_fill_and_outline_alpha(style, scene_dso, extent)
+        cr.set_source_rgba(0.0, 0.0, 0.0, outline_alpha)
         cr.set_line_width(mm_to_pt(width_mm))
         if dash is not None:
             cr.set_dash([mm_to_pt(dash[0]), mm_to_pt(dash[1])], 0.0)
         else:
             cr.set_dash([], 0.0)
         point = transform.to_page(scene_dso.chart_point)
-        extent = dso_symbol_extent(dso, mm_per_deg=transform.mm_per_deg, style=style)
         if color is None and _dso_overlaps_bright_star(
             scene_dso, scene, transform, size_model, extent, style
         ):
@@ -1142,7 +1166,8 @@ def _draw_filled_dso_outlines(
         extent = dso_symbol_extent(
             scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style
         )
-        cr.set_source_rgb(0.0, 0.0, 0.0)
+        _, outline_alpha = _dso_fill_and_outline_alpha(style, scene_dso, extent)
+        cr.set_source_rgba(0.0, 0.0, 0.0, outline_alpha)
         cr.set_line_width(mm_to_pt(width_mm))
         if dash is not None:
             cr.set_dash([mm_to_pt(dash[0]), mm_to_pt(dash[1])], 0.0)
@@ -1215,6 +1240,7 @@ def draw_dso_symbol(
     dash_mm: float,
     *,
     fill_color: tuple[float, float, float] | None = None,
+    fill_alpha: float = 1.0,
     fill_only: bool = False,
     outline_only: bool = False,
 ) -> None:
@@ -1226,6 +1252,7 @@ def draw_dso_symbol(
             y,
             extent,
             fill_color=fill_color,
+            fill_alpha=fill_alpha,
             fill_only=fill_only,
             outline_only=outline_only,
         )
@@ -1238,6 +1265,7 @@ def draw_dso_symbol(
             extent.shape,
             dash_mm,
             fill_color=fill_color,
+            fill_alpha=fill_alpha,
             fill_only=fill_only,
             outline_only=outline_only,
         )
@@ -1250,6 +1278,7 @@ def _draw_ellipse(
     extent: SymbolExtent,
     *,
     fill_color: tuple[float, float, float] | None = None,
+    fill_alpha: float = 1.0,
     fill_only: bool = False,
     outline_only: bool = False,
 ) -> None:
@@ -1262,7 +1291,7 @@ def _draw_ellipse(
     cr.arc(0.0, 0.0, 1.0, 0.0, 2.0 * math.pi)
     cr.restore()
     if fill_color is not None and fill_only:
-        cr.set_source_rgb(*fill_color)
+        cr.set_source_rgba(*fill_color, fill_alpha)
         cr.fill()
         return
     if fill_color is not None and not outline_only:
@@ -1281,6 +1310,7 @@ def _draw_dso_shape(
     dash_mm: float,
     *,
     fill_color: tuple[float, float, float] | None = None,
+    fill_alpha: float = 1.0,
     fill_only: bool = False,
     outline_only: bool = False,
 ) -> None:
@@ -1301,7 +1331,7 @@ def _draw_dso_shape(
     ):
         cr.arc(cx, cy, radius, 0.0, 2.0 * math.pi)
         if fill_color is not None and fill_only:
-            cr.set_source_rgb(*fill_color)
+            cr.set_source_rgba(*fill_color, fill_alpha)
             cr.fill()
         elif fill_color is not None and not outline_only:
             cr.set_source_rgb(*fill_color)
@@ -1312,7 +1342,7 @@ def _draw_dso_shape(
     if shape in (DsoShape.SQUARE, DsoShape.DASHED_SQUARE):
         cr.rectangle(cx - radius, cy - radius, 2.0 * radius, 2.0 * radius)
         if fill_color is not None and fill_only:
-            cr.set_source_rgb(*fill_color)
+            cr.set_source_rgba(*fill_color, fill_alpha)
             cr.fill()
         elif fill_color is not None and not outline_only:
             cr.set_source_rgb(*fill_color)
@@ -1323,7 +1353,7 @@ def _draw_dso_shape(
     if shape == DsoShape.DOT:
         cr.arc(cx, cy, radius, 0.0, 2.0 * math.pi)
         if fill_color is not None and fill_only:
-            cr.set_source_rgb(*fill_color)
+            cr.set_source_rgba(*fill_color, fill_alpha)
             cr.fill()
         elif fill_color is not None and not outline_only:
             cr.set_source_rgb(*fill_color)
@@ -1651,11 +1681,19 @@ def _draw_magellanic_clouds(
     )
     cr.clip()
     for level in magellanic.levels:
+        alpha = (
+            style.color_atlas.magellanic_cloud_fill_alpha.get(level, 1.0)
+            if style.color_atlas is not None
+            else 1.0
+        )
         if style.color_atlas is None:
             gray = magellanic.level_fill_gray[level]
             cr.set_source_rgb(gray, gray, gray)
         else:
-            cr.set_source_rgb(*_hex_rgb(magellanic.level_color[level]))
+            color = style.color_atlas.magellanic_cloud_fills.get(
+                level, magellanic.level_color[level]
+            )
+            cr.set_source_rgba(*_hex_rgb(color), alpha)
         for polygon in scene.magellanic_polygons:
             if polygon.level != level:
                 continue
@@ -1664,8 +1702,11 @@ def _draw_magellanic_clouds(
     cr.set_line_width(mm_to_pt(magellanic.line_width_mm))
     cr.set_line_join(cairo.LINE_JOIN_ROUND)
     for polygon in scene.magellanic_polygons:
-        gray = magellanic.level_gray[polygon.level]
-        cr.set_source_rgb(gray, gray, gray)
+        if style.color_atlas is None:
+            gray = magellanic.level_gray[polygon.level]
+            cr.set_source_rgb(gray, gray, gray)
+        else:
+            cr.set_source_rgb(*_hex_rgb(style.color_atlas.magellanic_cloud_outline))
         _append_closed_polygon(cr, transform, polygon.contour_points)
         cr.stroke()
     cr.restore()

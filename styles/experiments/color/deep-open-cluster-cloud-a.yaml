@@ -1,0 +1,14 @@
+extends: deep-a.yaml
+color_atlas:
+  open_cluster_fill:
+    small_max_diameter_mm: 5.0
+    medium_max_diameter_mm: 14.0
+    medium_fill_alpha: 0.48
+    large_fill_alpha: 0.18
+    medium_outline_alpha: 0.82
+    large_outline_alpha: 0.62
+  magellanic_cloud_fills: {1: "#E8F1F8", 2: "#D6E6F3", 3: "#C4D9EC"}
+  magellanic_cloud_fill_alpha: {1: 0.42, 2: 0.42, 3: 0.42}
+  magellanic_cloud_outline: "#D6E3ED"
+magellanic_clouds:
+  line_width_mm: 0.07
