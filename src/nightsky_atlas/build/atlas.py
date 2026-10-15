@@ -158,7 +158,13 @@ def _profile_config_path(source_path: str | Path, profile_name: str) -> Path:
     return sibling
 
 
-def _detail_style(detail: DetailChartConfig, style: StyleConfig) -> StyleConfig:
+def _detail_style(
+    detail: DetailChartConfig,
+    style: StyleConfig,
+    dso_profile: StyleConfig | None = None,
+) -> StyleConfig:
+    if dso_profile is not None:
+        style = style.model_copy(update={"dso": dso_profile.dso})
     constellation = {}
     for key, value in (
         ("names", detail.show_constellation_names),
@@ -1173,7 +1179,7 @@ def _credits_columns(
     faint_source = by_kind.get("faint_stars", {}).get("manifest") or {}
     if faint_source.get("catalogue") == "UCAC4":
         star_entries.append(
-            "UCAC4 — Zacharias et al. (2013), USNO; APASS V; terms not specified"
+            "UCAC4 — Zacharias et al. (2013), USNO; APASS V"
         )
     elif faint_source.get("source"):
         star_entries.append(f"Faint-star supplement — {faint_source['source']}")
@@ -1457,6 +1463,16 @@ def _build_atlas_impl(
             profile_atlas.stellar_limit_magnitude,
             _style_with_star_profile(style, profile_style),
         )
+    detail_dso_profiles = {
+        profile_name: load_style_config(_profile_config_path(style_path, profile_name))
+        for profile_name in sorted(
+            {
+                detail.dso_profile
+                for detail in detail_charts
+                if detail.dso_profile is not None
+            }
+        )
+    }
     main_faint_star_store = faint_star_store if atlas.id in {"eyepiece", "eyepieceDeep"} else None
     main_faint_star_limit = faint_star_limit if main_faint_star_store is not None else None
     if publication:
@@ -1520,6 +1536,10 @@ def _build_atlas_impl(
         input_paths[f"detail_star_profile_{profile_name}_style"] = _profile_config_path(
             style_path, profile_name
         )
+    for profile_name in detail_dso_profiles:
+        input_paths[f"detail_dso_profile_{profile_name}_style"] = _profile_config_path(
+            style_path, profile_name
+        )
     input_fingerprints = collect_build_inputs(input_paths)
     geometry_catalogues = {
         "constellation_lines": sorted(
@@ -1571,7 +1591,11 @@ def _build_atlas_impl(
         definition = detail.to_definition(atlas_id=atlas.id)
         profile_limit, profile_style = detail_star_profiles[detail.star_profile]
         stellar_limit_magnitude = detail.stars.magnitude_limit or profile_limit
-        detail_style = _detail_style(detail, profile_style)
+        detail_style = _detail_style(
+            detail,
+            profile_style,
+            detail_dso_profiles.get(detail.dso_profile),
+        )
         detail_faint_star_store, detail_faint_limit = _detail_faint_star_inputs(
             detail,
             profile_limit=stellar_limit_magnitude,
@@ -2032,7 +2056,11 @@ def _build_atlas_impl(
         definition = detail.to_definition(atlas_id=atlas.id)
         profile_limit, profile_style = detail_star_profiles[detail.star_profile]
         stellar_limit_magnitude = detail.stars.magnitude_limit or profile_limit
-        detail_style = _detail_style(detail, profile_style)
+        detail_style = _detail_style(
+            detail,
+            profile_style,
+            detail_dso_profiles.get(detail.dso_profile),
+        )
         detail_faint_star_store, detail_faint_limit = _detail_faint_star_inputs(
             detail,
             profile_limit=stellar_limit_magnitude,
@@ -2366,6 +2394,7 @@ def _build_atlas_impl(
                 "height_deg": detail.height_deg,
                 "mm_per_degree": detail.mm_per_degree,
                 "star_profile": detail.star_profile,
+                "dso_profile": detail.dso_profile,
                 "faint_star_limit": (
                     _detail_faint_star_inputs(
                         detail,

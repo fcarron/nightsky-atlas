@@ -193,10 +193,13 @@ chart. A detail chart elsewhere in the atlas is not sufficient evidence.
 The parent edition remains the source of DSO selection: Pocket details use
 Pocket selection, Standard details use Standard selection, and Deep details use
 Deep selection. A star profile can be denser without changing the DSO policy.
-The selected star profile supplies star limits, symbol sizes and star-label
-style; the base edition continues to supply DSO styling and selection. An
-optional UCAC4 supplement may be enabled for detail charts without adding it to
-the parent charts.
+Star and DSO rendering profiles are independent: `star_profile` controls star
+limits, symbol sizes and star-label style; optional `dso_profile` selects only
+the DSO rendering settings. If unset, DSO styling inherits the selected atlas
+style. Detail charts in the main editions explicitly select the corresponding
+scale-tier DSO profile, while retaining their parent edition's DSO selection
+and color palette. An optional UCAC4 supplement may be enabled for detail
+charts without adding it to the parent charts.
 
 Pocket detail charts use 10 mm/° with the Standard star profile, 20 mm/° with
 the Deep star profile, or 40 mm/° with the Eyepiece star profile. Detail-level
@@ -210,6 +213,8 @@ and the normal edition defaults.
 | --- | --- | ---: | ---: | --- |
 | Pocket — Virgo core | PD01 | 20 mm/° | 10.5 | P21, P20, P12, P11 |
 | Pocket — Pleiades · M45 | PD02 | 40 mm/° | 11.25 | P15 |
+| Pocket — Orion Nebula · M42 | PD03 | 20 mm/° | 10.5 | P23, P24 |
+| Pocket — Lagoon and Trifid Nebulae · M8 / M20 | PD04 | 20 mm/° | 10.5 | P28, P27 |
 | Standard — Virgo Cluster | SD01 | 20 mm/° | 10.5 | S051, S050, S066, S065 |
 | Standard — Virgo core | SD02 | 80 mm/° | 13.5 | S051 |
 | Standard — South Virgo | SD03 | 40 mm/° | 12.25 | S066, S051 |

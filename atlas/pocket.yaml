@@ -16,6 +16,7 @@ detail_charts:
     height_deg: 8.5
     mm_per_degree: 20.0
     star_profile: deep
+    dso_profile: deep
     parent_marker_label: ""
   - id: pocket-detail-pleiades
     code: PD02
@@ -26,6 +27,7 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+    dso_profile: eyepiece
     stars:
       magnitude_limit: 11.25
       include_ucac4: true
@@ -35,6 +37,26 @@ detail_charts:
       Mel022:
         show_symbol: false
         show_label: true
+  - id: pocket-detail-orion-m42
+    code: PD03
+    name: Orion Nebula · M42
+    center_ra_deg: 83.822
+    center_dec_deg: -5.391
+    width_deg: 13.0
+    height_deg: 8.5
+    mm_per_degree: 20.0
+    star_profile: deep
+    dso_profile: deep
+  - id: pocket-detail-sagittarius-m8-m20
+    code: PD04
+    name: Lagoon and Trifid Nebulae · M8 / M20
+    center_ra_deg: 270.8
+    center_dec_deg: -24.0
+    width_deg: 13.0
+    height_deg: 8.5
+    mm_per_degree: 20.0
+    star_profile: deep
+    dso_profile: deep
 tiling:
   width_deg: 54.0
   height_deg: 36.0

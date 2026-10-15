@@ -60,6 +60,7 @@ detail_charts:
     height_deg: 8.5
     mm_per_degree: 20.0
     star_profile: deep
+    dso_profile: deep
   - id: detail-virgo-core-label-fallback
     code: SD02
     name: Virgo core
@@ -69,6 +70,7 @@ detail_charts:
     height_deg: 2.125
     mm_per_degree: 80.0
     star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
   - id: detail-virgo-south-label-fallback
     code: SD03
     name: South Virgo
@@ -78,6 +80,7 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+    dso_profile: eyepiece
   - id: detail-fornax-core-label-fallback
     code: SD04
     name: Fornax core
@@ -87,6 +90,7 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+    dso_profile: eyepiece
   - id: detail-sagittarius
     code: SD05
     name: Sagittarius clusters · M22 / M28
@@ -96,6 +100,7 @@ detail_charts:
     height_deg: 8.5
     mm_per_degree: 20.0
     star_profile: deep
+    dso_profile: deep
   - id: detail-orion-m42
     code: SD07
     name: Orion Nebula · M42
@@ -105,6 +110,7 @@ detail_charts:
     height_deg: 8.5
     mm_per_degree: 20.0
     star_profile: deep
+    dso_profile: deep
   - id: detail-double-cluster
     code: SD08
     name: Perseus Double Cluster
@@ -114,6 +120,7 @@ detail_charts:
     height_deg: 8.5
     mm_per_degree: 20.0
     star_profile: deep
+    dso_profile: deep
   - id: detail-pleiades
     code: SD09
     name: Pleiades · M45
@@ -123,6 +130,7 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+    dso_profile: eyepiece
     stars:
       magnitude_limit: 12.0
       include_ucac4: true

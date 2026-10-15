@@ -182,6 +182,13 @@ class DetailChartConfig(_StrictModel):
         "eyepiece",
         "eyepiece_deep",
     ] = "deep"
+    dso_profile: Literal[
+        "pocket",
+        "standard",
+        "deep",
+        "eyepiece",
+        "eyepiece_deep",
+    ] | None = None
     stars: DetailStarConfig = Field(default_factory=DetailStarConfig)
     show_constellation_names: bool | None = None
     show_constellation_figures: bool | None = None

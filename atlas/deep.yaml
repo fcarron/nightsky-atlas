@@ -19,6 +19,7 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+    dso_profile: eyepiece
   - id: detail-deep-pleiades
     code: DD02
     name: Pleiades · M45
@@ -28,6 +29,7 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+    dso_profile: eyepiece
   - id: detail-deep-coma-core
     code: DD03
     name: Coma core
@@ -37,6 +39,7 @@ detail_charts:
     height_deg: 2.125
     mm_per_degree: 80.0
     star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
   - id: detail-deep-virgo-core
     code: DD04
     name: Markarian chain
@@ -46,6 +49,7 @@ detail_charts:
     height_deg: 2.125
     mm_per_degree: 80.0
     star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
   - id: detail-deep-orion-m42
     code: DD05
     name: M42 · Orion Nebula
@@ -55,6 +59,7 @@ detail_charts:
     height_deg: 2.125
     mm_per_degree: 80.0
     star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
   - id: detail-deep-fornax-core
     code: DD06
     name: Fornax core
@@ -64,6 +69,7 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+    dso_profile: eyepiece
   - id: detail-deep-30-doradus
     code: DD07
     name: 30 Doradus
@@ -74,6 +80,7 @@ detail_charts:
     height_deg: 2.125
     mm_per_degree: 80.0
     star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
   - id: detail-deep-lmc-central-bar
     code: DD08
     name: LMC bar
@@ -84,6 +91,7 @@ detail_charts:
     height_deg: 2.125
     mm_per_degree: 80.0
     star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
   - id: detail-deep-smc-ngc346
     code: DD09
     name: NGC 346 · SMC
@@ -93,6 +101,7 @@ detail_charts:
     height_deg: 4.25
     mm_per_degree: 40.0
     star_profile: eyepiece
+    dso_profile: eyepiece
   - id: detail-deep-perseus-cluster
     code: DD10
     name: Perseus Cluster · NGC 1275
@@ -102,6 +111,7 @@ detail_charts:
     height_deg: 2.125
     mm_per_degree: 80.0
     star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
 # Experimental aligned tiling: 23 symmetric declination rings, with small
 # shifts at ±53° and ±83° to improve the weakest sampled edge margin and polar
 # overlap. RA starts at 0° in every ring; see docs/CARTOGRAPHY.md.

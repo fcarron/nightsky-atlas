@@ -128,7 +128,7 @@ def test_credits_state_source_specific_licences_and_attributions() -> None:
 
     assert "CC BY-NC 3.0 IGO" in left_text
     assert "CC BY-SA 4.0" in left_text and "adapted" in left_text
-    assert "terms not specified" in left_text
+    assert "UCAC4 — Zacharias et al. (2013), USNO; APASS V" in left_text
     assert "Perren et al. (2023)" in left_text
     assert "CC BY-SA 2.0" in right_text
     assert "BSD-3-Clause" in right_text
