@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from nightsky_atlas.chart.page import PagePoint, PageRect
-from nightsky_atlas.layout.candidates import compass_candidates
+from nightsky_atlas.layout.candidates import compass_candidates, contour_candidates
 from nightsky_atlas.layout.geometry import circle_rect_edge_distance_mm
 from nightsky_atlas.layout.models import CompassPosition
 from nightsky_atlas.render.text import TextMetrics
@@ -118,6 +118,98 @@ def test_candidate_translates_glyph_geometry_to_page_coordinates() -> None:
         candidate.bounds.left_mm + 0.5
     )
     assert candidate.whitespace_bounds[0].top_mm == pytest.approx(candidate.bounds.top_mm)
+
+
+def test_contour_candidates_are_near_visible_path_and_inside_chart() -> None:
+    outline = (
+        PagePoint(90.0, 90.0),
+        PagePoint(110.0, 90.0),
+        PagePoint(110.0, 110.0),
+        PagePoint(90.0, 110.0),
+        PagePoint(90.0, 90.0),
+    )
+    chart = PageRect(80.0, 80.0, 40.0, 40.0)
+    candidates = contour_candidates(
+        label_id="label:dso:NEBULA",
+        metrics=METRICS,
+        outline_paths=(outline,),
+        edge_gap_mm=0.5,
+        allowed_rect=chart,
+    )
+
+    assert len(candidates) == 8
+    assert len({candidate.id for candidate in candidates}) == len(candidates)
+    for candidate in candidates:
+        assert candidate.bounds.left_mm >= chart.left_mm
+        assert candidate.bounds.top_mm >= chart.top_mm
+        assert candidate.bounds.right_mm <= chart.right_mm
+        assert candidate.bounds.bottom_mm <= chart.bottom_mm
+        assert candidate.bounds.width_mm == pytest.approx(METRICS.width_mm)
+        assert candidate.bounds.height_mm == pytest.approx(METRICS.height_mm)
+
+
+def test_contour_candidates_respect_clipping_at_chart_edge() -> None:
+    outline = ((PagePoint(80.0, 90.0), PagePoint(120.0, 90.0)),)
+    chart = PageRect(80.0, 80.0, 40.0, 40.0)
+    candidates = contour_candidates(
+        label_id="label:dso:EDGE",
+        metrics=METRICS,
+        outline_paths=outline,
+        edge_gap_mm=0.5,
+        allowed_rect=chart,
+    )
+
+    assert candidates
+    assert all(chart.left_mm <= item.bounds.left_mm for item in candidates)
+    assert all(item.bounds.right_mm <= chart.right_mm for item in candidates)
+
+
+def test_contour_candidates_sample_separate_visible_regions() -> None:
+    paths = (
+        (PagePoint(90.0, 90.0), PagePoint(100.0, 90.0)),
+        (PagePoint(90.0, 110.0), PagePoint(100.0, 110.0)),
+    )
+    candidates = contour_candidates(
+        label_id="label:dso:COMPLEX",
+        metrics=METRICS,
+        outline_paths=paths,
+        edge_gap_mm=0.5,
+        allowed_rect=PageRect(80.0, 80.0, 40.0, 40.0),
+    )
+
+    assert {candidate.id.split(":")[4] for candidate in candidates} == {"00", "01"}
+
+
+def test_contour_candidates_clear_nearby_segments_using_exact_geometry() -> None:
+    from nightsky_atlas.catalog.models import DsoType
+    from nightsky_atlas.layout.association import SourceGeometry, source_edge_distance
+
+    outline = (
+        PagePoint(90.0, 90.0),
+        PagePoint(110.0, 90.0),
+        PagePoint(110.0, 110.0),
+        PagePoint(90.0, 110.0),
+        PagePoint(90.0, 90.0),
+    )
+    source = SourceGeometry(
+        id="NEBULA",
+        source_type=DsoType.BRIGHT_NEBULA,
+        center=PagePoint(100.0, 100.0),
+        radius_x_mm=1.0,
+        radius_y_mm=1.0,
+        outline_paths=(outline,),
+    )
+    candidates = contour_candidates(
+        label_id="label:dso:NEBULA",
+        metrics=METRICS,
+        outline_paths=(outline,),
+        edge_gap_mm=0.5,
+        allowed_rect=PageRect(80.0, 80.0, 40.0, 40.0),
+        exact_edge_distance=lambda bounds, _glyphs: source_edge_distance(source, bounds),
+    )
+
+    assert candidates
+    assert all(source_edge_distance(source, item.bounds) >= 0.48 for item in candidates)
 
 
 def test_dense_candidate_sampling_uses_all_requested_gaps_and_directions() -> None:

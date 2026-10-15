@@ -65,7 +65,8 @@ def dso_source_geometries(
         )
     geometries: list[SourceGeometry] = []
     for scene_dso in scene.deep_sky_objects:
-        if not scene_dso.symbol_visible:
+        outline_paths = tuple(outlines_by_dso.get(scene_dso.dso.id, ()))
+        if not scene_dso.symbol_visible and not outline_paths:
             continue
         extent = dso_symbol_extent(
             scene_dso.dso,
@@ -81,7 +82,7 @@ def dso_source_geometries(
                 radius_x_mm=extent.radius_x_mm,
                 radius_y_mm=extent.radius_y_mm,
                 rotation_rad=extent.rotation_rad,
-                outline_paths=tuple(outlines_by_dso.get(scene_dso.dso.id, ())),
+                outline_paths=outline_paths,
                 ignore_interior_stars=scene_dso.dso.object_type == DsoType.OPEN_CLUSTER,
                 shape=extent.shape,
                 dash_length_mm=style.dso.dash_mm if is_dashed_circle else 0.0,

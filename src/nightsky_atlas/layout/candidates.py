@@ -21,6 +21,7 @@ __all__ = [
     "CANDIDATE_PREFERENCE",
     "COMPASS_VECTORS",
     "compass_candidates",
+    "contour_candidates",
     "direction_preference_rank",
 ]
 
@@ -221,6 +222,160 @@ def compass_candidates(
                 )
             )
     return tuple(candidates)
+
+
+def contour_candidates(
+    *,
+    label_id: str,
+    metrics: TextMetrics,
+    outline_paths: tuple[tuple[PagePoint, ...], ...],
+    edge_gap_mm: float,
+    allowed_rect: PageRect,
+    exact_edge_distance: CandidateEdgeDistance | None = None,
+    max_positions: int = 4,
+) -> tuple[LabelCandidate, ...]:
+    """Generate a small set of placements beside the visible contour.
+
+    Samples are spaced by arc length over the visible path segments. Each
+    sample is tried on both sides of the local tangent; the existing source
+    geometry scoring then prefers placements with a clear, close association.
+    """
+    if edge_gap_mm < 0.0:
+        raise ValueError("edge_gap_mm must be non-negative")
+    if max_positions < 1:
+        raise ValueError("max_positions must be positive")
+    paths = tuple(
+        (
+            path_index,
+            tuple(
+                (start, end, math.hypot(end.x_mm - start.x_mm, end.y_mm - start.y_mm))
+                for start, end in zip(path, path[1:], strict=False)
+                if math.hypot(end.x_mm - start.x_mm, end.y_mm - start.y_mm) > 1e-6
+            ),
+        )
+        for path_index, path in enumerate(outline_paths)
+    )
+    paths = tuple((path_id, segments) for path_id, segments in paths if segments)
+    if not paths:
+        return ()
+    selected_paths = tuple(
+        sorted(
+            sorted(
+                paths,
+                key=lambda item: (
+                    -sum(length for _, _, length in item[1]),
+                    item[0],
+                ),
+            )[:max_positions],
+            key=lambda item: item[0],
+        )
+    )
+
+    allocations = {path_id: 1 for path_id, _segments in selected_paths}
+    for _ in range(max(0, max_positions - len(allocations))):
+        path_id, _segments = max(
+            selected_paths,
+            key=lambda item: (
+                sum(length for _, _, length in item[1]) / allocations[item[0]],
+                -item[0],
+            ),
+        )
+        allocations[path_id] += 1
+
+    candidates: list[LabelCandidate] = []
+    for path_id, segments in selected_paths:
+        path_length = sum(length for _, _, length in segments)
+        for sample_index in range(allocations[path_id]):
+            target_length = path_length * (sample_index + 0.5) / allocations[path_id]
+            traversed = 0.0
+            for start, end, length in segments:
+                if traversed + length >= target_length:
+                    fraction = (target_length - traversed) / length
+                    point = PagePoint(
+                        start.x_mm + fraction * (end.x_mm - start.x_mm),
+                        start.y_mm + fraction * (end.y_mm - start.y_mm),
+                    )
+                    tangent_x = (end.x_mm - start.x_mm) / length
+                    tangent_y = (end.y_mm - start.y_mm) / length
+                    for side in (-1.0, 1.0):
+                        normal_x = side * -tangent_y
+                        normal_y = side * tangent_x
+                        half_extent = (
+                            abs(normal_x) * metrics.width_mm / 2.0
+                            + abs(normal_y) * metrics.height_mm / 2.0
+                        )
+                        center_x = point.x_mm + normal_x * (half_extent + edge_gap_mm)
+                        center_y = point.y_mm + normal_y * (half_extent + edge_gap_mm)
+                        bounds = PageRect(
+                            center_x - metrics.width_mm / 2.0,
+                            center_y - metrics.height_mm / 2.0,
+                            metrics.width_mm,
+                            metrics.height_mm,
+                        )
+                        if exact_edge_distance is not None:
+                            moved_mm = 0.0
+                            for _ in range(8):
+                                glyphs = _translated_rects(
+                                    metrics.ink_rects_mm, bounds.left_mm, bounds.top_mm
+                                )
+                                gap = exact_edge_distance(bounds, glyphs)
+                                if gap >= edge_gap_mm - 0.02:
+                                    break
+                                adjustment = max(edge_gap_mm - gap, 0.2)
+                                if moved_mm + adjustment > 3.0:
+                                    break
+                                bounds = PageRect(
+                                    bounds.left_mm + normal_x * adjustment,
+                                    bounds.top_mm + normal_y * adjustment,
+                                    bounds.width_mm,
+                                    bounds.height_mm,
+                                )
+                                moved_mm += adjustment
+                            glyphs = _translated_rects(
+                                metrics.ink_rects_mm, bounds.left_mm, bounds.top_mm
+                            )
+                            if exact_edge_distance(bounds, glyphs) < edge_gap_mm - 0.02:
+                                continue
+                        if not _rect_inside(bounds, allowed_rect):
+                            continue
+                        direction = max(
+                            COMPASS_VECTORS,
+                            key=lambda item: (
+                                COMPASS_VECTORS[item][0] * normal_x
+                                + COMPASS_VECTORS[item][1] * normal_y,
+                                -CANDIDATE_DIRECTIONS_16.index(item),
+                            ),
+                        )
+                        candidates.append(
+                            LabelCandidate(
+                                id=(
+                                    f"{label_id}:contour:{path_id:02d}:"
+                                    f"{sample_index:02d}:{int(side > 0)}"
+                                ),
+                                position=direction,
+                                anchor=PagePoint(bounds.left_mm, bounds.top_mm),
+                                bounds=bounds,
+                                ring=0,
+                                glyph_bounds=_translated_rects(
+                                    metrics.ink_rects_mm, bounds.left_mm, bounds.top_mm
+                                ),
+                                whitespace_bounds=_translated_rects(
+                                    metrics.whitespace_rects_mm, bounds.left_mm, bounds.top_mm
+                                ),
+                            )
+                        )
+                    break
+                traversed += length
+    return tuple(candidates)
+
+
+def _rect_inside(inner: PageRect, outer: PageRect) -> bool:
+    return (
+        inner.left_mm >= outer.left_mm - 1e-9
+        and inner.top_mm >= outer.top_mm - 1e-9
+        and inner.right_mm <= outer.right_mm + 1e-9
+        and inner.bottom_mm <= outer.bottom_mm + 1e-9
+    )
 
 
 def _translated_rects(

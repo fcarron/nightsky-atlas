@@ -30,6 +30,7 @@ from nightsky_atlas.layout.candidates import (
     CANDIDATE_DIRECTIONS_16,
     CANDIDATE_PREFERENCE,
     compass_candidates,
+    contour_candidates,
 )
 from nightsky_atlas.layout.dso_labels import format_dso_label
 from nightsky_atlas.layout.models import Label
@@ -197,6 +198,18 @@ def build_dso_labels(
             ring_gap_mm=style.label.ring_gap_mm,
         )
         candidates = compass_candidates(**candidate_kwargs)
+        if source is not None and source.outline_paths:
+            candidates = (
+                *candidates,
+                *contour_candidates(
+                    label_id=label_id,
+                    metrics=metrics,
+                    outline_paths=source.outline_paths,
+                    edge_gap_mm=placement_style.candidate_edge_gaps_mm[0],
+                    allowed_rect=transform.chart_rect,
+                    exact_edge_distance=exact_edge_distance,
+                ),
+            )
         if not candidates:
             candidate_kwargs["allowed_rect"] = None
             candidates = tuple(

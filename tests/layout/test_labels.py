@@ -88,6 +88,7 @@ def test_contour_alias_keeps_one_catalogue_label() -> None:
     labels = build_dso_labels(scene, PageTransform(chart=CHART, page=PAGE), STYLE)
 
     assert [label.id for label in labels] == ["label:dso:NGC7000"]
+    assert any(":contour:" in candidate.id for candidate in labels[0].candidates)
     assert label_priority(make_dso("Y", magnitude=13.0))[1] is False
 
 
