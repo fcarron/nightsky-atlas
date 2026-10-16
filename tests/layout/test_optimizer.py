@@ -9,23 +9,26 @@ from unittest.mock import Mock
 import pytest
 
 import nightsky_atlas.layout.optimizer as optimizer_module
+import nightsky_atlas.layout.placement as placement_module
 from nightsky_atlas.atlas.config import load_style_config
 from nightsky_atlas.catalog.models import DsoType, Provenance, Star
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.association import SourceGeometry
+from nightsky_atlas.layout.diagnostics import _dso_placement_metrics
 from nightsky_atlas.layout.geometry import rects_overlap
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import (
+    _dso_conflict_components,
+    _repair_dso_hard_conflicts,
+    optimize_labels,
+)
+from nightsky_atlas.layout.placement import (
     _association_scale,
     _build_star_index,
     _build_symbol_index,
     _CandidateScoreCache,
-    _dso_conflict_components,
-    _dso_placement_metrics,
     _is_valid,
-    _repair_dso_hard_conflicts,
-    optimize_labels,
 )
 from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle
 from nightsky_atlas.render.symbols import StarSizeModel
@@ -90,8 +93,8 @@ def test_candidate_cache_reuses_static_score_for_changed_neighbors(
 ) -> None:
     candidate = make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0)
     label = make_label("label:dso:X", (candidate,))
-    counted = Mock(wraps=optimizer_module.score_candidate)
-    monkeypatch.setattr(optimizer_module, "score_candidate", counted)
+    counted = Mock(wraps=placement_module.score_candidate)
+    monkeypatch.setattr(placement_module, "score_candidate", counted)
     clear_cost = candidate_cache.cost(label, candidate, ())
     occupied_cost = candidate_cache.cost(label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),))
 
@@ -104,8 +107,8 @@ def test_candidate_cache_reuses_static_validity_for_changed_neighbors(
 ) -> None:
     candidate = make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0)
     label = make_label("label:dso:X", (candidate,))
-    counted = Mock(wraps=optimizer_module._is_valid)
-    monkeypatch.setattr(optimizer_module, "_is_valid", counted)
+    counted = Mock(wraps=placement_module._is_valid)
+    monkeypatch.setattr(placement_module, "_is_valid", counted)
 
     assert candidate_cache.valid(label, candidate, ())
     assert not candidate_cache.valid(label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),))
@@ -506,3 +509,87 @@ def test_optimizer_prefers_candidate_with_cleaner_foreign_star_clearance() -> No
 
     assert result.labels[0].selected_candidate_id == clean.id
     assert result.component_totals_after["label_foreign_star_clearance"] == 0.0
+
+
+
+def test_optimization_phase_order_is_preserved(monkeypatch) -> None:
+    phases = (
+        "_evaluate", "_greedy_place", "_local_repair", "_joint_dso_optimize",
+        "_repair_dso_hard_conflicts", "_consider_star_leader_fallbacks",
+        "_consider_dso_leader_fallbacks", "_label_diagnostics",
+        "add_targeted_dso_leaders", "_dso_placement_metrics",
+    )
+    calls = []
+
+    def trace(name, function):
+        def run(*args, **kwargs):
+            calls.append(name)
+            return function(*args, **kwargs)
+        return run
+
+    for name in phases:
+        monkeypatch.setattr(optimizer_module, name, trace(name, getattr(optimizer_module, name)))
+    label = make_label(
+        "label:star:X", (make_candidate("label:star:X", CompassPosition.E, 100.0, 100.0),)
+    )
+    result = optimize_labels((label,), EMPTY_SCENE, TRANSFORM, STYLE)
+
+    assert calls == [
+        "_evaluate", "_greedy_place", "_local_repair", "_joint_dso_optimize",
+        "_repair_dso_hard_conflicts", "_consider_star_leader_fallbacks",
+        "_consider_dso_leader_fallbacks", "_evaluate", "_label_diagnostics",
+        "add_targeted_dso_leaders", "_dso_placement_metrics",
+    ]
+    assert result.labels[0].selected_candidate_id == label.candidates[0].id
+
+
+@pytest.mark.parametrize("detailed", [False, True])
+def test_diagnostics_preserve_layout_and_input_candidate_order(detailed) -> None:
+    first = make_label(
+        "label:dso:B",
+        (
+            make_candidate("label:dso:B", CompassPosition.E, 100.0, 100.0),
+            make_candidate("label:dso:B", CompassPosition.N, 100.0, 90.0),
+        ),
+    )
+    second = make_label(
+        "label:dso:A",
+        (
+            make_candidate("label:dso:A", CompassPosition.W, 102.0, 100.0),
+            make_candidate("label:dso:A", CompassPosition.E, 110.0, 100.0),
+        ),
+    )
+    labels = (first, second)
+    snapshot = tuple(label.to_dict() for label in labels)
+    normal = optimize_labels(labels, EMPTY_SCENE, TRANSFORM, STYLE)
+    result = optimize_labels(labels, EMPTY_SCENE, TRANSFORM, STYLE, detailed_diagnostics=detailed)
+
+    assert tuple(label.to_dict() for label in labels) == snapshot
+    assert result.labels == normal.labels
+    assert tuple(label.id for label in result.labels) == tuple(label.id for label in labels)
+    assert tuple(label.candidates for label in result.labels) == tuple(
+        label.candidates for label in labels
+    )
+    assert result.cost_before == normal.cost_before
+    assert result.cost_after == normal.cost_after
+    assert result.component_totals_before == normal.component_totals_before
+    assert result.component_totals_after == normal.component_totals_after
+    assert result.placed_count == 2
+    assert result.hidden_count == 0
+    assert {
+        key: value for key, value in result.metrics.items()
+        if key not in {"optimizer_runtime_s", "worst_placements"}
+    } == {
+        key: value for key, value in normal.metrics.items()
+        if key not in {"optimizer_runtime_s", "worst_placements"}
+    }
+    for actual, expected in zip(
+        result.metrics["worst_placements"], normal.metrics["worst_placements"], strict=True
+    ):
+        assert all(actual[key] == value for key, value in expected.items())
+    for label in result.labels:
+        diagnostic = result.label_diagnostics[label.id]
+        assert all(
+            diagnostic[key] == value for key, value in normal.label_diagnostics[label.id].items()
+        )
+        assert ("best_alternatives" in diagnostic) is detailed

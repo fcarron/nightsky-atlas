@@ -15,7 +15,7 @@ from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.collision import IssueType, find_hard_violations
 from nightsky_atlas.layout.labels import _exclusion_radius_mm
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
-from nightsky_atlas.layout.optimizer import _symbol_circles
+from nightsky_atlas.layout.placement import _symbol_circles
 from nightsky_atlas.render.symbols import (
     CIRCLE_CROSS_REACH_FACTOR,
     SPOKED_CIRCLE_INNER_FACTOR,

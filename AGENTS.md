@@ -298,6 +298,12 @@ never required for a valid page.
   improvement passes, deterministic conflict repair. Add simulated annealing /
   CP-SAT only if benchmarks show clear need; any stochastic optimizer is seeded.
 
+Optimizer entry: `layout/optimizer.py:optimize_labels` calls the placement,
+repair and leader phases in order. Shared scoring caches/spatial validity live
+in `layout/placement.py`; diagnostics live in `layout/diagnostics.py` and also
+feed targeted leaders. Candidate generation stays in `labels.py`/`candidates.py`;
+formulas stay in `scoring.py`. Relevant tests: `tests/layout/`.
+
 ## 16. Renderer architecture
 
 The renderer draws the supplied scene and resolved labels using their transform,

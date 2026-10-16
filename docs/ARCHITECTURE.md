@@ -294,6 +294,23 @@ layout; it must not be required to make an otherwise broken page valid.
   benchmark charts show a clear need; any stochastic algorithm must take and
   record an explicit seed.
 
+Optimizer implementation boundaries:
+
+| Responsibility | Entry/module | Regression tests |
+| --- | --- | --- |
+| Candidate generation and measured text | `labels.py`, `candidates.py` | `test_labels.py`, `test_candidates.py` |
+| Cost formulas / source geometry | `scoring.py`, `association.py` | `test_scoring.py`, `test_association.py` |
+| Spatial queries, static score cache, candidate validity | `placement.py` | `test_optimizer.py`, `test_spatial.py` |
+| Ordered placement, local/joint/hard repair and leader decisions | `optimizer.py:optimize_labels` | `test_optimizer.py`, `test_leader_lines.py` |
+| Association diagnostics and aggregate metrics | `diagnostics.py` | `test_optimizer.py`, `test_double_stars.py` |
+| Leader route geometry / hard validation | `leader_lines.py`, `validation.py`, `collision.py` | `test_leader_lines.py`, `test_collision.py` |
+
+The flow remains greedy → local repair → joint DSO search → hard repair →
+stellar/DSO leader fallbacks → diagnostics → targeted leaders → final metrics.
+Diagnostics feed the targeted leader phase; they are not a separate post-build
+report. Placement dictionaries and spatial index insertion order are intentional.
+Hard repair retains its bounded nested searches and shared closure state.
+
 ## Renderer
 
 The renderer is intentionally boring. It accepts the scene, resolved labels,

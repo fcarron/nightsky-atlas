@@ -1,9 +1,4 @@
-"""Deterministic label optimizer.
-
-Strategy (``AGENTS.md`` section 15.3): priority-ordered greedy placement
-followed by a deterministic local repair pass.  No stochastic search is used,
-so the result is reproducible.
-"""
+"""Deterministic label placement, conflict repair and leader fallback orchestration."""
 
 from __future__ import annotations
 
@@ -16,64 +11,65 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from nightsky_atlas.atlas.config import StyleConfig
-from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.association import (
     SourceGeometry,
     dso_source_geometries,
-    source_edge_distance,
-    source_geometries_overlap,
-    source_intersects_rect,
     source_outline_edge_distance,
 )
 from nightsky_atlas.layout.candidates import direction_preference_rank
+from nightsky_atlas.layout.diagnostics import (
+    _dso_placement_metrics,
+    _label_diagnostics,
+)
 from nightsky_atlas.layout.geometry import (
     circle_intersects_rect,
     rects_overlap,
 )
-from nightsky_atlas.layout.labels import constellation_label_anchors
 from nightsky_atlas.layout.leader_lines import (
     leader_line_for,
     prepare_leader_routing_context,
     resolve_leader_lines,
 )
 from nightsky_atlas.layout.models import Label, LabelCandidate
+from nightsky_atlas.layout.placement import (
+    _CROWDING_RADIUS_MM,
+    _GRID_CELL_MM,
+    _build_placed_index,
+    _build_star_index,
+    _build_symbol_index,
+    _candidate_breakdown,
+    _candidate_rejection_reason,
+    _CandidateScoreCache,
+    _collision_bounds,
+    _evaluate,
+    _is_valid,
+    _labels_overlap,
+    _nearby_stars,
+    _printable,
+    _resolved_weights,
+    _star_circles,
+    _symbol_circles,
+    _target_anchors,
+    _weighted_ownership_cost,
+)
 from nightsky_atlas.layout.scoring import (
     CostBreakdown,
     CostWeights,
     StarCircle,
     SymbolCircle,
-    candidate_star_edge_distance_mm,
-    foreign_star_hard_min_mm,
-    rescore_candidate_interactions,
-    score_candidate,
-    star_source_bounds,
 )
 from nightsky_atlas.layout.spatial import RectIndex
 from nightsky_atlas.layout.targeted_leaders import add_targeted_dso_leaders
 from nightsky_atlas.layout.text_geometry import (
     candidate_ink_bounds,
-    label_collision_bounds,
 )
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
-from nightsky_atlas.render.double_stars import (
-    printed_star_obstacles,
-    related_member_star_ids,
-    source_member_star_ids,
-)
-from nightsky_atlas.render.symbols import dso_symbol_extent
 from nightsky_atlas.scene.models import ChartScene
 
 __all__ = ["OptimizationResult", "layout_cost", "layout_hash", "optimize_labels"]
 
-_IMPORTANT_STAR_MAGNITUDE = 6.0
-_CROWDING_RADIUS_MM = 6.0
-_EDGE_MARGIN_MM = 8.0
 _MAX_REPAIR_PASSES = 4
-_GRID_CELL_MM = 8.0
-_SOURCE_INDEX_CACHE: dict[
-    int, tuple[tuple[SourceGeometry, ...], RectIndex[SourceGeometry]]
-] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,512 +87,404 @@ class OptimizationResult:
     metrics: dict[str, Any]
 
 
-class _CandidateScoreCache:
-    def __init__(
-        self,
-        anchors: dict[str, PagePoint],
-        printable: PageRect,
-        symbols_index: RectIndex[SymbolCircle],
-        sources: tuple[SourceGeometry, ...],
-        stars_index: RectIndex[StarCircle],
-        stars: tuple[StarCircle, ...],
-        style: StyleConfig,
-        weights: CostWeights,
-        constellation_lines: tuple[tuple[PagePoint, PagePoint], ...],
-        furniture: tuple[PageRect, ...] = (),
-    ) -> None:
-        self.anchors = anchors
-        self.printable = printable
-        self.symbols_index = symbols_index
-        self.sources = sources
-        self.source_by_id = {source.id: source for source in sources}
-        self.stars_index = stars_index
-        self.stars = stars
-        self.style = style
-        self.weights = weights
-        self.constellation_lines = constellation_lines
-        self.furniture = furniture
-        self._static: dict[tuple[str, str], CostBreakdown] = {}
-        self._geometry: dict[
-            tuple[str, str], tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]
-        ] = {}
-        self._validity: dict[tuple[str, str], tuple[bool, PageRect]] = {}
-
-    def geometry(
-        self,
-        label: Label,
-        candidate: LabelCandidate,
-    ) -> tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]:
-        key = (label.id, candidate.id)
-        geometry = self._geometry.get(key)
-        if geometry is None:
-            geometry = (
-                tuple(self.symbols_index.query(candidate.bounds)),
-                _nearby_stars(
-                    label, candidate.bounds, self.stars_index, self.stars, self.style
-                ),
-            )
-            self._geometry[key] = geometry
-        return geometry
-
-    def valid(
-        self,
-        label: Label,
-        candidate: LabelCandidate,
-        placed_bounds: tuple[PageRect, ...],
-    ) -> bool:
-        key = (label.id, candidate.id)
-        validity = self._validity.get(key)
-        if validity is None:
-            symbols, stars = self.geometry(label, candidate)
-            validity = (
-                _is_valid(
-                    label,
-                    candidate,
-                    (),
-                    self.printable,
-                    symbols,
-                    stars,
-                    self.style,
-                    self.furniture,
-                    self.sources,
-                    self.source_by_id,
-                ),
-                _collision_bounds(label, candidate, self.style),
-            )
-            self._validity[key] = validity
-        static_valid, collision_bounds = validity
-        return static_valid and not any(
-            rects_overlap(collision_bounds, other) for other in placed_bounds
-        )
-
-    def cost(
-        self,
-        label: Label,
-        candidate: LabelCandidate,
-        placed_bounds: tuple[PageRect, ...],
-        *,
-        nearby_symbols: tuple[SymbolCircle, ...] | None = None,
-        nearby_stars: tuple[StarCircle, ...] | None = None,
-    ) -> float:
-        return self.breakdown(
-            label,
-            candidate,
-            placed_bounds,
-            nearby_symbols=nearby_symbols,
-            nearby_stars=nearby_stars,
-        ).total(self.weights)
-
-    def breakdown(
-        self,
-        label: Label,
-        candidate: LabelCandidate,
-        placed_bounds: tuple[PageRect, ...],
-        *,
-        nearby_symbols: tuple[SymbolCircle, ...] | None = None,
-        nearby_stars: tuple[StarCircle, ...] | None = None,
-    ) -> CostBreakdown:
-        key = (label.id, candidate.id)
-        static = self._static.get(key)
-        if static is None:
-            if nearby_symbols is None or nearby_stars is None:
-                symbols, stars = self.geometry(label, candidate)
-            else:
-                symbols, stars = nearby_symbols, nearby_stars
-                self._geometry.setdefault(key, (symbols, stars))
-            static = score_candidate(
-                candidate,
-                target_anchor=_anchor_for(label, self.anchors, candidate),
-                placed_bounds=(),
-                symbols=symbols,
-                stars=stars,
-                associated_star_ids=_associated_star_ids(label, stars),
-                related_star_ids=_related_star_ids(label, stars),
-                star_clearance=self.style.label.star_clearance,
-                target_source_id=_association_source_id(label),
-                source_association=self.style.label.source_association,
-                dso_placement=self.style.label.dso_placement,
-                is_dso_label=label.id.startswith("label:dso:"),
-                source_symbols=_nearby_sources(label, candidate.bounds, self.sources, self.style),
-                association_scale=_association_scale(label, self.style),
-                printable=self.printable,
-                crowding_radius_mm=_CROWDING_RADIUS_MM,
-                weights=self.weights,
-                edge_margin_mm=_EDGE_MARGIN_MM,
-                constellation_lines=self.constellation_lines,
-            )
-            self._static[key] = static
-        return rescore_candidate_interactions(
-            static,
-            candidate,
-            placed_bounds,
-            crowding_radius_mm=_CROWDING_RADIUS_MM,
-            dso_placement=self.style.label.dso_placement,
-            is_dso_label=label.id.startswith("label:dso:"),
-        )
-
-
-def _symbol_circles(
-    scene: ChartScene, transform: PageTransform, style: StyleConfig
-) -> tuple[SymbolCircle, ...]:
-    symbols: list[SymbolCircle] = []
-    for scene_dso in scene.deep_sky_objects:
-        if not scene_dso.symbol_visible:
-            continue
-        extent = dso_symbol_extent(scene_dso.dso, mm_per_deg=transform.mm_per_deg, style=style)
-        symbols.append(
-            SymbolCircle(
-                center=transform.to_page(scene_dso.chart_point),
-                radius_mm=extent.collision_radius_mm,
-                id=scene_dso.dso.id,
-            )
-        )
-    return tuple(symbols)
-
-
-def _star_circles(
-    scene: ChartScene, transform: PageTransform, style: StyleConfig
-) -> tuple[StarCircle, ...]:
-    """Return every actual printed stellar disk for label-clearance geometry."""
-    return tuple(
-        StarCircle(
-            id=star.id,
-            star_ids=star.star_ids,
-            center=star.page_point,
-            radius_mm=star.radius_mm,
-            system_ids=star.system_ids,
-            marker_length_mm=star.marker_length_mm,
-            marker_line_width_mm=star.marker_line_width_mm,
-        )
-        for star in printed_star_obstacles(scene, transform, style)
-    )
-
-
-def _target_anchors(
-    labels: tuple[Label, ...], scene: ChartScene, transform: PageTransform, style: StyleConfig
-) -> dict[str, PagePoint]:
-    anchors: dict[str, PagePoint] = {}
-    for scene_star in scene.stars:
-        anchors[scene_star.star.id] = transform.to_page(scene_star.chart_point)
-    system_points: dict[str, list[PagePoint]] = {}
-    for obstacle in printed_star_obstacles(scene, transform, style):
-        for star_id in obstacle.star_ids:
-            anchors[star_id] = obstacle.page_point
-        for system_id in obstacle.system_ids:
-            system_points.setdefault(system_id, []).append(obstacle.page_point)
-    for system_id, points in system_points.items():
-        anchors[system_id] = PagePoint(
-            sum(point.x_mm for point in points) / len(points),
-            sum(point.y_mm for point in points) / len(points),
-        )
-    for scene_dso in scene.deep_sky_objects:
-        anchors[scene_dso.dso.id] = transform.to_page(scene_dso.chart_point)
-    anchors.update(constellation_label_anchors(scene, transform, style))
-    return anchors
-
-
-def _printable(transform: PageTransform) -> PageRect:
-    return PageRect(
-        left_mm=transform.page.margin_mm,
-        top_mm=transform.page.margin_mm,
-        width_mm=transform.page.printable_width_mm,
-        height_mm=transform.page.printable_height_mm,
-    )
-
-
-def _anchor_for(
-    label: Label, anchors: dict[str, PagePoint], candidate: LabelCandidate
-) -> PagePoint:
-    anchor = anchors.get(label.target_id)
-    if anchor is not None:
-        return anchor
-    return candidate.bounds.center
-
-
-def _symbol_bounds(symbol: SymbolCircle) -> PageRect:
-    return PageRect(
-        left_mm=symbol.center.x_mm - symbol.radius_mm,
-        top_mm=symbol.center.y_mm - symbol.radius_mm,
-        width_mm=2.0 * symbol.radius_mm,
-        height_mm=2.0 * symbol.radius_mm,
-    )
-
-
-def _collision_bounds(
-    label: Label, candidate: LabelCandidate, style: StyleConfig
-) -> PageRect:
-    return label_collision_bounds(
-        label,
-        candidate,
-        ink_clearance_mm=style.label.dso_placement.label_label_ink_clearance_mm,
-    )
-
-
-def _labels_overlap(
-    first: Label,
-    first_candidate: LabelCandidate,
-    second: Label,
-    second_candidate: LabelCandidate,
-    style: StyleConfig,
-) -> bool:
-    first_bounds = _collision_bounds(first, first_candidate, style)
-    second_bounds = _collision_bounds(second, second_candidate, style)
-    return rects_overlap(first_bounds, second_bounds)
-
-
-def _build_symbol_index(symbols: tuple[SymbolCircle, ...]) -> RectIndex[SymbolCircle]:
-    index: RectIndex[SymbolCircle] = RectIndex(_GRID_CELL_MM)
-    for position, symbol in enumerate(symbols):
-        index.set(f"symbol:{position}", _symbol_bounds(symbol), symbol)
-    return index
-
-
-def _nearby_sources(
-    label: Label,
-    bounds: PageRect,
-    sources: tuple[SourceGeometry, ...],
-    style: StyleConfig,
-) -> tuple[SourceGeometry, ...]:
-    """Limit DSO association scoring to the local source neighborhood."""
-    owner_id = _association_source_id(label)
-    placement = style.label.dso_placement
-    association = style.label.source_association
-    margin = max(placement.candidate_edge_gaps_mm) + association.corridor_margin_mm + 1.0
-    margin_sq = margin**2
-    source_index = _source_spatial_index(sources)
-    nearby = []
-    for source in source_index.query(bounds, margin_mm=margin):
-        radius = source.collision_radius_mm
-        dx = max(
-            bounds.left_mm - (source.center.x_mm + radius),
-            0.0,
-            source.center.x_mm - radius - bounds.right_mm,
-        )
-        dy = max(
-            bounds.top_mm - (source.center.y_mm + radius),
-            0.0,
-            source.center.y_mm - radius - bounds.bottom_mm,
-        )
-        if source.id == owner_id or dx * dx + dy * dy <= margin_sq:
-            nearby.append(source)
-    return tuple(nearby)
-
-
-def _source_spatial_index(
-    sources: tuple[SourceGeometry, ...],
-) -> RectIndex[SourceGeometry]:
-    key = id(sources)
-    cached = _SOURCE_INDEX_CACHE.get(key)
-    if cached is not None and cached[0] is sources:
-        return cached[1]
-    index: RectIndex[SourceGeometry] = RectIndex(_GRID_CELL_MM)
-    for source in sources:
-        radius = source.collision_radius_mm
-        index.set(
-            source.id,
-            PageRect(
-                source.center.x_mm - radius,
-                source.center.y_mm - radius,
-                2.0 * radius,
-                2.0 * radius,
-            ),
-            source,
-        )
-    if len(_SOURCE_INDEX_CACHE) >= 4:
-        _SOURCE_INDEX_CACHE.pop(next(iter(_SOURCE_INDEX_CACHE)))
-    _SOURCE_INDEX_CACHE[key] = (sources, index)
-    return index
-
-
-def _ownership_result(
-    label: Label,
-    bounds: PageRect,
-    sources: tuple[SourceGeometry, ...],
+def optimize_labels(
+    labels: tuple[Label, ...],
+    scene: ChartScene,
+    transform: PageTransform,
     style: StyleConfig,
     *,
-    all_sources: bool = False,
-) -> tuple[float, float | None, SourceGeometry | None, bool]:
-    considered = sources if all_sources else _nearby_sources(label, bounds, sources, style)
-    owner = next((source for source in considered if source.id == label.target_id), None)
-    if owner is None:
-        return 0.0, None, None, False
-    owner_gap = source_edge_distance(owner, bounds)
-    competitors = tuple(
-        source for source in considered if source.id != label.target_id
+    weights: CostWeights | None = None,
+    furniture: Iterable[PageRect] = (),
+    detailed_diagnostics: bool = False,
+) -> OptimizationResult:
+    """Optimize label placement deterministically.
+
+    ``furniture`` holds the mandatory page-furniture rectangles that no label
+    may overlap, so the optimizer never places a label onto the title,
+    navigation, scale bar or legend (``AGENTS.md`` sections 15.1 and 16).
+    """
+    started_at = time.perf_counter()
+    weights = _resolved_weights(style, weights)
+    furniture_rects = tuple(furniture)
+    printable = _printable(transform)
+    symbols = _symbol_circles(scene, transform, style)
+    sources = dso_source_geometries(scene, transform, style)
+    stars = _star_circles(scene, transform, style)
+    constellation_lines = tuple(
+        (stroke.start, stroke.end)
+        for stroke in resolve_constellation_lines(scene, transform, style)
     )
-    nearest = min(
-        competitors,
-        key=lambda source: (source_edge_distance(source, bounds), source.id),
-        default=None,
+    symbols_index = _build_symbol_index(symbols)
+    stars_index = _build_star_index(stars)
+    anchors = _target_anchors(scene, transform, style)
+    ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
+
+    # Initial layout: the placement that would be printed without optimization
+    # (the explicit selection, else the preferred candidate).  Locked labels
+    # start from their override so the "before" diagnostics already reflect it.
+    before: dict[str, str | None] = {}
+    for label in ordered:
+        candidate = label.effective_candidate()
+        before[label.id] = candidate.id if candidate is not None else None
+    cost_before, totals_before = _evaluate(
+        ordered,
+        before,
+        anchors,
+        printable,
+        symbols,
+        sources,
+        stars,
+        style,
+        weights,
+        constellation_lines,
     )
-    if nearest is None:
-        return owner_gap, None, None, False
-    foreign_gap = source_edge_distance(nearest, bounds)
-    margin = foreign_gap - owner_gap
-    isolated_galaxy = (
-        owner.source_type == DsoType.GALAXY
-        and nearest.source_type == DsoType.GALAXY
-    )
-    overlap_exception = isolated_galaxy and source_geometries_overlap(owner, nearest)
-    near_hard_violation = (
-        isolated_galaxy
-        and margin < style.label.dso_placement.ownership_margin_hard_limit_mm
-        and not overlap_exception
-    )
-    return owner_gap, margin, nearest, near_hard_violation
-
-
-def _build_star_index(stars: tuple[StarCircle, ...]) -> RectIndex[StarCircle]:
-    index: RectIndex[StarCircle] = RectIndex(_GRID_CELL_MM)
-    for star in stars:
-        index.set(star.id, star_source_bounds(star), star)
-    return index
-
-
-def _associated_star_ids(label: Label, stars: tuple[StarCircle, ...]) -> frozenset[str]:
-    """Return the physical printed members owned by a label's source."""
-    return source_member_star_ids(label.target_id, stars)
-
-
-def _related_star_ids(label: Label, stars: tuple[StarCircle, ...]) -> frozenset[str]:
-    """Return all printed components semantically related to a star label."""
-    return related_member_star_ids(label.target_id, stars)
-
-
-def _resolved_weights(style: StyleConfig, weights: CostWeights | None) -> CostWeights:
-    if weights is not None:
-        return weights
-    clearance = style.label.star_clearance
-    return CostWeights(
-        label_foreign_star_clearance=clearance.foreign.weight,
-        label_associated_star_clearance=clearance.associated.clearance_weight,
-        label_association_distance=clearance.associated.distance_weight,
-        label_source_distance=style.label.source_association.distance_weight,
-        label_source_facing_edge_distance=0.0,
-        label_source_corridor=style.label.source_association.corridor_weight,
-        label_competing_source_ambiguity=style.label.source_association.ambiguity_weight,
-        label_competing_owner=style.label.source_association.competing_owner_weight,
-        label_glyph_proximity=style.label.source_association.glyph_weight,
-        label_foreign_object_proximity=(
-            style.label.source_association.foreign_object_weight
-        ),
-        label_ownership_margin=style.label.dso_placement.ownership_margin_weight,
+    cost_cache = _CandidateScoreCache(
+        anchors,
+        printable,
+        symbols_index,
+        sources,
+        stars_index,
+        stars,
+        style,
+        weights,
+        constellation_lines,
+        furniture_rects,
     )
 
+    placements, placed_index = _greedy_place(ordered, cost_cache)
 
-def _star_query_margin_mm(style: StyleConfig) -> float:
-    foreign = style.label.star_clearance.foreign
-    return max(
-        foreign.soft_clear_mm + style.star.max_diameter_mm / 2.0 * foreign.radius_clearance_factor,
-        style.label.star_clearance.associated.preferred_max_mm,
+    local_repair_stats: dict[str, Any] = {}
+    placements = _local_repair(
+        ordered,
+        placements,
+        anchors,
+        printable,
+        placed_index,
+        symbols_index,
+        sources,
+        stars_index,
+        stars,
+        style,
+        weights,
+        furniture_rects,
+        constellation_lines,
+        cost_cache,
+        local_repair_stats,
+    )
+    placements, component_stats = _joint_dso_optimize(
+        ordered,
+        placements,
+        placed_index,
+        style,
+        cost_cache,
+    )
+    placements, hard_repair_stats = _repair_dso_hard_conflicts(
+        ordered,
+        placements,
+        anchors,
+        printable,
+        symbols_index,
+        sources,
+        stars_index,
+        stars,
+        style,
+        weights,
+        furniture_rects,
+        constellation_lines,
+        cost_cache,
+    )
+    component_stats.update(hard_repair_stats)
+    optimized = tuple(
+        label.with_placement(placements.get(label.id), hidden=placements.get(label.id) is None)
+        for label in labels
+    )
+    auto_labels = _consider_star_leader_fallbacks(
+        optimized, placed_index, scene, transform, cost_cache
+    )
+    auto_labels = list(
+        _consider_dso_leader_fallbacks(
+            tuple(auto_labels),
+            anchors,
+            printable,
+            symbols_index,
+            sources,
+            stars_index,
+            stars,
+            style,
+            weights,
+            furniture_rects,
+            constellation_lines,
+            scene,
+            transform,
+            cost_cache,
+        )
+    )
+    optimized = tuple(auto_labels)
+    final_placements: dict[str, str | None] = {}
+    for label in optimized:
+        candidate = None if label.hidden else label.effective_candidate()
+        final_placements[label.id] = candidate.id if candidate is not None else None
+    cost_after, totals_after = _evaluate(
+        ordered,
+        final_placements,
+        anchors,
+        printable,
+        symbols,
+        sources,
+        stars,
+        style,
+        weights,
+        constellation_lines,
+    )
+    placed_count = sum(1 for value in placements.values() if value is not None)
+    final_placed_index = _build_placed_index(optimized, style)
+    label_diagnostics = _label_diagnostics(
+        optimized,
+        anchors,
+        printable,
+        final_placed_index,
+        symbols_index,
+        sources,
+        stars_index,
+        stars,
+        style,
+        weights,
+        constellation_lines,
+        scene=scene,
+        transform=transform,
+        detailed_diagnostics=detailed_diagnostics,
+        furniture=furniture_rects,
+        component_stats=component_stats,
+    )
+    targeted = add_targeted_dso_leaders(
+        optimized, label_diagnostics, scene, transform, style, furniture=furniture_rects
+    )
+    if targeted.labels != optimized:
+        optimized = targeted.labels
+        label_diagnostics = _label_diagnostics(
+            optimized,
+            anchors,
+            printable,
+            final_placed_index,
+            symbols_index,
+            sources,
+            stars_index,
+            stars,
+            style,
+            weights,
+            constellation_lines,
+            scene=scene,
+            transform=transform,
+            detailed_diagnostics=detailed_diagnostics,
+            furniture=furniture_rects,
+            component_stats=component_stats,
+        )
+    elapsed_s = time.perf_counter() - started_at
+    dso_metrics = _dso_placement_metrics(
+        optimized,
+        label_diagnostics,
+        component_stats,
+        elapsed_s,
+        weak_margin_mm=style.label.dso_placement.ownership_margin_preferred_mm,
+    )
+    dso_metrics["local_repair"] = local_repair_stats
+    dso_metrics["targeted_dso_leaders"] = {
+        "counts": targeted.counts,
+        "decisions": list(targeted.decisions),
+    }
+    return OptimizationResult(
+        labels=optimized,
+        cost_before=cost_before,
+        cost_after=cost_after,
+        placed_count=placed_count,
+        hidden_count=len(ordered) - placed_count,
+        component_totals_before=totals_before,
+        component_totals_after=totals_after,
+        label_diagnostics=label_diagnostics,
+        metrics=dso_metrics,
     )
 
 
-def _nearby_stars(
-    label: Label,
-    bounds: PageRect,
-    index: RectIndex[StarCircle],
-    stars: tuple[StarCircle, ...],
-    style: StyleConfig,
-) -> tuple[StarCircle, ...]:
-    queried = tuple(index.query(bounds, margin_mm=_star_query_margin_mm(style)))
-    if not label.id.startswith("label:star:"):
-        return tuple(sorted(queried, key=lambda star: star.id))
-    known_ids = {star.id for star in queried}
-    associated = tuple(
-        star for star in stars if label.target_id in star.star_ids and star.id not in known_ids
-    )
-    related_ids = _related_star_ids(label, stars)
-    related = tuple(
-        star
-        for star in stars
-        if related_ids & star.star_ids and star.id not in known_ids
-    )
-    by_id = {star.id: star for star in (*queried, *associated, *related)}
-    return tuple(sorted(by_id.values(), key=lambda star: star.id))
+def _greedy_place(
+    ordered: tuple[Label, ...], cost_cache: _CandidateScoreCache
+) -> tuple[dict[str, str | None], RectIndex[PageRect]]:
+    placements: dict[str, str | None] = {}
+    placed_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
+    for label in ordered:
+        if not label.locked:
+            continue
+        candidate_id = label.selected_candidate_id
+        candidate = label.candidate(candidate_id) if candidate_id is not None else None
+        if candidate is not None:
+            placements[label.id] = candidate.id
+            bounds = _collision_bounds(label, candidate, cost_cache.style)
+            placed_index.set(label.id, bounds, bounds)
+        else:
+            placements[label.id] = None
+
+    for label in ordered:
+        if label.id in placements:
+            continue
+        best: tuple[tuple[float, float, int, float], LabelCandidate] | None = None
+        for candidate in label.candidates:
+            nearby_bounds = tuple(
+                placed_index.query(
+                    candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id
+                )
+            )
+            nearby_symbols = tuple(cost_cache.symbols_index.query(candidate.bounds))
+            nearby_stars = _nearby_stars(
+                label, candidate.bounds, cost_cache.stars_index, cost_cache.stars, cost_cache.style
+            )
+            valid = _is_valid(
+                label,
+                candidate,
+                nearby_bounds,
+                cost_cache.printable,
+                nearby_symbols,
+                nearby_stars,
+                cost_cache.style,
+                cost_cache.furniture,
+                cost_cache.sources,
+            )
+            if not valid and best is not None and best[0][0] == 0.0:
+                continue
+            cost = cost_cache.cost(
+                label,
+                candidate,
+                nearby_bounds,
+                nearby_symbols=nearby_symbols,
+                nearby_stars=nearby_stars,
+            )
+            key = (
+                0.0 if valid else 1.0,
+                cost,
+                candidate.variant_rank,
+                direction_preference_rank(candidate.position),
+            )
+            if best is None or key < best[0]:
+                best = (key, candidate)
+        if best is None:
+            placements[label.id] = None
+            continue
+        valid = best[0][0] == 0.0
+        if not valid and not label.mandatory and not label.id.startswith("label:dso:"):
+            placements[label.id] = None
+            continue
+        placements[label.id] = best[1].id
+        bounds = _collision_bounds(label, best[1], cost_cache.style)
+        placed_index.set(label.id, bounds, bounds)
+
+    return placements, placed_index
 
 
-def _is_valid(
-    label: Label,
-    candidate: LabelCandidate,
-    placed_bounds: tuple[PageRect, ...],
+def _local_repair(
+    ordered: tuple[Label, ...],
+    placements: dict[str, str | None],
+    anchors: dict[str, PagePoint],
     printable: PageRect,
-    symbols: tuple[SymbolCircle, ...],
+    placed_index: RectIndex[PageRect],
+    symbols_index: RectIndex[SymbolCircle],
+    sources: tuple[SourceGeometry, ...],
+    stars_index: RectIndex[StarCircle],
     stars: tuple[StarCircle, ...],
     style: StyleConfig,
+    weights: CostWeights,
     furniture: tuple[PageRect, ...] = (),
-    source_geometries: tuple[SourceGeometry, ...] | None = None,
-    source_by_id: dict[str, SourceGeometry] | None = None,
-) -> bool:
-    bounds = candidate.bounds
-    collision_bounds = _collision_bounds(label, candidate, style)
-    if (
-        bounds.left_mm < printable.left_mm
-        or bounds.top_mm < printable.top_mm
-        or bounds.right_mm > printable.right_mm
-        or bounds.bottom_mm > printable.bottom_mm
-    ):
-        return False
-    if any(rects_overlap(collision_bounds, other) for other in placed_bounds):
-        return False
-    if any(rects_overlap(bounds, obstacle) for obstacle in furniture):
-        return False
-    source_bounds = (
-        candidate_ink_bounds(candidate) if label.id.startswith("label:dso:") else bounds
-    )
-    if source_geometries is None:
-        if any(
-            circle_intersects_rect(symbol.center, symbol.radius_mm, source_bounds)
-            for symbol in symbols
-        ):
-            return False
-    else:
-        if source_by_id is None:
-            source_by_id = {source.id: source for source in source_geometries}
-        source_conflict = any(
-            source_intersects_rect(source_by_id[symbol.id], source_bounds)
-            for symbol in symbols
-            if symbol.id in source_by_id
+    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
+    cost_cache: _CandidateScoreCache | None = None,
+    repair_stats: dict[str, Any] | None = None,
+) -> dict[str, str | None]:
+    if cost_cache is None:
+        cost_cache = _CandidateScoreCache(
+            anchors,
+            printable,
+            symbols_index,
+            sources,
+            stars_index,
+            stars,
+            style,
+            weights,
+            constellation_lines,
+            furniture,
         )
-        if source_conflict:
-            return False
-    if label.id.startswith("label:dso:") and source_geometries is not None:
-        _, _, _, wrong_owner = _ownership_result(
-            label, candidate_ink_bounds(candidate), source_geometries, style
-        )
-        if wrong_owner:
-            return False
-    related = _related_star_ids(label, stars)
-    for star in stars:
-        hard_min = style.label.star_clearance.associated.hard_min_mm if (
-            related & star.star_ids
-        ) else foreign_star_hard_min_mm(star.radius_mm, style.label.star_clearance)
-        if candidate_star_edge_distance_mm(
-            star,
-            candidate,
-            visible_text=label.id.startswith(("label:star:", "label:dso:")),
-        ) < hard_min:
-            return False
-    return True
-
-
-def _preference_rank(candidate: LabelCandidate) -> float:
-    return direction_preference_rank(candidate.position)
-
-
-def _association_scale(label: Label, style: StyleConfig) -> float:
-    compact_text = "".join(label.text.split())
-    if label.id.startswith("label:star:") and len(compact_text) <= 3:
-        return style.label.source_association.compact_label_factor
-    if label.id.startswith("label:dso:") and len(compact_text) <= 4:
-        return style.label.dso_placement.compact_label_factor
-    return 1.0
-
-
-def _association_source_id(label: Label) -> str | None:
-    if label.id.startswith(("label:star:", "label:dso:")):
-        return label.target_id
-    return None
+    pass_stats: list[dict[str, Any]] = []
+    for _ in range(_MAX_REPAIR_PASSES):
+        changed = False
+        evaluated = 0
+        moves: list[dict[str, Any]] = []
+        for label in ordered:
+            if label.locked:
+                continue
+            current_id = placements.get(label.id)
+            if current_id is None:
+                continue
+            current = label.candidate(current_id)
+            if current is None:
+                continue
+            evaluated += 1
+            best_id = current_id
+            nearby_bounds = tuple(
+                placed_index.query(current.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
+            )
+            current_valid = cost_cache.valid(label, current, nearby_bounds)
+            best_cost = cost_cache.cost(label, current, nearby_bounds)
+            initial_cost = best_cost
+            best_key = (0 if current_valid else 1, best_cost)
+            for candidate in label.candidates:
+                if candidate.id == current_id:
+                    continue
+                if best_key[0] == 0 and not cost_cache.valid(label, candidate, ()):
+                    continue
+                cand_bounds = tuple(
+                    placed_index.query(
+                        candidate.bounds,
+                        margin_mm=_CROWDING_RADIUS_MM,
+                        exclude=label.id,
+                    )
+                )
+                candidate_valid = cost_cache.valid(label, candidate, cand_bounds)
+                if not candidate_valid and best_key[0] == 0:
+                    continue
+                cost = cost_cache.cost(label, candidate, cand_bounds)
+                candidate_key = (0 if candidate_valid else 1, cost)
+                if candidate_key < (best_key[0], best_key[1] - 1e-9):
+                    best_cost = cost
+                    best_id = candidate.id
+                    best_key = candidate_key
+            if best_id != current_id:
+                placements[label.id] = best_id
+                new_candidate = label.candidate(best_id)
+                if new_candidate is not None:
+                    if repair_stats is not None:
+                        old_center = current.bounds.center
+                        new_center = new_candidate.bounds.center
+                        moves.append({
+                            "label_id": label.id,
+                            "from": current_id,
+                            "to": best_id,
+                            "was_valid": current_valid,
+                            "is_valid": best_key[0] == 0,
+                            "cost_gain": (
+                                initial_cost - best_cost
+                                if current_valid == (best_key[0] == 0)
+                                else None
+                            ),
+                            "movement_mm": math.hypot(
+                                new_center.x_mm - old_center.x_mm,
+                                new_center.y_mm - old_center.y_mm,
+                            ),
+                        })
+                    bounds = _collision_bounds(label, new_candidate, style)
+                    placed_index.set(label.id, bounds, bounds)
+                changed = True
+        if repair_stats is not None:
+            pass_stats.append({"evaluated_labels": evaluated, "moves": moves})
+        if not changed:
+            break
+    if repair_stats is not None:
+        repair_stats["passes"] = pass_stats
+    return placements
 
 
 def _dso_conflict_components(
@@ -644,16 +532,7 @@ def _joint_component_search(
     component: tuple[str, ...],
     labels_by_id: dict[str, Label],
     placements: dict[str, str | None],
-    anchors: dict[str, PagePoint],
-    printable: PageRect,
-    symbols_index: RectIndex[SymbolCircle],
-    sources: tuple[SourceGeometry, ...],
-    stars_index: RectIndex[StarCircle],
-    stars: tuple[StarCircle, ...],
     style: StyleConfig,
-    weights: CostWeights,
-    furniture: tuple[PageRect, ...],
-    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...],
     cost_cache: _CandidateScoreCache,
 ) -> tuple[dict[str, str] | None, int]:
     """Bounded deterministic beam search for one small DSO conflict component."""
@@ -724,17 +603,8 @@ def _joint_component_search(
 def _joint_dso_optimize(
     labels: tuple[Label, ...],
     placements: dict[str, str | None],
-    anchors: dict[str, PagePoint],
-    printable: PageRect,
     placed_index: RectIndex[PageRect],
-    symbols_index: RectIndex[SymbolCircle],
-    sources: tuple[SourceGeometry, ...],
-    stars_index: RectIndex[StarCircle],
-    stars: tuple[StarCircle, ...],
     style: StyleConfig,
-    weights: CostWeights,
-    furniture: tuple[PageRect, ...],
-    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...],
     cost_cache: _CandidateScoreCache,
 ) -> tuple[dict[str, str | None], dict[str, Any]]:
     """Optimize independent small DSO conflict components jointly.
@@ -773,16 +643,7 @@ def _joint_dso_optimize(
             component,
             labels_by_id,
             placements,
-            anchors,
-            printable,
-            symbols_index,
-            sources,
-            stars_index,
-            stars,
             style,
-            weights,
-            furniture,
-            constellation_lines,
             cost_cache,
         )
         stats["joint_search_nodes"] += visited
@@ -1261,16 +1122,7 @@ def _repair_dso_hard_conflicts(
                 neighborhood,
                 labels_by_id,
                 placements,
-                anchors,
-                printable,
-                symbols_index,
-                sources,
-                stars_index,
-                stars,
                 style,
-                weights,
-                furniture,
-                constellation_lines,
                 cost_cache,
             )
             stats["neighborhood_search_nodes"] += visited
@@ -1318,16 +1170,7 @@ def _repair_dso_hard_conflicts(
                 neighborhood,
                 labels_by_id,
                 placements,
-                anchors,
-                printable,
-                symbols_index,
-                sources,
-                stars_index,
-                stars,
                 style,
-                weights,
-                furniture,
-                constellation_lines,
                 cost_cache,
             )
             stats["neighborhood_search_nodes"] += visited
@@ -1392,190 +1235,13 @@ def _repair_dso_hard_conflicts(
     return placements, stats
 
 
-def optimize_labels(
-    labels: tuple[Label, ...],
+def _consider_star_leader_fallbacks(
+    optimized: tuple[Label, ...],
+    placed_index: RectIndex[PageRect],
     scene: ChartScene,
     transform: PageTransform,
-    style: StyleConfig,
-    *,
-    weights: CostWeights | None = None,
-    furniture: Iterable[PageRect] = (),
-    detailed_diagnostics: bool = False,
-) -> OptimizationResult:
-    """Optimize label placement deterministically.
-
-    ``furniture`` holds the mandatory page-furniture rectangles that no label
-    may overlap, so the optimizer never places a label onto the title,
-    navigation, scale bar or legend (``AGENTS.md`` sections 15.1 and 16).
-    """
-    started_at = time.perf_counter()
-    weights = _resolved_weights(style, weights)
-    furniture_rects = tuple(furniture)
-    printable = _printable(transform)
-    symbols = _symbol_circles(scene, transform, style)
-    sources = dso_source_geometries(scene, transform, style)
-    stars = _star_circles(scene, transform, style)
-    constellation_lines = tuple(
-        (stroke.start, stroke.end)
-        for stroke in resolve_constellation_lines(scene, transform, style)
-    )
-    symbols_index = _build_symbol_index(symbols)
-    stars_index = _build_star_index(stars)
-    anchors = _target_anchors(labels, scene, transform, style)
-    ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
-
-    # Initial layout: the placement that would be printed without optimization
-    # (the explicit selection, else the preferred candidate).  Locked labels
-    # start from their override so the "before" diagnostics already reflect it.
-    before: dict[str, str | None] = {}
-    for label in ordered:
-        candidate = label.effective_candidate()
-        before[label.id] = candidate.id if candidate is not None else None
-    cost_before, totals_before = _evaluate(
-        ordered,
-        before,
-        anchors,
-        printable,
-        symbols,
-        sources,
-        stars,
-        style,
-        weights,
-        constellation_lines,
-    )
-    cost_cache = _CandidateScoreCache(
-        anchors,
-        printable,
-        symbols_index,
-        sources,
-        stars_index,
-        stars,
-        style,
-        weights,
-        constellation_lines,
-        furniture_rects,
-    )
-
-    placements: dict[str, str | None] = {}
-    placed_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
-    for label in ordered:
-        if not label.locked:
-            continue
-        candidate_id = label.selected_candidate_id
-        candidate = label.candidate(candidate_id) if candidate_id is not None else None
-        if candidate is not None:
-            placements[label.id] = candidate.id
-            bounds = _collision_bounds(label, candidate, style)
-            placed_index.set(label.id, bounds, bounds)
-        else:
-            placements[label.id] = None
-
-    for label in ordered:
-        if label.id in placements:
-            continue
-        best: tuple[tuple[float, float, int, float], LabelCandidate] | None = None
-        for candidate in label.candidates:
-            nearby_bounds = tuple(
-                placed_index.query(
-                    candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id
-                )
-            )
-            nearby_symbols = tuple(symbols_index.query(candidate.bounds))
-            nearby_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
-            valid = _is_valid(
-                label,
-                candidate,
-                nearby_bounds,
-                printable,
-                nearby_symbols,
-                nearby_stars,
-                style,
-                furniture_rects,
-                sources,
-            )
-            if not valid and best is not None and best[0][0] == 0.0:
-                continue
-            cost = cost_cache.cost(
-                label,
-                candidate,
-                nearby_bounds,
-                nearby_symbols=nearby_symbols,
-                nearby_stars=nearby_stars,
-            )
-            key = (
-                0.0 if valid else 1.0,
-                cost,
-                candidate.variant_rank,
-                _preference_rank(candidate),
-            )
-            if best is None or key < best[0]:
-                best = (key, candidate)
-        if best is None:
-            placements[label.id] = None
-            continue
-        valid = best[0][0] == 0.0
-        if not valid and not label.mandatory and not label.id.startswith("label:dso:"):
-            placements[label.id] = None
-            continue
-        placements[label.id] = best[1].id
-        bounds = _collision_bounds(label, best[1], style)
-        placed_index.set(label.id, bounds, bounds)
-
-    local_repair_stats: dict[str, Any] = {}
-    placements = _local_repair(
-        ordered,
-        placements,
-        anchors,
-        printable,
-        placed_index,
-        symbols_index,
-        symbols,
-        sources,
-        stars_index,
-        stars,
-        style,
-        weights,
-        furniture_rects,
-        constellation_lines,
-        cost_cache,
-        local_repair_stats,
-    )
-    placements, component_stats = _joint_dso_optimize(
-        ordered,
-        placements,
-        anchors,
-        printable,
-        placed_index,
-        symbols_index,
-        sources,
-        stars_index,
-        stars,
-        style,
-        weights,
-        furniture_rects,
-        constellation_lines,
-        cost_cache,
-    )
-    placements, hard_repair_stats = _repair_dso_hard_conflicts(
-        ordered,
-        placements,
-        anchors,
-        printable,
-        symbols_index,
-        sources,
-        stars_index,
-        stars,
-        style,
-        weights,
-        furniture_rects,
-        constellation_lines,
-        cost_cache,
-    )
-    component_stats.update(hard_repair_stats)
-    optimized = tuple(
-        label.with_placement(placements.get(label.id), hidden=placements.get(label.id) is None)
-        for label in labels
-    )
+    cost_cache: _CandidateScoreCache,
+) -> list[Label]:
     auto_labels = list(optimized)
     for index, label in enumerate(auto_labels):
         candidate = label.effective_candidate()
@@ -1583,29 +1249,29 @@ def optimize_labels(
             continue
         if label.id.startswith("label:dso:"):
             continue
-        threshold = _leader_ambiguity_threshold(label, style)
+        threshold = _leader_ambiguity_threshold(label, cost_cache.style)
         if threshold is None:
             continue
         selected_breakdown = _candidate_breakdown(
             label,
             candidate,
-            anchors,
-            printable,
+            cost_cache.anchors,
+            cost_cache.printable,
             placed_index,
-            symbols_index,
-            sources,
-            stars_index,
-            stars,
-            style,
-            weights,
-            constellation_lines,
+            cost_cache.symbols_index,
+            cost_cache.sources,
+            cost_cache.stars_index,
+            cost_cache.stars,
+            cost_cache.style,
+            cost_cache.weights,
+            cost_cache.constellation_lines,
         )
         selected_ambiguity = _ownership_ambiguity(selected_breakdown)
         if selected_ambiguity < threshold:
             continue
         direct_ambiguities = []
         for direct in label.candidates:
-            if direct.ring >= style.label.leader_lines.auto_min_ring:
+            if direct.ring >= cost_cache.style.label.leader_lines.auto_min_ring:
                 continue
             nearby_bounds = tuple(
                 placed_index.query(
@@ -1614,18 +1280,20 @@ def optimize_labels(
                     exclude=label.id,
                 )
             )
-            nearby_symbols = tuple(symbols_index.query(direct.bounds))
-            nearby_stars = _nearby_stars(label, direct.bounds, stars_index, stars, style)
+            nearby_symbols = tuple(cost_cache.symbols_index.query(direct.bounds))
+            nearby_stars = _nearby_stars(
+                label, direct.bounds, cost_cache.stars_index, cost_cache.stars, cost_cache.style
+            )
             if not _is_valid(
                 label,
                 direct,
                 nearby_bounds,
-                printable,
+                cost_cache.printable,
                 nearby_symbols,
                 nearby_stars,
-                style,
-                furniture_rects,
-                sources,
+                cost_cache.style,
+                cost_cache.furniture,
+                cost_cache.sources,
             ):
                 continue
             direct_ambiguities.append(
@@ -1633,22 +1301,22 @@ def optimize_labels(
                     _candidate_breakdown(
                         label,
                         direct,
-                        anchors,
-                        printable,
+                        cost_cache.anchors,
+                        cost_cache.printable,
                         placed_index,
-                        symbols_index,
-                        sources,
-                        stars_index,
-                        stars,
-                        style,
-                        weights,
-                        constellation_lines,
+                        cost_cache.symbols_index,
+                        cost_cache.sources,
+                        cost_cache.stars_index,
+                        cost_cache.stars,
+                        cost_cache.style,
+                        cost_cache.weights,
+                        cost_cache.constellation_lines,
                     )
                 )
             )
         if direct_ambiguities and min(direct_ambiguities) < threshold:
             continue
-        if leader_line_for(label, tuple(auto_labels), scene, transform, style) is None:
+        if leader_line_for(label, tuple(auto_labels), scene, transform, cost_cache.style) is None:
             continue
         proposed = list(auto_labels)
         proposed[index] = replace(
@@ -1657,181 +1325,11 @@ def optimize_labels(
             leader_line_reason="association_ambiguity",
         )
         enabled_count = sum(item.leader_line for item in proposed)
-        if len(resolve_leader_lines(tuple(proposed), scene, transform, style)) == enabled_count:
+        if len(resolve_leader_lines(
+            tuple(proposed), scene, transform, cost_cache.style
+        )) == enabled_count:
             auto_labels = proposed
-    auto_labels = list(
-        _consider_dso_leader_fallbacks(
-            tuple(auto_labels),
-            anchors,
-            printable,
-            symbols_index,
-            sources,
-            stars_index,
-            stars,
-            style,
-            weights,
-            furniture_rects,
-            constellation_lines,
-            scene,
-            transform,
-            cost_cache,
-        )
-    )
-    optimized = tuple(auto_labels)
-    final_placements: dict[str, str | None] = {}
-    for label in optimized:
-        candidate = None if label.hidden else label.effective_candidate()
-        final_placements[label.id] = candidate.id if candidate is not None else None
-    cost_after, totals_after = _evaluate(
-        ordered,
-        final_placements,
-        anchors,
-        printable,
-        symbols,
-        sources,
-        stars,
-        style,
-        weights,
-        constellation_lines,
-    )
-    placed_count = sum(1 for value in placements.values() if value is not None)
-    final_placed_index = _build_placed_index(optimized, style)
-    label_diagnostics = _label_diagnostics(
-        optimized,
-        anchors,
-        printable,
-        final_placed_index,
-        symbols_index,
-        sources,
-        stars_index,
-        stars,
-        style,
-        weights,
-        constellation_lines,
-        scene=scene,
-        transform=transform,
-        detailed_diagnostics=detailed_diagnostics,
-        furniture=furniture_rects,
-        component_stats=component_stats,
-    )
-    targeted = add_targeted_dso_leaders(
-        optimized, label_diagnostics, scene, transform, style, furniture=furniture_rects
-    )
-    if targeted.labels != optimized:
-        optimized = targeted.labels
-        label_diagnostics = _label_diagnostics(
-            optimized,
-            anchors,
-            printable,
-            final_placed_index,
-            symbols_index,
-            sources,
-            stars_index,
-            stars,
-            style,
-            weights,
-            constellation_lines,
-            scene=scene,
-            transform=transform,
-            detailed_diagnostics=detailed_diagnostics,
-            furniture=furniture_rects,
-            component_stats=component_stats,
-        )
-    elapsed_s = time.perf_counter() - started_at
-    dso_metrics = _dso_placement_metrics(
-        optimized,
-        label_diagnostics,
-        component_stats,
-        elapsed_s,
-        weak_margin_mm=style.label.dso_placement.ownership_margin_preferred_mm,
-    )
-    dso_metrics["local_repair"] = local_repair_stats
-    dso_metrics["targeted_dso_leaders"] = {
-        "counts": targeted.counts,
-        "decisions": list(targeted.decisions),
-    }
-    return OptimizationResult(
-        labels=optimized,
-        cost_before=cost_before,
-        cost_after=cost_after,
-        placed_count=placed_count,
-        hidden_count=len(ordered) - placed_count,
-        component_totals_before=totals_before,
-        component_totals_after=totals_after,
-        label_diagnostics=label_diagnostics,
-        metrics=dso_metrics,
-    )
-
-
-def _candidate_breakdown(
-    label: Label,
-    candidate: LabelCandidate,
-    anchors: dict[str, PagePoint],
-    printable: PageRect,
-    placed_index: RectIndex[PageRect],
-    symbols_index: RectIndex[SymbolCircle],
-    sources: tuple[SourceGeometry, ...],
-    stars_index: RectIndex[StarCircle],
-    stars: tuple[StarCircle, ...],
-    style: StyleConfig,
-    weights: CostWeights,
-    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...],
-    cost_cache: _CandidateScoreCache | None = None,
-) -> CostBreakdown:
-    nearby_bounds = tuple(
-        placed_index.query(candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
-    )
-    if cost_cache is not None:
-        return cost_cache.breakdown(label, candidate, nearby_bounds)
-    nearby_symbols = tuple(symbols_index.query(candidate.bounds))
-    nearby_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
-    return score_candidate(
-        candidate,
-        target_anchor=_anchor_for(label, anchors, candidate),
-        placed_bounds=nearby_bounds,
-        symbols=nearby_symbols,
-        stars=nearby_stars,
-        associated_star_ids=_associated_star_ids(label, nearby_stars),
-        related_star_ids=_related_star_ids(label, nearby_stars),
-        star_clearance=style.label.star_clearance,
-        target_source_id=_association_source_id(label),
-        source_association=style.label.source_association,
-        dso_placement=style.label.dso_placement,
-        is_dso_label=label.id.startswith("label:dso:"),
-        source_symbols=_nearby_sources(label, candidate.bounds, sources, style),
-        association_scale=_association_scale(label, style),
-        printable=printable,
-        crowding_radius_mm=_CROWDING_RADIUS_MM,
-        weights=weights,
-        edge_margin_mm=_EDGE_MARGIN_MM,
-        constellation_lines=constellation_lines,
-    )
-
-
-def _build_placed_index(
-    labels: tuple[Label, ...], style: StyleConfig
-) -> RectIndex[PageRect]:
-    index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
-    for label in labels:
-        candidate = None if label.hidden else label.effective_candidate()
-        if candidate is not None:
-            bounds = _collision_bounds(label, candidate, style)
-            index.set(label.id, bounds, bounds)
-    return index
-
-
-def _weighted_ownership_cost(
-    breakdown: CostBreakdown,
-    weights: CostWeights,
-) -> float:
-    return (
-        breakdown.label_source_distance_mm * weights.label_source_distance
-        + breakdown.label_source_corridor * weights.label_source_corridor
-        + breakdown.label_competing_source_ambiguity
-        * weights.label_competing_source_ambiguity
-        + breakdown.label_competing_owner * weights.label_competing_owner
-        + breakdown.label_ownership_margin_cost * weights.label_ownership_margin
-    )
+    return auto_labels
 
 
 def _consider_dso_leader_fallbacks(
@@ -2055,769 +1553,6 @@ def _leader_ambiguity_threshold(label: Label, style: StyleConfig) -> float | Non
     return None
 
 
-def _percentile(values: list[float], percentile: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    position = (len(ordered) - 1) * percentile
-    lower = math.floor(position)
-    upper = math.ceil(position)
-    if lower == upper:
-        return ordered[lower]
-    fraction = position - lower
-    return ordered[lower] * (1.0 - fraction) + ordered[upper] * fraction
-
-
-def _dso_placement_metrics(
-    labels: tuple[Label, ...],
-    diagnostics: dict[str, dict[str, Any]],
-    component_stats: dict[str, Any],
-    runtime_s: float,
-    *,
-    weak_margin_mm: float,
-) -> dict[str, Any]:
-    dso_labels = tuple(label for label in labels if label.id.startswith("label:dso:"))
-    dso_diagnostics = [diagnostics[label.id] for label in dso_labels if label.id in diagnostics]
-    gaps = [
-        float(item["source_facing_edge_distance_mm"])
-        for item in dso_diagnostics
-        if item.get("source_facing_edge_distance_mm") is not None
-    ]
-    direct_gaps = [
-        float(item["source_facing_edge_distance_mm"])
-        for item in dso_diagnostics
-        if not item.get("leader_line_used")
-        and item.get("source_facing_edge_distance_mm") is not None
-    ]
-    leader_gaps = [
-        float(item["source_facing_edge_distance_mm"])
-        for item in dso_diagnostics
-        if item.get("leader_line_used")
-        and item.get("source_facing_edge_distance_mm") is not None
-    ]
-    margins = [
-        float(item["ownership_margin_mm"])
-        for item in dso_diagnostics
-        if item.get("ownership_margin_mm") is not None
-    ]
-    leader_lengths = [
-        float(item["leader_line_length_mm"])
-        for item in dso_diagnostics
-        if item.get("leader_line_used") and item.get("leader_line_length_mm") is not None
-    ]
-    wrong_owner_nearest = sum(
-        1
-        for item in dso_diagnostics
-        if item.get("nearest_competing_dso_edge_gap_mm") is not None
-        and item["nearest_competing_dso_edge_gap_mm"]
-        < item["source_facing_edge_distance_mm"]
-    )
-    overlap_pairs: set[tuple[str, str]] = set()
-    for item in dso_diagnostics:
-        label_id = str(item["label_id"])
-        for other_id in item.get("label_label_conflicts", ()):
-            overlap_pairs.add(tuple(sorted((label_id, str(other_id)))))
-    leader_count = sum(bool(label.leader_line) for label in dso_labels)
-    component_by_label = {
-        label_id: {"component_index": component_index, "component_size": len(component)}
-        for component_index, component in enumerate(component_stats.get("components", ()))
-        for label_id in component
-    }
-    worst_placements = []
-    for item in dso_diagnostics:
-        margin = item.get("ownership_margin_mm")
-        gap = item.get("source_facing_edge_distance_mm")
-        severity = (
-            (4.0 if item.get("foreign_source_closer_than_owner") else 0.0)
-            + (max(0.0, -float(margin)) * 2.0 if margin is not None else 0.0)
-            + max(0.0, float(gap or 0.0) - 0.8)
-            + float(item.get("competing_source_ambiguity_cost", 0.0))
-            + float(item.get("association_corridor_cost", 0.0))
-        )
-        worst_placements.append((severity, item))
-    worst_placements.sort(
-        key=lambda pair: (
-            -pair[0],
-            str(pair[1].get("canonical_label", "")),
-            str(pair[1].get("object_id", "")),
-        )
-    )
-    hard_dso_pairs = {
-        tuple(sorted((str(item["label_id"]), str(source_id))))
-        for item in dso_diagnostics
-        for source_id in item.get("label_dso_conflicts", ())
-    }
-    return {
-        "dso_label_count": len(dso_labels),
-        "direct_count": len(dso_labels) - leader_count,
-        "leader_count": leader_count,
-        "source_edge_gap_mm": {
-            "count": len(gaps),
-            "median": _percentile(gaps, 0.50),
-            "p90": _percentile(gaps, 0.90),
-            "p95": _percentile(gaps, 0.95),
-            "max": max(gaps, default=None),
-        },
-        "direct_source_edge_gap_mm": {
-            "count": len(direct_gaps),
-            "median": _percentile(direct_gaps, 0.50),
-            "p90": _percentile(direct_gaps, 0.90),
-            "p95": _percentile(direct_gaps, 0.95),
-            "max": max(direct_gaps, default=None),
-        },
-        "leader_source_edge_gap_mm": {
-            "count": len(leader_gaps),
-            "median": _percentile(leader_gaps, 0.50),
-            "p90": _percentile(leader_gaps, 0.90),
-            "p95": _percentile(leader_gaps, 0.95),
-            "max": max(leader_gaps, default=None),
-        },
-        "ownership_margin_mm": {
-            "count": len(margins),
-            "negative_count": sum(margin < 0.0 for margin in margins),
-            "weak_count": sum(margin < weak_margin_mm for margin in margins),
-            "min": min(margins, default=None),
-            "p10": _percentile(margins, 0.10),
-            "median": _percentile(margins, 0.50),
-            "p90": _percentile(margins, 0.90),
-            "max": max(margins, default=None),
-            "weak_threshold_mm": weak_margin_mm,
-        },
-        "leader_length_mm": {
-            "count": len(leader_lengths),
-            "median": _percentile(leader_lengths, 0.50),
-            "p90": _percentile(leader_lengths, 0.90),
-            "max": max(leader_lengths, default=None),
-        },
-        "raw_ownership_ambiguity_count": sum(
-            float(item.get("competing_source_ambiguity_cost", 0.0)) > 0.0
-            or float(item.get("competing_owner_cost", 0.0)) > 0.0
-            for item in dso_diagnostics
-        ),
-        # A validated leader explicitly connects the label to its owner, so
-        # raw geometric competition is still reported above but is no longer
-        # counted as unresolved ownership ambiguity.
-        "ownership_ambiguity_count": sum(
-            not item.get("leader_line_used")
-            and (
-                float(item.get("competing_source_ambiguity_cost", 0.0)) > 0.0
-                or float(item.get("competing_owner_cost", 0.0)) > 0.0
-            )
-            for item in dso_diagnostics
-        ),
-        "nearest_dso_not_owner_count": wrong_owner_nearest,
-        "unconnected_nearest_dso_not_owner_count": sum(
-            1
-            for item in dso_diagnostics
-            if not item.get("leader_line_used")
-            and item.get("nearest_competing_dso_edge_gap_mm") is not None
-            and item["nearest_competing_dso_edge_gap_mm"]
-            < item["source_facing_edge_distance_mm"]
-        ),
-        "foreign_source_closer_than_owner_count": sum(
-            bool(item.get("foreign_source_closer_than_owner"))
-            for item in dso_diagnostics
-        ),
-        "negative_ownership_margin_count": sum(
-            margin < 0.0 for margin in margins
-        ),
-        "weak_ownership_margin_count": sum(
-            margin < weak_margin_mm for margin in margins
-        ),
-        "hard_label_dso_conflict_pair_count": len(hard_dso_pairs),
-        "hard_label_label_conflict_pair_count": len(overlap_pairs),
-        "label_label_overlap_count": len(overlap_pairs),
-        "corridor_conflict_count": sum(
-            float(item.get("association_corridor_cost", 0.0)) > 0.0
-            for item in dso_diagnostics
-        ),
-        "local_conflict_components": component_stats,
-        "worst_placements": [
-            {
-                **item,
-                "association_severity": severity,
-                **component_by_label.get(str(item.get("label_id")), {}),
-            }
-            for severity, item in worst_placements[:20]
-        ],
-        "optimizer_runtime_s": runtime_s,
-    }
-
-
-def _candidate_rejection_reason(
-    label: Label,
-    candidate: LabelCandidate,
-    placed_index: RectIndex[PageRect],
-    symbols_index: RectIndex[SymbolCircle],
-    stars_index: RectIndex[StarCircle],
-    stars: tuple[StarCircle, ...],
-    printable: PageRect,
-    style: StyleConfig,
-    *,
-    furniture: tuple[PageRect, ...],
-    source_geometries: tuple[SourceGeometry, ...],
-) -> str | None:
-    bounds = candidate.bounds
-    collision_bounds = _collision_bounds(label, candidate, style)
-    if (
-        bounds.left_mm < printable.left_mm
-        or bounds.top_mm < printable.top_mm
-        or bounds.right_mm > printable.right_mm
-        or bounds.bottom_mm > printable.bottom_mm
-    ):
-        return "outside_printable_area"
-    if any(rects_overlap(bounds, obstacle) for obstacle in furniture):
-        return "page_furniture_overlap"
-    if any(
-        rects_overlap(collision_bounds, other)
-        for other in placed_index.query(
-            collision_bounds,
-            margin_mm=style.label.dso_placement.label_label_ink_clearance_mm or 0.0,
-            exclude=label.id,
-        )
-    ):
-        return "label_label_overlap"
-    visible_bounds = (
-        candidate_ink_bounds(candidate)
-        if label.id.startswith("label:dso:")
-        else bounds
-    )
-    nearby_symbols = tuple(symbols_index.query(visible_bounds))
-    nearby_source_ids = {symbol.id for symbol in nearby_symbols}
-    if any(
-        source.id in nearby_source_ids
-        and source_outline_edge_distance(source, visible_bounds) <= 0.0
-        for source in source_geometries
-    ):
-        return "dso_symbol_overlap"
-    if label.id.startswith("label:dso:"):
-        _, _, _, wrong_owner = _ownership_result(
-            label, visible_bounds, source_geometries, style
-        )
-        if wrong_owner:
-            return "foreign_source_closer_than_owner"
-    for star in _nearby_stars(label, bounds, stars_index, stars, style):
-        related = _related_star_ids(label, stars)
-        hard_min = (
-            style.label.star_clearance.associated.hard_min_mm
-            if related & star.star_ids
-            else foreign_star_hard_min_mm(star.radius_mm, style.label.star_clearance)
-        )
-        if candidate_star_edge_distance_mm(
-            star,
-            candidate,
-            visible_text=label.id.startswith(("label:star:", "label:dso:")),
-        ) < hard_min:
-            return "star_clearance"
-    return None
-
-
-def _label_diagnostics(
-    labels: tuple[Label, ...],
-    anchors: dict[str, PagePoint],
-    printable: PageRect,
-    placed_index: RectIndex[PageRect],
-    symbols_index: RectIndex[SymbolCircle],
-    sources: tuple[SourceGeometry, ...],
-    stars_index: RectIndex[StarCircle],
-    stars: tuple[StarCircle, ...],
-    style: StyleConfig,
-    weights: CostWeights,
-    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...],
-    *,
-    scene: ChartScene,
-    transform: PageTransform,
-    detailed_diagnostics: bool,
-    furniture: tuple[PageRect, ...],
-    component_stats: dict[str, Any],
-) -> dict[str, dict[str, Any]]:
-    diagnostics: dict[str, dict[str, Any]] = {}
-    sources_by_id = {source.id: source for source in sources}
-    leader_lines = {
-        line.label_id: line
-        for line in resolve_leader_lines(labels, scene, transform, style)
-    }
-    placed = tuple(
-        (other, other.effective_candidate())
-        for other in labels
-        if not other.hidden and other.effective_candidate() is not None
-    )
-    component_by_label = {
-        label_id: {"conflict_component_index": component_index,
-                   "conflict_component_size": len(component)}
-        for component_index, component in enumerate(component_stats.get("components", ()))
-        for label_id in component
-    }
-    for label in labels:
-        candidate = None if label.hidden else label.effective_candidate()
-        if candidate is None or _association_source_id(label) is None:
-            continue
-        breakdown = _candidate_breakdown(
-            label,
-            candidate,
-            anchors,
-            printable,
-            placed_index,
-            symbols_index,
-            sources,
-            stars_index,
-            stars,
-            style,
-            weights,
-            constellation_lines,
-        )
-        nearby_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
-        diagnostic: dict[str, Any] = {
-            "source_facing_edge_distance_mm": (
-                breakdown.label_source_facing_edge_distance_mm
-            ),
-            "association_corridor_cost": breakdown.label_source_corridor,
-            "competing_owner_cost": breakdown.label_competing_owner,
-            "competing_owner_id": breakdown.competing_owner_id,
-            "glyph_proximity_cost": breakdown.label_glyph_proximity,
-            "closest_foreign_star_id": breakdown.closest_foreign_star_id,
-            "closest_foreign_star_radius_mm": breakdown.closest_foreign_star_radius_mm,
-            "closest_foreign_star_distance_mm": breakdown.closest_foreign_star_distance_mm,
-            "leader_line_used": label.leader_line,
-            "leader_line_reason": label.leader_line_reason,
-        }
-        diagnostic.update(_star_source_diagnostics(label, nearby_stars))
-        if label.id.startswith("label:dso:"):
-            source = sources_by_id.get(label.target_id)
-            visible_bounds = candidate_ink_bounds(candidate)
-            owner_gap, ownership_margin, nearest_source, wrong_owner = _ownership_result(
-                label, visible_bounds, sources, style, all_sources=True
-            )
-            nearest_competitor = (
-                source_edge_distance(nearest_source, visible_bounds), nearest_source.id
-            ) if nearest_source is not None else (None, None)
-            owner_overlaps_nearest = bool(
-                source is not None
-                and nearest_source is not None
-                and source_geometries_overlap(source, nearest_source)
-            )
-            leader = leader_lines.get(label.id)
-            line_length = (
-                math.hypot(leader.end.x_mm - leader.start.x_mm, leader.end.y_mm - leader.start.y_mm)
-                if leader is not None
-                else 0.0
-            )
-            overlapping_labels = tuple(
-                other.id
-                for other, other_candidate in placed
-                if other.id != label.id
-                and other_candidate is not None
-                and _labels_overlap(label, candidate, other, other_candidate, style)
-            )
-            nearby_symbol_ids = {symbol.id for symbol in symbols_index.query(visible_bounds)}
-            weighted_association = (
-                breakdown.label_source_distance_mm * weights.label_source_distance
-                + breakdown.label_source_corridor * weights.label_source_corridor
-                + breakdown.label_competing_source_ambiguity
-                * weights.label_competing_source_ambiguity
-                + breakdown.label_competing_owner * weights.label_competing_owner
-                + breakdown.label_ownership_margin_cost * weights.label_ownership_margin
-            )
-            line_cost = style.label.leader_lines.dso_length_weight * line_length**2
-            leader_adjusted_cost = (
-                breakdown.total(weights)
-                - weighted_association
-                * (1.0 - style.label.leader_lines.dso_association_residual_factor)
-                + line_cost
-                if leader is not None
-                else None
-            )
-            diagnostic.update({
-                "label_id": label.id,
-                "object_id": label.target_id,
-                "canonical_label": label.text,
-                "rendered_source_geometry_type": (
-                    "contour" if source is not None and source.outline_paths
-                    else "ellipse" if source is not None and source.source_type.value == "galaxy"
-                    else "symbol" if source is not None
-                    else "missing"
-                ),
-                "chosen_candidate_index": label.candidates.index(candidate),
-                "candidate_direction": candidate.position.value,
-                "source_label_center_distance_mm": (
-                    math.hypot(
-                        source.center.x_mm - visible_bounds.center.x_mm,
-                        source.center.y_mm - visible_bounds.center.y_mm,
-                    )
-                    if source is not None
-                    else None
-                ),
-                "nearest_competing_dso_id": nearest_competitor[1],
-                "nearest_competing_dso_edge_gap_mm": nearest_competitor[0],
-                "ownership_margin_mm": ownership_margin,
-                "foreign_source_closer_than_owner": wrong_owner,
-                "ownership_overlap_exception": owner_overlaps_nearest,
-                "ownership_nearest_source_id": (
-                    nearest_source.id if nearest_source is not None else None
-                ),
-                "ownership_owner_edge_gap_mm": owner_gap,
-                "ownership_foreign_edge_gap_mm": nearest_competitor[0],
-                "ownership_margin_weak": (
-                    ownership_margin is not None
-                    and ownership_margin < style.label.dso_placement.ownership_margin_preferred_mm
-                ),
-                "source_association_cost": weighted_association,
-                "ownership_margin_cost": (
-                    breakdown.label_ownership_margin_cost * weights.label_ownership_margin
-                ),
-                "competing_source_ambiguity_cost": (
-                    breakdown.label_competing_source_ambiguity
-                    * weights.label_competing_source_ambiguity
-                ),
-                "foreign_star_proximity_cost": (
-                    breakdown.label_foreign_star_clearance
-                    * weights.label_foreign_star_clearance
-                ),
-                "foreign_dso_proximity_cost": (
-                    breakdown.label_foreign_object_proximity
-                    * weights.label_foreign_object_proximity
-                ),
-                "preferred_direction_cost": breakdown.preference_rank * weights.preference_rank,
-                "label_label_conflict_count": len(overlapping_labels),
-                "label_label_conflicts": list(overlapping_labels),
-                "label_dso_conflicts": [
-                    other_source.id
-                    for other_source in sources
-                    if other_source.id in nearby_symbol_ids
-                    and source_outline_edge_distance(other_source, visible_bounds) <= 0.0
-                ],
-                "leader_line_used": leader is not None,
-                "leader_line_length_mm": line_length,
-                "direct_candidate_total_cost": breakdown.total(weights),
-                "leader_line_cost": line_cost if leader is not None else 0.0,
-                "leader_adjusted_total_cost": leader_adjusted_cost,
-                "candidate_total_cost": (
-                    leader_adjusted_cost
-                    if leader_adjusted_cost is not None
-                    else breakdown.total(weights)
-                ),
-            })
-            diagnostic.update(component_by_label.get(label.id, {}))
-            if detailed_diagnostics:
-                alternatives = []
-                rejection_counts: dict[str, int] = {}
-                valid_candidate_count = 0
-                for alternative in label.candidates:
-                    if alternative.id == candidate.id:
-                        continue
-                    rejection = _candidate_rejection_reason(
-                        label,
-                        alternative,
-                        placed_index,
-                        symbols_index,
-                        stars_index,
-                        stars,
-                        printable,
-                        style,
-                        furniture=furniture,
-                        source_geometries=sources,
-                    )
-                    if rejection is None:
-                        valid_candidate_count += 1
-                    else:
-                        rejection_counts[rejection] = rejection_counts.get(rejection, 0) + 1
-                    alternative_breakdown = _candidate_breakdown(
-                        label,
-                        alternative,
-                        anchors,
-                        printable,
-                        placed_index,
-                        symbols_index,
-                        sources,
-                        stars_index,
-                        stars,
-                        style,
-                        weights,
-                        constellation_lines,
-                    )
-                    alternatives.append({
-                        "candidate_id": alternative.id,
-                        "direction": alternative.position.value,
-                        "edge_gap_mm": alternative_breakdown.label_source_facing_edge_distance_mm,
-                        "total_cost": alternative_breakdown.total(weights),
-                        "rejection_reason": rejection,
-                    })
-                diagnostic["best_alternatives"] = sorted(
-                    alternatives,
-                    key=lambda item: (
-                        item["rejection_reason"] is not None,
-                        item["total_cost"],
-                        item["candidate_id"],
-                    ),
-                )[:3]
-                diagnostic["candidate_count"] = len(label.candidates)
-                diagnostic["hard_valid_candidate_count"] = valid_candidate_count
-                diagnostic["candidate_rejection_counts"] = dict(sorted(rejection_counts.items()))
-                if overlapping_labels or diagnostic["label_dso_conflicts"]:
-                    plausible = sorted(
-                        (
-                            source_edge_distance(source, candidate_ink_bounds(alternative))
-                            if source is not None
-                            else float("inf"),
-                            alternative.id,
-                            alternative,
-                        )
-                        for alternative in label.candidates
-                    )
-                    leader_resolvable = 0
-                    checked = 0
-                    for _, _, alternative in plausible:
-                        if checked >= 16:
-                            break
-                        if source_edge_distance(source, candidate_ink_bounds(alternative)) > (
-                            style.label.leader_lines.dso_preferred_gap_mm
-                        ):
-                            continue
-                        rejection = _candidate_rejection_reason(
-                            label,
-                            alternative,
-                            placed_index,
-                            symbols_index,
-                            stars_index,
-                            stars,
-                            printable,
-                            style,
-                            furniture=furniture,
-                            source_geometries=sources,
-                        )
-                        if rejection not in (None, "foreign_source_closer_than_owner"):
-                            continue
-                        checked += 1
-                        leader_label = replace(
-                            label,
-                            selected_candidate_id=alternative.id,
-                            leader_line=True,
-                            leader_line_reason="association_ambiguity",
-                        )
-                        proposed = tuple(
-                            leader_label if other.id == label.id else other for other in labels
-                        )
-                        if leader_line_for(leader_label, proposed, scene, transform, style):
-                            leader_resolvable += 1
-                    diagnostic["leader_candidates_checked"] = checked
-                    diagnostic["leader_resolvable_candidate_count"] = leader_resolvable
-        diagnostics[label.id] = diagnostic
-    return diagnostics
-
-
-def _star_source_diagnostics(
-    label: Label, stars: tuple[StarCircle, ...]
-) -> dict[str, float | str | bool | None]:
-    """Describe the rendered stellar source used by one star label."""
-    if not label.id.startswith("label:star:"):
-        return {}
-    owned = _associated_star_ids(label, stars)
-    related = _related_star_ids(label, stars)
-    owner_marks = tuple(star for star in stars if owned & star.star_ids)
-    system_ids = sorted(
-        system_id
-        for star in owner_marks
-        for system_id in star.system_ids
-        if system_id == label.target_id or label.target_id in star.star_ids
-    )
-    is_system_label = any(label.target_id in star.system_ids for star in stars)
-    if is_system_label:
-        source_type = (
-            "unresolved_double"
-            if len(owner_marks) == 1 and len(owner_marks[0].star_ids) > 1
-            else "resolved_double_system"
-        )
-    elif any(len(star.star_ids) > 1 for star in owner_marks):
-        source_type = "unresolved_double"
-    elif len(related) > len(owned):
-        source_type = (
-            "resolved_double_component"
-        )
-    else:
-        source_type = "single_star"
-    return {
-        "star_source_type": source_type,
-        "star_source_system_id": (
-            label.target_id if is_system_label else (system_ids[0] if system_ids else None)
-        ),
-        "source_envelope_component_count": float(len(owner_marks)),
-        "same_system_components_excluded": bool(related - owned),
-    }
-
-
-def _local_repair(
-    ordered: tuple[Label, ...],
-    placements: dict[str, str | None],
-    anchors: dict[str, PagePoint],
-    printable: PageRect,
-    placed_index: RectIndex[PageRect],
-    symbols_index: RectIndex[SymbolCircle],
-    symbols: tuple[SymbolCircle, ...],
-    sources: tuple[SourceGeometry, ...],
-    stars_index: RectIndex[StarCircle],
-    stars: tuple[StarCircle, ...],
-    style: StyleConfig,
-    weights: CostWeights,
-    furniture: tuple[PageRect, ...] = (),
-    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
-    cost_cache: _CandidateScoreCache | None = None,
-    repair_stats: dict[str, Any] | None = None,
-) -> dict[str, str | None]:
-    if cost_cache is None:
-        cost_cache = _CandidateScoreCache(
-            anchors,
-            printable,
-            symbols_index,
-            sources,
-            stars_index,
-            stars,
-            style,
-            weights,
-            constellation_lines,
-            furniture,
-        )
-    pass_stats: list[dict[str, Any]] = []
-    for _ in range(_MAX_REPAIR_PASSES):
-        changed = False
-        evaluated = 0
-        moves: list[dict[str, Any]] = []
-        for label in ordered:
-            if label.locked:
-                continue
-            current_id = placements.get(label.id)
-            if current_id is None:
-                continue
-            current = label.candidate(current_id)
-            if current is None:
-                continue
-            evaluated += 1
-            best_id = current_id
-            nearby_bounds = tuple(
-                placed_index.query(current.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
-            )
-            current_valid = cost_cache.valid(label, current, nearby_bounds)
-            best_cost = cost_cache.cost(label, current, nearby_bounds)
-            initial_cost = best_cost
-            best_key = (0 if current_valid else 1, best_cost)
-            for candidate in label.candidates:
-                if candidate.id == current_id:
-                    continue
-                if best_key[0] == 0 and not cost_cache.valid(label, candidate, ()):
-                    continue
-                cand_bounds = tuple(
-                    placed_index.query(
-                        candidate.bounds,
-                        margin_mm=_CROWDING_RADIUS_MM,
-                        exclude=label.id,
-                    )
-                )
-                candidate_valid = cost_cache.valid(label, candidate, cand_bounds)
-                if not candidate_valid and best_key[0] == 0:
-                    continue
-                cost = cost_cache.cost(label, candidate, cand_bounds)
-                candidate_key = (0 if candidate_valid else 1, cost)
-                if candidate_key < (best_key[0], best_key[1] - 1e-9):
-                    best_cost = cost
-                    best_id = candidate.id
-                    best_key = candidate_key
-            if best_id != current_id:
-                placements[label.id] = best_id
-                new_candidate = label.candidate(best_id)
-                if new_candidate is not None:
-                    if repair_stats is not None:
-                        old_center = current.bounds.center
-                        new_center = new_candidate.bounds.center
-                        moves.append({
-                            "label_id": label.id,
-                            "from": current_id,
-                            "to": best_id,
-                            "was_valid": current_valid,
-                            "is_valid": best_key[0] == 0,
-                            "cost_gain": (
-                                initial_cost - best_cost
-                                if current_valid == (best_key[0] == 0)
-                                else None
-                            ),
-                            "movement_mm": math.hypot(
-                                new_center.x_mm - old_center.x_mm,
-                                new_center.y_mm - old_center.y_mm,
-                            ),
-                        })
-                    bounds = _collision_bounds(label, new_candidate, style)
-                    placed_index.set(label.id, bounds, bounds)
-                changed = True
-        if repair_stats is not None:
-            pass_stats.append({"evaluated_labels": evaluated, "moves": moves})
-        if not changed:
-            break
-    if repair_stats is not None:
-        repair_stats["passes"] = pass_stats
-    return placements
-
-
-def _evaluate(
-    ordered: tuple[Label, ...],
-    placements: dict[str, str | None],
-    anchors: dict[str, PagePoint],
-    printable: PageRect,
-    symbols: tuple[SymbolCircle, ...],
-    sources: tuple[SourceGeometry, ...],
-    stars: tuple[StarCircle, ...],
-    style: StyleConfig,
-    weights: CostWeights,
-    constellation_lines: tuple[tuple[PagePoint, PagePoint], ...] = (),
-) -> tuple[float, dict[str, float]]:
-    label_by_id = {label.id: label for label in ordered}
-    placed_index: RectIndex[PageRect] = RectIndex(_GRID_CELL_MM)
-    for label_id, candidate_id in placements.items():
-        if candidate_id is None:
-            continue
-        placed_label = label_by_id[label_id]
-        placed_candidate = placed_label.candidate(candidate_id)
-        if placed_candidate is not None:
-            bounds = _collision_bounds(placed_label, placed_candidate, style)
-            placed_index.set(label_id, bounds, bounds)
-    stars_index = _build_star_index(stars)
-    total = 0.0
-    totals: dict[str, float] = {}
-    for label in ordered:
-        candidate_id = placements.get(label.id)
-        if candidate_id is None:
-            continue
-        candidate = label.candidate(candidate_id)
-        if candidate is None:
-            continue
-        nearby_bounds = tuple(
-            placed_index.query(candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id)
-        )
-        nearby_stars = _nearby_stars(label, candidate.bounds, stars_index, stars, style)
-        breakdown = score_candidate(
-            candidate,
-            target_anchor=_anchor_for(label, anchors, candidate),
-            placed_bounds=nearby_bounds,
-            symbols=symbols,
-            stars=nearby_stars,
-            associated_star_ids=_associated_star_ids(label, nearby_stars),
-            related_star_ids=_related_star_ids(label, nearby_stars),
-            star_clearance=style.label.star_clearance,
-            target_source_id=_association_source_id(label),
-            source_association=style.label.source_association,
-            dso_placement=style.label.dso_placement,
-            is_dso_label=label.id.startswith("label:dso:"),
-            source_symbols=_nearby_sources(label, candidate.bounds, sources, style),
-            association_scale=_association_scale(label, style),
-            printable=printable,
-            crowding_radius_mm=_CROWDING_RADIUS_MM,
-            weights=weights,
-            edge_margin_mm=_EDGE_MARGIN_MM,
-            constellation_lines=constellation_lines,
-        )
-        total += breakdown.total(weights)
-        for name, value in breakdown.components().items():
-            totals[name] = totals.get(name, 0.0) + value
-    return total, totals
-
-
 def layout_hash(labels: tuple[Label, ...]) -> str:
     """Return a stable hash of placements for repeated-layout detection."""
     payload = [
@@ -2846,7 +1581,7 @@ def layout_cost(
         (stroke.start, stroke.end)
         for stroke in resolve_constellation_lines(scene, transform, style)
     )
-    anchors = _target_anchors(labels, scene, transform, style)
+    anchors = _target_anchors(scene, transform, style)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
     placements: dict[str, str | None] = {}

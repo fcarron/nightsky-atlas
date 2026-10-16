@@ -22,7 +22,8 @@ from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.layout.collision import IssueType, find_hard_violations
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
-from nightsky_atlas.layout.optimizer import _star_circles, _target_anchors, optimize_labels
+from nightsky_atlas.layout.optimizer import optimize_labels
+from nightsky_atlas.layout.placement import _star_circles, _target_anchors
 from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.projection.stereographic import StereographicProjection
 from nightsky_atlas.render.cairo import (
@@ -152,7 +153,7 @@ def test_mark_extends_existing_star_obstacle_in_optimizer_and_hard_gate() -> Non
     circles = _star_circles(scene, TRANSFORM, STYLE)
     assert len(circles) == 1
     assert circles[0].radius_mm == obstacle.disk_radius_mm
-    assert _target_anchors((), scene, TRANSFORM, STYLE)["B"] == obstacle.page_point
+    assert _target_anchors(scene, TRANSFORM, STYLE)["B"] == obstacle.page_point
 
     x = obstacle.page_point.x_mm + (original_radius + obstacle.collision_radius_mm) / 2.0
     bounds = PageRect(x, obstacle.page_point.y_mm - 0.05, 0.1, 0.1)
