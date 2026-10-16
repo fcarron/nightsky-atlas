@@ -516,11 +516,24 @@ def _dso_fill_and_outline_alpha(
     style: StyleConfig, scene_dso: SceneDso, extent: SymbolExtent
 ) -> tuple[float, float]:
     palette = style.color_atlas
-    if (
-        palette is None
-        or palette.open_cluster_fill is None
-        or scene_dso.dso.object_type != DsoType.OPEN_CLUSTER
-    ):
+    if palette is None:
+        return 1.0, 1.0
+
+    if scene_dso.dso.object_type == DsoType.GALAXY and palette.galaxy_fill is not None:
+        rule = palette.galaxy_fill
+        diameter_mm = max(extent.width_mm, extent.height_mm)
+        if diameter_mm <= rule.full_fill_until_mm:
+            return 1.0, 1.0
+        progress = min(
+            1.0,
+            (diameter_mm - rule.full_fill_until_mm)
+            / (rule.large_fill_from_mm - rule.full_fill_until_mm),
+        )
+        smooth_progress = progress * progress * (3.0 - 2.0 * progress)
+        fill_alpha = 1.0 + (rule.large_fill_alpha - 1.0) * smooth_progress
+        return fill_alpha, 1.0
+
+    if scene_dso.dso.object_type != DsoType.OPEN_CLUSTER or palette.open_cluster_fill is None:
         return 1.0, 1.0
     rule = palette.open_cluster_fill
     diameter_mm = max(extent.width_mm, extent.height_mm)

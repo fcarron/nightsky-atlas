@@ -70,6 +70,9 @@ def test_color_styles_inherit_edition_and_select_fill_levels(
     assert style.color_atlas.dso.galaxies == "#B97A63"
     assert style.color_atlas.constellation_names == "#92969E"
     assert style.color_atlas.open_cluster_fill.large_fill_alpha == 0.18
+    assert style.color_atlas.galaxy_fill.full_fill_until_mm == 2.5
+    assert style.color_atlas.galaxy_fill.large_fill_from_mm == 7.0
+    assert style.color_atlas.galaxy_fill.large_fill_alpha == 0.18
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
@@ -95,6 +98,29 @@ def test_open_cluster_color_style_reduces_large_symbol_fill_only() -> None:
         0.18,
         style.color_atlas.open_cluster_fill.large_outline_alpha,
     )
+
+
+def test_galaxy_fill_fades_smoothly_with_rendered_symbol_size() -> None:
+    style = load_style_config(REPO_ROOT / "styles/color/standard.yaml")
+    galaxy = Mock(dso=Mock(object_type=DsoType.GALAXY))
+
+    def alpha(diameter_mm: float) -> tuple[float, float]:
+        extent = SymbolExtent(DsoShape.CIRCLE, diameter_mm, diameter_mm / 2.0)
+        return _dso_fill_and_outline_alpha(style, galaxy, extent)
+
+    assert alpha(2.0) == (1.0, 1.0)
+    assert alpha(2.5) == (1.0, 1.0)
+    assert alpha(4.75) == pytest.approx((0.59, 1.0))
+    assert alpha(7.0) == pytest.approx((0.18, 1.0))
+    assert alpha(12.0) == pytest.approx((0.18, 1.0))
+    assert alpha(3.5)[0] > alpha(4.75)[0] > alpha(6.0)[0]
+
+
+def test_monochrome_galaxy_fill_is_not_size_attenuated() -> None:
+    style = load_style_config(REPO_ROOT / "styles/standard.yaml")
+    galaxy = Mock(dso=Mock(object_type=DsoType.GALAXY))
+    extent = SymbolExtent(DsoShape.CIRCLE, 60.0, 30.0)
+    assert _dso_fill_and_outline_alpha(style, galaxy, extent) == (1.0, 1.0)
 
 
 def test_magellanic_cloud_color_style_uses_milky_way_family() -> None:

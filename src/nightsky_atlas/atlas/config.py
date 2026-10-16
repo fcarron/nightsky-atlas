@@ -1280,6 +1280,22 @@ class ColorOpenClusterFillStyle(_StrictModel):
         return self
 
 
+class ColorGalaxyFillStyle(_StrictModel):
+    """Smoothly reduce galaxy fill strength as its printed footprint grows."""
+
+    full_fill_until_mm: PositiveFloat = 8.0
+    large_fill_from_mm: PositiveFloat = 32.0
+    large_fill_alpha: float = 0.18
+
+    @model_validator(mode="after")
+    def _thresholds_and_alpha_are_valid(self) -> ColorGalaxyFillStyle:
+        if self.large_fill_from_mm <= self.full_fill_until_mm:
+            raise ValueError("galaxy fill size thresholds must increase")
+        if not math.isfinite(self.large_fill_alpha) or not 0.0 <= self.large_fill_alpha <= 1.0:
+            raise ValueError("galaxy fill alpha must be within [0, 1]")
+        return self
+
+
 class ColorAtlasStyle(_StrictModel):
     background: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
     stars: str = Field(default="#17191C", pattern=r"^#[0-9A-Fa-f]{6}$")
@@ -1291,6 +1307,7 @@ class ColorAtlasStyle(_StrictModel):
     dso: ColorDSOPalette
     dso_fill_white_blend: tuple[float, float, float, float] = (0.0, 0.10, 0.22, 0.34)
     open_cluster_fill: ColorOpenClusterFillStyle | None = None
+    galaxy_fill: ColorGalaxyFillStyle | None = None
     milky_way_fills: dict[int, str]
     milky_way_outline: str = Field(default="#D6E3ED", pattern=r"^#[0-9A-Fa-f]{6}$")
     magellanic_cloud_fills: dict[int, str] = Field(default_factory=dict)
