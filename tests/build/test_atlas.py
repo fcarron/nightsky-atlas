@@ -13,6 +13,7 @@ import yaml
 from nightsky_atlas.atlas.config import DetailChartConfig, load_atlas_config
 from nightsky_atlas.build.atlas import (
     AtlasBuildResult,
+    _AtlasPages,
     _detail_fallback_labels_for_parent,
     _detail_fallback_protected_ids,
     _detail_label_suppression_candidate,
@@ -25,7 +26,7 @@ from nightsky_atlas.build.atlas import (
 from nightsky_atlas.build.chart import field_query_box, find_chart
 from nightsky_atlas.build.preflight import validate_atlas_output
 from nightsky_atlas.catalog.dso_store import write_dso_catalog
-from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
+from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance, Star
 from nightsky_atlas.catalog.openngc import iter_openngc_objects
 from nightsky_atlas.catalog.selection import DsoMetadata
 from nightsky_atlas.catalog.store import chart_query_box
@@ -36,13 +37,56 @@ from nightsky_atlas.layout.collision import IssueType, LayoutIssue
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.validation import ValidationResult
 from nightsky_atlas.projection.base import ChartPoint
-from nightsky_atlas.scene.models import ChartScene, SceneDso
+from nightsky_atlas.scene.models import ChartScene, SceneDso, SceneStar
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STYLE = REPO_ROOT / "styles" / "standard.yaml"
 SHIPPED_ATLAS = REPO_ROOT / "atlas" / "standard.yaml"
 STARS = REPO_ROOT / "data" / "fixtures" / "stars" / "test_virgo.csv"
 DSO_FIXTURE = REPO_ROOT / "data" / "fixtures" / "openngc" / "sample.csv"
+
+
+def test_index_records_only_visible_proper_name_labels() -> None:
+    definition = ChartDefinition("test-001", 10.0, 20.0, 20.0, 20.0)
+    named = Star("HIP 123", 10.0, 20.0, 1.0, Provenance("test", "123"), hip_id="HIP 123")
+    hidden = Star("HIP 124", 11.0, 20.0, 2.0, Provenance("test", "124"), hip_id="HIP 124")
+    bayer = Star("HIP 125", 12.0, 20.0, 2.5, Provenance("test", "125"), hip_id="HIP 125")
+    scene = ChartScene(
+        definition,
+        stars=tuple(SceneStar(star, ChartPoint(0.0, 0.0)) for star in (named, hidden, bayer)),
+    )
+
+    def label(star: Star, text: str, semantic_key: str, *, hidden: bool = False) -> Label:
+        candidate = LabelCandidate(
+            id=f"{star.id}:N",
+            position=CompassPosition.N,
+            anchor=PagePoint(100.0, 100.0),
+            bounds=PageRect(100.0, 100.0, 5.0, 2.0),
+        )
+        return Label(
+            id=f"label:star:{star.id}",
+            target_id=star.id,
+            text=text,
+            priority=1,
+            mandatory=True,
+            candidates=(candidate,),
+            selected_candidate_id=candidate.id,
+            hidden=hidden,
+            semantic_key=semantic_key,
+        )
+
+    pages = _AtlasPages()
+    pages.record_index(
+        definition.id,
+        scene,
+        (
+            label(named, "Curated Name α", "star:name:Curated Name"),
+            label(hidden, "Omitted Name", "star:name:Omitted Name", hidden=True),
+            label(bayer, "β", "star:bayer:β Com"),
+        ),
+    )
+
+    assert pages.index_star_name_labels == {"test-001": ((123, "Curated Name"),)}
 
 
 def make_atlas_file(tmp_path: Path) -> Path:

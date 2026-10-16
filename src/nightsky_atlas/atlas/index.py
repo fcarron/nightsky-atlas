@@ -174,11 +174,17 @@ def _angular_distance(chart: ChartDefinition, ra_deg: float, dec_deg: float) -> 
 
 def _star_designation(entry: StarName) -> str:
     """Return a compact, stable companion designation for a proper name."""
-    if entry.constellation:
-        for value in (entry.bayer, entry.flamsteed, entry.variable):
-            if value:
-                return f"{value} {entry.constellation}"
-    return entry.bayer or entry.flamsteed or entry.variable or ""
+    if designation := entry.full_bayer_designation:
+        return designation
+    if designation := entry.full_flamsteed_designation:
+        return designation
+    if entry.variable and re.fullmatch(r"[A-Z]{1,2} [A-Za-z]{3}", entry.variable):
+        return entry.variable
+    if entry.bayer and re.fullmatch(r"[α-ω][0-9]?", entry.bayer):
+        return entry.bayer
+    if entry.flamsteed and re.fullmatch(r"[1-9][0-9]{0,2}", entry.flamsteed):
+        return entry.flamsteed
+    return ""
 
 
 def _angular_distance_to_star(chart: ChartDefinition, star: Star) -> float:
@@ -191,6 +197,7 @@ def build_atlas_index(
     charts: tuple[ChartDefinition, ...],
     edition: EditionConfig,
     chart_stars: dict[str, Iterable[Star | FaintStar]] | None = None,
+    chart_star_name_labels: dict[str, Iterable[tuple[int, str]]] | None = None,
     star_names: dict[int, StarName] | None = None,
     chart_label_targets: dict[str, frozenset[str]] | None = None,
     chart_code_by_id: dict[str, str] | None = None,
@@ -257,38 +264,40 @@ def build_atlas_index(
             )
         )
     named_star_entries: list[NamedStarIndexEntry] = []
-    if chart_stars and star_names:
+    if chart_stars and chart_star_name_labels and star_names:
         stars: dict[int, Star] = {}
-        star_locations: dict[int, set[str]] = {}
-        for chart_id, scene_stars in chart_stars.items():
+        for scene_stars in chart_stars.values():
             for star in scene_stars:
                 if not isinstance(star, Star):
                     continue
                 number = hip_number(star.hip_id)
-                if number is None or number not in star_names or not star_names[number].name:
-                    continue
-                stars.setdefault(number, star)
-                star_locations.setdefault(number, set()).add(chart_id)
-        for number, star in stars.items():
-            name = star_names[number]
+                if number is not None:
+                    stars.setdefault(number, star)
+        star_locations: dict[tuple[int, str], set[str]] = {}
+        for chart_id, printed_names in chart_star_name_labels.items():
+            for number, name in printed_names:
+                if number in stars and name:
+                    star_locations.setdefault((number, name), set()).add(chart_id)
+        for (number, proper_name), chart_ids_for_name in star_locations.items():
+            star = stars[number]
+            name = star_names.get(number)
+            if name is None:
+                continue
             chart_ids = sorted(
-                star_locations[number],
+                chart_ids_for_name,
                 key=lambda chart_id: (
-                    star.id not in printed_labels.get(chart_id, frozenset()),
                     _angular_distance_to_star(definitions[chart_id], star),
                     chart_id,
                 ),
             )
             star_chart_codes = tuple(
-                codes.get(
-                    item, presentation_from_edition(definitions[item], edition).chart_code
-                )
+                codes.get(item, presentation_from_edition(definitions[item], edition).chart_code)
                 for item in chart_ids
             )
             named_star_entries.append(
                 NamedStarIndexEntry(
                     f"HIP {number}",
-                    name.name or "",
+                    proper_name,
                     _star_designation(name),
                     name.constellation or "",
                     star_chart_codes[0],

@@ -876,6 +876,7 @@ class _AtlasPages:
     applied_chart_ids: set[str] = field(default_factory=set)
     index_dsos: dict[str, tuple[SceneDso, ...]] = field(default_factory=dict)
     index_stars: dict[str, tuple[Star | FaintStar, ...]] = field(default_factory=dict)
+    index_star_name_labels: dict[str, tuple[tuple[int, str], ...]] = field(default_factory=dict)
     index_label_targets: dict[str, frozenset[str]] = field(default_factory=dict)
     index_constellations: dict[str, frozenset[str]] = field(default_factory=dict)
     observing_lists: tuple[str, ...] = ()
@@ -884,6 +885,24 @@ class _AtlasPages:
     def record_index(self, chart_id: str, scene: ChartScene, labels: tuple[Label, ...]) -> None:
         self.index_dsos[chart_id] = tuple(scene.deep_sky_objects)
         self.index_stars[chart_id] = tuple(item.star for item in scene.stars)
+        star_by_id = {
+            item.star.id: item.star for item in scene.stars if isinstance(item.star, Star)
+        }
+        self.index_star_name_labels[chart_id] = tuple(
+            sorted(
+                {
+                    (hip, label.semantic_key.removeprefix("star:name:"))
+                    for label in labels
+                    if not label.hidden
+                    and label.effective_candidate() is not None
+                    and label.semantic_key is not None
+                    and label.semantic_key.startswith("star:name:")
+                    and isinstance((star := star_by_id.get(label.target_id)), Star)
+                    and (hip := hip_number(star.hip_id)) is not None
+                    and label.semantic_key.removeprefix("star:name:").strip()
+                }
+            )
+        )
         self.index_label_targets[chart_id] = frozenset(
             label.target_id
             for label in labels
@@ -1180,6 +1199,7 @@ def _create_atlas_index(
         (*plan.charts, *detail_definitions),
         edition,
         chart_stars=pages.index_stars,
+        chart_star_name_labels=pages.index_star_name_labels,
         star_names=star_names,
         chart_label_targets=pages.index_label_targets,
         chart_code_by_id={detail.id: detail.code for detail in plan.details},
