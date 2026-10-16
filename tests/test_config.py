@@ -122,7 +122,7 @@ def test_invalid_atlas_configuration(
 def test_shipped_style_fixture_loads() -> None:
     config = load_style_config(STYLE_FIXTURE)
     assert config.id == "standard"
-    assert config.star.min_diameter_mm == pytest.approx(0.36)
+    assert config.star.min_diameter_mm == pytest.approx(0.32)
     assert config.star.label_magnitude_limit == pytest.approx(5.5)
     assert config.label.font_size_pt == pytest.approx(6.0)
     assert config.constellation.lines.enabled is True

@@ -130,7 +130,7 @@ def test_deep_magnitude_10_5_uses_a_smaller_printable_faint_star() -> None:
     style = load_style_config(ROOT / "styles" / "deep.yaml")
     sizes = StarSizeModel.from_style(style.star)
     assert style.star.faint_magnitude == 10.5
-    assert sizes.diameter_mm(10.0) == pytest.approx(0.35)
+    assert sizes.diameter_mm(10.0) == pytest.approx(0.31)
     assert sizes.diameter_mm(10.5) == pytest.approx(0.25)
 
 

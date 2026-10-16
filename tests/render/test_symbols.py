@@ -60,17 +60,28 @@ def test_from_style_matches_configuration() -> None:
 
 
 @pytest.mark.parametrize(
-    ("edition", "magnitude_limit", "mag_six_diameter_mm"),
-    (("pocket", 7.5, 0.65), ("standard", 9.0, 1.10), ("deep", 10.5, 1.85)),
+    ("edition", "magnitude_limit", "mag_six_diameter_mm", "faint_points"),
+    (
+        ("pocket", 7.5, 0.65, ((7.0, 0.42), (7.5, 0.28))),
+        ("standard", 9.0, 1.10, ((8.0, 0.54), (9.0, 0.32))),
+        ("deep", 10.5, 1.85, ((9.0, 0.56), (10.0, 0.31), (10.5, 0.25))),
+        ("eyepiece", 12.25, 2.5, ((11.0, 0.31), (11.5, 0.25), (12.25, 0.195))),
+        ("eyepiece_deep", 13.5, 3.38, ((11.5, 0.28), (12.0, 0.24), (13.5, 0.14))),
+        ("deep_detail", 11.5, 1.85, ((10.0, 0.31), (11.0, 0.26), (11.5, 0.25))),
+        ("deep_detail_40", 11.5, 2.5, ((10.0, 0.56), (11.0, 0.31), (11.5, 0.28))),
+    ),
 )
 def test_edition_star_curves_are_calibrated(
-    edition: str, magnitude_limit: float, mag_six_diameter_mm: float
+    edition: str, magnitude_limit: float, mag_six_diameter_mm: float,
+    faint_points: tuple[tuple[float, float], ...],
 ) -> None:
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     model = StarSizeModel.from_style(style.star)
 
     assert style.star.faint_magnitude == pytest.approx(magnitude_limit)
     assert model.diameter_mm(6.0) == pytest.approx(mag_six_diameter_mm)
+    for magnitude, diameter_mm in faint_points:
+        assert model.diameter_mm(magnitude) == pytest.approx(diameter_mm)
     assert model.diameter_mm(style.star.diameter_curve[0][0] - 1.0) == pytest.approx(
         style.star.diameter_curve[0][1]
     )
@@ -80,6 +91,7 @@ def test_edition_star_curves_are_calibrated(
 
     magnitudes = [value / 10.0 for value in range(-10, int((magnitude_limit + 2.0) * 10))]
     diameters = [model.diameter_mm(magnitude) for magnitude in magnitudes]
+    assert min(diameters) >= style.star.min_diameter_mm
     assert all(later <= earlier + 1e-12 for earlier, later in pairwise(diameters))
 
 

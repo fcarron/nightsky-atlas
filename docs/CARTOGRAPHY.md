@@ -172,6 +172,19 @@ Furniture sits outside the chart frame and is deliberately quiet
 - **Footer** uses the same one-line atlas, constellation and chart identifier
   across editions. The magnitude legend remains at left where configured.
 
+## Faint-star sizing
+
+The approved Pocket P06 comparison uses 0.42 mm at magnitude 7 and 0.28 mm
+at 7.5, preserving the brighter curve through magnitude 6. Standard follows
+with 0.54 mm at magnitude 8 and 0.32 mm at 9. Deep and the experimental
+Eyepiece profiles reduce their faint intermediate points while retaining their
+existing smallest dots (Deep: 0.25 mm; Eyepiece profiles: 0.14 mm). The extended
+Deep detail profiles receive the same treatment while retaining their own
+minimum sizes. Values between knots use the existing linear interpolation.
+Magnitude limits and bright-star knots are unchanged. The shared base styles
+apply these curves to both colour and B&W output; detail charts inherit their
+selected star profile.
+
 ## Detail charts
 
 Detail charts use only three physical map scales: 20, 40 or 80 mm/°. Their
