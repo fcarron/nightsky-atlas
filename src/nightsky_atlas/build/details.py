@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 from nightsky_atlas.atlas.config import (
     DetailChartConfig,
@@ -184,6 +185,7 @@ class _PreparedDetail:
     cost_before: float
     cost_after: float
     validation: ValidationResult
+    label_diagnostics: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 def _verified_detail_dso_label_ids(
@@ -375,6 +377,7 @@ def prepare_detail_charts(
             cost_before=detail_cost_before,
             cost_after=detail_cost_after,
             validation=detail_validation,
+            label_diagnostics=optimized.label_diagnostics if optimize else {},
         )
     return prepared_details
 

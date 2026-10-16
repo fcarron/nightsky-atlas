@@ -15,10 +15,11 @@ import math
 from dataclasses import dataclass, replace
 
 from nightsky_atlas.atlas.config import StyleConfig
-from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
+from nightsky_atlas.chart.page import PageRect, PageTransform
 from nightsky_atlas.chart.presentation import presentation_for
 from nightsky_atlas.layout.models import Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import layout_cost
+from nightsky_atlas.layout.placement import translate_candidate
 from nightsky_atlas.layout.validation import validate_layout
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.review.schema import ReviewAction, ReviewActionType, ReviewResult
@@ -135,19 +136,11 @@ def _fine_adjustments(label: Label, action: ReviewAction) -> tuple[Label, ...]:
     )
     adjusted: list[Label] = []
     for offset_x, offset_y in offsets:
-        candidate = replace(
+        candidate = translate_candidate(
             current,
-            id=f"{current.id}:fine:{offset_x:+.1f}:{offset_y:+.1f}",
-            anchor=PagePoint(
-                current.anchor.x_mm + offset_x,
-                current.anchor.y_mm + offset_y,
-            ),
-            bounds=PageRect(
-                current.bounds.left_mm + offset_x,
-                current.bounds.top_mm + offset_y,
-                current.bounds.width_mm,
-                current.bounds.height_mm,
-            ),
+            offset_x,
+            offset_y,
+            candidate_id=f"{current.id}:fine:{offset_x:+.1f}:{offset_y:+.1f}",
         )
         adjusted.append(
             replace(

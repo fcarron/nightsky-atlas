@@ -242,6 +242,7 @@ class _BuiltMainChart:
     forced_lists: tuple[str, ...]
     applied_overrides: bool
     timings: tuple[float, float, float, float, float, float, float]
+    label_diagnostics: dict[str, dict[str, Any]]
 
 
 def _detail_fallback_protected_ids(
@@ -798,6 +799,7 @@ def _build_main_chart(
             validate_s,
             render_s,
         ),
+        label_diagnostics=optimized.label_diagnostics if shared.optimize else {},
     )
 
 

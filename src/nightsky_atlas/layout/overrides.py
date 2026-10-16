@@ -9,13 +9,14 @@ it.  They are never allowed to change astronomical data.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from nightsky_atlas.layout.models import CompassPosition, Label
+from nightsky_atlas.layout.placement import offset_label_placement
 
 __all__ = [
     "ChartOverrides",
@@ -33,12 +34,21 @@ class OverrideError(ValueError):
     """Raised when an override document is malformed or cannot be applied."""
 
 
+class _OffsetOverrideModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    x: float = Field(allow_inf_nan=False)
+    y: float = Field(allow_inf_nan=False)
+
+
 class _LabelOverrideModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     candidate: str | None = None
     locked: bool | None = None
     hidden: bool | None = None
+    offset_mm: _OffsetOverrideModel | None = None
+    leader_line: bool | None = None
 
     @field_validator("candidate")
     @classmethod
@@ -46,6 +56,14 @@ class _LabelOverrideModel(BaseModel):
         if value is not None and not value.strip():
             raise ValueError("candidate must not be blank")
         return value
+
+    @model_validator(mode="after")
+    def _validate_combination(self) -> _LabelOverrideModel:
+        if self.offset_mm is not None and self.candidate is None:
+            raise ValueError("offset_mm requires an explicit candidate")
+        if self.hidden is True and self.leader_line is True:
+            raise ValueError("a hidden label cannot have a leader line")
+        return self
 
 
 class _OverrideFileModel(BaseModel):
@@ -74,6 +92,8 @@ class LabelOverride:
     candidate: str | None = None
     locked: bool | None = None
     hidden: bool | None = None
+    offset_mm: tuple[float, float] | None = None
+    leader_line: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +145,8 @@ def _parse(path: Path) -> ChartOverrides:
             candidate=item.candidate,
             locked=item.locked,
             hidden=item.hidden,
+            offset_mm=(None if item.offset_mm is None else (item.offset_mm.x, item.offset_mm.y)),
+            leader_line=item.leader_line,
         )
         for label_id, item in model.labels.items()
     }
@@ -174,19 +196,13 @@ def _resolve_candidate_id(label: Label, candidate: str | None) -> str | None:
             for item in label.candidates:
                 if item.position == position and item.ring == 0:
                     return item.id
-            raise OverrideError(
-                f"{label.id}: override candidate {candidate!r} has no candidate"
-            )
+            raise OverrideError(f"{label.id}: override candidate {candidate!r} has no candidate")
     if label.candidate(candidate) is not None:
         return candidate
-    raise OverrideError(
-        f"{label.id}: override candidate {candidate!r} is not a valid candidate"
-    )
+    raise OverrideError(f"{label.id}: override candidate {candidate!r} is not a valid candidate")
 
 
-def apply_overrides(
-    labels: tuple[Label, ...], overrides: ChartOverrides
-) -> tuple[Label, ...]:
+def apply_overrides(labels: tuple[Label, ...], overrides: ChartOverrides) -> tuple[Label, ...]:
     """Apply a chart's overrides to its labels.
 
     Unknown label IDs and invalid candidates are hard errors: an override that
@@ -213,22 +229,32 @@ def apply_overrides(
         candidate_id = _resolve_candidate_id(label, spec.candidate)
         if candidate_id is None:
             if spec.locked is True:
-                raise OverrideError(
-                    f"{label.id}: locked override must specify a candidate"
-                )
-            updated.append(
-                label.with_placement(
-                    label.selected_candidate_id,
-                    hidden=label.hidden if spec.hidden is None else spec.hidden,
-                    locked=spec.locked,
-                )
-            )
-            continue
-        updated.append(
-            label.with_placement(
-                candidate_id,
-                hidden=False if spec.hidden is None else spec.hidden,
+                raise OverrideError(f"{label.id}: locked override must specify a candidate")
+            updated_label = label.with_placement(
+                label.selected_candidate_id,
+                hidden=label.hidden if spec.hidden is None else spec.hidden,
                 locked=spec.locked,
             )
+            if spec.leader_line is not None:
+                updated_label = _with_leader_line(updated_label, spec.leader_line)
+            updated.append(updated_label)
+            continue
+        if spec.offset_mm is not None:
+            updated_label = offset_label_placement(
+                label, candidate_id, spec.offset_mm[0], spec.offset_mm[1]
+            )
+        else:
+            updated_label = label.with_placement(candidate_id)
+        updated_label = updated_label.with_placement(
+            updated_label.selected_candidate_id,
+            hidden=False if spec.hidden is None else spec.hidden,
+            locked=spec.locked,
         )
+        if spec.leader_line is not None:
+            updated_label = _with_leader_line(updated_label, spec.leader_line)
+        updated.append(updated_label)
     return tuple(updated)
+
+
+def _with_leader_line(label: Label, enabled: bool) -> Label:
+    return replace(label, leader_line=enabled, leader_line_reason="manual" if enabled else None)

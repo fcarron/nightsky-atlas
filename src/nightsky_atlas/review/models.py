@@ -90,10 +90,11 @@ class ReviewRequest:
     permitted_actions: tuple[str, ...]
     elements: tuple[ReviewElement, ...] = ()
     diagnostics: dict[str, float] = field(default_factory=dict)
+    user_instruction: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable mapping of this request."""
-        return {
+        payload = {
             "page_id": self.page_id,
             "prompt_version": self.prompt_version,
             "schema_version": self.schema_version,
@@ -102,3 +103,6 @@ class ReviewRequest:
             "elements": [element.to_dict() for element in self.elements],
             "diagnostics": dict(self.diagnostics),
         }
+        if self.user_instruction is not None:
+            payload["user_instruction"] = self.user_instruction
+        return payload

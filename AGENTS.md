@@ -382,6 +382,11 @@ labels:
 Reviewable in Git, applied after initial layout, respected by later optimizers
 when locked. Escape hatch, not the primary layout method.
 
+`nightsky review editor --edition pocket --chart P11` starts the optional local
+label editor. It reuses the atlas build pipeline and saves YAML overrides under
+`build/label-editor/`. See `docs/INTERACTIVE_LABEL_EDITOR.md`; tests live in
+`tests/review/test_editor.py`.
+
 ## 23. Validation
 
 Rendering is not publishability.
