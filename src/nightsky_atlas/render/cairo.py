@@ -533,6 +533,25 @@ def _dso_fill_and_outline_alpha(
         fill_alpha = 1.0 + (rule.large_fill_alpha - 1.0) * smooth_progress
         return fill_alpha, 1.0
 
+    if (
+        scene_dso.dso.object_type
+        in (DsoType.BRIGHT_NEBULA, DsoType.DARK_NEBULA, DsoType.SUPERNOVA_REMNANT)
+        and extent.shape in (DsoShape.SQUARE, DsoShape.DASHED_SQUARE)
+        and palette.schematic_nebula_fill is not None
+    ):
+        rule = palette.schematic_nebula_fill
+        diameter_mm = max(extent.width_mm, extent.height_mm)
+        if diameter_mm <= rule.full_fill_until_mm:
+            return 1.0, 1.0
+        progress = min(
+            1.0,
+            (diameter_mm - rule.full_fill_until_mm)
+            / (rule.large_fill_from_mm - rule.full_fill_until_mm),
+        )
+        smooth_progress = progress * progress * (3.0 - 2.0 * progress)
+        fill_alpha = 1.0 + (rule.large_fill_alpha - 1.0) * smooth_progress
+        return fill_alpha, 1.0
+
     if scene_dso.dso.object_type != DsoType.OPEN_CLUSTER or palette.open_cluster_fill is None:
         return 1.0, 1.0
     rule = palette.open_cluster_fill

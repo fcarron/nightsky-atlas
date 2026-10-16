@@ -73,6 +73,9 @@ def test_color_styles_inherit_edition_and_select_fill_levels(
     assert style.color_atlas.galaxy_fill.full_fill_until_mm == 2.5
     assert style.color_atlas.galaxy_fill.large_fill_from_mm == 7.0
     assert style.color_atlas.galaxy_fill.large_fill_alpha == 0.18
+    assert style.color_atlas.schematic_nebula_fill.full_fill_until_mm == 3.0
+    assert style.color_atlas.schematic_nebula_fill.large_fill_from_mm == 16.0
+    assert style.color_atlas.schematic_nebula_fill.large_fill_alpha == 0.08
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
@@ -114,6 +117,53 @@ def test_galaxy_fill_fades_smoothly_with_rendered_symbol_size() -> None:
     assert alpha(7.0) == pytest.approx((0.18, 1.0))
     assert alpha(12.0) == pytest.approx((0.18, 1.0))
     assert alpha(3.5)[0] > alpha(4.75)[0] > alpha(6.0)[0]
+
+
+@pytest.mark.parametrize(
+    "object_type",
+    (DsoType.BRIGHT_NEBULA, DsoType.DARK_NEBULA, DsoType.SUPERNOVA_REMNANT),
+)
+def test_schematic_nebula_fills_fade_smoothly_without_fading_outlines(
+    object_type: DsoType,
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles/color/standard.yaml")
+    scene_dso = Mock(dso=Mock(object_type=object_type))
+
+    def alpha(size_mm: float, shape: DsoShape) -> tuple[float, float]:
+        extent = SymbolExtent(shape, size_mm, size_mm)
+        return _dso_fill_and_outline_alpha(style, scene_dso, extent)
+
+    assert alpha(2.0, DsoShape.SQUARE) == (1.0, 1.0)
+    assert alpha(3.0, DsoShape.DASHED_SQUARE) == (1.0, 1.0)
+    assert alpha(9.5, DsoShape.SQUARE) == pytest.approx((0.54, 1.0))
+    assert alpha(16.0, DsoShape.DASHED_SQUARE) == pytest.approx((0.08, 1.0))
+    assert alpha(24.0, DsoShape.SQUARE) == pytest.approx((0.08, 1.0))
+    assert alpha(5.0, DsoShape.SQUARE)[0] > alpha(9.5, DsoShape.SQUARE)[0]
+    assert alpha(9.5, DsoShape.SQUARE)[0] > alpha(14.0, DsoShape.SQUARE)[0]
+
+
+def test_schematic_nebula_fill_rule_does_not_affect_non_square_or_other_symbols() -> None:
+    style = load_style_config(REPO_ROOT / "styles/color/standard.yaml")
+    nebula = Mock(dso=Mock(object_type=DsoType.BRIGHT_NEBULA))
+    galaxy = Mock(dso=Mock(object_type=DsoType.GALAXY))
+    extent = SymbolExtent(DsoShape.CIRCLE, 20.0, 20.0)
+
+    assert _dso_fill_and_outline_alpha(style, nebula, extent) == (1.0, 1.0)
+    assert _dso_fill_and_outline_alpha(style, galaxy, extent) == pytest.approx((0.18, 1.0))
+
+
+@pytest.mark.parametrize(
+    "object_type",
+    (DsoType.BRIGHT_NEBULA, DsoType.DARK_NEBULA, DsoType.SUPERNOVA_REMNANT),
+)
+def test_monochrome_schematic_nebula_symbols_are_not_attenuated(
+    object_type: DsoType,
+) -> None:
+    style = load_style_config(REPO_ROOT / "styles/standard.yaml")
+    scene_dso = Mock(dso=Mock(object_type=object_type))
+    extent = SymbolExtent(DsoShape.DASHED_SQUARE, 30.0, 30.0)
+
+    assert _dso_fill_and_outline_alpha(style, scene_dso, extent) == (1.0, 1.0)
 
 
 def test_monochrome_galaxy_fill_is_not_size_attenuated() -> None:

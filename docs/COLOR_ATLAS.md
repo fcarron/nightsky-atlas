@@ -10,8 +10,12 @@ large open-cluster fills are reduced by size: alpha 0.48 for medium symbols and
 0.18 for large symbols; small clusters retain their normal fill. Galaxy fill
 strength now fades smoothly with rendered major-axis size: full strength through
 2.5 mm, reaching alpha 0.18 at 7 mm. The dark galaxy outline remains fully
-opaque. The Magellanic Clouds use the same light blue family as the Milky Way,
-with edition-specific fill strength.
+opaque. Bright nebula, dark nebula and supernova-remnant schematic square fills
+also fade smoothly by rendered size: they retain full strength through 3 mm and
+reach alpha 0.08 at 16 mm. Their solid or dashed black outlines stay opaque.
+Irregular curated nebula contours use their own geometry and are not attenuated.
+The Magellanic Clouds use the same light blue family as the Milky Way, with
+edition-specific fill strength.
 
 Build Pocket with:
 

@@ -25,6 +25,10 @@ color_atlas:
     full_fill_until_mm: 2.5
     large_fill_from_mm: 7.0
     large_fill_alpha: 0.18
+  schematic_nebula_fill:
+    full_fill_until_mm: 3.0
+    large_fill_from_mm: 16.0
+    large_fill_alpha: 0.08
   milky_way_fills: {1: "#E8F1F8", 2: "#E3EEF7", 3: "#D6E6F3", 4: "#CFE2F1", 5: "#C4D9EC"}
   milky_way_outline: "#D6E3ED"
   open_cluster_fill:
