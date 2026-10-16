@@ -25,14 +25,14 @@ from nightsky_atlas.atlas.tiling import (
     neighbour_overlap_report,
     resolve_ring_counts,
 )
-from nightsky_atlas.build.atlas import (
+from nightsky_atlas.build.atlas import _exclude_star_labels
+from nightsky_atlas.build.chart import build_chart_context, load_chart_inputs
+from nightsky_atlas.build.details import (
     _detail_scene,
     _detail_style,
-    _exclude_star_labels,
     _profile_config_path,
     _style_with_star_profile,
 )
-from nightsky_atlas.build.chart import build_chart_context, load_chart_inputs
 from nightsky_atlas.catalog.star_names import hip_number, load_star_names
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform

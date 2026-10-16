@@ -96,6 +96,12 @@ The explicit **Layout Document** between astronomy and rendering is the
 defining architectural difference from a catalogue-to-PDF renderer. Module map:
 `docs/ARCHITECTURE.md`.
 
+Atlas entry: `build/atlas.py:build_atlas` owns publication staging;
+`_build_atlas_impl` coordinates the named build phases. `build/details.py`
+prepares detail layouts once; `build/document.py` composes editorial/overview
+pages and PDF navigation. Main-chart workers remain in `build/atlas.py`.
+Relevant tests: `tests/build/`, plus edition/profile cases in `tests/atlas/`.
+
 ## 5. Fundamental design law: immutable astronomy, mutable layout
 
 Never weaken without explicit human approval.

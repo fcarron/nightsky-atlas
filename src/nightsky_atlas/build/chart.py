@@ -72,6 +72,7 @@ from nightsky_atlas.catalog.systems import (
 )
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageTransform
+from nightsky_atlas.layout.models import Label
 from nightsky_atlas.scene.builder import build_scene
 from nightsky_atlas.scene.models import ChartScene
 
@@ -503,3 +504,13 @@ def _selection_policy(
     return resolve_edition_hierarchy(
         config, atlas.id, visibility_by_edition=visibility_by_edition
     )
+
+
+def _require_mandatory_labels(chart_id: str, labels: tuple[Label, ...]) -> None:
+    missing = sorted(
+        label.id
+        for label in labels
+        if label.mandatory and (label.hidden or label.effective_candidate() is None)
+    )
+    if missing:
+        raise ValueError(f"chart {chart_id} has missing mandatory labels: {', '.join(missing)}")

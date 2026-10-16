@@ -323,6 +323,20 @@ layout generation, and are respected by later optimizers when locked. They are
 an escape hatch, not the primary layout method. Manual override details and the
 current implementation live in `docs/STATE.md`.
 
+## Atlas build phases
+
+`build/atlas.py:build_atlas` retains the publication staging/swap boundary.
+Its `_build_atlas_impl` plans charts, captures input provenance, prepares
+details, composes main charts, appends details/editorial pages and writes
+artifacts. `build/details.py` resolves detail profiles and prepares each layout
+once, before main-chart fallback eligibility is determined. `build/document.py`
+owns combined-PDF navigation, opening/overview pages, credits and directories.
+Main workers write individual artifacts; only the parent composes the combined
+PDF, consuming bounded spawned-worker results in chart order.
+
+Build regressions live in `tests/build/`; `test_atlas_pipeline.py` checks detail
+reuse and identical serial/parallel previews and page diagnostics.
+
 ## Validation
 
 A chart is not publishable because it rendered successfully.
@@ -404,7 +418,7 @@ nightsky-atlas/
 │   ├── review/            # models, schema, build
 │   ├── ai/                # base, schema/actions, openrouter, recorded, loop,
 │   │                      # benchmark, config, credentials
-│   └── build/             # chart, atlas
+│   └── build/             # chart, atlas, details, document, preflight, progress
 ├── atlas/                 # main and experimental edition definitions
 ├── styles/                # matching edition/detail styles
 ├── config/                # observing policy and curated memberships

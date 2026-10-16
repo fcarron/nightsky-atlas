@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import datetime
 import json
-import math
 import os
 import subprocess
 import tempfile
@@ -17,13 +16,11 @@ import time
 from collections import deque
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from itertools import combinations, islice
 from multiprocessing import get_context
 from pathlib import Path
 from typing import Any
-
-import cairo
 
 from nightsky_atlas.atlas.config import (
     AtlasConfig,
@@ -31,16 +28,14 @@ from nightsky_atlas.atlas.config import (
     EditionConfig,
     StyleConfig,
     load_atlas_config,
-    load_style_config,
 )
 from nightsky_atlas.atlas.detail_geometry import (
     detail_chart_contains_position,
     detail_chart_parent_ids,
 )
-from nightsky_atlas.atlas.directory import build_chart_directory, build_detail_chart_directory
-from nightsky_atlas.atlas.index import build_atlas_index
+from nightsky_atlas.atlas.index import AtlasIndex, build_atlas_index
 from nightsky_atlas.atlas.observing_config import DEFAULT_CONFIG_PATH as OBSERVING_CONFIG_PATH
-from nightsky_atlas.atlas.overview import OverviewMap, build_overview, hemisphere_for
+from nightsky_atlas.atlas.overview import OverviewMap, hemisphere_for
 from nightsky_atlas.atlas.report import build_draft_report, render_text_summary
 from nightsky_atlas.atlas.tiling import (
     TilingSpec,
@@ -50,12 +45,28 @@ from nightsky_atlas.atlas.tiling import (
 from nightsky_atlas.build.chart import (
     DEFAULT_DOUBLE_STAR_PATH,
     OPENNGC_OUTLINE_DIR,
-    ChartContext,
     ChartInputs,
+    _require_mandatory_labels,
     build_chart_context,
     default_dso_path,
     load_chart_inputs,
     load_star_systems,
+)
+from nightsky_atlas.build.details import (
+    DEFAULT_FAINT_STAR_STORE,
+    _PreparedDetail,
+    _profile_config_path,
+    _verified_detail_dso_label_ids,
+    prepare_detail_charts,
+    resolve_detail_profiles,
+    verified_detail_star_hips,
+)
+from nightsky_atlas.build.document import (
+    AtlasPdf,
+    OpeningPages,
+    open_atlas_pdf,
+    write_closing_pages,
+    write_opening_pages,
 )
 from nightsky_atlas.build.preflight import (
     collect_build_inputs,
@@ -64,16 +75,14 @@ from nightsky_atlas.build.preflight import (
     validate_publication_inputs,
 )
 from nightsky_atlas.build.progress import Progress, null_progress
+from nightsky_atlas.catalog.faint_stars import FaintStar
 from nightsky_atlas.catalog.magellanic_clouds import DEFAULT_DATA_PATH as MAGELLANIC_CLOUD_DATA_PATH
 from nightsky_atlas.catalog.manifest import file_sha256
-from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Star
+from nightsky_atlas.catalog.models import Star
 from nightsky_atlas.catalog.observing_lists import (
     DEFAULT_FIXTURE_DIR as OBSERVING_LISTS_FIXTURE_DIR,
 )
-from nightsky_atlas.catalog.observing_lists import build_membership_index
 from nightsky_atlas.catalog.priority import messier_id
-from nightsky_atlas.catalog.sample import load_sample_stars
-from nightsky_atlas.catalog.selection import select_dso
 from nightsky_atlas.catalog.star_names import (
     DEFAULT_FIXTURE_DIR as STAR_NAMES_FIXTURE_DIR,
 )
@@ -82,7 +91,6 @@ from nightsky_atlas.catalog.star_names import (
     hip_number,
     load_star_names,
 )
-from nightsky_atlas.catalog.store import QueryBox, StarStore
 from nightsky_atlas.catalog.systems import StarSystem
 from nightsky_atlas.chart.models import ChartDefinition
 from nightsky_atlas.chart.page import PageTransform
@@ -101,27 +109,13 @@ from nightsky_atlas.layout.overrides import (
 )
 from nightsky_atlas.layout.selection import select_labels
 from nightsky_atlas.layout.validation import ValidationResult, validate_layout
-from nightsky_atlas.render.atlas_index import draw_atlas_index_pages
 from nightsky_atlas.render.cairo import draw_chart_page, render_chart
-from nightsky_atlas.render.chart_directory import (
-    draw_chart_directory_pages,
-    draw_detail_chart_directory_pages,
-)
 from nightsky_atlas.render.detail_markers import DetailMapMarker, build_detail_marker
-from nightsky_atlas.render.front_matter import (
-    draw_credits_page,
-    draw_field_guide,
-    draw_introduction,
-)
 from nightsky_atlas.render.furniture import furniture_obstacles
 from nightsky_atlas.render.overview import (
     LocatorInset,
-    draw_overview_page,
-    draw_overview_spread_page,
 )
-from nightsky_atlas.render.pdf_navigation import PdfNavigation
 from nightsky_atlas.scene.models import ChartScene, SceneDso
-from nightsky_atlas.units import mm_to_pt
 
 __all__ = [
     "AtlasBuildResult",
@@ -129,144 +123,6 @@ __all__ = [
     "build_atlas",
     "chart_definitions",
 ]
-
-DEFAULT_FAINT_STAR_STORE = Path("data/processed/stars/faint_stars.sqlite")
-
-
-def _style_with_star_profile(base_style: StyleConfig, star_profile: StyleConfig) -> StyleConfig:
-    """Use one edition's star appearance while preserving the base DSO style."""
-    return base_style.model_copy(
-        update={
-            "star": star_profile.star,
-            "double_stars": star_profile.double_stars,
-            "label": base_style.label.model_copy(
-                update={"star_labels": star_profile.label.star_labels}
-            ),
-        }
-    )
-
-
-def _profile_config_path(source_path: str | Path, profile_name: str) -> Path:
-    source = Path(source_path)
-    sibling = source.with_name(f"{profile_name}.yaml")
-    if sibling.is_file():
-        return sibling
-    config_family = "atlas" if source.parent.name == "atlas" else "styles"
-    shared = Path(__file__).resolve().parents[3] / config_family / f"{profile_name}.yaml"
-    if shared.is_file():
-        return shared
-    return sibling
-
-
-def _detail_style(
-    detail: DetailChartConfig,
-    style: StyleConfig,
-    dso_profile: StyleConfig | None = None,
-) -> StyleConfig:
-    if dso_profile is not None:
-        style = style.model_copy(update={"dso": dso_profile.dso})
-    constellation = {}
-    for key, value in (
-        ("names", detail.show_constellation_names),
-        ("lines", detail.show_constellation_figures),
-        ("boundaries", detail.show_constellation_boundaries),
-    ):
-        if value is not None:
-            current = getattr(style.constellation, key)
-            constellation[key] = current.model_copy(update={"enabled": value})
-    if not constellation:
-        return style
-    return style.model_copy(
-        update={
-            "constellation": style.constellation.model_copy(update=constellation)
-        }
-    )
-
-
-def _detail_scene(detail: DetailChartConfig, scene: ChartScene) -> ChartScene:
-    if not detail.objects:
-        return scene
-    dsos = []
-    for scene_dso in scene.deep_sky_objects:
-        config = detail.objects.get(scene_dso.dso.id)
-        if config is None:
-            dsos.append(scene_dso)
-            continue
-        updates = {}
-        if config.show_symbol is not None:
-            updates["symbol_visible"] = config.show_symbol
-        if config.show_label is not None:
-            updates["label_visible"] = config.show_label
-        if updates:
-            scene_dso = replace(scene_dso, **updates)
-        dsos.append(scene_dso)
-    return replace(scene, deep_sky_objects=tuple(dsos))
-
-
-def _detail_faint_star_inputs(
-    detail: DetailChartConfig,
-    *,
-    profile_limit: float,
-    faint_star_store: str | Path | None,
-    faint_star_limit: float | None,
-) -> tuple[str | Path | None, float | None]:
-    include_ucac4 = (
-        faint_star_store is not None
-        if detail.stars.include_ucac4 is None
-        else detail.stars.include_ucac4
-    )
-    if not include_ucac4:
-        return None, None
-    store = faint_star_store if faint_star_store is not None else DEFAULT_FAINT_STAR_STORE
-    if not Path(store).is_file():
-        raise FileNotFoundError(
-            f"detail chart {detail.code} requests UCAC4 stars, but {store} is missing; "
-            "provide --faint-star-store or create the local UCAC4 supplement"
-        )
-    limit = detail.stars.magnitude_limit or profile_limit
-    if faint_star_limit is not None:
-        limit = min(limit, faint_star_limit)
-    return store, limit
-
-
-def _detail_presentation(
-    detail: DetailChartConfig,
-    *,
-    edition: EditionConfig,
-    main_charts: tuple[ChartDefinition, ...],
-    parent_chart_ids: tuple[str, ...],
-    stellar_limit_magnitude: float,
-) -> ChartPresentation:
-    parents = {chart.id: chart for chart in main_charts}
-    parent_codes = tuple(
-        presentation_from_edition(parents[chart_id], edition).chart_code
-        for chart_id in parent_chart_ids
-    )
-    parent_code = parent_codes[0] if parent_codes else None
-    field = f"{detail.width_deg:g}° × {detail.height_deg:g}°"
-    parent_text = ", ".join(parent_codes) if parent_codes else "none"
-    return ChartPresentation(
-        edition_name=edition.name,
-        edition_code=edition.code,
-        chart_index=None,
-        internal_chart_id=detail.code,
-        page_heading=f"{detail.code} · {detail.name}",
-        page_footer=(
-            f"{edition.name} · {detail.code} · {detail.mm_per_degree:g} mm/° · "
-            f"stars to {stellar_limit_magnitude:g} · {field} · Main charts {parent_text}"
-        ),
-        page_footer_target=parent_code,
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class _PreparedDetail:
-    context: ChartContext
-    style: StyleConfig
-    labels: tuple[Label, ...]
-    cost_before: float
-    cost_after: float
-    validation: ValidationResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,16 +244,6 @@ class _BuiltMainChart:
     timings: tuple[float, float, float, float, float, float, float]
 
 
-def _require_mandatory_labels(chart_id: str, labels: tuple[Label, ...]) -> None:
-    missing = sorted(
-        label.id
-        for label in labels
-        if label.mandatory and (label.hidden or label.effective_candidate() is None)
-    )
-    if missing:
-        raise ValueError(f"chart {chart_id} has missing mandatory labels: {', '.join(missing)}")
-
-
 def _detail_fallback_protected_ids(
     scene: ChartScene, manually_protected_ids: frozenset[str]
 ) -> frozenset[str]:
@@ -406,29 +252,6 @@ def _detail_fallback_protected_ids(
         f"label:dso:{scene_dso.dso.id}"
         for scene_dso in scene.deep_sky_objects
         if messier_id(scene_dso.dso) is not None
-    )
-
-
-def _verified_detail_dso_label_ids(
-    scene: ChartScene,
-    labels: tuple[Label, ...],
-    validation: ValidationResult,
-) -> frozenset[str]:
-    """Return visible DSO IDs whose detail labels are placed and hard-clean."""
-    placed_label_ids = {
-        label.id
-        for label in labels
-        if not label.hidden and label.effective_candidate() is not None
-    }
-    problematic_label_ids = {
-        element_id for issue in validation.issues for element_id in issue.element_ids
-    }
-    return frozenset(
-        scene_dso.dso.id
-        for scene_dso in scene.deep_sky_objects
-        if scene_dso.symbol_visible
-        and f"label:dso:{scene_dso.dso.id}" in placed_label_ids
-        and f"label:dso:{scene_dso.dso.id}" not in problematic_label_ids
     )
 
 
@@ -466,8 +289,7 @@ def _exclude_star_labels(
     hip_by_star_id = {
         item.star.id: hip
         for item in scene.stars
-        if isinstance(item.star, Star)
-        and (hip := hip_number(item.star.hip_id)) in excluded_hips
+        if isinstance(item.star, Star) and (hip := hip_number(item.star.hip_id)) in excluded_hips
     }
     removed = tuple(
         label
@@ -487,16 +309,34 @@ def _exclude_star_labels(
     return tuple(label for label in labels if label.id not in removed_ids), records
 
 
-def _layout_issue_records(issues: tuple[LayoutIssue, ...]) -> tuple[dict[str, Any], ...]:
-    return tuple(
-        {
-            "issue_id": issue.id,
-            "type": issue.issue_type.value,
-            "severity": "hard",
-            "affected_ids": list(issue.element_ids),
-            "message": issue.message,
-        }
-        for issue in issues
+def _layout_issue_records(
+    issues: tuple[LayoutIssue, ...], labels: tuple[Label, ...] = ()
+) -> tuple[dict[str, Any], ...]:
+    return (
+        *(
+            {
+                "issue_id": issue.id,
+                "type": issue.issue_type.value,
+                "severity": "hard",
+                "affected_ids": list(issue.element_ids),
+                "message": issue.message,
+            }
+            for issue in issues
+        ),
+        *(
+            {
+                "issue_id": f"issue:fallback_candidate:{label.id}",
+                "type": "fallback_candidate",
+                "severity": "warning",
+                "affected_ids": [label.id],
+                "message": (
+                    "No candidate fit inside the chart field; unrestricted candidates "
+                    "were generated."
+                ),
+            }
+            for label in labels
+            if any(candidate.id.endswith(":fallback") for candidate in label.candidates)
+        ),
     )
 
 
@@ -592,9 +432,7 @@ def _detail_label_suppression_group(
                 if examined > 100_000:
                     break
                 covered = frozenset(
-                    issue.id
-                    for label_id in group
-                    for issue in issues_by_label[label_id]
+                    issue.id for label_id in group for issue in issues_by_label[label_id]
                 )
                 if not issue_ids <= covered:
                     continue
@@ -614,12 +452,7 @@ def _detail_label_suppression_group(
             label_id = min(
                 label_ids,
                 key=lambda candidate_id: (
-                    -len(
-                        {
-                            issue.id for issue in issues_by_label[candidate_id]
-                        }
-                        & uncovered
-                    ),
+                    -len({issue.id for issue in issues_by_label[candidate_id]} & uncovered),
                     label_by_id[candidate_id].priority,
                     len(label_by_id[candidate_id].candidates),
                     candidate_id,
@@ -930,23 +763,7 @@ def _build_main_chart(
             )
             for detail_code in sorted({item["detail_chart"] for item in permitted_suppressions})
         ),
-        layout_issues=(
-            *_layout_issue_records(validation.issues),
-            *(
-                {
-                    "issue_id": f"issue:fallback_candidate:{label.id}",
-                    "type": "fallback_candidate",
-                    "severity": "warning",
-                    "affected_ids": [label.id],
-                    "message": (
-                        "No candidate fit inside the chart field; unrestricted candidates "
-                        "were generated."
-                    ),
-                }
-                for label in labels
-                if any(candidate.id.endswith(":fallback") for candidate in label.candidates)
-            ),
-        ),
+        layout_issues=_layout_issue_records(validation.issues, labels),
         permitted_suppressions=tuple(permitted_suppressions),
         intentional_excluded_star_labels=intentional_exclusions,
         fallback_candidate_label_ids=tuple(
@@ -1029,373 +846,60 @@ def _tiling_manifest(atlas: AtlasConfig) -> dict[str, Any] | None:
     return payload
 
 
-def _load_overview_stars(
-    star_store: str | Path | None,
-    stars_csv: str | Path | None,
-    magnitude_limit: float,
-) -> tuple[Star, ...]:
-    """Load the bright-star foreground for the overview pages.
+@dataclass(frozen=True, slots=True)
+class _ChartPlan:
+    """Validated main selection and its included detail-chart relationships."""
 
-    The overview needs the whole sky, not one chart, so it queries the store
-    with a full-sky box instead of the per-chart path.
-    """
-    if star_store is not None:
-        with StarStore.open(star_store) as store:
-            stars = store.query_box(
-                QueryBox(0.0, 360.0, -90.0, 90.0), magnitude_limit=magnitude_limit
-            )
-        return tuple(stars)
-    if stars_csv is not None:
-        return tuple(
-            star for star in load_sample_stars(stars_csv) if star.magnitude <= magnitude_limit
+    all_charts: tuple[ChartDefinition, ...]
+    charts: tuple[ChartDefinition, ...]
+    details: tuple[DetailChartConfig, ...]
+    detail_parent_chart_ids: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True, slots=True)
+class _BuildProvenance:
+    """Resolved input paths and their pre-build provenance snapshots."""
+
+    source_paths: dict[str, str | Path | bool | None]
+    sources: list[dict[str, Any]]
+    geometry_inputs: dict[str, str | None]
+    geometry_catalogues: dict[str, list[str]]
+    input_paths: dict[str, str | Path | None]
+    fingerprints: dict[str, dict[str, Any] | None]
+
+
+@dataclass(slots=True)
+class _AtlasPages:
+    """Parent-process page results and sources for the printed atlas index."""
+
+    results: list[ChartPageResult] = field(default_factory=list)
+    applied_chart_ids: set[str] = field(default_factory=set)
+    index_dsos: dict[str, tuple[SceneDso, ...]] = field(default_factory=dict)
+    index_stars: dict[str, tuple[Star | FaintStar, ...]] = field(default_factory=dict)
+    index_label_targets: dict[str, frozenset[str]] = field(default_factory=dict)
+    index_constellations: dict[str, frozenset[str]] = field(default_factory=dict)
+    observing_lists: tuple[str, ...] = ()
+    forced_lists: tuple[str, ...] = ()
+
+    def record_index(self, chart_id: str, scene: ChartScene, labels: tuple[Label, ...]) -> None:
+        self.index_dsos[chart_id] = tuple(scene.deep_sky_objects)
+        self.index_stars[chart_id] = tuple(item.star for item in scene.stars)
+        self.index_label_targets[chart_id] = frozenset(
+            label.target_id
+            for label in labels
+            if not label.hidden and label.effective_candidate() is not None
         )
-    return ()
 
 
-def _draw_front_matter_pages(
-    cr: cairo.Context[cairo.Surface],
-    surface: cairo.Surface,
+def _plan_charts(
     atlas: AtlasConfig,
-    style: StyleConfig,
-    main_charts: tuple[ChartDefinition, ...],
-    scale_chart: ChartDefinition,
-    pdf_navigation: PdfNavigation,
-    outline_parent_id: int,
-) -> int:
-    """Write the two opening pages shared by all editions."""
-    page = atlas.page.to_geometry()
-    mm_per_degree = PageTransform(
-        scale_chart,
-        page,
-        scale_mm_per_degree=atlas.mm_per_degree,
-    ).mm_per_deg
-    draw_introduction(cr, atlas, style, main_charts)
-    pdf_navigation.mark_page(surface, cr, "introduction", label="Introduction")
-    pdf_navigation.add_page_outline(surface, outline_parent_id, "Introduction", "introduction")
-    surface.show_page()
-
-    draw_field_guide(cr, atlas, style, len(main_charts), mm_per_degree)
-    pdf_navigation.mark_page(surface, cr, "field-guide", label="Field Guide")
-    pdf_navigation.add_page_outline(
-        surface, outline_parent_id, "Field Guide & Symbol Key", "field-guide"
-    )
-    surface.show_page()
-    return 2
-
-
-def _draw_build_credits_page(
-    cr: cairo.Context[cairo.Surface],
-    surface: cairo.Surface,
-    atlas: AtlasConfig,
-    style: StyleConfig,
-    data_sources: list[dict[str, Any]],
-    geometry_inputs: dict[str, str | None],
-    geometry_catalogues: dict[str, list[str]],
-    inputs: ChartInputs,
-    star_names: dict[int, StarName],
-    pdf_navigation: PdfNavigation,
-    outline_parent_id: int,
-) -> None:
-    """Append credits derived from the data and geometry used in this build."""
-    page = atlas.page.to_geometry()
-    family = style.typography.sans_family
-    selected_dsos = _selected_dsos(inputs)
-    left_sections, right_sections = _credits_columns(
-        data_sources=data_sources,
-        geometry_catalogues=geometry_catalogues,
-        used_dso_catalogues=frozenset(
-            catalogue
-            for dso in selected_dsos
-            for catalogue in (
-                dso.provenance.catalogue,
-                *(record.catalogue_id for record in dso.catalogue_records),
-            )
-        ),
-        star_name_source=geometry_inputs["star_names"] if star_names else None,
-        has_iau_star_names=any(name.curated_name for name in star_names.values()),
-        has_galaxies=any(dso.object_type == DsoType.GALAXY for dso in selected_dsos),
-    )
-    draw_credits_page(
-        cr,
-        page,
-        family,
-        left_sections,
-        right_sections,
-        edition=atlas.resolved_edition().name,
-        catalogue_data_label="source-specific dates in the build manifest",
-    )
-    pdf_navigation.mark_page(surface, cr, "credits", label="Data Sources & Credits")
-    pdf_navigation.add_page_outline(
-        surface, outline_parent_id, "Data Sources & Credits", "credits"
-    )
-    surface.show_page()
-
-
-def _selected_dsos(inputs: ChartInputs) -> tuple[DeepSkyObject, ...]:
-    """Return physical targets selected by the edition policy for attribution."""
-    membership_index = build_membership_index(inputs.observing_lists, inputs.dsos)
-    if inputs.selection_policy is None:
-        return inputs.dsos
-    selected = []
-    for dso in inputs.dsos:
-        decision = select_dso(
-            dso,
-            index=membership_index,
-            policy=inputs.selection_policy,
-        )
-        if decision.visible or decision.forced:
-            selected.append(dso)
-    return tuple(selected)
-
-
-def _credits_columns(
     *,
-    data_sources: list[dict[str, Any]],
-    geometry_catalogues: dict[str, list[str]],
-    used_dso_catalogues: frozenset[str],
-    star_name_source: str | None,
-    has_iau_star_names: bool,
-    has_galaxies: bool,
-) -> tuple[
-    tuple[tuple[str, tuple[str, ...]], ...],
-    tuple[tuple[str, tuple[str, ...]], ...],
-]:
-    """Prepare concise, build-specific source credits from the input manifests."""
-    by_kind = {item["kind"]: item for item in data_sources}
-    left: list[tuple[str, tuple[str, ...]]] = []
-    right: list[tuple[str, tuple[str, ...]]] = []
-
-    star_entries: list[str] = []
-    star_source = by_kind.get("stars", {}).get("manifest") or {}
-    if star_source.get("catalogue") == "TYC2":
-        star_entries.append("Tycho-2 — Høg et al. (2000), ESA; CC BY-NC 3.0 IGO")
-        supplement = star_source.get("bright_star_supplement") or {}
-        if supplement.get("catalogue") == "HIP":
-            star_entries.append(
-                "Hipparcos — ESA (1997), Lindegren/Kovalevsky teams; CC BY-NC 3.0 IGO"
-            )
-    elif star_source.get("source"):
-        star_entries.append(f"Stars — {star_source['source']}")
-    faint_source = by_kind.get("faint_stars", {}).get("manifest") or {}
-    if faint_source.get("catalogue") == "UCAC4":
-        star_entries.append(
-            "UCAC4 — Zacharias et al. (2013), USNO; APASS V"
-        )
-    elif faint_source.get("source"):
-        star_entries.append(f"Faint-star supplement — {faint_source['source']}")
-    if star_entries:
-        left.append(("Star catalogues", tuple(star_entries)))
-
-    dso_source = by_kind.get("deep_sky", {}).get("manifest") or {}
-    manifest_sources = {
-        str(item.get("catalogue_id")): item
-        for item in dso_source.get("sources", ())
-        if isinstance(item, dict) and item.get("catalogue_id")
-    }
-    active_ids = set(used_dso_catalogues)
-    dso_entries: list[str] = []
-    if "OpenNGC" in active_ids:
-        dso_entries.append("OpenNGC — Mattia Verga & contributors; CC BY-SA 4.0; adapted")
-
-    group_specs = (
-        (
-            ("VII/20", "VII/7A", "VII/9", "VII/21", "VII/220A"),
-            {
-                "VII/20": "Sharpless (1959)",
-                "VII/7A": "Lynds LDN (1962)",
-                "VII/9": "Lynds LBN (1965)",
-                "VII/21": "van den Bergh (1966)",
-                "VII/220A": "Barnard (1927)",
-            },
-            "Nebula catalogues",
-        ),
-        (
-            ("VII/92A:Collinder", "VII/92A:Melotte", "VII/92A:Stock"),
-            {
-                "VII/92A:Collinder": "Collinder",
-                "VII/92A:Melotte": "Melotte",
-                "VII/92A:Stock": "Stock",
-            },
-            "Open clusters — Lyngå (1987)",
-        ),
-        (
-            ("IV/24:AbellPN", "IV/24:CuratedPN"),
-            {
-                "IV/24:AbellPN": "Kohoutek (2001)",
-                "IV/24:CuratedPN": "Kohoutek (2001)",
-            },
-            "Planetary nebulae",
-        ),
-        (
-            ("VII/202:Palomar", "VII/202:Terzan"),
-            {"VII/202:Palomar": "Palomar", "VII/202:Terzan": "Terzan"},
-            "Globular clusters — Harris (1996)",
-        ),
-        (
-            ("VII/213", "VII/74A", "VII/155"),
-            {
-                "VII/213": "Hickson (1982)",
-                "VII/74A": "Arp (1966)",
-                "VII/155": "de Vaucouleurs et al. (1991)",
-            },
-            "Galaxy catalogues",
-        ),
-    )
-    grouped_ids: set[str] = set()
-    for ids, labels, heading in group_specs:
-        grouped_ids.update(ids)
-        included = list(dict.fromkeys(labels[item] for item in ids if item in active_ids))
-        if included:
-            citation = "; ".join(included)
-            if " — " in heading:
-                citation = f"{', '.join(included)} — {heading.split(' — ')[-1]}"
-            dso_entries.append(citation)
-    for catalogue_id in sorted(active_ids - grouped_ids - {"OpenNGC"}):
-        metadata = manifest_sources.get(catalogue_id, {})
-        name = metadata.get("name") or catalogue_id
-        if catalogue_id.lower() == "ucc" or "unified cluster" in str(name).lower():
-            dso_entries.append(
-                "Unified Cluster Catalogue — Perren et al. (2023); data licence not stated"
-            )
-        else:
-            dso_entries.append(str(name))
-    if not dso_entries and dso_source.get("source"):
-        dso_entries.append(f"Deep-sky catalogue — {dso_source['source']}")
-    dso_entries.append(
-        "Herschel 400 — Wikipedia (CC BY-SA 4.0); Messier/Caldwell lists supply designations"
-    )
-    if dso_entries:
-        left.append(("Deep-sky catalogues", tuple(dso_entries)))
-    if has_galaxies:
-        left.append(
-            (
-                "Galaxy visibility",
-                (
-                    "Galaxy visibility classes follow a Crumey (2014)-based model.",
-                ),
-            )
-        )
-
-    wds = by_kind.get("double_stars", {}).get("manifest") or {}
-    if wds:
-        left.append(
-            (
-                "Double stars",
-                (
-                    "Washington Double Star Catalog — Mason et al., USNO",
-                    "This research has made use of the Washington Double Star Catalog "
-                    "maintained at the U.S. Naval Observatory.",
-                ),
-            )
-        )
-
-    line_sources = set(geometry_catalogues.get("constellation_lines", ()))
-    boundary_sources = set(geometry_catalogues.get("constellation_boundaries", ()))
-    outline_sources = set(geometry_catalogues.get("outlines", ()))
-    milky_way_sources = set(geometry_catalogues.get("milky_way", ()))
-    magellanic_sources = set(geometry_catalogues.get("magellanic_clouds", ()))
-    cartography: list[str] = []
-    if "Stellarium Western (Sky & Telescope)" in line_sources:
-        cartography.append(
-            "Constellation figures — Stellarium Western (Sky & Telescope); "
-            "Krizak, Piskor & Stellarium Team; CC BY-SA 2.0"
-        )
-    elif line_sources:
-        cartography.extend(f"Constellation figures — {item}" for item in sorted(line_sources))
-    if "d3-celestial" in boundary_sources:
-        cartography.append(
-            "Constellation boundaries — IAU; d3-celestial, Olaf Frohn; BSD-3-Clause"
-        )
-    elif boundary_sources:
-        cartography.extend(
-            f"Constellation boundaries — {item}" for item in sorted(boundary_sources)
-        )
-    if "nightsky-atlas-authored" in outline_sources:
-        cartography.append("Schematic nebula outlines — NightSky Atlas; CC BY 4.0")
-    if milky_way_sources:
-        cartography.append(
-            "Milky Way contours — d3-celestial, Olaf Frohn; source José R. Vieira; BSD-3-Clause"
-        )
-    if magellanic_sources:
-        cartography.append(
-            "Magellanic Cloud contours — Gaia DR3 density and G-flux HiPS; "
-            "ESA/Gaia/DPAC, CDS/CNRS via hips2fits; ODbL 1.0"
-        )
-    if cartography:
-        right.append(("Constellations & cartography", tuple(cartography)))
-
-    if (
-        star_name_source is not None
-        and Path(star_name_source).resolve() == STAR_NAMES_FIXTURE_DIR.resolve()
-    ):
-        name_sources = ["d3-celestial star-name data (Olaf Frohn), BSD-3-Clause"]
-        if has_iau_star_names:
-            name_sources.append("spellings checked against IAU Catalog of Star Names")
-        right.append(("Star names", ("; ".join(name_sources),)))
-    elif star_name_source:
-        right.append(("Star names", (f"Star-name input — {Path(star_name_source).name}",)))
-
-    service_entries: list[str] = []
-    if manifest_sources and active_ids.intersection(manifest_sources):
-        source_url = dso_source.get("acknowledgement")
-        service_entries.append("VizieR — CDS, Strasbourg, France")
-        if source_url:
-            service_entries.append(str(source_url))
-    if service_entries:
-        right.append(("Catalogue services", tuple(service_entries)))
-
-    return tuple(left), tuple(right)
-
-
-def _build_atlas_impl(
-    *,
-    atlas_path: str | Path,
-    style_path: str | Path,
-    outdir: str | Path,
-    star_store: str | Path | None = None,
-    faint_star_store: str | Path | None = None,
-    faint_star_limit: float | None = None,
-    stars_csv: str | Path | None = None,
-    dsos_path: str | Path | None = None,
-    constellations_dir: str | Path | bool | None = None,
-    outlines_dir: str | Path | bool | None = None,
-    star_names_dir: str | Path | bool | None = None,
-    observing_lists_dir: str | Path | bool | None = None,
-    observing_config_path: str | Path | None = None,
-    double_stars_path: str | Path | bool | None = None,
-    overrides_path: str | Path | None = None,
-    chart_ids: tuple[str, ...] | None = None,
-    limit: int | None = None,
-    optimize: bool = True,
-    render_png: bool = True,
-    png_dpi: float = 150.0,
-    jobs: int = 1,
-    write_front_matter: bool = True,
-    write_overviews: bool = True,
-    write_draft_report: bool = True,
-    publication: bool = False,
-    progress: Progress | None = None,
-) -> AtlasBuildResult:
-    """Build an atlas subset or the whole atlas and write a manifest."""
-    progress = progress if progress is not None else null_progress()
-    with progress.step("load config and shared catalogues"):
-        inputs = load_chart_inputs(
-            atlas_path=atlas_path,
-            style_path=style_path,
-            dsos_path=dsos_path,
-            constellations_dir=constellations_dir,
-            outlines_dir=outlines_dir,
-            observing_lists_dir=observing_lists_dir,
-            observing_config_path=observing_config_path,
-            progress=progress,
-        )
-    atlas = inputs.atlas
-    style = inputs.style
-    if (
-        faint_star_store is None
-        and any(detail.stars.include_ucac4 is True for detail in atlas.detail_charts)
-    ):
-        faint_star_store = DEFAULT_FAINT_STAR_STORE
+    chart_ids: tuple[str, ...] | None,
+    limit: int | None,
+    jobs: int,
+    progress: Progress,
+) -> _ChartPlan:
+    """Select main charts and their geometrically overlapping detail charts."""
     edition = atlas.resolved_edition()
     with progress.step("resolve chart definitions"):
         all_charts = chart_definitions(atlas)
@@ -1433,62 +937,37 @@ def _build_atlas_impl(
             "detail chart codes collide with atlas chart codes: "
             + ", ".join(sorted(duplicate_detail_codes))
         )
+    selected_ids = {chart.id for chart in charts}
     detail_charts = tuple(
         detail
         for detail in atlas.detail_charts
-        if any(
-            chart_id in {chart.id for chart in charts}
-            for chart_id in all_detail_parent_chart_ids[detail.id]
-        )
+        if selected_ids.intersection(all_detail_parent_chart_ids[detail.id])
     )
     selected_detail_parent_chart_ids = {
         detail.id: all_detail_parent_chart_ids[detail.id] for detail in detail_charts
     }
-    detail_star_profiles: dict[str, tuple[float, StyleConfig]] = {}
-    for profile_name in sorted({detail.star_profile for detail in detail_charts}):
-        profile_atlas_path = _profile_config_path(atlas_path, profile_name)
-        profile_style_path = _profile_config_path(style_path, profile_name)
-        profile_atlas = load_atlas_config(profile_atlas_path)
-        profile_style = load_style_config(profile_style_path)
-        if not math.isclose(
-            profile_atlas.stellar_limit_magnitude,
-            profile_style.star.faint_magnitude,
-            rel_tol=0.0,
-            abs_tol=1e-9,
-        ):
-            raise ValueError(
-                f"{profile_name} atlas stellar limit does not match its star-style faint limit"
-            )
-        detail_star_profiles[profile_name] = (
-            profile_atlas.stellar_limit_magnitude,
-            _style_with_star_profile(style, profile_style),
-        )
-    detail_dso_profiles = {
-        profile_name: load_style_config(_profile_config_path(style_path, profile_name))
-        for profile_name in sorted(
-            {
-                detail.dso_profile
-                for detail in detail_charts
-                if detail.dso_profile is not None
-            }
-        )
-    }
-    main_faint_star_store = faint_star_store if atlas.id in {"eyepiece", "eyepieceDeep"} else None
-    main_faint_star_limit = faint_star_limit if main_faint_star_store is not None else None
-    if publication:
-        if not optimize:
-            raise ValueError("publication requires deterministic layout optimization")
-        if not write_front_matter or not write_overviews or not style.overview.enabled:
-            raise ValueError("publication requires front matter and overview maps")
-    selected_sources = collect_data_sources(
-        star_store=star_store,
-        faint_star_store=faint_star_store,
-        stars_csv=stars_csv,
-        dsos_path=dsos_path if dsos_path is not None else default_dso_path(),
-        double_stars_path=(
-            DEFAULT_DOUBLE_STAR_PATH if double_stars_path is None else double_stars_path
-        ),
-    )
+    return _ChartPlan(all_charts, charts, detail_charts, selected_detail_parent_chart_ids)
+
+
+def _collect_provenance(
+    inputs: ChartInputs,
+    *,
+    atlas_path: str | Path,
+    style_path: str | Path,
+    source_paths: dict[str, str | Path | bool | None],
+    constellations_dir: str | Path | bool | None,
+    outlines_dir: str | Path | bool | None,
+    star_names_dir: str | Path | bool | None,
+    observing_lists_dir: str | Path | bool | None,
+    observing_config_path: str | Path | None,
+    overrides_path: str | Path | None,
+    detail_star_profiles: dict[str, tuple[float, StyleConfig]],
+    detail_dso_profiles: dict[str, StyleConfig],
+) -> _BuildProvenance:
+    """Snapshot the exact catalogue, geometry, profile and override inputs."""
+    style = inputs.style
+    faint_star_store = source_paths["faint_star_store"]
+    selected_sources = collect_data_sources(**source_paths)
     geometry_inputs = {
         "constellations": (
             None
@@ -1551,374 +1030,37 @@ def _build_atlas_impl(
         "outlines": sorted({item.provenance.catalogue for item in inputs.outlines}),
         "milky_way": ["d3-celestial"] if inputs.milky_way_contours else [],
         "magellanic_clouds": (
-            ["Gaia DR3 density map via CDS HiPS (ODbL-1.0)"]
-            if inputs.magellanic_contours
-            else []
+            ["Gaia DR3 density map via CDS HiPS (ODbL-1.0)"] if inputs.magellanic_contours else []
         ),
     }
-    if publication:
-        validate_publication_inputs(
-            atlas,
-            all_charts,
-            charts,
-            star_store=star_store,
-            dso_count=len(inputs.dsos),
-            data_sources=selected_sources,
-        )
-
-    library: OverridesLibrary | None = (
-        load_override_library(overrides_path) if overrides_path is not None else None
+    return _BuildProvenance(
+        source_paths,
+        selected_sources,
+        geometry_inputs,
+        geometry_catalogues,
+        input_paths,
+        input_fingerprints,
     )
-    applied_chart_ids: set[str] = set()
 
-    with progress.step("load shared fixtures"):
-        star_names = (
-            {}
-            if star_names_dir is False
-            else load_star_names(
-                star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
-            )
-        )
-        variable_star_hips = frozenset(
-            hip for hip, entry in star_names.items() if entry.variable_marker
-        )
-        star_systems = load_star_systems(double_stars_path)
 
-    prepared_details: dict[str, _PreparedDetail] = {}
-    detail_labelled_dso_ids: dict[str, frozenset[str]] = {}
-    detail_labelled_star_hips: dict[str, frozenset[int]] = {}
-    for detail in detail_charts:
-        definition = detail.to_definition(atlas_id=atlas.id)
-        profile_limit, profile_style = detail_star_profiles[detail.star_profile]
-        stellar_limit_magnitude = detail.stars.magnitude_limit or profile_limit
-        detail_style = _detail_style(
-            detail,
-            profile_style,
-            detail_dso_profiles.get(detail.dso_profile),
-        )
-        detail_faint_star_store, detail_faint_limit = _detail_faint_star_inputs(
-            detail,
-            profile_limit=stellar_limit_magnitude,
-            faint_star_store=faint_star_store,
-            faint_star_limit=faint_star_limit,
-        )
-        detail_context = build_chart_context(
-            atlas_path=atlas_path,
-            style_path=style_path,
-            definition=definition,
-            star_store=star_store,
-            faint_star_store=detail_faint_star_store,
-            faint_star_limit=detail_faint_limit,
-            stars_csv=stars_csv,
-            double_stars_path=double_stars_path,
-            star_systems=star_systems,
-            magnitude_limit=stellar_limit_magnitude,
-            scale_mm_per_degree=detail.mm_per_degree,
-            allow_faint_star_supplement=True,
-            progress=progress,
-            inputs=inputs,
-        )
-        detail_context = replace(
-            detail_context, scene=_detail_scene(detail, detail_context.scene)
-        )
-        detail_labels = build_labels(
-            detail_context.scene,
-            detail_context.transform,
-            detail_style,
-            star_names,
-            required_star_hips=detail.stars.named_labels,
-        )
-        detail_labels = select_labels(
-            detail_labels,
-            detail_context.scene,
-            detail_context.transform,
-            detail_style,
-        )
-        detail_overrides = library.for_chart(definition.id) if library is not None else None
-        if detail_overrides is not None:
-            detail_labels = apply_overrides(detail_labels, detail_overrides)
-            applied_chart_ids.add(definition.id)
-        detail_presentation = _detail_presentation(
-            detail,
-            edition=edition,
-            main_charts=all_charts,
-            parent_chart_ids=selected_detail_parent_chart_ids[detail.id],
-            stellar_limit_magnitude=stellar_limit_magnitude,
-        )
-        detail_furniture = furniture_obstacles(
-            detail_context.transform,
-            definition,
-            detail_style,
-            detail_presentation,
-        )
-        if optimize:
-            optimized = optimize_labels(
-                detail_labels,
-                detail_context.scene,
-                detail_context.transform,
-                detail_style,
-                furniture=detail_furniture,
-            )
-            detail_labels = optimized.labels
-            detail_cost_before = optimized.cost_before
-            detail_cost_after = optimized.cost_after
-        else:
-            detail_cost_before = layout_cost(
-                detail_labels,
-                detail_context.scene,
-                detail_context.transform,
-                detail_style,
-            )[0]
-            detail_cost_after = detail_cost_before
-        detail_validation = validate_layout(
-            detail_labels,
-            detail_context.scene,
-            detail_context.transform,
-            detail_style,
-            furniture=detail_furniture,
-        )
-        _require_mandatory_labels(definition.id, detail_labels)
-        problematic_label_ids = {
-            element_id
-            for issue in detail_validation.issues
-            for element_id in issue.element_ids
-        }
-        detail_labelled_dso_ids[detail.id] = _verified_detail_dso_label_ids(
-            detail_context.scene, detail_labels, detail_validation
-        )
-        placed_targets = {
-            label.target_id
-            for label in detail_labels
-            if not label.hidden and label.effective_candidate() is not None
-        }
-        detail_labelled_star_hips[detail.id] = frozenset(
-            hip
-            for scene_star in detail_context.scene.stars
-            if isinstance(scene_star.star, Star)
-            and (hip := hip_number(scene_star.star.hip_id)) in atlas.exclude_star_labels
-            and scene_star.star.id in placed_targets
-            and f"label:star:{scene_star.star.id}" not in problematic_label_ids
-        )
-        prepared_details[detail.id] = _PreparedDetail(
-            context=detail_context,
-            style=detail_style,
-            labels=detail_labels,
-            cost_before=detail_cost_before,
-            cost_after=detail_cost_after,
-            validation=detail_validation,
-        )
-    page = atlas.page.to_geometry()
-    outroot = Path(outdir) / atlas.id
-    outroot.mkdir(parents=True, exist_ok=True)
-    combined_pdf = outroot / "atlas.pdf"
+def _compose_main_pages(
+    charts: tuple[ChartDefinition, ...],
+    shared: _MainChartShared,
+    document: AtlasPdf,
+    pages: _AtlasPages,
+    jobs: int,
+    progress: Progress,
+) -> None:
+    """Run bounded main-chart workers and compose their results in definition order."""
+    context, surface = document.context, document.surface
+    pdf_navigation, outline_root = document.navigation, document.outline_root
+    variable_star_hips = shared.variable_star_hips
     effective_jobs = min(jobs, len(charts))
-    progress.info(f"atlas {atlas.id!r}: {len(charts)} charts, {effective_jobs} jobs -> {outroot}")
-
-    surface = cairo.PDFSurface(str(combined_pdf), mm_to_pt(page.width_mm), mm_to_pt(page.height_mm))
-    context = cairo.Context(surface)
-    chart_codes = {
-        chart.id: presentation_from_edition(chart, edition).chart_code for chart in charts
-    }
-    pdf_navigation = PdfNavigation(
-        frozenset((*chart_codes.values(), *(detail.code for detail in detail_charts))),
-        frozenset(
-            {
-                "introduction",
-                "field-guide",
-                "overview-north",
-                "overview-south",
-                "overview-both",
-                "credits",
-                "index-dso",
-                "index-stars",
-                "index-constellations",
-                "index-cross-references",
-                "chart-directory",
-                "detail-directory",
-            }
-        ),
-    )
-    outline_root = pdf_navigation.add_outline(
-        surface,
-        cairo.PDF_OUTLINE_ROOT,
-        edition.name,
-        chart_codes[charts[0].id],
-        open_item=True,
-    )
-    assert outline_root is not None
-    front_matter_pages = 0
-    if write_front_matter:
-        with progress.step("front matter", detail=True):
-            front_matter_pages = _draw_front_matter_pages(
-                context,
-                surface,
-                atlas,
-                style,
-                tuple(charts),
-                charts[0],
-                pdf_navigation,
-                outline_root,
-            )
-
-    chart_directory = ()
-    detail_chart_directory = ()
-    chart_directory_pages = 0
-    if write_front_matter:
-        chart_directory = build_chart_directory(charts, edition)
-        detail_chart_directory = build_detail_chart_directory(detail_charts, all_charts, edition)
-        if atlas.chart_directory_position == "front":
-            with progress.step("chart directory", detail=True):
-                chart_directory_pages = draw_chart_directory_pages(
-                    context,
-                    surface,
-                    chart_directory,
-                    page,
-                    style,
-                    edition,
-                    pdf_navigation,
-                    outline_parent_id=outline_root,
-                )
-                chart_directory_pages += draw_detail_chart_directory_pages(
-                    context,
-                    surface,
-                    detail_chart_directory,
-                    page,
-                    style,
-                    edition,
-                    pdf_navigation,
-                    outline_parent_id=outline_root,
-                )
-
-    overviews: dict[str, OverviewMap] = {}
-    overview_page_info: list[dict[str, Any]] = []
-    write_overview_pages = write_overviews and style.overview.enabled and atlas.tiling is not None
-    if write_overview_pages or style.locator.enabled:
-        with progress.step("build overview maps"):
-            overview_stars: tuple[Star, ...] = ()
-            if write_overview_pages and style.overview.show_stars:
-                overview_stars = _load_overview_stars(
-                    star_store,
-                    stars_csv,
-                    style.overview.star_limit_magnitude,
-                )
-            for hemisphere in ("north", "south"):
-                overviews[hemisphere] = build_overview(
-                    all_charts,
-                    hemisphere=hemisphere,
-                    constellations=inputs.constellations,
-                    edition=edition,
-                    bright_stars=overview_stars,
-                    equatorial_extension_deg=style.overview.equatorial_extension_deg,
-                )
-    if write_overview_pages:
-        with progress.step("overview pages", detail=True):
-            if style.overview.hemispheres_per_page == 2:
-                draw_overview_spread_page(
-                    context,
-                    overviews["north"],
-                    overviews["south"],
-                    page,
-                    style,
-                    pdf_navigation,
-                )
-                overview_outline = pdf_navigation.add_page_outline(
-                    surface, outline_root, "Sky Overviews", "overview-both", open_item=False
-                )
-                assert overview_outline is not None
-                pdf_navigation.mark_page(
-                    surface, context, "overview-both", label="Sky Overviews"
-                )
-                pdf_navigation.add_page_outline(
-                    surface, overview_outline, "Northern Sky", "overview-both"
-                )
-                pdf_navigation.add_page_outline(
-                    surface, overview_outline, "Southern Sky", "overview-both"
-                )
-                surface.show_page()
-                overview_page_info.append(
-                    {
-                        "hemisphere": "both",
-                        "title": "Northern and southern sky",
-                        "chart_count": overviews["north"].chart_count
-                        + overviews["south"].chart_count,
-                        "star_count": len(overviews["north"].stars) + len(overviews["south"].stars),
-                    }
-                )
-            else:
-                overview_outline = None
-                for hemisphere in ("north", "south"):
-                    overview = overviews[hemisphere]
-                    page_id = f"overview-{hemisphere}"
-                    draw_overview_page(context, overview, page, style, pdf_navigation)
-                    pdf_navigation.mark_page(
-                        surface,
-                        context,
-                        page_id,
-                        label=(
-                            "Northern Sky Overview"
-                            if hemisphere == "north"
-                            else "Southern Sky Overview"
-                        ),
-                    )
-                    if hemisphere == "north":
-                        overview_outline = pdf_navigation.add_page_outline(
-                            surface, outline_root, "Sky Overviews", page_id
-                        )
-                        assert overview_outline is not None
-                    else:
-                        assert overview_outline is not None
-                    pdf_navigation.add_page_outline(
-                        surface,
-                        overview_outline,
-                        "Northern Sky" if hemisphere == "north" else "Southern Sky",
-                        page_id,
-                    )
-                    surface.show_page()
-                    overview_page_info.append(
-                        {
-                            "hemisphere": hemisphere,
-                            "title": overview.title,
-                            "chart_count": overview.chart_count,
-                            "star_count": len(overview.stars),
-                        }
-                    )
-
-    results: list[ChartPageResult] = []
-    index_dsos: dict[str, tuple[SceneDso, ...]] = {}
-    index_stars: dict[str, tuple[Star, ...]] = {}
-    index_label_targets: dict[str, frozenset[str]] = {}
-    index_constellations: dict[str, frozenset[str]] = {}
     boundary_constellations = {
         segment.id: segment.constellation_id
-        for segment in inputs.constellations.boundaries
+        for segment in shared.inputs.constellations.boundaries
         if segment.constellation_id
     }
-    observing_lists: dict[str, object] = {}
-    forced_lists: list[str] = []
-    shared = _MainChartShared(
-        atlas_path=atlas_path,
-        style_path=style_path,
-        star_store=star_store,
-        faint_star_store=main_faint_star_store,
-        faint_star_limit=main_faint_star_limit,
-        stars_csv=stars_csv,
-        double_stars_path=double_stars_path,
-        inputs=inputs,
-        star_systems=tuple(star_systems),
-        star_names=star_names,
-        library=library,
-        detail_charts=detail_charts,
-        detail_parent_chart_ids=selected_detail_parent_chart_ids,
-        detail_labelled_dso_ids=detail_labelled_dso_ids,
-        exclude_star_labels=atlas.exclude_star_labels,
-        edition=edition,
-        overviews=overviews if style.locator.enabled else {},
-        variable_star_hips=variable_star_hips,
-        outroot=outroot,
-        optimize=optimize,
-        render_png=render_png,
-        png_dpi=png_dpi,
-    )
     pool = (
         ProcessPoolExecutor(
             max_workers=effective_jobs,
@@ -1938,19 +1080,13 @@ def _build_atlas_impl(
         for index, (definition, built) in enumerate(zip(charts, built_pages, strict=True), start=1):
             progress.detail(f"[{index}/{len(charts)}] {definition.id}: compose")
             if built.applied_overrides:
-                applied_chart_ids.add(definition.id)
+                pages.applied_chart_ids.add(definition.id)
             if built.observing_list_names:
-                observing_lists = dict.fromkeys(built.observing_list_names)
+                pages.observing_lists = built.observing_list_names
             if built.forced_lists:
-                forced_lists = list(built.forced_lists)
-            index_dsos[definition.id] = tuple(built.scene.deep_sky_objects)
-            index_stars[definition.id] = tuple(item.star for item in built.scene.stars)
-            index_label_targets[definition.id] = frozenset(
-                label.target_id
-                for label in built.labels
-                if not label.hidden and label.effective_candidate() is not None
-            )
-            index_constellations[definition.id] = frozenset(
+                pages.forced_lists = built.forced_lists
+            pages.record_index(definition.id, built.scene, built.labels)
+            pages.index_constellations[definition.id] = frozenset(
                 boundary_constellations[segment.source_id]
                 for segment in built.scene.constellation_boundaries
                 if segment.source_id in boundary_constellations
@@ -1994,20 +1130,25 @@ def _build_atlas_impl(
                 f"validate {validate_s:.2f}s | render {render_s:.2f}s | "
                 f"compose {compose_s:.2f}s"
             )
-            results.append(page_result)
+            pages.results.append(page_result)
     finally:
         if pool is not None:
             pool.shutdown(cancel_futures=True)
 
+
+def _verify_star_exclusions(
+    results: list[ChartPageResult],
+    detail_charts: tuple[DetailChartConfig, ...],
+    detail_labelled_star_hips: dict[str, frozenset[int]],
+) -> None:
+    """Fail if an intentional main-chart exclusion has no clean included detail label."""
     excluded_hips_in_build = {
         int(record["hip_id"].removeprefix("HIP "))
         for page_result in results
         for record in page_result.intentional_excluded_star_labels
     }
     verified_hips = (
-        set().union(*detail_labelled_star_hips.values())
-        if detail_labelled_star_hips
-        else set()
+        set().union(*detail_labelled_star_hips.values()) if detail_labelled_star_hips else set()
     )
     unverified = sorted(excluded_hips_in_build - verified_hips)
     if unverified:
@@ -2018,30 +1159,48 @@ def _build_atlas_impl(
             f"included detail chart ({detail_codes}): {missing}"
         )
 
-    detail_definitions = tuple(
-        detail.to_definition(atlas_id=atlas.id) for detail in detail_charts
-    )
-    detail_codes = {detail.id: detail.code for detail in detail_charts}
-    for detail, definition in zip(detail_charts, detail_definitions, strict=True):
-        prepared = prepared_details[detail.id]
-        index_dsos[definition.id] = tuple(prepared.context.scene.deep_sky_objects)
-        index_stars[definition.id] = tuple(item.star for item in prepared.context.scene.stars)
-        index_label_targets[definition.id] = frozenset(
-            label.target_id
-            for label in prepared.labels
-            if not label.hidden and label.effective_candidate() is not None
-        )
 
-    atlas_index = build_atlas_index(
-        index_dsos,
-        index_constellations,
-        (*charts, *detail_definitions),
-        edition,
-        chart_stars=index_stars,
-        star_names=star_names,
-        chart_label_targets=index_label_targets,
-        chart_code_by_id=detail_codes,
+def _create_atlas_index(
+    pages: _AtlasPages,
+    plan: _ChartPlan,
+    prepared_details: dict[str, _PreparedDetail],
+    edition: EditionConfig,
+    star_names: dict[int, StarName],
+) -> AtlasIndex:
+    """Index actual main and detail scenes and the labels that will be printed."""
+    detail_definitions = tuple(
+        prepared_details[detail.id].context.definition for detail in plan.details
     )
+    for definition in detail_definitions:
+        prepared = prepared_details[definition.id]
+        pages.record_index(definition.id, prepared.context.scene, prepared.labels)
+    return build_atlas_index(
+        pages.index_dsos,
+        pages.index_constellations,
+        (*plan.charts, *detail_definitions),
+        edition,
+        chart_stars=pages.index_stars,
+        star_names=star_names,
+        chart_label_targets=pages.index_label_targets,
+        chart_code_by_id={detail.id: detail.code for detail in plan.details},
+    )
+
+
+def _render_detail_pages(
+    detail_charts: tuple[DetailChartConfig, ...],
+    prepared_details: dict[str, _PreparedDetail],
+    document: AtlasPdf,
+    pages: _AtlasPages,
+    *,
+    outroot: Path,
+    render_png: bool,
+    png_dpi: float,
+    variable_star_hips: frozenset[int],
+    progress: Progress,
+) -> None:
+    """Render and compose prepared detail layouts without selecting or optimizing again."""
+    context, surface = document.context, document.surface
+    pdf_navigation, outline_root = document.navigation, document.outline_root
     detail_outline = None
     if detail_charts:
         detail_outline = pdf_navigation.add_outline(
@@ -2053,110 +1212,15 @@ def _build_atlas_impl(
 
     for detail_index, detail in enumerate(detail_charts, start=1):
         detail_start = time.perf_counter()
-        definition = detail.to_definition(atlas_id=atlas.id)
-        profile_limit, profile_style = detail_star_profiles[detail.star_profile]
-        stellar_limit_magnitude = detail.stars.magnitude_limit or profile_limit
-        detail_style = _detail_style(
-            detail,
-            profile_style,
-            detail_dso_profiles.get(detail.dso_profile),
-        )
-        detail_faint_star_store, detail_faint_limit = _detail_faint_star_inputs(
-            detail,
-            profile_limit=stellar_limit_magnitude,
-            faint_star_store=faint_star_store,
-            faint_star_limit=faint_star_limit,
-        )
         progress.detail(f"[{detail_index}/{len(detail_charts)}] {detail.id}: detail chart start")
-        chart_overrides = library.for_chart(definition.id) if library is not None else None
-        prepared = prepared_details.get(detail.id)
-        if prepared is None:
-            chart_context = build_chart_context(
-                atlas_path=atlas_path,
-                style_path=style_path,
-                definition=definition,
-                star_store=star_store,
-                faint_star_store=detail_faint_star_store,
-                faint_star_limit=detail_faint_limit,
-                stars_csv=stars_csv,
-                double_stars_path=double_stars_path,
-                star_systems=star_systems,
-                magnitude_limit=stellar_limit_magnitude,
-                scale_mm_per_degree=detail.mm_per_degree,
-                allow_faint_star_supplement=True,
-                progress=progress,
-                inputs=inputs,
-            )
-            chart_context = replace(
-                chart_context, scene=_detail_scene(detail, chart_context.scene)
-            )
-            labels = build_labels(
-                chart_context.scene,
-                chart_context.transform,
-                detail_style,
-                star_names,
-                required_star_hips=detail.stars.named_labels,
-            )
-            labels = select_labels(
-                labels,
-                chart_context.scene,
-                chart_context.transform,
-                detail_style,
-            )
-            if chart_overrides is not None:
-                labels = apply_overrides(labels, chart_overrides)
-                applied_chart_ids.add(definition.id)
-            presentation = _detail_presentation(
-                detail,
-                edition=edition,
-                main_charts=all_charts,
-                parent_chart_ids=selected_detail_parent_chart_ids[detail.id],
-                stellar_limit_magnitude=stellar_limit_magnitude,
-            )
-            furniture = furniture_obstacles(
-                chart_context.transform,
-                definition,
-                detail_style,
-                presentation,
-            )
-            if optimize:
-                optimized = optimize_labels(
-                    labels,
-                    chart_context.scene,
-                    chart_context.transform,
-                    detail_style,
-                    furniture=furniture,
-                )
-                labels = optimized.labels
-                cost_before = optimized.cost_before
-                cost_after = optimized.cost_after
-            else:
-                cost_before = layout_cost(
-                    labels, chart_context.scene, chart_context.transform, detail_style
-                )[0]
-                cost_after = cost_before
-            validation = validate_layout(
-                labels,
-                chart_context.scene,
-                chart_context.transform,
-                detail_style,
-                furniture=furniture,
-            )
-            _require_mandatory_labels(definition.id, labels)
-        else:
-            chart_context = prepared.context
-            detail_style = prepared.style
-            labels = prepared.labels
-            cost_before = prepared.cost_before
-            cost_after = prepared.cost_after
-            validation = prepared.validation
-            presentation = _detail_presentation(
-                detail,
-                edition=edition,
-                main_charts=all_charts,
-                parent_chart_ids=selected_detail_parent_chart_ids[detail.id],
-                stellar_limit_magnitude=stellar_limit_magnitude,
-            )
+        prepared = prepared_details[detail.id]
+        chart_context = prepared.context
+        definition = chart_context.definition
+        detail_style = prepared.style
+        labels = prepared.labels
+        cost_before, cost_after = prepared.cost_before, prepared.cost_after
+        validation = prepared.validation
+        presentation = prepared.presentation
         _require_mandatory_labels(definition.id, labels)
         page_dir = outroot / "charts" / definition.id
         render_chart(
@@ -2190,7 +1254,7 @@ def _build_atlas_impl(
             )
         surface.show_page()
         placed = sum(1 for label in labels if not label.hidden and label.candidates)
-        results.append(
+        pages.results.append(
             ChartPageResult(
                 chart_id=definition.id,
                 star_count=chart_context.scene.star_count,
@@ -2199,29 +1263,13 @@ def _build_atlas_impl(
                 label_count=len(labels),
                 placed_count=placed,
                 hidden_count=len(labels) - placed,
-                overrides_applied=len(chart_overrides) if chart_overrides is not None else 0,
+                overrides_applied=prepared.overrides_applied or 0,
                 hard_issues=len(validation.issues),
                 cost_before=cost_before,
                 cost_after=cost_after,
                 layout_hash=layout_hash(labels),
                 neighbours=definition.neighbours,
-                layout_issues=(
-                    *_layout_issue_records(validation.issues),
-                    *(
-                        {
-                            "issue_id": f"issue:fallback_candidate:{label.id}",
-                            "type": "fallback_candidate",
-                            "severity": "warning",
-                            "affected_ids": [label.id],
-                            "message": (
-                                "No candidate fit inside the chart field; unrestricted "
-                                "candidates were generated."
-                            ),
-                        }
-                        for label in labels
-                        if any(candidate.id.endswith(":fallback") for candidate in label.candidates)
-                    ),
-                ),
+                layout_issues=_layout_issue_records(validation.issues, labels),
                 fallback_candidate_label_ids=tuple(
                     label.id
                     for label in labels
@@ -2235,79 +1283,54 @@ def _build_atlas_impl(
             f"{len(validation.issues)} hard issues ({time.perf_counter() - detail_start:.2f}s)"
         )
 
-    credits_page_count = 0
-    if write_front_matter:
-        with progress.step("append data sources and credits", detail=True):
-            _draw_build_credits_page(
-                context,
-                surface,
-                atlas,
-                style,
-                selected_sources,
-                geometry_inputs,
-                geometry_catalogues,
-                inputs,
-                star_names,
-                pdf_navigation,
-                outline_root,
-            )
-            credits_page_count = 1
 
-    with progress.step("append atlas index", detail=True):
-        index_pages = draw_atlas_index_pages(
-            context,
-            surface,
-            atlas_index,
-            page,
-            style,
-            edition,
-            pdf_navigation,
-            outline_parent_id=outline_root,
-        )
-
-    if write_front_matter and atlas.chart_directory_position == "back":
-        with progress.step("append chart directory", detail=True):
-            chart_directory_pages = draw_chart_directory_pages(
-                context,
-                surface,
-                chart_directory,
-                page,
-                style,
-                edition,
-                pdf_navigation,
-                outline_parent_id=outline_root,
-            )
-            chart_directory_pages += draw_detail_chart_directory_pages(
-                context,
-                surface,
-                detail_chart_directory,
-                page,
-                style,
-                edition,
-                pdf_navigation,
-                outline_parent_id=outline_root,
-            )
-
-    with progress.step("finish combined PDF"):
-        surface.finish()
-
-    if publication:
-        if collect_build_inputs(input_paths) != input_fingerprints:
-            raise ValueError("publication inputs changed during the build")
-        if (
-            collect_data_sources(
-                star_store=star_store,
-                faint_star_store=faint_star_store,
-                stars_csv=stars_csv,
-                dsos_path=dsos_path if dsos_path is not None else default_dso_path(),
-                double_stars_path=(
-                    DEFAULT_DOUBLE_STAR_PATH if double_stars_path is None else double_stars_path
-                ),
-            )
-            != selected_sources
-        ):
-            raise ValueError("publication catalogues changed during the build")
-
+def _build_manifest(
+    inputs: ChartInputs,
+    plan: _ChartPlan,
+    provenance: _BuildProvenance,
+    pages: _AtlasPages,
+    prepared_details: dict[str, _PreparedDetail],
+    detail_labelled_star_hips: dict[str, frozenset[int]],
+    star_names: dict[int, StarName],
+    opening: OpeningPages,
+    atlas_index: AtlasIndex,
+    *,
+    library: OverridesLibrary | None,
+    atlas_path: str | Path,
+    style_path: str | Path,
+    overrides_path: str | Path | None,
+    faint_star_store: str | Path | None,
+    faint_star_limit: float | None,
+    jobs: int,
+    render_png: bool,
+    publication: bool,
+    credits_page_count: int,
+    index_pages: int,
+    chart_directory_pages: int,
+) -> dict[str, Any]:
+    """Serialize build decisions and diagnostics without querying or rebuilding charts."""
+    atlas = inputs.atlas
+    page = atlas.page.to_geometry()
+    charts, detail_charts = plan.charts, plan.details
+    effective_jobs = min(jobs, len(charts))
+    applied_chart_ids, results = pages.applied_chart_ids, pages.results
+    observing_lists = pages.observing_lists
+    front_matter_pages = opening.front_matter_pages
+    chart_directory, detail_chart_directory = (
+        opening.chart_directory,
+        opening.detail_chart_directory,
+    )
+    overview_page_info = opening.overview_page_info
+    selected_sources = provenance.sources
+    input_fingerprints = provenance.fingerprints
+    geometry_inputs, geometry_catalogues = (
+        provenance.geometry_inputs,
+        provenance.geometry_catalogues,
+    )
+    edition = atlas.resolved_edition()
+    parent_codes = {
+        chart.id: presentation_from_edition(chart, edition).chart_code for chart in plan.all_charts
+    }
     unused_chart_ids = (
         sorted(set(library.chart_ids()) - applied_chart_ids) if library is not None else []
     )
@@ -2336,7 +1359,7 @@ def _build_atlas_impl(
         "tiling": _tiling_manifest(atlas),
         "observing_lists": {
             "lists": sorted(observing_lists),
-            "forced": forced_lists,
+            "forced": list(pages.forced_lists),
         },
         "chart_count": len(results),
         "parallel_jobs": effective_jobs,
@@ -2372,22 +1395,11 @@ def _build_atlas_impl(
                 "id": detail.id,
                 "code": detail.code,
                 "name": detail.name,
-                "parent_chart_ids": list(all_detail_parent_chart_ids[detail.id]),
+                "parent_chart_ids": list(plan.detail_parent_chart_ids[detail.id]),
                 "parent_chart_codes": [
-                    presentation_from_edition(
-                        next(chart for chart in all_charts if chart.id == chart_id),
-                        edition,
-                    ).chart_code
-                    for chart_id in all_detail_parent_chart_ids[detail.id]
+                    parent_codes[chart_id] for chart_id in plan.detail_parent_chart_ids[detail.id]
                 ],
-                "parent_chart_code": presentation_from_edition(
-                    next(
-                        chart
-                        for chart in all_charts
-                        if chart.id == all_detail_parent_chart_ids[detail.id][0]
-                    ),
-                    edition,
-                ).chart_code,
+                "parent_chart_code": parent_codes[plan.detail_parent_chart_ids[detail.id][0]],
                 "center_ra_deg": detail.center_ra_deg,
                 "center_dec_deg": detail.center_dec_deg,
                 "width_deg": detail.width_deg,
@@ -2395,22 +1407,9 @@ def _build_atlas_impl(
                 "mm_per_degree": detail.mm_per_degree,
                 "star_profile": detail.star_profile,
                 "dso_profile": detail.dso_profile,
-                "faint_star_limit": (
-                    _detail_faint_star_inputs(
-                        detail,
-                        profile_limit=(
-                            detail.stars.magnitude_limit
-                            or detail_star_profiles[detail.star_profile][0]
-                        ),
-                        faint_star_store=faint_star_store,
-                        faint_star_limit=faint_star_limit,
-                    )[1]
-                ),
+                "faint_star_limit": prepared_details[detail.id].faint_star_limit,
                 "parent_marker_label": detail.parent_marker_label,
-                "stellar_limit_magnitude": (
-                    detail.stars.magnitude_limit
-                    or detail_star_profiles[detail.star_profile][0]
-                ),
+                "stellar_limit_magnitude": prepared_details[detail.id].stellar_limit_magnitude,
             }
             for detail in detail_charts
         ],
@@ -2438,8 +1437,23 @@ def _build_atlas_impl(
         },
         "pages": [page_result.to_dict() for page_result in results],
     }
+    return manifest
+
+
+def _write_build_artifacts(
+    atlas_path: str | Path,
+    outroot: Path,
+    manifest: dict[str, Any],
+    results: list[ChartPageResult],
+    *,
+    write_draft_report: bool,
+    render_png: bool,
+    publication: bool,
+    progress: Progress,
+) -> tuple[Path, Path | None]:
+    """Write the report, checksums and manifest, then enforce publication output checks."""
     draft_report_path: Path | None = None
-    if write_draft_report and atlas.tiling is not None:
+    if write_draft_report and manifest["tiling"] is not None:
         with progress.step("write draft report", detail=True):
             draft_report = build_draft_report(
                 atlas_path=atlas_path,
@@ -2480,14 +1494,265 @@ def _build_atlas_impl(
             f"see {manifest_path}"
         )
 
+    return manifest_path, draft_report_path
+
+
+def _build_atlas_impl(
+    *,
+    atlas_path: str | Path,
+    style_path: str | Path,
+    outdir: str | Path,
+    star_store: str | Path | None = None,
+    faint_star_store: str | Path | None = None,
+    faint_star_limit: float | None = None,
+    stars_csv: str | Path | None = None,
+    dsos_path: str | Path | None = None,
+    constellations_dir: str | Path | bool | None = None,
+    outlines_dir: str | Path | bool | None = None,
+    star_names_dir: str | Path | bool | None = None,
+    observing_lists_dir: str | Path | bool | None = None,
+    observing_config_path: str | Path | None = None,
+    double_stars_path: str | Path | bool | None = None,
+    overrides_path: str | Path | None = None,
+    chart_ids: tuple[str, ...] | None = None,
+    limit: int | None = None,
+    optimize: bool = True,
+    render_png: bool = True,
+    png_dpi: float = 150.0,
+    jobs: int = 1,
+    write_front_matter: bool = True,
+    write_overviews: bool = True,
+    write_draft_report: bool = True,
+    publication: bool = False,
+    progress: Progress | None = None,
+) -> AtlasBuildResult:
+    """Build an atlas subset or the whole atlas and write a manifest."""
+    progress = progress if progress is not None else null_progress()
+    with progress.step("load config and shared catalogues"):
+        inputs = load_chart_inputs(
+            atlas_path=atlas_path,
+            style_path=style_path,
+            dsos_path=dsos_path,
+            constellations_dir=constellations_dir,
+            outlines_dir=outlines_dir,
+            observing_lists_dir=observing_lists_dir,
+            observing_config_path=observing_config_path,
+            progress=progress,
+        )
+    atlas, style = inputs.atlas, inputs.style
+    if faint_star_store is None and any(
+        detail.stars.include_ucac4 is True for detail in atlas.detail_charts
+    ):
+        faint_star_store = DEFAULT_FAINT_STAR_STORE
+    edition = atlas.resolved_edition()
+    plan = _plan_charts(atlas, chart_ids=chart_ids, limit=limit, jobs=jobs, progress=progress)
+    star_profiles, dso_profiles = resolve_detail_profiles(
+        plan.details, atlas_path, style_path, style
+    )
+    if publication:
+        if not optimize:
+            raise ValueError("publication requires deterministic layout optimization")
+        if not write_front_matter or not write_overviews or not style.overview.enabled:
+            raise ValueError("publication requires front matter and overview maps")
+    provenance = _collect_provenance(
+        inputs,
+        atlas_path=atlas_path,
+        style_path=style_path,
+        source_paths={
+            "star_store": star_store,
+            "faint_star_store": faint_star_store,
+            "stars_csv": stars_csv,
+            "dsos_path": dsos_path if dsos_path is not None else default_dso_path(),
+            "double_stars_path": (
+                DEFAULT_DOUBLE_STAR_PATH if double_stars_path is None else double_stars_path
+            ),
+        },
+        constellations_dir=constellations_dir,
+        outlines_dir=outlines_dir,
+        star_names_dir=star_names_dir,
+        observing_lists_dir=observing_lists_dir,
+        observing_config_path=observing_config_path,
+        overrides_path=overrides_path,
+        detail_star_profiles=star_profiles,
+        detail_dso_profiles=dso_profiles,
+    )
+    if publication:
+        validate_publication_inputs(
+            atlas,
+            plan.all_charts,
+            plan.charts,
+            star_store=star_store,
+            dso_count=len(inputs.dsos),
+            data_sources=provenance.sources,
+        )
+    library = load_override_library(overrides_path) if overrides_path is not None else None
+    with progress.step("load shared fixtures"):
+        star_names = (
+            {}
+            if star_names_dir is False
+            else load_star_names(
+                star_names_dir if star_names_dir is not None else STAR_NAMES_FIXTURE_DIR
+            )
+        )
+        variable_star_hips = frozenset(
+            hip for hip, entry in star_names.items() if entry.variable_marker
+        )
+        star_systems = load_star_systems(double_stars_path)
+
+    prepared_details = prepare_detail_charts(
+        plan.details,
+        atlas_path=atlas_path,
+        style_path=style_path,
+        inputs=inputs,
+        all_charts=plan.all_charts,
+        parent_chart_ids=plan.detail_parent_chart_ids,
+        star_profiles=star_profiles,
+        dso_profiles=dso_profiles,
+        star_store=star_store,
+        faint_star_store=faint_star_store,
+        faint_star_limit=faint_star_limit,
+        stars_csv=stars_csv,
+        double_stars_path=double_stars_path,
+        star_systems=tuple(star_systems),
+        star_names=star_names,
+        library=library,
+        optimize=optimize,
+        progress=progress,
+    )
+    detail_labelled_dso_ids = {
+        detail_id: _verified_detail_dso_label_ids(item.context.scene, item.labels, item.validation)
+        for detail_id, item in prepared_details.items()
+    }
+    detail_labelled_star_hips = {
+        detail_id: verified_detail_star_hips(item, atlas.exclude_star_labels)
+        for detail_id, item in prepared_details.items()
+    }
+    outroot = Path(outdir) / atlas.id
+    outroot.mkdir(parents=True, exist_ok=True)
+    combined_pdf = outroot / "atlas.pdf"
+    progress.info(
+        f"atlas {atlas.id!r}: {len(plan.charts)} charts, "
+        f"{min(jobs, len(plan.charts))} jobs -> {outroot}"
+    )
+    document = open_atlas_pdf(combined_pdf, atlas, style, plan.charts, plan.details)
+    opening = write_opening_pages(
+        document,
+        inputs,
+        plan.charts,
+        plan.all_charts,
+        plan.details,
+        star_store=star_store,
+        stars_csv=stars_csv,
+        write_front_matter=write_front_matter,
+        write_overviews=write_overviews,
+        progress=progress,
+    )
+    pages = _AtlasPages(
+        applied_chart_ids={
+            item.context.definition.id
+            for item in prepared_details.values()
+            if item.overrides_applied is not None
+        }
+    )
+    main_faint_star_store = faint_star_store if atlas.id in {"eyepiece", "eyepieceDeep"} else None
+    shared = _MainChartShared(
+        atlas_path=atlas_path,
+        style_path=style_path,
+        star_store=star_store,
+        faint_star_store=main_faint_star_store,
+        faint_star_limit=faint_star_limit if main_faint_star_store is not None else None,
+        stars_csv=stars_csv,
+        double_stars_path=double_stars_path,
+        inputs=inputs,
+        star_systems=tuple(star_systems),
+        star_names=star_names,
+        library=library,
+        detail_charts=plan.details,
+        detail_parent_chart_ids=plan.detail_parent_chart_ids,
+        detail_labelled_dso_ids=detail_labelled_dso_ids,
+        exclude_star_labels=atlas.exclude_star_labels,
+        edition=edition,
+        overviews=opening.overviews if style.locator.enabled else {},
+        variable_star_hips=variable_star_hips,
+        outroot=outroot,
+        optimize=optimize,
+        render_png=render_png,
+        png_dpi=png_dpi,
+    )
+    _compose_main_pages(plan.charts, shared, document, pages, jobs, progress)
+    _verify_star_exclusions(pages.results, plan.details, detail_labelled_star_hips)
+    atlas_index = _create_atlas_index(pages, plan, prepared_details, edition, star_names)
+    _render_detail_pages(
+        plan.details,
+        prepared_details,
+        document,
+        pages,
+        outroot=outroot,
+        render_png=render_png,
+        png_dpi=png_dpi,
+        variable_star_hips=variable_star_hips,
+        progress=progress,
+    )
+    credits_page_count, index_pages, chart_directory_pages = write_closing_pages(
+        document,
+        opening,
+        atlas_index,
+        inputs,
+        star_names,
+        selected_sources=provenance.sources,
+        geometry_inputs=provenance.geometry_inputs,
+        geometry_catalogues=provenance.geometry_catalogues,
+        write_front_matter=write_front_matter,
+        progress=progress,
+    )
+    with progress.step("finish combined PDF"):
+        document.surface.finish()
+    if publication:
+        if collect_build_inputs(provenance.input_paths) != provenance.fingerprints:
+            raise ValueError("publication inputs changed during the build")
+        if collect_data_sources(**provenance.source_paths) != provenance.sources:
+            raise ValueError("publication catalogues changed during the build")
+    manifest = _build_manifest(
+        inputs,
+        plan,
+        provenance,
+        pages,
+        prepared_details,
+        detail_labelled_star_hips,
+        star_names,
+        opening,
+        atlas_index,
+        library=library,
+        atlas_path=atlas_path,
+        style_path=style_path,
+        overrides_path=overrides_path,
+        faint_star_store=faint_star_store,
+        faint_star_limit=faint_star_limit,
+        jobs=jobs,
+        render_png=render_png,
+        publication=publication,
+        credits_page_count=credits_page_count,
+        index_pages=index_pages,
+        chart_directory_pages=chart_directory_pages,
+    )
+    manifest_path, draft_report_path = _write_build_artifacts(
+        atlas_path,
+        outroot,
+        manifest,
+        pages.results,
+        write_draft_report=write_draft_report,
+        render_png=render_png,
+        publication=publication,
+        progress=progress,
+    )
     return AtlasBuildResult(
         atlas_id=atlas.id,
-        pages=tuple(results),
+        pages=tuple(pages.results),
         combined_pdf=combined_pdf,
         manifest_path=manifest_path,
         draft_report_path=draft_report_path,
         index_page_count=index_pages,
-        front_matter_page_count=front_matter_pages,
+        front_matter_page_count=opening.front_matter_pages,
         credits_page_count=credits_page_count,
         chart_directory_page_count=chart_directory_pages,
     )

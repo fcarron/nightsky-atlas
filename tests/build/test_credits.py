@@ -3,7 +3,7 @@ from __future__ import annotations
 import cairo
 import pytest
 
-from nightsky_atlas.build.atlas import _credits_columns
+from nightsky_atlas.build.document import _credits_columns
 from nightsky_atlas.chart.models import PageGeometry
 from nightsky_atlas.render.fonts import register_bundled_fonts
 from nightsky_atlas.render.front_matter import draw_credits_page
