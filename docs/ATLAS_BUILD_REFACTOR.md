@@ -238,7 +238,7 @@ then rasterize the PDFs with Poppler:
 ```bash
 .venv/bin/python -m nightsky_atlas atlas build \
   --atlas atlas/pocket.yaml \
-  --style styles/experiments/color/pocket-open-cluster-cloud-a.yaml \
+  --style styles/color/pocket.yaml \
   --star-store data/processed/stars/tycho2.sqlite \
   --charts pocket-009,pocket-015,pocket-020,pocket-021 \
   --jobs 2 --png-dpi 100 --outdir build/atlas-refactor/reproduce

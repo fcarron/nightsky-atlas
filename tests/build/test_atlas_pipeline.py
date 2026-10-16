@@ -172,7 +172,7 @@ def test_shared_detail_profiles_are_loaded_once(monkeypatch, dso_profile, expect
         star_profile="deep",
         dso_profile=dso_profile,
     )
-    parent = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-a.yaml")
+    parent = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     loader = Mock(wraps=detail_build.load_style_config)
     monkeypatch.setattr(detail_build, "load_style_config", loader)
     star_profiles, dso_profiles = detail_build.resolve_detail_profiles(

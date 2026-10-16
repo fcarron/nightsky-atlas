@@ -526,7 +526,7 @@ def test_detail_overrides_inherit_style_and_control_pleiades_layers() -> None:
 
 def test_detail_profile_uses_shared_star_profile_with_experimental_style() -> None:
     profile = _profile_config_path(
-        ROOT / "styles" / "experiments" / "color" / "pocket-c.yaml", "eyepiece"
+        ROOT / "styles" / "color" / "pocket.yaml", "eyepiece"
     )
     assert profile == ROOT / "styles" / "eyepiece.yaml"
 

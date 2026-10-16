@@ -1,5 +1,0 @@
-extends: deep-a.yaml
-milky_way:
-  levels: [1, 3, 5]
-color_atlas:
-  milky_way_fills: {1: "#E8F1F8", 3: "#D6E6F3", 5: "#C4D9EC"}

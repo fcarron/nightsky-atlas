@@ -34,70 +34,42 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize(
-    ("edition", "levels"),
+    ("edition", "base_levels", "color_levels", "expected_fills"),
     (
-        ("pocket", (1,)),
-        ("standard", (1, 3)),
-        ("deep", (1, 3, 5)),
+        (
+            "pocket",
+            (1,),
+            (1, 2, 3, 4, 5),
+            {
+                1: "#E8F1F8",
+                2: "#E3EEF7",
+                3: "#D6E6F3",
+                4: "#CFE2F1",
+                5: "#C4D9EC",
+            },
+        ),
+        ("standard", (1, 3), (1, 3), {1: "#E8F1F8", 3: "#D6E6F3"}),
+        ("deep", (1, 3, 5), (1, 3), {1: "#E8F1F8", 3: "#D6E6F3"}),
     ),
 )
-def test_experimental_color_styles_inherit_edition_and_select_fill_levels(
-    edition: str, levels: tuple[int, ...]
+def test_color_styles_inherit_edition_and_select_fill_levels(
+    edition: str,
+    base_levels: tuple[int, ...],
+    color_levels: tuple[int, ...],
+    expected_fills: dict[int, str],
 ) -> None:
     base = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
-    assert base.milky_way.levels == levels
-    for variant in "abc":
-        style = load_style_config(
-            REPO_ROOT / "styles" / "experiments" / "color" / f"{edition}-{variant}.yaml"
-        )
-        assert style.id == base.id
-        assert style.star == base.star
-        assert style.dso == base.dso
-        expected_levels = (
-            (1, 2, 3, 4, 5)
-            if edition == "pocket"
-            else (1, 3, 5)
-            if variant == "c"
-            else (1, 3)
-        )
-        assert style.milky_way.levels == expected_levels
-        assert style.color_atlas is not None
-        if edition == "pocket":
-            expected_fills = (
-                {
-                    1: "#E8F1F8",
-                    2: "#E3EEF7",
-                    3: "#CFE2F1",
-                    4: "#B8D7EA",
-                    5: "#9FC9E2",
-                }
-                if variant == "b"
-                else {
-                    1: "#E8F1F8",
-                    2: "#E3EEF7",
-                    3: "#CFE2F1",
-                    4: "#B8D7EA",
-                    5: "#9FC9E2",
-                }
-                if variant == "c"
-                else {
-                    1: "#E8F1F8",
-                    2: "#E3EEF7",
-                    3: "#D6E6F3",
-                    4: "#CFE2F1",
-                    5: "#C4D9EC",
-                }
-            )
-        else:
-            expected_fills = {
-                1: "#E3EEF7" if variant == "b" else "#E8F1F8",
-                3: "#CFE2F1" if variant == "b" else "#D6E6F3",
-            }
-            if variant == "c":
-                expected_fills[5] = "#C4D9EC"
-        assert style.color_atlas.milky_way_fills == expected_fills
-        assert style.color_atlas.dso.galaxies == "#B97A63"
-        assert style.color_atlas.constellation_names == "#92969E"
+    assert base.milky_way.levels == base_levels
+    style = load_style_config(REPO_ROOT / "styles" / "color" / f"{edition}.yaml")
+    assert style.id == base.id
+    assert style.star == base.star
+    assert style.dso == base.dso
+    assert style.milky_way.levels == color_levels
+    assert style.color_atlas is not None
+    assert style.color_atlas.milky_way_fills == expected_fills
+    assert style.color_atlas.dso.galaxies == "#B97A63"
+    assert style.color_atlas.constellation_names == "#92969E"
+    assert style.color_atlas.open_cluster_fill.large_fill_alpha == 0.18
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
@@ -106,16 +78,8 @@ def test_existing_edition_styles_remain_uncolored(edition: str) -> None:
     assert style.color_atlas is None
 
 
-@pytest.mark.parametrize(
-    ("variant", "medium_alpha", "large_alpha"),
-    (("a", 0.48, 0.18), ("b", 0.28, 0.0)),
-)
-def test_open_cluster_color_variants_reduce_large_symbol_fill_only(
-    variant: str, medium_alpha: float, large_alpha: float
-) -> None:
-    style = load_style_config(
-        REPO_ROOT / f"styles/experiments/color/pocket-open-cluster-cloud-{variant}.yaml"
-    )
+def test_open_cluster_color_style_reduces_large_symbol_fill_only() -> None:
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     assert style.color_atlas is not None
     cluster = Mock(dso=Mock(object_type=DsoType.OPEN_CLUSTER))
     small = SymbolExtent(DsoShape.DASHED_CIRCLE, 4.0, 4.0)
@@ -124,42 +88,34 @@ def test_open_cluster_color_variants_reduce_large_symbol_fill_only(
 
     assert _dso_fill_and_outline_alpha(style, cluster, small) == (1.0, 1.0)
     assert _dso_fill_and_outline_alpha(style, cluster, medium) == (
-        medium_alpha,
+        0.48,
         style.color_atlas.open_cluster_fill.medium_outline_alpha,
     )
     assert _dso_fill_and_outline_alpha(style, cluster, large) == (
-        large_alpha,
+        0.18,
         style.color_atlas.open_cluster_fill.large_outline_alpha,
     )
 
 
-def test_magellanic_cloud_color_variants_use_milky_way_family() -> None:
-    for variant, expected in (
-        ("a", {1: "#E8F1F8", 2: "#D6E6F3", 3: "#C4D9EC"}),
-        ("b", {1: "#EEF5FA", 2: "#E4EFF7", 3: "#D7E7F3"}),
-    ):
-        style = load_style_config(
-            REPO_ROOT
-            / f"styles/experiments/color/pocket-open-cluster-cloud-{variant}.yaml"
-        )
-        assert style.color_atlas is not None
-        assert style.color_atlas.magellanic_cloud_fills == expected
-        assert set(style.color_atlas.magellanic_cloud_fill_alpha) == {1, 2, 3}
-        assert style.color_atlas.magellanic_cloud_outline in {
-            "#D6E3ED",
-            "#DFEAF2",
-        }
+def test_magellanic_cloud_color_style_uses_milky_way_family() -> None:
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
+    assert style.color_atlas is not None
+    assert style.color_atlas.magellanic_cloud_fills == {
+        1: "#E8F1F8",
+        2: "#D6E6F3",
+        3: "#C4D9EC",
+    }
+    assert style.color_atlas.magellanic_cloud_fill_alpha == {
+        1: 0.78,
+        2: 0.78,
+        3: 0.78,
+    }
+    assert style.color_atlas.magellanic_cloud_outline == "#D6E3ED"
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
-@pytest.mark.parametrize("variant", ("a", "b"))
-def test_cluster_and_magellanic_experiment_styles_cover_each_edition(
-    edition: str, variant: str
-) -> None:
-    style = load_style_config(
-        REPO_ROOT
-        / f"styles/experiments/color/{edition}-open-cluster-cloud-{variant}.yaml"
-    )
+def test_color_styles_cover_each_edition(edition: str) -> None:
+    style = load_style_config(REPO_ROOT / f"styles/color/{edition}.yaml")
     assert style.color_atlas is not None
     assert style.color_atlas.open_cluster_fill is not None
     assert set(style.color_atlas.magellanic_cloud_fills) == {1, 2, 3}
@@ -184,7 +140,7 @@ def test_dso_classes_use_the_configured_color_palette(
     object_type: DsoType, subtype: str | None, palette_key: str
 ) -> None:
     style = load_style_config(
-        REPO_ROOT / "styles/experiments/color/standard-a.yaml"
+        REPO_ROOT / "styles/color/standard.yaml"
     )
     dso = Mock(object_type=object_type, semantic_subtype=subtype)
     color = _dso_color(style, Mock(dso=dso))
@@ -204,7 +160,7 @@ def test_dso_classes_use_the_configured_color_palette(
 def test_galaxy_fill_intensity_follows_existing_contour_class(
     visibility_class: GalaxyContourClass, blend_level: int
 ) -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-a.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     dso = Mock(object_type=DsoType.GALAXY, semantic_subtype=None)
     metadata = DsoMetadata("NGC 1", galaxy_contour_class=visibility_class)
     scene_dso = Mock(dso=dso, metadata=metadata)
@@ -223,7 +179,7 @@ def test_galaxy_fill_intensity_follows_existing_contour_class(
 def test_other_dso_fill_intensity_uses_existing_visual_score(
     score: float, blend_level: int
 ) -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-a.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     dso = Mock(object_type=DsoType.BRIGHT_NEBULA, semantic_subtype=None)
     scene_dso = Mock(dso=dso, metadata=DsoMetadata("NGC 1", visual_score=score))
 
@@ -285,7 +241,7 @@ def test_milky_way_geojson_rings_keep_their_source_polygon_group() -> None:
 
 
 def test_milky_way_fill_can_render_without_an_outline_path() -> None:
-    style = load_style_config(REPO_ROOT / "styles" / "experiments" / "color" / "standard-a.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/standard.yaml")
     chart = ChartDefinition("fill-only", 0.0, 0.0, 4.0, 4.0)
     scene = ChartScene(
         definition=chart,
@@ -320,7 +276,7 @@ def test_milky_way_fill_can_render_without_an_outline_path() -> None:
 
 
 def test_milky_way_brightness_bands_are_clipped_to_the_previous_contour() -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/standard-a.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/standard.yaml")
     chart = ChartDefinition("nested-fill", 0.0, 0.0, 4.0, 4.0)
     outer = (
         ChartPoint(-1.5, -1.5),
@@ -414,7 +370,7 @@ def _count_rgb(surface: cairo.ImageSurface, target: tuple[int, int, int]) -> int
 
 
 def test_color_fills_show_nested_levels_and_keep_exterior_white() -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-b.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     chart = ChartDefinition("raster-levels", 0.0, 0.0, 4.0, 4.0)
 
     def square(radius: float) -> tuple[ChartPoint, ...]:
@@ -465,7 +421,7 @@ def test_color_fills_show_nested_levels_and_keep_exterior_white() -> None:
 
 
 def test_real_pocket_p009_has_white_exterior_and_filled_level_one_at_sadr() -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-b.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     chart = ChartDefinition("pocket-009-mask-regression", 292.0, 33.0, 54.0, 36.0)
     contours = load_milky_way_contours(REPO_ROOT / "data/third_party/d3-celestial/mw.json")
     scene = build_scene(
@@ -491,7 +447,7 @@ def test_real_pocket_p009_has_white_exterior_and_filled_level_one_at_sadr() -> N
 
 
 def test_real_pocket_p007_keeps_m31_in_the_level_one_source_hole() -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-b.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     chart = ChartDefinition("pocket-007-m31-mask-regression", 12.0, 33.0, 54.0, 36.0)
     scene = build_scene(
         chart,
@@ -514,7 +470,7 @@ def test_real_pocket_p007_keeps_m31_in_the_level_one_source_hole() -> None:
 
 
 def test_real_pocket_p008_shows_cygnus_milky_way_and_white_exterior() -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-b.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     chart = ChartDefinition("pocket-008-cygnus-regression", 332.0, 33.0, 54.0, 36.0)
     contours = load_milky_way_contours(REPO_ROOT / "data/third_party/d3-celestial/mw.json")
     scene = build_scene(
@@ -544,7 +500,7 @@ def test_real_pocket_p008_shows_cygnus_milky_way_and_white_exterior() -> None:
 
 
 def test_overlapping_pocket_charts_render_the_same_milky_way_tone() -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-b.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     contours = load_milky_way_contours(REPO_ROOT / "data/third_party/d3-celestial/mw.json")
     geometry = PageGeometry(297.0, 210.0, 13.5)
     rendered = {}
@@ -573,7 +529,7 @@ def test_overlapping_pocket_charts_render_the_same_milky_way_tone() -> None:
 
 
 def test_real_source_fills_a_chart_fully_inside_level_one_band() -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-b.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     chart = ChartDefinition("inside-level-one-band", 305.557, 40.256, 2.0, 2.0)
     style = style.model_copy(
         update={"milky_way": style.milky_way.model_copy(update={"levels": (1,)})}
@@ -600,7 +556,7 @@ def test_real_source_fills_a_chart_fully_inside_level_one_band() -> None:
 
 
 def test_no_milky_way_source_does_not_paint_level_one_base() -> None:
-    style = load_style_config(REPO_ROOT / "styles/experiments/color/pocket-b.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/pocket.yaml")
     chart = ChartDefinition("no-milky-way-data", 0.0, 0.0, 4.0, 4.0)
     scene = ChartScene(definition=chart)
     context = Mock()
@@ -633,7 +589,7 @@ def test_colored_dso_symbol_uses_color_fill_and_black_outline() -> None:
 
 
 def test_color_fill_levels_must_be_enabled_as_contours() -> None:
-    style = load_style_config(REPO_ROOT / "styles" / "experiments" / "color" / "standard-a.yaml")
+    style = load_style_config(REPO_ROOT / "styles/color/standard.yaml")
     style_data = style.model_dump()
     style_data["milky_way"]["levels"] = [1]
     with pytest.raises(ValueError, match="fill levels must also be enabled"):

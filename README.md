@@ -231,9 +231,13 @@ and ten details. Prepare UCAC4 for Pocket PD02 as described above. Explicit conf
 `atlas/eyepiece.yaml` with `styles/eyepiece.yaml`.
 
 Colour is opt-in; `--edition` uses the classic black-and-white preset. The
-currently reviewed colour A treatment uses the existing experimental styles,
-for example `--style styles/experiments/color/pocket-open-cluster-cloud-a.yaml`
-with `--edition pocket`. Equivalent files exist for Standard and Deep.
+canonical colour styles are `styles/color/pocket.yaml`,
+`styles/color/standard.yaml` and `styles/color/deep.yaml`. For example:
+
+```bash
+.venv/bin/nightsky atlas build --edition pocket \
+  --style styles/color/pocket.yaml
+```
 
 ## Find and print the PDFs
 

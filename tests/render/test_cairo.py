@@ -201,7 +201,7 @@ def test_dso_line_width_uses_bold_width_for_emphasized_objects() -> None:
 
 def test_filled_dso_contours_are_redrawn_after_star_overlays(monkeypatch) -> None:
     color_style = load_style_config(
-        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-b.yaml"
+        REPO_ROOT / "styles" / "color" / "pocket.yaml"
     )
     first = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
     second_dso = replace(
@@ -251,7 +251,7 @@ def test_filled_dso_contours_are_redrawn_after_star_overlays(monkeypatch) -> Non
 
 def test_colored_dso_keeps_its_fill_behind_overlapping_bright_star(monkeypatch) -> None:
     color_style = load_style_config(
-        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-a.yaml"
+        REPO_ROOT / "styles" / "color" / "pocket.yaml"
     )
     cluster = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
     star = Star("bright", 187.5, 12.0, 1.0, Provenance("TEST", "bright"))
@@ -276,7 +276,7 @@ def test_colored_dso_keeps_its_fill_behind_overlapping_bright_star(monkeypatch) 
 
 def test_star_halos_do_not_cut_holes_in_colored_dso_fills(monkeypatch) -> None:
     color_style = load_style_config(
-        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-a.yaml"
+        REPO_ROOT / "styles" / "color" / "pocket.yaml"
     )
     cluster = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
     star = Star("bright", 187.5, 12.0, 1.0, Provenance("TEST", "bright"))
@@ -310,7 +310,7 @@ def test_star_halos_do_not_cut_holes_in_colored_dso_fills(monkeypatch) -> None:
 
 def test_open_cluster_fill_and_outline_do_not_cover_a_star() -> None:
     color_style = load_style_config(
-        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-b.yaml"
+        REPO_ROOT / "styles" / "color" / "pocket.yaml"
     )
     cluster = _scene_dso(None, object_type=DsoType.OPEN_CLUSTER)
     star = Star("cluster-star", 187.5, 12.0, 1.0, Provenance("TEST", "cluster-star"))
@@ -456,7 +456,7 @@ def test_compact_dso_overlapping_bright_star_keeps_its_knockout() -> None:
 
 def test_compact_colored_galaxy_remains_visible_over_bright_star() -> None:
     color_style = load_style_config(
-        REPO_ROOT / "styles" / "experiments" / "color" / "standard-b.yaml"
+        REPO_ROOT / "styles" / "color" / "standard.yaml"
     )
     star = Star("bright", 187.5, 12.0, 2.0, Provenance("TEST", "bright"))
     dso = DeepSkyObject(
@@ -563,7 +563,7 @@ def test_bright_nebula_outline_uses_color_fill_beneath_its_contour() -> None:
     )
     scene = build_scene(CHART, (), (nebula,), nebula_outlines=(outline,))
     color_style = load_style_config(
-        REPO_ROOT / "styles" / "experiments" / "color" / "pocket-b.yaml"
+        REPO_ROOT / "styles" / "color" / "pocket.yaml"
     )
     context = Mock()
 
