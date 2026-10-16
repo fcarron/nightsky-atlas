@@ -66,3 +66,24 @@ def test_malformed_fixture_is_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="dso_id"):
         load_outlines(tmp_path)
+
+
+def test_openngc_outline_import_is_repeatable_and_preserves_coordinates(tmp_path: Path) -> None:
+    from nightsky_atlas.catalog.openngc_outlines import import_openngc_outlines
+
+    source = tmp_path / "source/objects"
+    source.mkdir(parents=True)
+    text = "RAJ2000\tDEJ2000\tCont_Flag\n359\t-2\t\n0\t-1\t\n1\t-2\t*\n"
+    (source / "NGC1499_lv2.txt").write_text(text)
+    (source / "NGC1499_lv1.txt").write_text(text)
+    target = tmp_path / "processed/nebulae.json"
+    import_openngc_outlines(source.parent, target)
+    first = target.read_bytes()
+    import_openngc_outlines(source.parent, target)
+    assert target.read_bytes() == first
+    data = json.loads(first)
+    assert data["source"]["license"] == "CC-BY-SA-4.0"
+    assert data["source"]["source_url"] == "https://github.com/mattiaverga/OpenNGC"
+    assert len(data["outlines"]) == 1
+    assert data["outlines"][0]["id"] == "outline:openngc:NGC1499:2:0"
+    assert data["outlines"][0]["points"] == [[359.0, -2.0], [0.0, -1.0], [1.0, -2.0]]

@@ -468,6 +468,45 @@ the label formatter does not use Caldwell designations as chart labels.
 | Transformations | edges densified along RA/Dec, projected with the chart projection, clipped to the chart field |
 | Committed | yes; build must be reproducible offline |
 
+### Imported OpenNGC nebula outlines
+
+The optional processed layer `data/processed/outlines/nebulae.json` supplements
+the schematic fixtures. Builds load it automatically when present and record
+its directory fingerprint. It remains OpenNGC-derived CC BY-SA 4.0 material.
+The existing `catalog/openngc_outlines.py` converter reads level-2 tab-separated
+polygons without changing their vertices, and assigns stable component IDs.
+
+A pinned upstream snapshot reproduces all **238** current component records
+(IDs, points and object links) exactly:
+`d2fcc9f7f20ad9be573f71d2c86d1e389db2f63b`. From the repository root:
+
+```bash
+mkdir -p data/raw/openngc-outlines
+curl --fail --location \
+  https://codeload.github.com/mattiaverga/OpenNGC/tar.gz/d2fcc9f7f20ad9be573f71d2c86d1e389db2f63b \
+  --output data/raw/openngc-outlines/source.tar.gz
+echo '38511d33beb170e1b700d70649d12d7522d082c80601246aee321744bc188777  data/raw/openngc-outlines/source.tar.gz' | sha256sum --check
+tar -xzf data/raw/openngc-outlines/source.tar.gz \
+  -C data/raw/openngc-outlines --strip-components=1 \
+  --wildcards 'OpenNGC-*/outlines/*'
+.venv/bin/python - <<'PYTHON'
+from nightsky_atlas.catalog.openngc_outlines import import_openngc_outlines
+import_openngc_outlines(
+    "data/raw/openngc-outlines/outlines",
+    "data/processed/outlines/nebulae.json",
+)
+PYTHON
+```
+
+The current converter additionally writes a `source_url` metadata field, absent
+from the older local processed file. The generated JSON therefore has SHA-256
+`b3f37840391310a623bbe51ab0529fbcd514e2bb85c2b3558f38bfe9ce5a0cf8`,
+while every outline record is identical. The audit verified this in an isolated
+directory and did not replace the production layer. Preserve the archive and
+its [upstream licence](https://github.com/mattiaverga/OpenNGC/blob/d2fcc9f7f20ad9be573f71d2c86d1e389db2f63b/LICENSES/CC-BY-SA-4.0.txt)
+with local provenance; do not describe a fresh moving-branch fetch as a pinned
+reproduction.
+
 ### Milky Way brightness contours
 
 | Field | Value |

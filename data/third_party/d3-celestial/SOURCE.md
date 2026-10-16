@@ -16,4 +16,5 @@
 NightSky Atlas reads the five GeoJSON features `ol1` through `ol5`, converts
 GeoJSON longitude back to equatorial right ascension, projects the coordinates
 with the chart's stereographic projection, and clips contour paths to the chart
-field. It does not alter the source geometry. No filled areas are rendered.
+field. It does not alter the source geometry. Black-and-white styles draw
+contour lines; experimental colour styles also fill the contour levels.

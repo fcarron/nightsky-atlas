@@ -220,6 +220,10 @@ def test_classic_targets_selected_with_explicit_pocket_reason(name, code):
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not (ROOT / "data/processed/dso/catalogue.json").is_file(),
+    reason="processed merged DSO catalogue not built",
+)
 def test_pocket_candidate_additions_do_not_change_standard_or_deep_selection():
     from nightsky_atlas.catalog.dso_store import load_dso_catalog
 

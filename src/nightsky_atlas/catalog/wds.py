@@ -3,8 +3,8 @@
 Source: CDS ``B/wds``, *The Washington Visual Double Star Catalog* (Mason et al.),
 maintained by the U.S. Naval Observatory.  The main part ``wds.dat`` is a
 fixed-width file (130 bytes per record); byte ranges below follow the CDS
-ReadMe.  The catalogue is a U.S. government work and is treated as public
-domain; the USNO requests the acknowledgement recorded in
+ReadMe.  No explicit reuse licence was identified on the USNO source page;
+the USNO requests the acknowledgement recorded in
 ``data/fixtures/double_stars/SOURCE.md``.
 
 WDS is an **overlay**, not a replacement for the star base: the importer yields

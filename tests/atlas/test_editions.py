@@ -46,6 +46,12 @@ from nightsky_atlas.render.detail_markers import build_detail_marker
 from nightsky_atlas.render.symbols import StarSizeModel
 
 ROOT = Path(__file__).resolve().parents[2]
+PRIMARY_STAR_STORE = ROOT / "data/processed/stars/tycho2.sqlite"
+FAINT_STAR_STORE = ROOT / "data/processed/stars/faint_stars.sqlite"
+HAS_DSO_CATALOGUE = any(
+    (ROOT / "data/processed/dso" / name).is_file()
+    for name in ("catalogue.json", "openngc.json")
+)
 
 
 @pytest.mark.parametrize(
@@ -83,6 +89,7 @@ def test_star_label_exclusions_are_configured_for_pocket_and_standard() -> None:
     (("pocket", "pocket-015"), ("standard", "standard-041")),
 )
 @pytest.mark.integration
+@pytest.mark.skipif(not PRIMARY_STAR_STORE.is_file(), reason="processed star catalogue not built")
 def test_pleiades_main_chart_excludes_two_names_but_keeps_star_symbols(
     edition: str, chart_id: str
 ) -> None:
@@ -429,6 +436,10 @@ def test_pocket_detail_scale_requires_matching_stellar_profile() -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not (PRIMARY_STAR_STORE.is_file() and FAINT_STAR_STORE.is_file() and HAS_DSO_CATALOGUE),
+    reason="processed stellar, UCAC4 and DSO catalogues not built",
+)
 def test_detail_overrides_inherit_style_and_control_pleiades_layers() -> None:
     atlas_path = ROOT / "atlas" / "pocket.yaml"
     style_path = ROOT / "styles" / "pocket.yaml"
@@ -663,6 +674,7 @@ def test_detail_star_profiles_preserve_parent_dso_styling_and_limit() -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(not HAS_DSO_CATALOGUE, reason="processed DSO catalogue not built")
 def test_standard_detail_star_depth_does_not_change_dso_selection() -> None:
     atlas_path = ROOT / "atlas" / "standard.yaml"
     style_path = ROOT / "styles" / "standard.yaml"
@@ -690,6 +702,7 @@ def test_standard_detail_star_depth_does_not_change_dso_selection() -> None:
         selected_ids.append(tuple(item.dso.id for item in context.scene.deep_sky_objects))
         assert context.selection_policy == inputs.selection_policy
 
+    assert selected_ids[0]
     assert selected_ids[0] == selected_ids[1]
 
 

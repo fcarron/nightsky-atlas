@@ -898,7 +898,12 @@ def _command_import_wds(args: argparse.Namespace) -> int:
         "catalogue": WDS_CATALOGUE,
         "edition": WDS_EDITION,
         "source": "The Washington Visual Double Star Catalog (Mason et al.), CDS B/wds",
-        "license": "Public domain (U.S. Naval Observatory); acknowledgement requested",
+        "license": "No explicit reuse licence identified; USNO acknowledgement requested",
+        "source_url": "https://crf.usno.navy.mil/wds",
+        "acknowledgement": (
+            "This research has made use of the Washington Double Star Catalog "
+            "maintained at the U.S. Naval Observatory."
+        ),
         "epoch": "J2000",
         "coordinate_rule": "sexagesimal RA/Dec converted to degrees",
         "separation_rule": (

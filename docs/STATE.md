@@ -3,7 +3,47 @@
 Handoff snapshot. The authoritative contract remains `AGENTS.md`; the granular
 plan is `docs/DEVELOPMENT_PLAN.md`.
 
-Current edition configuration (2026-10-08): Pocket is 5 mm/°, Standard 10
+## Alpha readiness audit (2026-10-16)
+
+Non-layout follow-up completed at the user's request: WDS metadata no longer
+asserts an unverified public-domain grant; the local object JSON is unchanged.
+The pinned OpenNGC outline workflow reproduces all 238 component records.
+`docs/ATLAS_DISTRIBUTION.md` and `tools/prepare_alpha_download.py` provide a
+local download companion/package with notices, exact Gaia contour data,
+configuration copies, input/environment hashes and recorded layout issues.
+The verified local archive is
+`build/downloads/pocket-alpha-2026-10-16.zip`; it has not been uploaded.
+
+Follow-up `make check`: **1,458 passed** in 374.73 s. The colour-A Pocket
+rebuild at `build/alpha-cleanup/verified-pocket/pocket/atlas.pdf` retains all
+15 hard issues and one warning. All 43 chart PNGs, chart layout/diagnostic
+records and extracted combined-PDF text match the previous audit build exactly.
+The user explicitly deferred layout corrections. Strict publication checks
+and accepted data-rights caveats remain in effect.
+
+The source project is technically suitable for an explicitly experimental
+public alpha; no further large refactoring is recommended before it.
+See `docs/ALPHA_READINESS_AUDIT.md` for evidence, priorities and limitations.
+Standalone PDF distribution still requires checking the actual notices/data
+download package and disclosing remaining layout defects. This is not
+publication or field-use approval and does not settle accepted licence caveats.
+
+`make check` passes with all local catalogues (1,453 tests), also with fresh
+Python dependencies (1,453 tests). A catalogue-free tracked-source export
+passes 1,431 tests with 22 justified skips after integration-test guards were
+corrected. Ubuntu 24.04 was tested on the existing host, not a fresh container.
+No chart-rendering, selection, layout algorithm or astronomical data changed.
+
+New colour-A Pocket output: `build/alpha-audit/full-pocket/pocket/atlas.pdf`,
+39 main + 4 detail charts, 74 PDF pages, 15 hard issues and one warning.
+Ordinary manifest validation passes; publication validation correctly fails.
+Standard B&W and Deep colour proof subsets have 6 and 1 hard issues respectively;
+these are not complete-edition counts. Current selected DSOs are 1,133 / 3,093 /
+11,904 for Pocket / Standard / Deep. All older counts below are snapshots.
+
+## Historical build snapshot
+
+Edition configuration recorded on 2026-10-08: Pocket is 5 mm/°, Standard 10
 mm/°, and Deep 20 mm/°. Eyepiece at 40 mm/° and Eyepiece Deep at 80 mm/° are
 experimental presets. The Standard alpha build is complete; printed field
 review remains pending. Full local Pocket, Standard and Deep builds were

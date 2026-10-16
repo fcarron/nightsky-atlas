@@ -97,7 +97,19 @@ def test_wds_import_cli_preserves_semantic_overlay(tmp_path: Path) -> None:
     systems = load_system_catalog(output)
     assert len(systems) == 9
     assert any(system.source_id == "STF2383:CD" for system in systems)
-    assert json.loads(manifest.read_text())["processed_sha256"] == file_sha256(output)
+    metadata = json.loads(manifest.read_text())
+    assert metadata["processed_sha256"] == file_sha256(output)
+    assert metadata["license"] == (
+        "No explicit reuse licence identified; USNO acknowledgement requested"
+    )
+    assert metadata["source_url"] == "https://crf.usno.navy.mil/wds"
+    assert "maintained at the U.S. Naval Observatory" in metadata["acknowledgement"]
+    first = output.read_bytes(), manifest.read_bytes()
+    assert main([
+        "data", "import-wds", "--raw", str(raw), "--out", str(output),
+        "--manifest", str(manifest),
+    ]) == 0
+    assert (output.read_bytes(), manifest.read_bytes()) == first
 
 
 def test_import_cli_reports_missing_input_without_writing_output(tmp_path: Path, capsys) -> None:

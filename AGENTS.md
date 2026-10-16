@@ -60,6 +60,13 @@ secrets or large generated catalogues. Preserve existing unrelated worktree
 changes. Prefer repository commands (`make check`) and checks appropriate to the
 task. Do not add code comments unless asked.
 
+**0.6 Keep local changes local.** Search existing implementations and consumers
+before adding code. Respect domain boundaries; put research tools in `tools/`
+or `scripts/`, not automatically in the production CLI. Add configuration only
+for demonstrated needs, and justify special cases. Retire unused experiments
+after recording their results and checking consumers. Protect scientific and
+cartographic behavior with focused regression tests.
+
 ## 1. Product vision
 
 Beautiful, practical paper charts for use at a telescope. Functional quality

@@ -15,6 +15,10 @@ offered under ODbL 1.0. A PDF is a cartographic Produced Work and is not
 therefore itself offered under ODbL. Free non-commercial beta distribution is
 the intended use, not a legal clearance or permission for commercial use.
 
+For PDF downloads, retain the [distribution notices](docs/ATLAS_DISTRIBUTION.md)
+and accompanying source notices/data. The README describes the local package
+preparation tool; it does not publish or approve a release.
+
 ## Tycho-2 and Hipparcos
 
 The Tycho-2 catalogue and the Hipparcos catalogue are credited to ESA and their

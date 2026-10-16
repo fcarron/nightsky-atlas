@@ -2,12 +2,25 @@
 
 ## What is NightSky Atlas?
 
-NightSky Atlas creates printable, publication-quality star charts and atlases
+NightSky Atlas creates printable star charts and atlases
 for visual deep-sky observing and Dobsonian star-hopping. Its main output is a
 vector PDF; chart previews are also written as PNG files. Charts combine stars,
 deep-sky objects, constellation geometry, coordinate grids and navigation.
 The main editions are Pocket (5 mm/°), Standard (10 mm/°) and Deep (20 mm/°).
 Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental.
+
+## Alpha status
+
+The atlas generation pipeline works locally and offline once the catalogues
+are prepared. This is an alpha: known label collisions remain on some pages,
+and printed telescope-field review is still pending. An ordinary build can
+write a complete PDF and still exit with status 1 because it found hard layout
+issues; inspect its manifest and draft report. `--publication` is a stricter
+zero-hard-issue check, not legal clearance or field-use approval.
+
+No tagged public atlas download is linked here yet. The fixture quickstart
+below generates an installation example; full-catalogue charts require the
+separate data preparation steps. Run commands from the repository root.
 
 ## Requirements: Ubuntu 24.04 and WSL
 
@@ -16,7 +29,8 @@ under WSL. Ubuntu 24.04 provides Python 3.12 as `/usr/bin/python3`. Native
 Windows and macOS have not been tested.
 
 Rendering uses Cairo and Pango through PyGObject. Install their Ubuntu packages
-before making the virtual environment. The `--system-site-packages` option is
+before making the virtual environment. The compiler and Python headers are
+needed when pip builds Pycairo from source. The `--system-site-packages` option is
 needed so that the environment can import Ubuntu's `gi` bindings; a default
 isolated virtual environment cannot see them.
 
@@ -34,7 +48,7 @@ Install the system libraries and Python bindings:
 ```bash
 sudo apt update
 sudo apt install -y \
-    python3-venv python3-gi python3-gi-cairo gir1.2-pango-1.0 \
+    build-essential python3-dev python3-venv python3-gi python3-gi-cairo gir1.2-pango-1.0 \
     libcairo2-dev libfontconfig1 pkg-config
 ```
 
@@ -51,7 +65,16 @@ Confirm that the CLI and Pango bindings are available:
 
 ```bash
 .venv/bin/nightsky --help
-.venv/bin/python -c "import gi; gi.require_version('Pango', '1.0'); gi.require_version('PangoCairo', '1.0'); from gi.repository import Pango, PangoCairo; print('Pango OK')"
+.venv/bin/python - <<'PYTHON'
+import cairo
+import gi
+gi.require_version("Pango", "1.0")
+gi.require_version("PangoCairo", "1.0")
+from gi.repository import PangoCairo
+cr = cairo.Context(cairo.ImageSurface(cairo.FORMAT_ARGB32, 10, 10))
+PangoCairo.create_layout(cr)
+print("PangoCairo OK")
+PYTHON
 ```
 
 No API key is needed to install or create charts. The Lato and Source Sans 3
@@ -68,6 +91,7 @@ not download astronomical catalogues:
     --atlas atlas/standard.yaml \
     --style styles/standard.yaml \
     --stars data/fixtures/stars/test_virgo.csv \
+    --optimize \
     --outdir build
 ```
 
@@ -120,6 +144,10 @@ The repository already contains the small constellation, star-name, observing
 list and schematic nebula-outline fixtures used by the renderer. They do not
 need to be fetched separately.
 
+Reviewed full-catalogue charts also use an optional imported OpenNGC outline
+layer. Its pinned download, checksum and existing converter invocation are in
+[DATA_SOURCES.md](docs/DATA_SOURCES.md#imported-openngc-nebula-outlines).
+
 ### Optional catalogues
 
 The Washington Double Star Catalog (WDS) adds a double/multiple-star overlay.
@@ -134,9 +162,11 @@ The raw WDS download is about 6.5 MB; the processed overlay is about 57 MB.
 When `data/processed/double_stars/wds.json` exists, atlas builds use it by
 default. Use `--no-double-stars` to omit it.
 
-UCAC4 is a separate, optional faint-star supplement intended for experimental
-Eyepiece work. The complete source is about 8.5 GiB before its local SQLite
-store; it is not needed for Pocket, Standard or Deep:
+UCAC4 is a separate faint-star supplement. No main chart needs it, but the
+configured Pocket Pleiades detail PD02 explicitly requests it at 40 mm/° and
+magnitude 11.25. A complete Pocket build therefore needs the supplement even
+without global `--faint-star-store` options. Standard and Deep do not request it
+by default. The complete source is about 8.5 GiB before its local SQLite store:
 
 ```bash
 .venv/bin/nightsky data fetch-ucac4
@@ -152,8 +182,16 @@ merge them with OpenNGC, run:
 .venv/bin/nightsky data import-vizier-dsos
 ```
 
-The merged catalogue is written to `data/processed/dso/catalogue.json`; pass
-that path to `atlas build --dsos` when you want to use it. VizieR sources have
+The merged catalogue is written to `data/processed/dso/catalogue.json` and is
+used automatically when present, unless `--dsos` explicitly selects another file.
+UCC 260615 can enrich that catalogue after the VizieR import:
+
+```bash
+.venv/bin/nightsky data fetch-ucc
+.venv/bin/nightsky data import-ucc
+```
+
+Import makes records available; it does not select every imported object. VizieR sources have
 source-specific terms, so review them before redistribution. See
 [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) for provenance and licensing.
 
@@ -167,7 +205,7 @@ Build the complete Standard chart set with the star and OpenNGC catalogues:
     --dsos data/processed/dso/openngc.json
 ```
 
-Standard contains 118 sky charts plus detail charts. The default build uses two
+Standard contains 129 main charts plus eight detail charts. The default build uses two
 workers and also creates per-chart PNG previews. Use `--jobs 1` to build
 serially, `--jobs 4` if several GiB of memory are available, or `--no-png` to
 skip preview images. A full build can take substantially longer than the
@@ -187,9 +225,15 @@ import it again before this check:
 ```
 
 To build Pocket or Deep instead, change `--edition standard` to `pocket` or
-`deep`. Explicit configuration paths are also accepted with `--atlas` and
+`deep`. Pocket has 39 main charts and four details; Deep has 492 main charts
+and ten details. Prepare UCAC4 for Pocket PD02 as described above. Explicit configuration paths are also accepted with `--atlas` and
 `--style`; for example, the experimental Eyepiece configuration is
 `atlas/eyepiece.yaml` with `styles/eyepiece.yaml`.
+
+Colour is opt-in; `--edition` uses the classic black-and-white preset. The
+currently reviewed colour A treatment uses the existing experimental styles,
+for example `--style styles/experiments/color/pocket-open-cluster-cloud-a.yaml`
+with `--edition pocket`. Equivalent files exist for Standard and Deep.
 
 ## Find and print the PDFs
 
@@ -205,10 +249,33 @@ print at **100% / actual size** so the edition's printed scale is preserved.
 Disable “fit to page” or equivalent scaling in the print dialog. The atlas
 pages are A4 landscape.
 
+## Prepare an alpha download
+
+Keep the PDF with its source notices and corresponding Gaia contour data.
+From the repository root, prepare a local package from a completed build:
+
+```bash
+.venv/bin/python tools/prepare_alpha_download.py \
+    --atlas-dir build/pocket \
+    --outdir build/downloads/pocket-alpha
+.venv/bin/python -m zipfile -c build/downloads/pocket-alpha.zip \
+    build/downloads/pocket-alpha
+```
+
+The tool verifies ordinary output checksums, unchanged build inputs and
+catalogue metadata. It retains recorded layout issues, includes notices,
+the exact Gaia GeoJSON, configuration files and an input/environment inventory.
+It refuses to overwrite an existing package. This does not satisfy the
+zero-hard-issue `--publication` check or grant legal/field approval.
+No upload happens. For separate PDF hosting, link the notices and contour
+download beside it. See [alpha download notices](docs/ATLAS_DISTRIBUTION.md).
+
 ## Editions
 
 Pocket is the compact 5 mm/° edition, Standard is 10 mm/°, and Deep is 20 mm/°.
-Their chart scale and object selection differ. Use `--edition pocket`,
+Pocket emphasizes wide-field orientation, binoculars and small telescopes;
+Standard is a general-purpose observing atlas; Deep provides smaller fields
+and fainter targets. Their chart scale and object selection differ. Use `--edition pocket`,
 `--edition standard` or `--edition deep` with `nightsky atlas build`.
 Eyepiece (40 mm/°) and Eyepiece Deep (80 mm/°) are experimental and currently
 require explicit atlas and style files. A 100%-print comparison sheet for the
@@ -234,6 +301,8 @@ make check
 against locally imported full catalogues (`integration`). `make check` always
 runs the complete suite, including `tests/build/` and publication checks.
 Tests do not download catalogues; most use committed small fixtures.
+Integration cases requiring imported catalogues are skipped with a reason when
+those files are absent, and run during `make check` when the files are available.
 On Ubuntu, install the system packages above before running `make setup`; the
 target creates the virtual environment with access to Ubuntu's `gi` bindings.
 
