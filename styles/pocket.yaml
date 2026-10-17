@@ -20,7 +20,7 @@ constellation:
     font_size_pt: 15.3
     min_visible_area_fraction: 0.10
   lines:
-    gray: 0.64
+    gray: 0.51
     bold_width_mm: 0.18
     normal_width_mm: 0.12
     thin_width_mm: 0.08
@@ -44,7 +44,7 @@ grid:
   ra_step_deg: 15.0
   dec_step_deg: 10.0
   polar_ra_step_deg: 30.0
-  polar_ra_gray: 0.72
+  polar_ra_gray: 0.56
   polar_ra_line_width_mm: 0.12
   label_ra_step_deg: 15.0
   label_dec_step_deg: 10.0

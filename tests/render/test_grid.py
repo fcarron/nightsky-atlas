@@ -122,7 +122,7 @@ def test_polar_style_applies_to_north_and_south_polar_fields(center_dec: float) 
     assert any(line.kind == "ra" and line.polar for line in lines)
     assert any(line.kind == "dec" and not line.polar for line in lines)
     assert STYLE.grid.polar_ra_line_width_mm == pytest.approx(0.08)
-    assert STYLE.grid.polar_ra_gray == pytest.approx(0.87)
+    assert STYLE.grid.polar_ra_gray == pytest.approx(0.67)
 
 
 @pytest.mark.parametrize("center_dec", [90.0, -90.0])

@@ -243,14 +243,33 @@ def test_pocket_constellation_boundaries_are_distinct_from_grid_and_figures() ->
     assert boundary.enabled
     assert boundary.line_width_mm == pytest.approx(0.12)
     assert boundary.gray == pytest.approx(0.68)
-    assert boundary.gray < pocket.grid.gray
     assert boundary.gray > pocket.constellation.lines.gray
-    assert pocket.constellation.lines.gray == pytest.approx(0.64)
+    assert pocket.constellation.lines.gray == pytest.approx(0.51)
     assert pocket.constellation.lines.bold_width_mm == pytest.approx(0.18)
     assert pocket.constellation.lines.normal_width_mm == pytest.approx(0.12)
     assert pocket.constellation.lines.thin_width_mm == pytest.approx(0.08)
     assert pocket.grid.gray == standard.grid.gray
     assert pocket.grid.line_width_mm == standard.grid.line_width_mm
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+def test_classic_edition_line_contrast_preserves_hierarchy_and_widths(edition: str) -> None:
+    style = load_style_config(ROOT / "styles" / f"{edition}.yaml")
+    assert style.grid.gray == pytest.approx(0.62)
+    assert style.grid.polar_ra_gray == pytest.approx(0.56 if edition == "pocket" else 0.67)
+    assert style.grid.line_width_mm == pytest.approx(0.1)
+    assert style.grid.polar_ra_line_width_mm == pytest.approx(0.12 if edition == "pocket" else 0.08)
+    assert style.constellation.lines.gray == pytest.approx(0.51 if edition == "pocket" else 0.46)
+    assert style.constellation.lines.gray < style.grid.gray
+    assert style.constellation.boundaries.gray == pytest.approx(
+        0.68 if edition == "pocket" else 0.82
+    )
+    if edition == "pocket":
+        assert style.constellation.lines.bold_width_mm == pytest.approx(0.18)
+        assert style.constellation.lines.normal_width_mm == pytest.approx(0.12)
+        assert style.constellation.lines.thin_width_mm == pytest.approx(0.08)
+    else:
+        assert style.constellation.lines.line_width_mm == pytest.approx(0.16)
 
 
 def test_deep_tiling_uses_aligned_rings_with_polar_caps() -> None:

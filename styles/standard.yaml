@@ -214,7 +214,7 @@ variable_stars:
 constellation:
   lines:
     enabled: true
-    gray: 0.56
+    gray: 0.46
     line_width_mm: 0.16
     bold_width_mm: 0.25
     normal_width_mm: 0.16
@@ -235,9 +235,9 @@ grid:
   dec_step_deg: 5.0
   polar_ra_step_deg: 7.5
   line_width_mm: 0.1
-  gray: 0.8
+  gray: 0.62
   polar_ra_line_width_mm: 0.08
-  polar_ra_gray: 0.87
+  polar_ra_gray: 0.67
   labels_enabled: true
   label_placement: outside
   label_font_size_pt: 5.0
