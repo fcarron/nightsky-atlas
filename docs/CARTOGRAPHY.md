@@ -246,6 +246,16 @@ and the normal edition defaults.
 | Deep — LMC bar | DD08 | 80 mm/° | 13.5 | D474, D473 |
 | Deep — NGC 346 / SMC | DD09 | 40 mm/° | 12.25 | D477, D486, D476, D462 |
 | Deep — Perseus Cluster / NGC 1275 | DD10 | 80 mm/° | 13.5 | D089, D088, D114, D113 |
+| Deep — NGC 507 / NGC 499 group | DD11 | 80 mm/° | 13.5 | D141, D116, D140, D115 |
+| Deep — Hercules Cluster / NGC 6041 | DD12 | 80 mm/° | 13.5 | D182, D152 |
+| Deep — Leo Cluster / NGC 3842 | DD13 | 80 mm/° | 13.5 | D157, D187, D158, D188 |
+| Deep — NGC 2832 group | DD14 | 80 mm/° | 13.5 | D107, D132 |
+| Deep — NGC 4005 / NGC 4015 group | DD15 | 80 mm/° | 13.5 | D157, D130, D129 |
+| Deep — NGC 708 group | DD16 | 80 mm/° | 13.5 | D115 |
+| Deep — NGC 4065 / NGC 4057 group | DD17 | 80 mm/° | 13.5 | D157, D187 |
+| Deep — Southern Virgo / NGC 4273 | DD18 | 40 mm/° | 12.25 | D217, D216, D247, D246 |
+| Deep — Northern LMC / NGC 1869 / NGC 2011 | DD19 | 80 mm/° | 13.5 | D474, D473 |
+| Deep — Western LMC / NGC 1748 / NGC 1761 | DD20 | 40 mm/° | 12.25 | D474, D473, D475 |
 
 Star profiles are existing edition presets: Standard detail stars use the
 Standard profile, Deep detail stars use Deep, and the denser detail fields use

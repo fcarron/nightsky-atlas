@@ -112,6 +112,108 @@ detail_charts:
     mm_per_degree: 80.0
     star_profile: eyepiece_deep
     dso_profile: eyepiece_deep
+  - id: detail-deep-ngc507-group
+    code: DD11
+    name: NGC 507 · NGC 499 group
+    center_ra_deg: 20.85
+    center_dec_deg: 33.35
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
+  - id: detail-deep-hercules-cluster
+    code: DD12
+    name: Hercules Cluster · NGC 6041
+    center_ra_deg: 241.35
+    center_dec_deg: 17.7
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
+  - id: detail-deep-leo-ngc3842
+    code: DD13
+    name: Leo Cluster · NGC 3842
+    center_ra_deg: 176.15
+    center_dec_deg: 19.85
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
+  - id: detail-deep-ngc2832-group
+    code: DD14
+    name: NGC 2832 group
+    center_ra_deg: 139.98
+    center_dec_deg: 33.8
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
+  - id: detail-deep-ngc4005-group
+    code: DD15
+    name: NGC 4005 · NGC 4015 group
+    center_ra_deg: 179.6
+    center_dec_deg: 25.1
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
+  - id: detail-deep-ngc708-group
+    code: DD16
+    name: NGC 708 group
+    center_ra_deg: 28.2
+    center_dec_deg: 36.1
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
+  - id: detail-deep-ngc4065-group
+    code: DD17
+    name: NGC 4065 · NGC 4057 group
+    center_ra_deg: 181.0
+    center_dec_deg: 20.3
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
+  - id: detail-deep-virgo-south
+    code: DD18
+    name: Southern Virgo · NGC 4273
+    center_ra_deg: 185.0
+    center_dec_deg: 5.45
+    width_deg: 6.5
+    height_deg: 4.25
+    mm_per_degree: 40.0
+    star_profile: eyepiece
+    dso_profile: eyepiece
+  - id: detail-deep-lmc-north
+    code: DD19
+    name: Northern LMC · NGC 1869 / NGC 2011
+    parent_marker_label: ""
+    center_ra_deg: 80.5
+    center_dec_deg: -67.3
+    width_deg: 3.25
+    height_deg: 2.125
+    mm_per_degree: 80.0
+    star_profile: eyepiece_deep
+    dso_profile: eyepiece_deep
+  - id: detail-deep-lmc-west
+    code: DD20
+    name: Western LMC · NGC 1748 / NGC 1761
+    parent_marker_label: ""
+    center_ra_deg: 73.9
+    center_dec_deg: -67.7
+    width_deg: 6.5
+    height_deg: 4.25
+    mm_per_degree: 40.0
+    star_profile: eyepiece
+    dso_profile: eyepiece
 # Experimental aligned tiling: 23 symmetric declination rings, with small
 # shifts at ±53° and ±83° to improve the weakest sampled edge margin and polar
 # overlap. RA starts at 0° in every ring; see docs/CARTOGRAPHY.md.

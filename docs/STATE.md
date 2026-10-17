@@ -208,7 +208,18 @@ terms rather than a blanket project licence. See `docs/DATA_SOURCES.md` and
 - Pocket uses the same three label-transfer fields on `P025` and `P032`, with
   compact parent-frame tags (`PD025A`, `PD025B`, `PD032`) to fit the smaller
   field footprints.
-- Deep now has ten detail maps: NGC 7331/Stephan's Quintet, Pleiades, Coma
+- Deep has twenty detail maps. DD11–DD20 add the NGC 507, Hercules,
+  Leo/NGC 3842, NGC 2832, NGC 4005, NGC 708 and NGC 4065 groups, southern
+  Virgo, and northern/western LMC fields. Southern Virgo and western LMC use
+  40 mm/° with the Eyepiece star/DSO profile; the other new fields use 80 mm/°
+  with Eyepiece Deep. DD01–DD10 and all 492 main-chart geometries are unchanged.
+  The 22-parent proof at `build/deep-additional-details/proof/deep/atlas.pdf`
+  reduces main-chart hard issues from 275 to 134, with no new main-chart issue
+  IDs and 78 additional verified label transfers. Eight new details are
+  hard-clean; DD18 has one remaining label/DSO overlap and DD20 has three.
+  The unchanged Coma main charts retain 115 issues; DD03 retains 28. This is
+  a partial proof, not a complete-edition rebuild. `make check`: 1,489 passed.
+  The original ten fields are NGC 7331/Stephan's Quintet, Pleiades, Coma
   core, Markarian chain, M42, Fornax core, 30 Doradus, LMC bar, NGC 346 and the
   Perseus Cluster. The same geometry- and validation-gated label fallback
   applies there; Messier labels remain protected, while H400 labels may use it

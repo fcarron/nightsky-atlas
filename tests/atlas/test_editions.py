@@ -286,7 +286,7 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         "SD09",
     ]
     assert "SD06" not in {detail.code for detail in details}
-    assert [detail.code for detail in deep.detail_charts] == [f"DD{i:02d}" for i in range(1, 11)]
+    assert [detail.code for detail in deep.detail_charts] == [f"DD{i:02d}" for i in range(1, 21)]
     assert all(
         not hasattr(detail, "fallback_parent_galaxy_labels")
         and not hasattr(detail, "parent_chart_id")
@@ -322,10 +322,10 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     assert pocket_pleiades.stars.magnitude_limit == pytest.approx(11.25)
     assert standard_pleiades.show_constellation_names is False
     assert standard_pleiades.objects == pocket_pleiades.objects
-    assert [detail.mm_per_degree for detail in deep.detail_charts] == [
+    assert [detail.mm_per_degree for detail in deep.detail_charts[:10]] == [
         40, 40, 80, 80, 80, 40, 80, 80, 40, 80
     ]
-    assert [detail.star_profile for detail in deep.detail_charts] == [
+    assert [detail.star_profile for detail in deep.detail_charts[:10]] == [
         "eyepiece",
         "eyepiece",
         "eyepiece_deep",
@@ -337,7 +337,7 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         "eyepiece",
         "eyepiece_deep",
     ]
-    perseus = deep.detail_charts[-1]
+    perseus = next(detail for detail in deep.detail_charts if detail.code == "DD10")
     assert perseus.name == "Perseus Cluster · NGC 1275"
     assert perseus.center_ra_deg == pytest.approx(49.9507)
     assert perseus.center_dec_deg == pytest.approx(41.5117)
@@ -346,6 +346,13 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         2.125,
         80.0,
     )
+    for detail in deep.detail_charts[10:]:
+        expected_scale = 40.0 if detail.code in {"DD18", "DD20"} else 80.0
+        expected_profile = "eyepiece" if expected_scale == 40.0 else "eyepiece_deep"
+        assert detail.mm_per_degree == expected_scale
+        assert detail.star_profile == detail.dso_profile == expected_profile
+        assert detail.width_deg * expected_scale == 260.0
+        assert detail.height_deg * expected_scale == 170.0
     assert pocket.detail_charts[0].mm_per_degree == 20.0
     assert pocket.detail_charts[0].star_profile == "deep"
     assert pocket.detail_charts[1].name == "Pleiades · M45"
