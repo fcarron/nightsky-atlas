@@ -7,7 +7,7 @@ import pytest
 from nightsky_atlas.atlas.config import DsoLabelPlacementStyle, SourceAssociationStyle
 from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.page import PagePoint, PageRect
-from nightsky_atlas.layout.association import SourceGeometry
+from nightsky_atlas.layout.association import SourceGeometry, source_edge_distance
 from nightsky_atlas.layout.models import CompassPosition, LabelCandidate
 from nightsky_atlas.layout.scoring import (
     CostWeights,
@@ -114,6 +114,63 @@ def _galaxy_source(source_id: str, x: float, y: float, radius: float) -> SourceG
         radius_x_mm=radius,
         radius_y_mm=radius,
     )
+
+
+@pytest.mark.parametrize("margin", [0.0, 0.02, -0.02, -0.35, 0.8])
+def test_approximate_distances_refine_ambiguous_neighbours_and_ownership(
+    monkeypatch: pytest.MonkeyPatch, margin: float,
+) -> None:
+    candidate = make_candidate(CompassPosition.E, 100.0, 99.0)
+    owner = _galaxy_source("owner", 97.0, 100.0, 1.0)
+    nearest = _galaxy_source("A-nearest", 111.0 + margin, 100.0, 1.0)
+    farther = _galaxy_source("Z-farther", 111.03 + margin, 100.0, 1.0)
+    sources = (owner, farther, nearest)
+    arguments = {
+        "target_source_id": owner.id,
+        "source_symbols": sources,
+        "source_association": SourceAssociationStyle(),
+        "dso_placement": DsoLabelPlacementStyle(),
+        "is_dso_label": True,
+    }
+    expected = score(candidate, **arguments)
+
+    def biased_distance(source: SourceGeometry, bounds: PageRect) -> float:
+        bias = -0.04 if source.id == farther.id else 0.04
+        return source_edge_distance(source, bounds) + bias
+
+    monkeypatch.setattr("nightsky_atlas.layout.scoring.source_scoring_distance", biased_distance)
+    actual = score(candidate, **arguments)
+    assert actual.nearest_foreign_source_id == nearest.id
+    assert actual.nearest_foreign_source_gap_mm == expected.nearest_foreign_source_gap_mm
+    assert actual.foreign_source_closer_than_owner == expected.foreign_source_closer_than_owner
+    if abs(margin) <= 0.02:
+        assert actual.ownership_margin_mm == expected.ownership_margin_mm
+
+
+@pytest.mark.parametrize("offset", [0.0, 0.2, 2.0, 6.0, 20.0])
+@pytest.mark.parametrize("is_dso", [False, True])
+def test_working_geometry_keeps_all_active_cost_components_exact(
+    monkeypatch: pytest.MonkeyPatch, offset: float, is_dso: bool,
+) -> None:
+    owner = SourceGeometry("owner", DsoType.GALAXY, PagePoint(97.0, 100.0), 2.0, 0.5, 0.3)
+    foreign = SourceGeometry(
+        "foreign", DsoType.GALAXY, PagePoint(109.0 + offset, 100.0), 1.5, 0.3, 0.7
+    )
+    candidate = make_candidate(CompassPosition.E, 100.0, 99.0)
+    arguments = {
+        "target_source_id": owner.id,
+        "source_symbols": (owner, foreign),
+        "source_association": SourceAssociationStyle(),
+        "dso_placement": DsoLabelPlacementStyle() if is_dso else None,
+        "is_dso_label": is_dso,
+    }
+    approximate = score(candidate, **arguments)
+    monkeypatch.setattr(
+        "nightsky_atlas.layout.scoring.source_scoring_distance", source_edge_distance
+    )
+    exact = score(candidate, **arguments)
+    assert approximate.components() == exact.components()
+    assert approximate.total(CostWeights()) == exact.total(CostWeights())
 
 
 def test_cached_static_score_matches_full_score_with_different_placed_labels() -> None:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from nightsky_atlas.atlas.config import StyleConfig
@@ -20,14 +20,18 @@ from nightsky_atlas.scene.models import ChartScene
 __all__ = [
     "SourceGeometry",
     "dso_source_geometries",
+    "nearest_source_geometry",
     "source_contains_point",
     "source_edge_distance",
+    "source_scoring_distance",
     "source_outline_edge_distance",
     "source_extent_edge_distance",
     "source_facing_point",
     "source_geometries_overlap",
     "source_intersects_rect",
 ]
+
+SCORING_DISTANCE_ERROR_MM = 0.05
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +50,12 @@ class SourceGeometry:
     dash_length_mm: float = 0.0
     dash_gap_mm: float = 0.0
     outline_width_mm: float = 0.0
+
+    def __hash__(self) -> int:
+        """Keep cache-key hashing independent of the contour vertex count."""
+        return hash((
+            self.id, self.center, self.radius_x_mm, self.radius_y_mm, self.rotation_rad,
+        ))
 
     @property
     def collision_radius_mm(self) -> float:
@@ -97,30 +107,153 @@ def dso_source_geometries(
 def source_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
     """Measure from the rendered source boundary to its facing label edge."""
     if source.outline_paths:
-        return min(
-            _segment_rect_distance(start, end, rect)
-            for path in source.outline_paths
-            for start, end in zip(path, path[1:], strict=False)
-        )
+        return _outline_rect_distance(source, rect)
     if source.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:
         return _axis_aligned_rect_edge_distance(source, rect)
     return _ellipse_rect_edge_distance(source, rect)
 
 
 @lru_cache(maxsize=32768)
+def source_scoring_distance(source: SourceGeometry, rect: PageRect) -> float:
+    """Bound soft distance error to 0.05 mm; refine near possible collisions."""
+    working = _scoring_geometry(source)
+    if not working.outline_paths:
+        return source_edge_distance(source, rect)
+    if not source.outline_paths and source_intersects_rect(source, rect):
+        return 0.0
+    gap = _outline_rect_distance(working, rect)
+    if gap <= 4.0 * SCORING_DISTANCE_ERROR_MM:
+        return source_edge_distance(source, rect)
+    return gap
+
+
+@lru_cache(maxsize=512)
+def _scoring_geometry(source: SourceGeometry) -> SourceGeometry:
+    """Prepare page-scale working paths without changing rendered geometry."""
+    if source.outline_paths:
+        paths = tuple(_simplify_path(path) for path in source.outline_paths)
+    elif (
+        source.shape not in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}
+        and source.radius_x_mm != source.radius_y_mm
+    ):
+        radius = max(source.radius_x_mm, source.radius_y_mm)
+        count = max(16, math.ceil(math.pi * math.sqrt(radius / (2 * SCORING_DISTANCE_ERROR_MM))))
+        boundary = _ellipse_boundary(source, count)
+        paths = (boundary + boundary[:1],)
+    else:
+        return source
+    return replace(source, outline_paths=paths)
+
+
+def _simplify_path(path: tuple[PagePoint, ...]) -> tuple[PagePoint, ...]:
+    """Keep endpoints and bound polyline deviation with deterministic RDP."""
+    if len(path) <= 2:
+        return path
+    kept = {0, len(path) - 1}
+    pending = [(0, len(path) - 1)]
+    threshold_sq = SCORING_DISTANCE_ERROR_MM**2
+    while pending:
+        first, last = pending.pop()
+        start, end = path[first], path[last]
+        dx, dy = end.x_mm - start.x_mm, end.y_mm - start.y_mm
+        length_sq = dx * dx + dy * dy
+        farthest, max_distance_sq = first, threshold_sq
+        for index in range(first + 1, last):
+            point = path[index]
+            px, py = point.x_mm - start.x_mm, point.y_mm - start.y_mm
+            along = max(0.0, min(1.0, (px * dx + py * dy) / length_sq)) if length_sq else 0.0
+            distance_sq = (px - along * dx)**2 + (py - along * dy)**2
+            if distance_sq > max_distance_sq:
+                farthest, max_distance_sq = index, distance_sq
+        if farthest != first:
+            kept.add(farthest)
+            pending.extend(((farthest, last), (first, farthest)))
+    return tuple(path[index] for index in sorted(kept))
+
+
+@lru_cache(maxsize=32768)
 def source_outline_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
     """Measure clearance to the drawn outline, ignoring footprint containment."""
     if source.outline_paths:
-        return min(
-            _segment_rect_distance(start, end, rect)
-            for path in source.outline_paths
-            for start, end in zip(path, path[1:], strict=False)
-        )
+        return _outline_rect_distance(source, rect)
     if source.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:
         return _axis_aligned_rect_outline_distance(source, rect)
     if source.shape == DsoShape.DASHED_CIRCLE and source.dash_length_mm > 0.0:
         return _dashed_circle_rect_distance(source, rect)
     return _ellipse_rect_outline_distance(source, rect)
+
+
+@lru_cache(maxsize=1024)
+def _outline_segments(
+    source: SourceGeometry,
+) -> tuple[tuple[PagePoint, PagePoint, float, float, float, float], ...]:
+    return tuple(
+        (
+            start, end,
+            min(start.x_mm, end.x_mm), min(start.y_mm, end.y_mm),
+            max(start.x_mm, end.x_mm), max(start.y_mm, end.y_mm),
+        )
+        for path in source.outline_paths
+        for start, end in zip(path, path[1:], strict=False)
+    )
+
+
+def _outline_rect_distance(source: SourceGeometry, rect: PageRect) -> float:
+    segments = _outline_segments(source)
+    if not segments:
+        raise ValueError("outline must contain at least one segment")
+    distance = math.inf
+    for start, end, left, top, right, bottom in segments:
+        dx = max(left - rect.right_mm, rect.left_mm - right, 0.0)
+        dy = max(top - rect.bottom_mm, rect.top_mm - bottom, 0.0)
+        if dx * dx + dy * dy > (distance + 1e-9) ** 2:
+            continue
+        distance = min(distance, _segment_rect_distance(start, end, rect))
+        if distance == 0.0:
+            break
+    return distance
+
+
+@lru_cache(maxsize=4096)
+def _source_bounds(source: SourceGeometry) -> PageRect:
+    if source.outline_paths:
+        points = tuple(point for path in source.outline_paths for point in path)
+        left = min(point.x_mm for point in points)
+        top = min(point.y_mm for point in points)
+        right = max(point.x_mm for point in points)
+        bottom = max(point.y_mm for point in points)
+        return PageRect(left, top, right - left, bottom - top)
+    radius = source.collision_radius_mm
+    return PageRect(
+        source.center.x_mm - radius,
+        source.center.y_mm - radius,
+        2.0 * radius,
+        2.0 * radius,
+    )
+
+
+def nearest_source_geometry(
+    sources: tuple[SourceGeometry, ...], rect: PageRect
+) -> SourceGeometry | None:
+    """Find the nearest source without measuring boundaries beyond the best gap."""
+    ranked = []
+    for source in sources:
+        bounds = _source_bounds(source)
+        lower_bound = math.hypot(
+            max(bounds.left_mm - rect.right_mm, rect.left_mm - bounds.right_mm, 0.0),
+            max(bounds.top_mm - rect.bottom_mm, rect.top_mm - bounds.bottom_mm, 0.0),
+        )
+        ranked.append((lower_bound, source.id, source))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    nearest = None
+    best_gap = math.inf
+    for lower_bound, _, source in ranked:
+        if lower_bound > best_gap + 1e-9:
+            break
+        gap = source_edge_distance(source, rect)
+        if nearest is None or (gap, source.id) < (best_gap, nearest.id):
+            nearest, best_gap = source, gap
+    return nearest
 
 
 def _dashed_circle_rect_distance(source: SourceGeometry, rect: PageRect) -> float:
@@ -290,6 +423,16 @@ def _ellipse_rect_outline_distance(source: SourceGeometry, rect: PageRect) -> fl
 
 
 def _ellipse_rect_boundary_distance(source: SourceGeometry, rect: PageRect) -> float:
+    if source.radius_x_mm == source.radius_y_mm:
+        nearest = math.hypot(
+            max(rect.left_mm - source.center.x_mm, source.center.x_mm - rect.right_mm, 0.0),
+            max(rect.top_mm - source.center.y_mm, source.center.y_mm - rect.bottom_mm, 0.0),
+        )
+        farthest = math.hypot(
+            max(abs(rect.left_mm - source.center.x_mm), abs(rect.right_mm - source.center.x_mm)),
+            max(abs(rect.top_mm - source.center.y_mm), abs(rect.bottom_mm - source.center.y_mm)),
+        )
+        return max(nearest - source.radius_x_mm, source.radius_x_mm - farthest, 0.0)
     cos_angle = math.cos(source.rotation_rad)
     sin_angle = math.sin(source.rotation_rad)
 

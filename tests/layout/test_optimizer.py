@@ -19,6 +19,7 @@ from nightsky_atlas.layout.diagnostics import _dso_placement_metrics
 from nightsky_atlas.layout.geometry import rects_overlap
 from nightsky_atlas.layout.models import CompassPosition, Label, LabelCandidate
 from nightsky_atlas.layout.optimizer import (
+    OptimizationCache,
     _dso_conflict_components,
     _repair_dso_hard_conflicts,
     optimize_labels,
@@ -27,10 +28,12 @@ from nightsky_atlas.layout.placement import (
     _association_scale,
     _build_star_index,
     _build_symbol_index,
+    _candidate_rejection_reason,
     _CandidateScoreCache,
     _is_valid,
 )
-from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle
+from nightsky_atlas.layout.scoring import CostWeights, StarCircle, SymbolCircle
+from nightsky_atlas.layout.spatial import RectIndex
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
 
@@ -114,6 +117,197 @@ def test_candidate_cache_reuses_static_validity_for_changed_neighbors(
     assert not candidate_cache.valid(label, candidate, (PageRect(101.0, 100.0, 2.0, 2.5),))
     assert candidate_cache.valid(label, candidate, ())
     assert counted.call_count == 1
+
+
+@pytest.mark.parametrize("star_present", [False, True])
+def test_leader_rejection_cache_preserves_dynamic_collisions_and_reason_order(
+    monkeypatch, candidate_cache, star_present: bool,
+) -> None:
+    candidate = make_candidate("label:dso:X", CompassPosition.E, 100, 100)
+    label = make_label("label:dso:X", (candidate,))
+    if star_present:
+        star = StarCircle("S", frozenset({"S"}), PagePoint(103, 101), 1.0)
+        candidate_cache.stars = (star,)
+        candidate_cache.stars_index = _build_star_index((star,))
+    candidate_cache.prepare_labels((label,))
+    counted = Mock(wraps=placement_module._source_candidate_rejection_reason)
+    monkeypatch.setattr(placement_module, "_source_candidate_rejection_reason", counted)
+    index = RectIndex(8.0)
+
+    def reason(*, cached: bool, furniture: tuple[PageRect, ...] = ()) -> str | None:
+        return _candidate_rejection_reason(
+            label, candidate, index, candidate_cache.symbols_index,
+            candidate_cache.stars_index, candidate_cache.stars,
+            candidate_cache.printable, STYLE, furniture=furniture, source_geometries=(),
+            cost_cache=candidate_cache if cached else None,
+        )
+
+    expected = "star_clearance" if star_present else None
+    assert reason(cached=True) == expected
+    assert reason(cached=True) == expected
+    assert counted.call_count == 1
+    index.set("other", candidate.bounds, candidate.bounds)
+    assert reason(cached=True) == reason(cached=False) == "label_label_overlap"
+    assert reason(cached=True, furniture=(candidate.bounds,)) == "page_furniture_overlap"
+    index.discard("other")
+    assert reason(cached=True) == reason(cached=False) == expected
+    assert candidate_cache.statistics()["rejection"]["hits"] == 2
+
+
+def test_rejection_cache_updates_related_star_clearance_after_target_change(
+    candidate_cache,
+) -> None:
+    candidate = make_candidate("label:star:X", CompassPosition.E, 100, 100)
+    label = make_label("label:star:X", (candidate,))
+    star = StarCircle("S", frozenset({"S"}), PagePoint(103, 101), 0.5)
+    candidate_cache.stars = (star,)
+    candidate_cache.stars_index = _build_star_index((star,))
+    candidate_cache.prepare_labels((label,))
+    assert candidate_cache.source_rejection(label, candidate) is None
+    related_label = replace(label, target_id="S")
+    candidate_cache.prepare_labels((related_label,))
+    assert candidate_cache.source_rejection(related_label, candidate) == "star_clearance"
+
+
+@pytest.mark.parametrize(
+    "change", ["locked", "leader_line", "text", "target", "geometry", "glyphs"]
+)
+def test_candidate_cache_invalidates_changed_label_semantics_and_geometry(
+    candidate_cache, change: str,
+) -> None:
+    candidate = make_candidate("label:dso:X", CompassPosition.E, 100.0, 100.0)
+    label = make_label("label:dso:X", (candidate,))
+    candidate_cache.prepare_labels((label,))
+    candidate_cache.cost(label, candidate, ())
+    candidate_cache.valid(label, candidate, ())
+    candidate_cache.source_rejection(label, candidate)
+    placement_only = replace(label, selected_candidate_id=candidate.id, hidden=True)
+    candidate_cache.prepare_labels((placement_only,))
+    assert candidate_cache.statistics()["static"]["retained"] == 1
+    assert candidate_cache.statistics()["rejection"]["retained"] == 1
+    if change == "locked":
+        changed = replace(label, locked=True)
+    elif change == "leader_line":
+        changed = replace(label, leader_line=True, leader_line_reason="manual")
+    elif change == "text":
+        changed = replace(label, text="longer text")
+    elif change == "target":
+        changed = replace(label, target_id="another-source")
+    elif change == "geometry":
+        changed = replace(label, candidates=(replace(candidate, bounds=PageRect(95, 95, 8, 2.5)),))
+    else:
+        glyph_candidate = replace(candidate, glyph_bounds=(PageRect(101, 101, 1, 1),))
+        changed = replace(label, candidates=(glyph_candidate,))
+    candidate_cache.prepare_labels((changed,))
+    assert all(item["entries"] == 0 for item in candidate_cache.statistics().values())
+
+
+def test_candidate_cache_eviction_is_bounded_and_preserves_scores(candidate_cache) -> None:
+    candidate_cache.max_entries = 2
+    candidates = tuple(
+        replace(make_candidate("label:dso:X", CompassPosition.E, 100 + index, 100), id=str(index))
+        for index in range(3)
+    )
+    label = make_label("label:dso:X", candidates)
+    candidate_cache.prepare_labels((label,))
+    expected = candidate_cache.cost(label, candidates[0], ())
+    for candidate in candidates:
+        candidate_cache.cost(label, candidate, ())
+        candidate_cache.valid(label, candidate, ())
+        candidate_cache.source_rejection(label, candidate)
+    assert all(item["entries"] <= 2 for item in candidate_cache.statistics().values())
+    assert candidate_cache.statistics()["static"]["evictions"] > 0
+    assert candidate_cache.statistics()["rejection"]["evictions"] > 0
+    assert candidate_cache.cost(label, candidates[0], ()) == expected
+
+
+def test_optimizer_cache_retries_transfers_restores_and_changed_placements_exactly() -> None:
+    labels = tuple(
+        make_label(
+            f"label:dso:{index}",
+            tuple(
+                replace(make_candidate(str(index), pos, 100 + index * 5, top), id=f"{index}:{pos}")
+                for pos, top in ((CompassPosition.N, 100), (CompassPosition.S, 106))
+            ),
+        )
+        for index in range(3)
+    )
+    cache = OptimizationCache()
+    initial = optimize_labels(labels, EMPTY_SCENE, TRANSFORM, STYLE, cache=cache)
+    retries = (
+        initial.labels[1:],
+        (replace(initial.labels[1], locked=True), initial.labels[2]),
+        (replace(initial.labels[1], leader_line=True, leader_line_reason="manual"),),
+        labels,
+    )
+    for retry in retries:
+        shared = optimize_labels(retry, EMPTY_SCENE, TRANSFORM, STYLE, cache=cache)
+        fresh = optimize_labels(retry, EMPTY_SCENE, TRANSFORM, STYLE)
+        for field in (
+            "labels", "cost_before", "cost_after", "placed_count", "hidden_count",
+            "component_totals_before", "component_totals_after", "label_diagnostics",
+        ):
+            assert getattr(shared, field) == getattr(fresh, field), field
+    assert cache.statistics()["static"]["hits"] > 0
+
+
+@pytest.mark.parametrize("change", ["scene", "style", "weights", "furniture", "transform"])
+def test_optimizer_cache_invalidates_changed_chart_context(change: str) -> None:
+    candidate = make_candidate("label:dso:X", CompassPosition.E, 100, 100)
+    label = make_label("label:dso:X", (candidate,))
+    cache = OptimizationCache()
+    style = STYLE.model_copy(deep=True)
+    optimize_labels((label,), EMPTY_SCENE, TRANSFORM, style, cache=cache)
+    original = cache._scores
+    scene, transform, weights, furniture = EMPTY_SCENE, TRANSFORM, None, ()
+    if change == "scene":
+        scene = replace(EMPTY_SCENE)
+    elif change == "style":
+        association = style.label.source_association.model_copy(
+            update={"compact_label_factor": 0.5}
+        )
+        style = style.model_copy(update={
+            "label": style.label.model_copy(update={"source_association": association}),
+        })
+    elif change == "weights":
+        weights = CostWeights(anchor_distance=3.0)
+    elif change == "furniture":
+        furniture = (PageRect(150, 150, 10, 10),)
+    else:
+        transform = replace(TRANSFORM, page=replace(PAGE, margin_mm=13))
+    shared = optimize_labels(
+        (label,), scene, transform, style, weights=weights, furniture=furniture, cache=cache
+    )
+    fresh = optimize_labels((label,), scene, transform, style, weights=weights, furniture=furniture)
+    assert cache._scores is not original
+    assert shared.labels == fresh.labels
+    assert shared.cost_after == fresh.cost_after
+    assert cache.statistics()["static"]["retained"] == 0
+
+
+def test_conflict_graph_does_not_recheck_already_connected_label_pairs(monkeypatch) -> None:
+    def repeated(label_id: str, left: float) -> tuple[LabelCandidate, ...]:
+        return tuple(
+            replace(
+                make_candidate(label_id, CompassPosition.E, left, 100.0),
+                id=f"{label_id}:{index}",
+            )
+            for index in range(20)
+        )
+
+    first = make_label("label:dso:A", repeated("A", 100.0))
+    bridge = make_candidate("B", CompassPosition.W, 130.0, 100.0)
+    second = make_label("label:dso:B", (*repeated("B", 102.0), bridge))
+    third = make_label("label:dso:C", repeated("C", 132.0))
+    isolated = make_label("label:dso:D", repeated("D", 230.0))
+    counted = Mock(wraps=optimizer_module.rects_overlap)
+    monkeypatch.setattr(optimizer_module, "rects_overlap", counted)
+
+    assert _dso_conflict_components((first, second, third, isolated), STYLE) == (
+        (first.id, second.id, third.id),
+        (isolated.id,),
+    )
+    assert counted.call_count == 2
 
 
 def test_greedy_avoids_overlap_between_mandatory_labels() -> None:

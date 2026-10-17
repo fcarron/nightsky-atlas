@@ -101,7 +101,12 @@ from nightsky_atlas.chart.presentation import (
 from nightsky_atlas.layout.collision import LayoutIssue
 from nightsky_atlas.layout.labels import build_labels
 from nightsky_atlas.layout.models import Label
-from nightsky_atlas.layout.optimizer import layout_cost, layout_hash, optimize_labels
+from nightsky_atlas.layout.optimizer import (
+    OptimizationCache,
+    layout_cost,
+    layout_hash,
+    optimize_labels,
+)
 from nightsky_atlas.layout.overrides import (
     OverridesLibrary,
     apply_overrides,
@@ -580,6 +585,7 @@ def _build_main_chart(
     optimize_s = 0.0
     cost_s = 0.0
     optimization_runs = 0
+    optimization_cache = OptimizationCache() if shared.optimize else None
     if shared.optimize:
         stage_start = time.perf_counter()
         optimized = optimize_labels(
@@ -588,6 +594,7 @@ def _build_main_chart(
             chart_context.transform,
             chart_context.style,
             furniture=furniture,
+            cache=optimization_cache,
         )
         labels = optimized.labels
         optimize_s = time.perf_counter() - stage_start
@@ -658,6 +665,7 @@ def _build_main_chart(
                 chart_context.transform,
                 chart_context.style,
                 furniture=furniture,
+                cache=optimization_cache,
             )
             optimization_runs += 1
             labels = optimized.labels
@@ -709,6 +717,7 @@ def _build_main_chart(
                     chart_context.transform,
                     chart_context.style,
                     furniture=furniture,
+                    cache=optimization_cache,
                 )
                 optimization_runs += 1
                 labels = optimized.labels

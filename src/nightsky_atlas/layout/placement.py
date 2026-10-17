@@ -9,6 +9,7 @@ from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.association import (
     SourceGeometry,
+    nearest_source_geometry,
     source_edge_distance,
     source_geometries_overlap,
     source_intersects_rect,
@@ -65,7 +66,11 @@ class _CandidateScoreCache:
         weights: CostWeights,
         constellation_lines: tuple[tuple[PagePoint, PagePoint], ...],
         furniture: tuple[PageRect, ...] = (),
+        *,
+        max_entries: int = 65536,
     ) -> None:
+        if max_entries < 1:
+            raise ValueError("max_entries must be positive")
         self.anchors = anchors
         self.printable = printable
         self.symbols_index = symbols_index
@@ -77,11 +82,53 @@ class _CandidateScoreCache:
         self.weights = weights
         self.constellation_lines = constellation_lines
         self.furniture = furniture
+        self.max_entries = max_entries
+        self._versions: dict[str, Label] = {}
+        self._hits = dict.fromkeys(("static", "geometry", "validity", "rejection"), 0)
+        self._misses = self._hits.copy()
+        self._evictions = self._hits.copy()
+        self._retained = self._hits.copy()
         self._static: dict[tuple[str, str], CostBreakdown] = {}
         self._geometry: dict[
             tuple[str, str], tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]
         ] = {}
         self._validity: dict[tuple[str, str], tuple[bool, PageRect]] = {}
+        self._rejection: dict[tuple[str, str], str | None] = {}
+
+    def prepare_labels(self, labels: tuple[Label, ...]) -> None:
+        """Retain only entries whose complete non-placement label state matches."""
+        versions = {
+            label.id: replace(label, selected_candidate_id=None, hidden=False)
+            for label in labels[:self.max_entries]
+        }
+        unchanged = {
+            label_id for label_id, label in versions.items()
+            if self._versions.get(label_id) == label
+        }
+        for name in self._hits:
+            entries = getattr(self, f"_{name}")
+            for key in list(entries):
+                if key[0] not in unchanged:
+                    del entries[key]
+            self._retained[name] = len(entries)
+        self._versions = versions
+
+    def statistics(self) -> dict[str, dict[str, int]]:
+        return {
+            name: {
+                "hits": self._hits[name], "misses": self._misses[name],
+                "evictions": self._evictions[name], "retained": self._retained[name],
+                "entries": len(getattr(self, f"_{name}")),
+            }
+            for name in self._hits
+        }
+
+    def _remember(self, name: str, key: tuple[str, str], value: object) -> None:
+        entries = getattr(self, f"_{name}")
+        if key not in entries and len(entries) >= self.max_entries:
+            del entries[next(iter(entries))]
+            self._evictions[name] += 1
+        entries[key] = value
 
     def geometry(
         self,
@@ -90,6 +137,8 @@ class _CandidateScoreCache:
     ) -> tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]:
         key = (label.id, candidate.id)
         geometry = self._geometry.get(key)
+        self._hits["geometry"] += geometry is not None
+        self._misses["geometry"] += geometry is None
         if geometry is None:
             geometry = (
                 tuple(self.symbols_index.query(candidate.bounds)),
@@ -97,7 +146,7 @@ class _CandidateScoreCache:
                     label, candidate.bounds, self.stars_index, self.stars, self.style
                 ),
             )
-            self._geometry[key] = geometry
+            self._remember("geometry", key, geometry)
         return geometry
 
     def valid(
@@ -108,6 +157,16 @@ class _CandidateScoreCache:
     ) -> bool:
         key = (label.id, candidate.id)
         validity = self._validity.get(key)
+        if validity is not None and not validity[0]:
+            self._hits["validity"] += 1
+            return False
+        collision_bounds = validity[1] if validity is not None else _collision_bounds(
+            label, candidate, self.style
+        )
+        if any(rects_overlap(collision_bounds, other) for other in placed_bounds):
+            return False
+        self._hits["validity"] += validity is not None
+        self._misses["validity"] += validity is None
         if validity is None:
             symbols, stars = self.geometry(label, candidate)
             validity = (
@@ -123,13 +182,26 @@ class _CandidateScoreCache:
                     self.sources,
                     self.source_by_id,
                 ),
-                _collision_bounds(label, candidate, self.style),
+                collision_bounds,
             )
-            self._validity[key] = validity
-        static_valid, collision_bounds = validity
-        return static_valid and not any(
-            rects_overlap(collision_bounds, other) for other in placed_bounds
-        )
+            self._remember("validity", key, validity)
+        return validity[0]
+
+    def source_rejection(self, label: Label, candidate: LabelCandidate) -> str | None:
+        """Reuse source/star rejection reasons, independently of placed labels."""
+        key = (label.id, candidate.id)
+        present = key in self._rejection
+        self._hits["rejection"] += present
+        self._misses["rejection"] += not present
+        if not present:
+            self._remember(
+                "rejection", key,
+                _source_candidate_rejection_reason(
+                    label, candidate, self.symbols_index, self.stars_index,
+                    self.stars, self.style, self.sources,
+                ),
+            )
+        return self._rejection[key]
 
     def cost(
         self,
@@ -159,12 +231,15 @@ class _CandidateScoreCache:
     ) -> CostBreakdown:
         key = (label.id, candidate.id)
         static = self._static.get(key)
+        self._hits["static"] += static is not None
+        self._misses["static"] += static is None
         if static is None:
             if nearby_symbols is None or nearby_stars is None:
                 symbols, stars = self.geometry(label, candidate)
             else:
                 symbols, stars = nearby_symbols, nearby_stars
-                self._geometry.setdefault(key, (symbols, stars))
+                if key not in self._geometry:
+                    self._remember("geometry", key, (symbols, stars))
             static = score_candidate(
                 candidate,
                 target_anchor=_anchor_for(label, self.anchors, candidate),
@@ -186,7 +261,7 @@ class _CandidateScoreCache:
                 edge_margin_mm=_EDGE_MARGIN_MM,
                 constellation_lines=self.constellation_lines,
             )
-            self._static[key] = static
+            self._remember("static", key, static)
         return rescore_candidate_interactions(
             static,
             candidate,
@@ -385,11 +460,7 @@ def _ownership_result(
     competitors = tuple(
         source for source in considered if source.id != label.target_id
     )
-    nearest = min(
-        competitors,
-        key=lambda source: (source_edge_distance(source, bounds), source.id),
-        default=None,
-    )
+    nearest = nearest_source_geometry(competitors, bounds)
     if nearest is None:
         return owner_gap, None, None, False
     foreign_gap = source_edge_distance(nearest, bounds)
@@ -639,6 +710,7 @@ def _candidate_rejection_reason(
     *,
     furniture: tuple[PageRect, ...],
     source_geometries: tuple[SourceGeometry, ...],
+    cost_cache: _CandidateScoreCache | None = None,
 ) -> str | None:
     bounds = candidate.bounds
     collision_bounds = _collision_bounds(label, candidate, style)
@@ -660,6 +732,23 @@ def _candidate_rejection_reason(
         )
     ):
         return "label_label_overlap"
+    if cost_cache is not None:
+        return cost_cache.source_rejection(label, candidate)
+    return _source_candidate_rejection_reason(
+        label, candidate, symbols_index, stars_index, stars, style, source_geometries
+    )
+
+
+def _source_candidate_rejection_reason(
+    label: Label,
+    candidate: LabelCandidate,
+    symbols_index: RectIndex[SymbolCircle],
+    stars_index: RectIndex[StarCircle],
+    stars: tuple[StarCircle, ...],
+    style: StyleConfig,
+    source_geometries: tuple[SourceGeometry, ...],
+) -> str | None:
+    bounds = candidate.bounds
     visible_bounds = (
         candidate_ink_bounds(candidate)
         if label.id.startswith("label:dso:")
@@ -679,8 +768,9 @@ def _candidate_rejection_reason(
         )
         if wrong_owner:
             return "foreign_source_closer_than_owner"
-    for star in _nearby_stars(label, bounds, stars_index, stars, style):
-        related = _related_star_ids(label, stars)
+    nearby_stars = _nearby_stars(label, bounds, stars_index, stars, style)
+    related = _related_star_ids(label, stars) if nearby_stars else frozenset()
+    for star in nearby_stars:
         hard_min = (
             style.label.star_clearance.associated.hard_min_mm
             if related & star.star_ids

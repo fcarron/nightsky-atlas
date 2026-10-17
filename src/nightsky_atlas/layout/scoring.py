@@ -16,11 +16,13 @@ from nightsky_atlas.atlas.config import (
 )
 from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.association import (
+    SCORING_DISTANCE_ERROR_MM,
     SourceGeometry,
     source_contains_point,
     source_edge_distance,
     source_facing_point,
     source_geometries_overlap,
+    source_scoring_distance,
 )
 from nightsky_atlas.layout.candidates import direction_preference_rank
 from nightsky_atlas.layout.geometry import (
@@ -566,6 +568,12 @@ def _source_association_costs(
     strongest_competitor = 0.0
     foreign_object_proximity = 0.0
     ambiguity_limit = max(0.0, owner_gap) + config.ambiguity_margin_mm
+    influence_limit = max(
+        ambiguity_limit,
+        owner_gap,
+        config.foreign_object_clear_mm,
+        owner_gap + dso_placement.ownership_margin_preferred_mm if dso_placement else 0.0,
+    )
     nearest_foreign_source_gap: float | None = None
     nearest_foreign_source_id: str | None = None
 
@@ -603,7 +611,16 @@ def _source_association_costs(
             symbol.collision_radius_mm + config.corridor_margin_mm
         ):
             corridor += 1.0
-        gap = source_edge_distance(symbol, bounds)
+        gap = source_scoring_distance(symbol, bounds)
+        if gap <= influence_limit + SCORING_DISTANCE_ERROR_MM:
+            gap = source_edge_distance(symbol, bounds)
+        if (
+            nearest_foreign_source_gap is not None
+            and abs(gap - nearest_foreign_source_gap) <= 2 * SCORING_DISTANCE_ERROR_MM
+        ):
+            nearest = next(source for source in symbols if source.id == nearest_foreign_source_id)
+            nearest_foreign_source_gap = source_edge_distance(nearest, bounds)
+            gap = source_edge_distance(symbol, bounds)
         if (
             nearest_foreign_source_gap is None
             or gap < nearest_foreign_source_gap

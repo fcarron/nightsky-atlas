@@ -3,18 +3,129 @@
 from __future__ import annotations
 
 import math
+import pickle
+from dataclasses import replace
 
 import pytest
 
 from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.page import PagePoint, PageRect
 from nightsky_atlas.layout.association import (
+    SCORING_DISTANCE_ERROR_MM,
     SourceGeometry,
+    _scoring_geometry,
+    _segment_rect_distance,
+    nearest_source_geometry,
     source_edge_distance,
     source_intersects_rect,
     source_outline_edge_distance,
+    source_scoring_distance,
 )
 from nightsky_atlas.render.symbols import DsoShape
+
+
+def test_contour_hash_collisions_keep_distance_cache_entries_distinct() -> None:
+    first = SourceGeometry(
+        "same-source", DsoType.BRIGHT_NEBULA, PagePoint(5, 2), 5, 2,
+        outline_paths=((PagePoint(0, 0), PagePoint(10, 0)),),
+    )
+    second = replace(first, outline_paths=((PagePoint(0, 4), PagePoint(10, 4)),))
+    assert hash(first) == hash(second)
+    assert first != second
+    rect = PageRect(1, 0, 1, 0.1)
+    for distance in (source_edge_distance, source_scoring_distance, source_outline_edge_distance):
+        for _ in range(2):
+            assert distance(first, rect) == 0.0
+            assert distance(second, rect) == pytest.approx(3.9)
+    assert len({first, second}) == 2
+    restored = pickle.loads(pickle.dumps(first))
+    assert restored == first
+    assert hash(restored) == hash(first)
+    assert source_edge_distance(restored, rect) == 0.0
+
+
+@pytest.mark.parametrize("scale", [0.25, 1.0, 4.0])
+def test_working_contours_preserve_paths_and_bound_paper_distance_error(scale: float) -> None:
+    paths = tuple(
+        tuple(
+            PagePoint(
+                offset + scale * (4 + 0.3 * math.sin(index * 0.06)) * math.cos(index * 0.01),
+                scale * 2 * math.sin(index * 0.01),
+            )
+            for index in range(629)
+        )
+        for offset in (0.0, 25.0)
+    )
+    source = SourceGeometry(
+        "contours", DsoType.BRIGHT_NEBULA, PagePoint(0.0, 0.0), 0.1, 0.1,
+        outline_paths=paths,
+    )
+    working = _scoring_geometry(source)
+    assert len(working.outline_paths) == len(paths)
+    assert sum(map(len, working.outline_paths)) < sum(map(len, paths)) / 4
+    assert source.outline_paths == paths
+    for original, simplified in zip(paths, working.outline_paths, strict=True):
+        assert (simplified[0], simplified[-1]) == (original[0], original[-1])
+    for x in range(-20, 46, 3):
+        for y in range(-10, 11, 2):
+            rect = PageRect(x + 0.11, y + 0.23, 0.8, 0.6)
+            exact = source_edge_distance(source, rect)
+            approximate = source_scoring_distance(source, rect)
+            assert abs(approximate - exact) <= SCORING_DISTANCE_ERROR_MM + 1e-9
+            assert (approximate == 0.0) == (exact == 0.0)
+            if exact <= 3 * SCORING_DISTANCE_ERROR_MM:
+                assert approximate == exact
+
+
+@pytest.mark.parametrize("radii", [(1.0, 0.05), (4.0, 2.0), (40.0, 1.0), (100.0, 60.0)])
+@pytest.mark.parametrize("angle", [0.0, 0.35, 1.1])
+def test_ellipse_working_polygon_bounds_distance_error_and_preserves_intersections(
+    radii: tuple[float, float], angle: float,
+) -> None:
+    source = SourceGeometry(
+        "ellipse", DsoType.GALAXY, PagePoint(0.0, 0.0), *radii, angle,
+    )
+    working = _scoring_geometry(source)
+    assert working.outline_paths[0][0] == working.outline_paths[0][-1]
+    assert not source.outline_paths
+    for index in range(64):
+        direction = 2 * math.pi * index / 64
+        x, y = radii[0] * math.cos(direction), radii[1] * math.sin(direction)
+        rect = PageRect(
+            x * math.cos(angle) - y * math.sin(angle) + 0.17,
+            x * math.sin(angle) + y * math.cos(angle) + 0.21,
+            0.3, 0.2,
+        )
+        exact = source_edge_distance(source, rect)
+        approximate = source_scoring_distance(source, rect)
+        assert abs(approximate - exact) <= SCORING_DISTANCE_ERROR_MM + 1e-6
+        assert (approximate == 0.0) == (exact == 0.0)
+    assert source_scoring_distance(source, PageRect(-0.1, -0.1, 0.2, 0.2)) == 0.0
+
+
+def test_contour_crossing_and_clipped_open_ends_use_original_geometry() -> None:
+    path = (PagePoint(0.0, 0.0), PagePoint(5.0, 0.04), PagePoint(10.0, 0.0))
+    source = SourceGeometry(
+        "open", DsoType.BRIGHT_NEBULA, PagePoint(0.0, 0.0), 1.0, 1.0,
+        outline_paths=(path,),
+    )
+    working = _scoring_geometry(source)
+    assert working.outline_paths == ((path[0], path[-1]),)
+    crossing = PageRect(4.99, 0.035, 0.02, 0.01)
+    assert source_scoring_distance(source, crossing) == 0.0
+    near = PageRect(4.99, 0.045, 0.02, 0.01)
+    assert source_scoring_distance(source, near) == source_edge_distance(source, near)
+    assert source_outline_edge_distance(source, near) == source_edge_distance(source, near)
+
+
+@pytest.mark.parametrize("shape", [DsoShape.CIRCLE, DsoShape.DASHED_CIRCLE, DsoShape.SQUARE])
+def test_simple_symbol_scoring_is_unchanged_for_equal_but_distinct_sources(shape: DsoShape) -> None:
+    source = SourceGeometry(
+        "simple", DsoType.OPEN_CLUSTER, PagePoint(0.0, 0.0), 2.0, 2.0, shape=shape,
+    )
+    rect = PageRect(5.0, 3.0, 1.0, 1.0)
+    assert source_scoring_distance(source, rect) == source_edge_distance(source, rect)
+    assert source_scoring_distance(replace(source), rect) == source_edge_distance(source, rect)
 
 
 def test_ellipse_clearance_uses_actual_rendered_boundary() -> None:
@@ -71,6 +182,103 @@ def test_text_inside_square_footprint_clears_its_rendered_outline() -> None:
 
     assert source_edge_distance(source, label) == 0.0
     assert source_outline_edge_distance(source, label) > 0.0
+
+
+@pytest.mark.parametrize("radius", [1.0, 5.0, 50.0])
+@pytest.mark.parametrize(
+    ("rect", "outline_gap"),
+    [
+        ((1.5, -0.25, 0.5, 0.5), 0.5),
+        ((-0.25, -0.25, 0.5, 0.5), 1.0 - math.sqrt(0.125)),
+        ((0.75, -0.1, 0.5, 0.2), 0.0),
+        ((1.0, 0.0, 0.5, 0.5), 0.0),
+        ((-2.0, -2.0, 4.0, 4.0), 0.0),
+        ((1.2, 1.6, 0.0, 0.0), 1.0),
+    ],
+)
+def test_circle_outline_clearance_inside_outside_and_tangent(
+    radius: float, rect: tuple[float, float, float, float], outline_gap: float
+) -> None:
+    source = SourceGeometry(
+        id="cluster",
+        source_type=DsoType.OPEN_CLUSTER,
+        center=PagePoint(100.0, 100.0),
+        radius_x_mm=radius,
+        radius_y_mm=radius,
+        rotation_rad=0.7,
+    )
+    x, y, width, height = rect
+    bounds = PageRect(100.0 + x * radius, 100.0 + y * radius, width * radius, height * radius)
+    assert source_outline_edge_distance(source, bounds) == pytest.approx(
+        outline_gap * radius, abs=1e-12
+    )
+
+
+def test_nearest_source_pruning_matches_exhaustive_geometry() -> None:
+    sources = (
+        SourceGeometry("circle", DsoType.OPEN_CLUSTER, PagePoint(3.0, 4.0), 2.0, 2.0),
+        SourceGeometry("ellipse", DsoType.GALAXY, PagePoint(12.0, 7.0), 5.0, 0.5, 0.7),
+        SourceGeometry(
+            "square", DsoType.BRIGHT_NEBULA, PagePoint(-5.0, 3.0), 3.0, 1.0,
+            shape=DsoShape.SQUARE,
+        ),
+        SourceGeometry(
+            "contour", DsoType.BRIGHT_NEBULA, PagePoint(0.0, 0.0), 0.1, 0.1,
+            outline_paths=((PagePoint(20.0, -5.0), PagePoint(20.0, 15.0)),),
+        ),
+    )
+    for x in range(-10, 25, 3):
+        for y in range(-10, 20, 3):
+            rect = PageRect(x + 0.13, y + 0.21, 0.7, 0.4)
+            expected = min(
+                sources, key=lambda source: (source_edge_distance(source, rect), source.id)
+            )
+            assert nearest_source_geometry(sources, rect) is expected, (x, y)
+    assert nearest_source_geometry(sources, PageRect(20.1, 0.0, 0.2, 0.2)).id == "contour"
+
+
+def test_nearest_source_preserves_stable_ties_and_empty_inputs() -> None:
+    first = SourceGeometry("A", DsoType.GALAXY, PagePoint(0.0, 0.0), 1.0, 1.0)
+    second = SourceGeometry("Z", DsoType.GALAXY, PagePoint(0.0, 0.0), 1.0, 1.0)
+    rect = PageRect(3.0, 0.0, 1.0, 1.0)
+    assert nearest_source_geometry((second, first), rect) is first
+    assert nearest_source_geometry((), rect) is None
+
+
+def test_contour_segment_pruning_matches_exhaustive_distance() -> None:
+    paths = tuple(
+        tuple(
+            PagePoint(
+                offset + (4.0 + math.sin(index * 0.7)) * math.cos(index * math.pi / 32),
+                2.0 * math.sin(index * math.pi / 32),
+            )
+            for index in range(65)
+        )
+        for offset in (0.0, 20.0)
+    )
+    source = SourceGeometry(
+        "nebulosity", DsoType.BRIGHT_NEBULA, PagePoint(0.0, 0.0), 0.1, 0.1,
+        outline_paths=paths,
+    )
+    for x in range(-8, 29, 3):
+        for y in range(-5, 6, 2):
+            rect = PageRect(x + 0.11, y + 0.23, 0.8, 0.6)
+            expected = min(
+                _segment_rect_distance(start, end, rect)
+                for path in paths
+                for start, end in zip(path, path[1:], strict=False)
+            )
+            assert source_edge_distance(source, rect) == expected
+            assert source_outline_edge_distance(source, rect) == expected
+
+
+def test_empty_contour_distance_remains_an_error() -> None:
+    source = SourceGeometry(
+        "invalid", DsoType.BRIGHT_NEBULA, PagePoint(0.0, 0.0), 1.0, 1.0,
+        outline_paths=((PagePoint(0.0, 0.0),),),
+    )
+    with pytest.raises(ValueError):
+        source_edge_distance(source, PageRect(1.0, 1.0, 1.0, 1.0))
 
 
 @pytest.mark.parametrize(
