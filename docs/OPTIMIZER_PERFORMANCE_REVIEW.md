@@ -166,3 +166,102 @@ the contour acceleration; Coma remains an expensive unresolved layout.
 
 This is a representative-field performance study, not a complete three-edition
 rebuild or a claim of a universally bounded per-page runtime.
+
+## Bounded working geometry (follow-up)
+
+The follow-up introduces approximation in the soft source-distance
+terms of candidate scoring (`source_scoring_distance`). Rendering, candidate
+generation, source ownership validity, hard collision tests and the final
+geometric diagnostics retain their original geometry and distance routines.
+
+- Irregular outlines use cached deterministic Ramer–Douglas–Peucker working
+  paths with a maximum deviation of 0.05 mm in page coordinates. Each separate
+  path keeps its endpoints; open clipped paths are not closed or joined.
+  D473's 10,978 original contour segments become 608 working segments.
+- Non-circular ellipses use a cached inscribed polygon. Its segment count is
+  at least 16 and grows with the square root of the major radius, bounding
+  interpolation error to 0.05 mm. Circles and square symbols retain the direct
+  distance formulas.
+- Approximate contour distances at or below 0.2 mm fall back to the original
+  calculation. Potential ties between competing DSO distances within 0.1 mm
+  are refined. The own-object gap stays exact. Every foreign-object distance
+  within the influence range of ambiguity, proximity or ownership penalties
+  is recomputed exactly, with the approximation-error margin added to the
+  range. Approximations therefore reject distant, irrelevant neighbours rather
+  than changing an active penalty. Final checks do not use approximate
+  collision geometry.
+
+The tolerance is a numerical working precision in physical millimetres, not an
+astronomical source modification or a new style option. A first trial allowed
+approximate active costs; it retained the initial D473 layout but increased
+D128's final hard issues from 113 to 118 and changed other placements. That
+trial was rejected and its superseded Deep build interrupted. The retained
+version refines all active distances. Deterministic output, label retention
+and exact validation remain required; pixel equality is measured rather than
+assumed. Segment caches now retain up to 1,024 sets to accommodate original and
+working paths together; the working-geometry cache is limited to 512 sources.
+
+### Retained version: measured results
+
+Baseline for this follow-up is commit `0b2407a`, the committed exact-geometry
+acceleration above. Two fresh-process D473 repeats start from the identical
+serialized scene and candidates:
+
+| Initial optimizer | Wall time | Process CPU time |
+| --- | ---: | ---: |
+| Exact accelerated baseline | 53.08 s | 52.98 s |
+| Working geometry, repeat 1 | 46.66 s | 46.64 s |
+| Working geometry, repeat 2 | 48.18 s | 48.18 s |
+
+Both repeats retain all 249 labels, the same placements, cost components,
+total cost and 25 initial hard-issue IDs. The repeats reproduce each other's
+labels and cost exactly. The retained version improves this CPU control by
+about 10–12%, rather than the larger gain of the rejected active-cost trial.
+
+Complete chart work includes detail-fallback reoptimization and rendering:
+
+| Chart | Exact accelerated baseline | Working geometry |
+| --- | ---: | ---: |
+| D128, Coma | 165.83 s | 144.43 s |
+| D157, Leo | 91.13 s | 83.09 s |
+| D473, LMC | 223.50 s | 193.45 s |
+| D474, LMC | 192.82 s | 167.50 s |
+| D475, sparse control | 2.34 s | 2.38 s |
+
+Both Deep proofs use two main-chart workers and the same five main/eight detail
+charts; the complete proof changes from 456.50 to about 404 s. Serial controls
+including associated details change from 50.47 to 42.33 s for Pocket P20 and
+78.13 to about 71 s for Standard S051. These ordinary timings can vary with
+machine load; the CPU control above independently supports the improvement.
+
+Across all 19 main/detail pages, preview PNG bytes, layout hashes, selected
+star/DSO counts, placed/hidden counts, total layout costs, permitted detail-label
+transfers and individual hard-issue IDs match. The Deep subset retains its
+154 pre-existing hard issues, and Pocket/Standard controls remain clean.
+No new issue is accepted. Deep's build exit status is 1 for the recorded layout
+issues; ordinary artifact validation passes for all three editions. These are
+representative proofs, not complete three-edition rebuilds or publication runs.
+
+`make check` passes: **1,546 tests in 370.15 s**, with lint passing. The focused
+layout suite passes 341 tests. New offline cases cover page-scale contour
+error bounds, separate/open paths, original-geometry collision refinement,
+rotated/eccentric ellipses, unchanged simple symbols, ambiguous neighbour
+refinement and equality of active scoring components to exact calculations.
+
+Artifacts under `build/perf-label-optimizer/`:
+
+- `approx-final/<edition>/<edition>/atlas.pdf`: final proof PDFs.
+- `approx-comparison.pdf`: alternating exact/working-geometry main-chart pages
+  for P20, S051, D128, D157 and D473–D475.
+- `approx-final-comparison.json`: all 19 per-page comparisons and determinism.
+- `approx-final-timings.json`: complete Deep chart work and stage times.
+- `exact-repeat.json`, `final1-repeat.json`, `final2-repeat.json`: isolated
+  timing/validation controls, with adjacent serialized layouts.
+- `approx-final-make-check.log`: complete check output.
+
+Changed files for this follow-up are `layout/association.py` (working geometry),
+`layout/scoring.py` (adaptive refinement), `tests/layout/test_association.py`,
+`tests/layout/test_scoring.py`, this report and `docs/PERFORMANCE.md`. No new
+dependency, configuration schema or renderer change is introduced. Repeated
+whole-chart optimizer calls after detail transfers remain the next substantial
+opportunity; this change does not remove those calls.

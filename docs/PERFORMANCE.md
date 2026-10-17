@@ -7,6 +7,9 @@ profiles the slow Deep LMC fields. Repeated exact contour distances dominate;
 conservative geometry pruning speeds the tested optimizer call by about 3.2×
 under cProfile while preserving its placements. The review records the ordinary
 build controls, unchanged search budgets, validation and remaining work.
+The follow-up uses bounded 0.05-mm working contours and ellipse polygons to
+screen distant neighbours; distances affecting penalties and final collision
+checks retain the original precision.
 
 ## Atlas page parallelism
 

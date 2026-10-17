@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from nightsky_atlas.atlas.config import StyleConfig
@@ -23,12 +23,15 @@ __all__ = [
     "nearest_source_geometry",
     "source_contains_point",
     "source_edge_distance",
+    "source_scoring_distance",
     "source_outline_edge_distance",
     "source_extent_edge_distance",
     "source_facing_point",
     "source_geometries_overlap",
     "source_intersects_rect",
 ]
+
+SCORING_DISTANCE_ERROR_MM = 0.05
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +108,64 @@ def source_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
 
 
 @lru_cache(maxsize=32768)
+def source_scoring_distance(source: SourceGeometry, rect: PageRect) -> float:
+    """Bound soft distance error to 0.05 mm; refine near possible collisions."""
+    working = _scoring_geometry(source)
+    if not working.outline_paths:
+        return source_edge_distance(source, rect)
+    if not source.outline_paths and source_intersects_rect(source, rect):
+        return 0.0
+    gap = _outline_rect_distance(working, rect)
+    if gap <= 4.0 * SCORING_DISTANCE_ERROR_MM:
+        return source_edge_distance(source, rect)
+    return gap
+
+
+@lru_cache(maxsize=512)
+def _scoring_geometry(source: SourceGeometry) -> SourceGeometry:
+    """Prepare page-scale working paths without changing rendered geometry."""
+    if source.outline_paths:
+        paths = tuple(_simplify_path(path) for path in source.outline_paths)
+    elif (
+        source.shape not in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}
+        and source.radius_x_mm != source.radius_y_mm
+    ):
+        radius = max(source.radius_x_mm, source.radius_y_mm)
+        count = max(16, math.ceil(math.pi * math.sqrt(radius / (2 * SCORING_DISTANCE_ERROR_MM))))
+        boundary = _ellipse_boundary(source, count)
+        paths = (boundary + boundary[:1],)
+    else:
+        return source
+    return replace(source, outline_paths=paths)
+
+
+def _simplify_path(path: tuple[PagePoint, ...]) -> tuple[PagePoint, ...]:
+    """Keep endpoints and bound polyline deviation with deterministic RDP."""
+    if len(path) <= 2:
+        return path
+    kept = {0, len(path) - 1}
+    pending = [(0, len(path) - 1)]
+    threshold_sq = SCORING_DISTANCE_ERROR_MM**2
+    while pending:
+        first, last = pending.pop()
+        start, end = path[first], path[last]
+        dx, dy = end.x_mm - start.x_mm, end.y_mm - start.y_mm
+        length_sq = dx * dx + dy * dy
+        farthest, max_distance_sq = first, threshold_sq
+        for index in range(first + 1, last):
+            point = path[index]
+            px, py = point.x_mm - start.x_mm, point.y_mm - start.y_mm
+            along = max(0.0, min(1.0, (px * dx + py * dy) / length_sq)) if length_sq else 0.0
+            distance_sq = (px - along * dx)**2 + (py - along * dy)**2
+            if distance_sq > max_distance_sq:
+                farthest, max_distance_sq = index, distance_sq
+        if farthest != first:
+            kept.add(farthest)
+            pending.extend(((farthest, last), (first, farthest)))
+    return tuple(path[index] for index in sorted(kept))
+
+
+@lru_cache(maxsize=32768)
 def source_outline_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
     """Measure clearance to the drawn outline, ignoring footprint containment."""
     if source.outline_paths:
@@ -116,7 +177,7 @@ def source_outline_edge_distance(source: SourceGeometry, rect: PageRect) -> floa
     return _ellipse_rect_outline_distance(source, rect)
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=1024)
 def _outline_segments(
     source: SourceGeometry,
 ) -> tuple[tuple[PagePoint, PagePoint, float, float, float, float], ...]:
