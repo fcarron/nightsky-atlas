@@ -18,6 +18,7 @@ from typing import Literal
 
 import cairo
 
+from nightsky_atlas import __version__
 from nightsky_atlas.atlas.config import StyleConfig
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PageRect, PageTransform
@@ -59,6 +60,7 @@ _LEGEND_CENTER_FROM_BOTTOM_MM = 5.0
 _LEGEND_BOTTOM_SAFE_MM = 2.0
 _SCALE_LABEL_GAP_MM = 0.6
 _SIDE_NAVIGATION_ANGLE_RAD = math.pi / 2.0
+_VERSION_FONT_SIZE_PT = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +123,7 @@ class FurniturePlan:
     brand: PlacedText | None
     page_heading: PlacedText | None
     page_footer: PlacedText | None
+    version: PlacedText
     navigation: tuple[PlacedText, ...]
     scale_bar: ScaleBar | None
     legend: MagnitudeLegend | None
@@ -344,6 +347,16 @@ def build_furniture_plan(
     brand: PlacedText | None = None
     page_heading: PlacedText | None = None
     page_footer: PlacedText | None = None
+    version_size = _VERSION_FONT_SIZE_PT
+    version_metrics = TextMeasurer(family, version_size).measure_mm(f"v{__version__}")
+    version = PlacedText(
+        f"v{__version__}",
+        page.margin_mm,
+        page.height_mm - _FOOTER_TITLE_CENTER_FROM_BOTTOM_MM - version_metrics.height_mm / 2.0,
+        "left",
+        version_size,
+    )
+    obstacles.append(_obstacle_for_text(version, family))
     if presentation.page_heading is not None or presentation.page_footer is not None:
         heading_size = style.furniture.title_font_size_pt
         if presentation.page_heading:
@@ -465,6 +478,7 @@ def build_furniture_plan(
         brand=brand,
         page_heading=page_heading,
         page_footer=page_footer,
+        version=version,
         navigation=navigation,
         scale_bar=scale_bar,
         legend=legend,
@@ -616,6 +630,8 @@ def draw_furniture(
                 _draw_placed_text(cr, plan.page_footer, family, style.furniture.footer_brand_gray)
         else:
             _draw_placed_text(cr, plan.page_footer, family, style.furniture.footer_brand_gray)
+
+    _draw_placed_text(cr, plan.version, family, style.furniture.footer_brand_gray)
 
     nav_gray = style.furniture.navigation.gray
     for nav_text in plan.navigation:

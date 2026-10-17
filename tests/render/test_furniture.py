@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,9 @@ def test_title_uses_short_code_and_footer_position() -> None:
         STYLE.label.font_family, plan.title.font_size_pt
     ).measure_markup_mm(plan.title.markup).height_mm
     assert plan.title.y_mm + title_height <= PAGE.height_mm - 2.0
+    assert plan.version.text == f"v{version('nightsky-atlas')}"
+    assert plan.version.font_size_pt < STYLE.furniture.footer_brand_font_size_pt
+    assert plan.version.x_mm == PAGE.margin_mm
 
 
 def test_detail_heading_and_metadata_footer_fit_outside_map_frame() -> None:
@@ -72,6 +76,7 @@ def test_detail_heading_and_metadata_footer_fit_outside_map_frame() -> None:
     assert plan.page_heading is not None
     assert plan.page_footer is not None
     assert plan.page_footer.target_chart_code == "S050"
+    assert plan.version.text == f"v{version('nightsky-atlas')}"
     heading_metrics = TextMeasurer(STYLE.label.font_family, plan.page_heading.font_size_pt)
     footer_metrics = TextMeasurer(STYLE.label.font_family, plan.page_footer.font_size_pt)
     heading_height = heading_metrics.measure_mm(plan.page_heading.text).height_mm
@@ -110,6 +115,7 @@ def test_editions_share_the_standard_chart_footer(edition, chart_id, expected) -
     assert plan.title.text == expected
     assert plan.brand is None
     assert plan.title.font_size_pt == pytest.approx(STYLE.furniture.title_font_size_pt)
+    assert plan.version.text == f"v{version('nightsky-atlas')}"
     assert plan.scale_bar is None
 
 

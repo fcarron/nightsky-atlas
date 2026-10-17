@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.0a1"
+from importlib.metadata import version
+
+__version__ = version("nightsky-atlas")
 
 __all__ = ["__version__"]
