@@ -67,9 +67,37 @@ from nightsky_atlas.layout.text_geometry import (
 from nightsky_atlas.render.constellation_lines import resolve_constellation_lines
 from nightsky_atlas.scene.models import ChartScene
 
-__all__ = ["OptimizationResult", "layout_cost", "layout_hash", "optimize_labels"]
+__all__ = [
+    "OptimizationCache", "OptimizationResult", "layout_cost", "layout_hash", "optimize_labels",
+]
 
 _MAX_REPAIR_PASSES = 4
+
+
+class OptimizationCache:
+    """One chart's bounded immutable candidate work across complete retries."""
+
+    def __init__(self, *, max_candidate_entries: int = 65536) -> None:
+        if max_candidate_entries < 1:
+            raise ValueError("max_candidate_entries must be positive")
+        self.max_candidate_entries = max_candidate_entries
+        self._scene: ChartScene | None = None
+        self._context: tuple[object, ...] = ()
+        self._scores: _CandidateScoreCache | None = None
+
+    def _bind(
+        self, scene: ChartScene, transform: PageTransform, style: StyleConfig,
+        weights: CostWeights, furniture: tuple[PageRect, ...],
+    ) -> _CandidateScoreCache | None:
+        context = (
+            transform, style.model_dump_json(), weights, furniture, self.max_candidate_entries,
+        )
+        if self._scene is not scene or self._context != context:
+            self._scene, self._context, self._scores = scene, context, None
+        return self._scores
+
+    def statistics(self) -> dict[str, dict[str, int]]:
+        return self._scores.statistics() if self._scores is not None else {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +124,7 @@ def optimize_labels(
     weights: CostWeights | None = None,
     furniture: Iterable[PageRect] = (),
     detailed_diagnostics: bool = False,
+    cache: OptimizationCache | None = None,
 ) -> OptimizationResult:
     """Optimize label placement deterministically.
 
@@ -108,15 +137,29 @@ def optimize_labels(
     furniture_rects = tuple(furniture)
     printable = _printable(transform)
     symbols = _symbol_circles(scene, transform, style)
-    sources = dso_source_geometries(scene, transform, style)
-    stars = _star_circles(scene, transform, style)
-    constellation_lines = tuple(
-        (stroke.start, stroke.end)
-        for stroke in resolve_constellation_lines(scene, transform, style)
-    )
-    symbols_index = _build_symbol_index(symbols)
-    stars_index = _build_star_index(stars)
-    anchors = _target_anchors(scene, transform, style)
+    cost_cache = cache._bind(scene, transform, style, weights, furniture_rects) if cache else None
+    if cost_cache is None:
+        sources = dso_source_geometries(scene, transform, style)
+        stars = _star_circles(scene, transform, style)
+        constellation_lines = tuple(
+            (stroke.start, stroke.end)
+            for stroke in resolve_constellation_lines(scene, transform, style)
+        )
+        symbols_index = _build_symbol_index(symbols)
+        stars_index = _build_star_index(stars)
+        anchors = _target_anchors(scene, transform, style)
+        cost_cache = _CandidateScoreCache(
+            anchors, printable, symbols_index, sources, stars_index, stars,
+            style, weights, constellation_lines, furniture_rects,
+            max_entries=cache.max_candidate_entries if cache else 65536,
+        )
+        if cache is not None:
+            cache._scores = cost_cache
+    else:
+        anchors, symbols_index = cost_cache.anchors, cost_cache.symbols_index
+        sources, stars, stars_index = cost_cache.sources, cost_cache.stars, cost_cache.stars_index
+        constellation_lines = cost_cache.constellation_lines
+    cost_cache.prepare_labels(labels)
     ordered = tuple(sorted(labels, key=lambda label: (-label.priority, label.id)))
 
     # Initial layout: the placement that would be printed without optimization
@@ -138,19 +181,6 @@ def optimize_labels(
         weights,
         constellation_lines,
     )
-    cost_cache = _CandidateScoreCache(
-        anchors,
-        printable,
-        symbols_index,
-        sources,
-        stars_index,
-        stars,
-        style,
-        weights,
-        constellation_lines,
-        furniture_rects,
-    )
-
     placements, placed_index = _greedy_place(ordered, cost_cache)
 
     local_repair_stats: dict[str, Any] = {}
@@ -332,21 +362,8 @@ def _greedy_place(
                     candidate.bounds, margin_mm=_CROWDING_RADIUS_MM, exclude=label.id
                 )
             )
-            nearby_symbols = tuple(cost_cache.symbols_index.query(candidate.bounds))
-            nearby_stars = _nearby_stars(
-                label, candidate.bounds, cost_cache.stars_index, cost_cache.stars, cost_cache.style
-            )
-            valid = _is_valid(
-                label,
-                candidate,
-                nearby_bounds,
-                cost_cache.printable,
-                nearby_symbols,
-                nearby_stars,
-                cost_cache.style,
-                cost_cache.furniture,
-                cost_cache.sources,
-            )
+            nearby_symbols, nearby_stars = cost_cache.geometry(label, candidate)
+            valid = cost_cache.valid(label, candidate, nearby_bounds)
             if not valid and best is not None and best[0][0] == 0.0:
                 continue
             cost = cost_cache.cost(

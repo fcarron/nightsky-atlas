@@ -10,6 +10,10 @@ build controls, unchanged search budgets, validation and remaining work.
 The follow-up uses bounded 0.05-mm working contours and ellipse polygons to
 screen distant neighbours; distances affecting penalties and final collision
 checks retain the original precision.
+The next stage shares bounded immutable candidate work between detail-transfer
+retries. On the measured D473 page, complete chart time changes from about
+200 to 102 seconds; all 18 tested main/detail previews and layout costs match.
+See the review for CPU controls, cache hit rates and the additional memory cost.
 
 ## Atlas page parallelism
 

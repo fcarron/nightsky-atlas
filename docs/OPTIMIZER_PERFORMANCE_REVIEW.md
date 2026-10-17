@@ -265,3 +265,171 @@ Changed files for this follow-up are `layout/association.py` (working geometry),
 dependency, configuration schema or renderer change is introduced. Repeated
 whole-chart optimizer calls after detail transfers remain the next substantial
 opportunity; this change does not remove those calls.
+
+## Reusing immutable work between complete optimizer retries
+
+The working-geometry stage was committed first as **`bb27d41`**. This section
+compares the next stage with that checkpoint, using the same catalogue inputs,
+configuration, chart subsets and worker counts. The new changes remain
+uncommitted for review. No partial/incremental optimization is implemented.
+
+### Findings and implementation
+
+D473 still needs five optimizer calls. Previously each rebuilt roughly
+20,000–23,000 static scores. D474 needs three calls, D128 four and D157 three.
+The second D473 call alone spent 37.21 CPU seconds rebuilding/reusing a fresh
+per-call cache, despite unchanged scene geometry.
+
+`OptimizationCache` now belongs to one `_build_main_chart` invocation and is
+passed to the initial optimization and both grouped/sequential fallback paths.
+It retains the existing `_CandidateScoreCache` and immutable chart geometry,
+source/star spatial indices and anchors. The greedy pass now uses that cache's
+geometry and validity methods too; candidate ordering and tie-breaking remain
+unchanged.
+
+Safe retained data:
+
+- Candidate neighbourhood geometry: nearby printed stars and DSO symbols.
+- Static cost components, excluding label overlap and crowding.
+- Candidate validity against printable bounds, furniture, stars, DSO geometry
+  and source ownership, calculated without other label placements.
+
+Current label overlap and crowding are recomputed on every lookup. Placed-label
+indices, conflict components, searches, repairs and leader routing/decisions are
+rebuilt on every optimizer call. Search budgets, priorities, transfer eligibility
+and hard-collision rules are unchanged.
+
+Reuse requires the same immutable scene instance, transform, complete serialized
+style, weights and furniture. A context change discards the cache. Before each
+retry, full label/candidate definitions are compared, including target, text,
+fonts, glyph geometry, locked state and leader state/reason. Only the selected
+candidate and hidden flag are excluded from this immutable signature: their
+effects enter the freshly built placement state. Removed or changed labels lose
+their entries; restored labels are recalculated as necessary. This also handles
+rollback from grouped to sequential transfers.
+
+Each of the three entry dictionaries is capped at **65,536** entries with
+deterministic FIFO eviction; label-version bookkeeping is bounded too. No
+evictions occurred in these controls. Separate main-chart workers create their
+own cache; there is no new global or cross-process mutable cache. The cache is
+released when that chart finishes. No runtime dependency or style/CLI option is
+added.
+
+### Complete chart measurements
+
+Timings below measure `_build_main_chart`, including context/candidate creation,
+all optimizer calls, validation and rendering. Instrumentation serializes the
+D473 replay after this timer, so CLI work logs can be about 0.5 seconds higher.
+
+| Main chart | Wall before | Wall after | CPU before | CPU after |
+| --- | ---: | ---: | ---: | ---: |
+| D473 | 200.33 s | 101.73 s | 200.29 s | 101.72 s |
+| D474 | 175.93 s | 106.51 s | 175.89 s | 106.46 s |
+| D128 | 144.50 s | 98.44 s | 144.49 s | 98.42 s |
+| D157 | 81.94 s | 58.00 s | 81.92 s | 58.00 s |
+| P20 | 31.96 s | 23.45 s | 31.96 s | 23.45 s |
+| S051 | 48.19 s | 29.24 s | 48.19 s | 29.25 s |
+
+End-to-end proofs include their associated detail charts and document pages:
+
+| Proof | Workers | Wall before / after | Parent CPU before / after | Worker/child CPU before / after |
+| --- | ---: | ---: | ---: | ---: |
+| Deep: 4 main + 8 detail | 2 | 409.31 / 297.33 s | 89.40 / 92.17 s | 616.12 / 376.96 s |
+| Pocket: P20 + 1 detail | 1 | 45.24 / 35.42 s | 45.26 / 35.44 s | 0 / 0 s |
+| Standard: S051 + 3 details | 1 | 75.31 / 53.63 s | 75.33 / 53.65 s | 0 / 0 s |
+
+Child CPU is summed `RUSAGE_CHILDREN` CPU after worker shutdown, not elapsed
+time; it includes small rendering/helper subprocess costs. One-worker builds
+run in the parent. These are representative subsets, not full atlas builds.
+Ordinary wall timings can fluctuate with other machine activity.
+
+### Repeated calls and cache effectiveness
+
+Per-call D473 process CPU from the complete Deep proofs:
+
+| Call | CPU before | CPU after | Static-score misses before | Static-score misses after |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 48.59 s | 47.69 s | 22,899 | 22,899 |
+| 2 | 37.21 s | 13.05 s | 20,910 | 1,885 |
+| 3 | 31.43 s | 8.05 s | 20,156 | 244 |
+| 4 | 32.37 s | 7.70 s | 19,955 | 161 |
+| 5 | 32.56 s | 7.25 s | 19,716 | 1 |
+
+The first call is not universally faster: D128's first CPU time increases from
+59.08 to 63.22 seconds, and D157's from 33.14 to 34.58 seconds. The later calls
+recover substantially more than that overhead. No optimizer call is omitted.
+
+A separate fresh-process replay of the five identical serialized D473 inputs
+reduces accumulated optimizer CPU from **184.95 to 78.70 seconds (2.35×)**.
+Every call reproduces the checkpoint's recorded label/candidate values, hidden
+counts, costs and component totals exactly. Across those calls:
+
+- Static-score misses: 103,636 → 25,190; cumulative hit rate 81.8% → **95.6%**.
+- Cached geometry hit rate: **82.1%**; static-validity hit rate: **95.9%**.
+- Exact source-edge cache misses: 1,055,269 → 250,541.
+- Working source-distance cache misses: 886,168 → 232,917.
+- Hard outline-distance lookups are unchanged: 33,819 hits and 22,961 misses.
+
+The source-distance figures are underlying LRU lookup/miss counts, not new
+search budgets. Validity/geometry rates are for the retained implementation;
+the old greedy pass bypassed those caches, so its method-level rates are not
+directly comparable.
+
+### Memory
+
+The controlled replay peak process RSS rises from **235.1 to 300.4 MiB**,
+approximately **65.3 MiB** extra. At its last call the retained cache structures
+occupy an estimated **30.8 MiB**, counting containers, cost values, rectangle
+values and label-version objects while excluding referenced scene/candidate
+graphs. This estimate is calculated after the final timed/RSS measurement.
+The RSS delta also includes Python allocation/retention effects and is the more
+conservative practical overhead measurement.
+
+Whole-build worker high-water RSS was about 805 versus 775 MiB, dominated by
+shared prepared detail data and allocator behaviour. That lower high-water
+value is not evidence that the cache consumes no additional memory. Budget
+additional memory per active chart; the cache's lifetime and entry caps prevent
+unbounded accumulation across the atlas.
+
+### Validation, artifacts and remaining work
+
+All **18** main/detail pages match in selected/placed/hidden counts, layout
+hashes, exact before/after costs, individual hard-issue IDs, optimization-run
+counts, detail-label transfers and preview PNG bytes/SHA-256 values. The Deep
+subset retains 154 existing hard issues; Pocket/Standard remain clean. Ordinary
+artifact validation passes for all three editions. Deep build exit status 1
+records those existing layout issues; this is not a publication build.
+All non-code input fingerprints match between the two versions.
+
+`make check` passes **1,559 tests in 377.84 seconds**, including lint. Focused
+layout checks pass 354 tests and build checks pass 48 tests. Added cases protect
+changed candidate/glyph geometry under stable IDs, text/target changes, locked
+and leader state, transfer rollback/restoration, current neighbour collisions,
+context changes and bounded eviction. No test baselines were weakened.
+
+Files changed: `build/atlas.py`, `layout/optimizer.py`, `layout/placement.py`,
+`tests/layout/test_optimizer.py`, this report and `docs/PERFORMANCE.md`.
+
+Local artifacts under `build/perf-repeated-optimizer/` include:
+
+- `baseline-source/src/`: archived checkpoint code.
+- `baseline/` and `cached-final/`: profiles, per-chart/process timings and
+  `<edition>/<edition>/atlas.pdf` proof PDFs.
+- `comparison.json`: all 18 exact output comparisons; `timings.json`: CPU and
+  wall measurements, per-call phase costs and cache statistics.
+- `baseline/deep-473-replay.pkl`, `replay-baseline.json`, `replay-cached.json`:
+  identical-input controls, source-distance statistics and memory measurements.
+- `measure_build.py`, `run_matrix.py`, `replay.py`, `compare.py`: local
+  measurement/reproduction scripts; `final-make-check.log`: complete checks.
+
+With the same local processed data, `run_matrix.py baseline` uses the archived
+checkpoint and `run_matrix.py cached-final` uses the current implementation.
+`replay.py` reruns the saved five-call control in fresh processes. These tools
+and generated catalogues/artifacts are not committed.
+
+Remaining D473 CPU across all five calls is concentrated in leader fallbacks
+(20.62 s), hard-conflict repair (17.58 s), greedy placement (17.60 s) and joint
+optimization (6.97 s). Repeated dynamic conflict checks/searches and the cold
+first pass remain. Next, profile the remaining repair/leader work and assess
+partial reoptimization as a separate stage with equivalent quality controls;
+neither is implemented here.

@@ -66,7 +66,11 @@ class _CandidateScoreCache:
         weights: CostWeights,
         constellation_lines: tuple[tuple[PagePoint, PagePoint], ...],
         furniture: tuple[PageRect, ...] = (),
+        *,
+        max_entries: int = 65536,
     ) -> None:
+        if max_entries < 1:
+            raise ValueError("max_entries must be positive")
         self.anchors = anchors
         self.printable = printable
         self.symbols_index = symbols_index
@@ -78,11 +82,52 @@ class _CandidateScoreCache:
         self.weights = weights
         self.constellation_lines = constellation_lines
         self.furniture = furniture
+        self.max_entries = max_entries
+        self._versions: dict[str, Label] = {}
+        self._hits = dict.fromkeys(("static", "geometry", "validity"), 0)
+        self._misses = self._hits.copy()
+        self._evictions = self._hits.copy()
+        self._retained = self._hits.copy()
         self._static: dict[tuple[str, str], CostBreakdown] = {}
         self._geometry: dict[
             tuple[str, str], tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]
         ] = {}
         self._validity: dict[tuple[str, str], tuple[bool, PageRect]] = {}
+
+    def prepare_labels(self, labels: tuple[Label, ...]) -> None:
+        """Retain only entries whose complete non-placement label state matches."""
+        versions = {
+            label.id: replace(label, selected_candidate_id=None, hidden=False)
+            for label in labels[:self.max_entries]
+        }
+        unchanged = {
+            label_id for label_id, label in versions.items()
+            if self._versions.get(label_id) == label
+        }
+        for name in self._hits:
+            entries = getattr(self, f"_{name}")
+            for key in list(entries):
+                if key[0] not in unchanged:
+                    del entries[key]
+            self._retained[name] = len(entries)
+        self._versions = versions
+
+    def statistics(self) -> dict[str, dict[str, int]]:
+        return {
+            name: {
+                "hits": self._hits[name], "misses": self._misses[name],
+                "evictions": self._evictions[name], "retained": self._retained[name],
+                "entries": len(getattr(self, f"_{name}")),
+            }
+            for name in self._hits
+        }
+
+    def _remember(self, name: str, key: tuple[str, str], value: object) -> None:
+        entries = getattr(self, f"_{name}")
+        if key not in entries and len(entries) >= self.max_entries:
+            del entries[next(iter(entries))]
+            self._evictions[name] += 1
+        entries[key] = value
 
     def geometry(
         self,
@@ -91,6 +136,8 @@ class _CandidateScoreCache:
     ) -> tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]:
         key = (label.id, candidate.id)
         geometry = self._geometry.get(key)
+        self._hits["geometry"] += geometry is not None
+        self._misses["geometry"] += geometry is None
         if geometry is None:
             geometry = (
                 tuple(self.symbols_index.query(candidate.bounds)),
@@ -98,7 +145,7 @@ class _CandidateScoreCache:
                     label, candidate.bounds, self.stars_index, self.stars, self.style
                 ),
             )
-            self._geometry[key] = geometry
+            self._remember("geometry", key, geometry)
         return geometry
 
     def valid(
@@ -109,6 +156,16 @@ class _CandidateScoreCache:
     ) -> bool:
         key = (label.id, candidate.id)
         validity = self._validity.get(key)
+        if validity is not None and not validity[0]:
+            self._hits["validity"] += 1
+            return False
+        collision_bounds = validity[1] if validity is not None else _collision_bounds(
+            label, candidate, self.style
+        )
+        if any(rects_overlap(collision_bounds, other) for other in placed_bounds):
+            return False
+        self._hits["validity"] += validity is not None
+        self._misses["validity"] += validity is None
         if validity is None:
             symbols, stars = self.geometry(label, candidate)
             validity = (
@@ -124,13 +181,10 @@ class _CandidateScoreCache:
                     self.sources,
                     self.source_by_id,
                 ),
-                _collision_bounds(label, candidate, self.style),
+                collision_bounds,
             )
-            self._validity[key] = validity
-        static_valid, collision_bounds = validity
-        return static_valid and not any(
-            rects_overlap(collision_bounds, other) for other in placed_bounds
-        )
+            self._remember("validity", key, validity)
+        return validity[0]
 
     def cost(
         self,
@@ -160,12 +214,15 @@ class _CandidateScoreCache:
     ) -> CostBreakdown:
         key = (label.id, candidate.id)
         static = self._static.get(key)
+        self._hits["static"] += static is not None
+        self._misses["static"] += static is None
         if static is None:
             if nearby_symbols is None or nearby_stars is None:
                 symbols, stars = self.geometry(label, candidate)
             else:
                 symbols, stars = nearby_symbols, nearby_stars
-                self._geometry.setdefault(key, (symbols, stars))
+                if key not in self._geometry:
+                    self._remember("geometry", key, (symbols, stars))
             static = score_candidate(
                 candidate,
                 target_anchor=_anchor_for(label, self.anchors, candidate),
@@ -187,7 +244,7 @@ class _CandidateScoreCache:
                 edge_margin_mm=_EDGE_MARGIN_MM,
                 constellation_lines=self.constellation_lines,
             )
-            self._static[key] = static
+            self._remember("static", key, static)
         return rescore_candidate_interactions(
             static,
             candidate,
