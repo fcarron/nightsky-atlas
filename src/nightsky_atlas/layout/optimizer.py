@@ -502,7 +502,11 @@ def _dso_conflict_components(
         for candidate in label.candidates:
             bounds = _collision_bounds(label, candidate, style)
             for other_id, other_bounds in index.query(bounds):
-                if other_id != label.id and rects_overlap(bounds, other_bounds):
+                if (
+                    other_id != label.id
+                    and other_id not in adjacency[label.id]
+                    and rects_overlap(bounds, other_bounds)
+                ):
                     adjacency[label.id].add(other_id)
                     adjacency[other_id].add(label.id)
             index.set(

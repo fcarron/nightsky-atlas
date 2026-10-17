@@ -9,6 +9,7 @@ from nightsky_atlas.catalog.models import DsoType
 from nightsky_atlas.chart.page import PagePoint, PageRect, PageTransform
 from nightsky_atlas.layout.association import (
     SourceGeometry,
+    nearest_source_geometry,
     source_edge_distance,
     source_geometries_overlap,
     source_intersects_rect,
@@ -385,11 +386,7 @@ def _ownership_result(
     competitors = tuple(
         source for source in considered if source.id != label.target_id
     )
-    nearest = min(
-        competitors,
-        key=lambda source: (source_edge_distance(source, bounds), source.id),
-        default=None,
-    )
+    nearest = nearest_source_geometry(competitors, bounds)
     if nearest is None:
         return owner_gap, None, None, False
     foreign_gap = source_edge_distance(nearest, bounds)

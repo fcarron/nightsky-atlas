@@ -1,5 +1,13 @@
 # Performance notes
 
+## Dense label layouts
+
+The 2026-10-17 [optimizer performance review](OPTIMIZER_PERFORMANCE_REVIEW.md)
+profiles the slow Deep LMC fields. Repeated exact contour distances dominate;
+conservative geometry pruning speeds the tested optimizer call by about 3.2×
+under cProfile while preserving its placements. The review records the ordinary
+build controls, unchanged search budgets, validation and remaining work.
+
 ## Atlas page parallelism
 
 The atlas builder can compute independent main chart pages in separate processes

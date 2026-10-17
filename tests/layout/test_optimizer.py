@@ -116,6 +116,31 @@ def test_candidate_cache_reuses_static_validity_for_changed_neighbors(
     assert counted.call_count == 1
 
 
+def test_conflict_graph_does_not_recheck_already_connected_label_pairs(monkeypatch) -> None:
+    def repeated(label_id: str, left: float) -> tuple[LabelCandidate, ...]:
+        return tuple(
+            replace(
+                make_candidate(label_id, CompassPosition.E, left, 100.0),
+                id=f"{label_id}:{index}",
+            )
+            for index in range(20)
+        )
+
+    first = make_label("label:dso:A", repeated("A", 100.0))
+    bridge = make_candidate("B", CompassPosition.W, 130.0, 100.0)
+    second = make_label("label:dso:B", (*repeated("B", 102.0), bridge))
+    third = make_label("label:dso:C", repeated("C", 132.0))
+    isolated = make_label("label:dso:D", repeated("D", 230.0))
+    counted = Mock(wraps=optimizer_module.rects_overlap)
+    monkeypatch.setattr(optimizer_module, "rects_overlap", counted)
+
+    assert _dso_conflict_components((first, second, third, isolated), STYLE) == (
+        (first.id, second.id, third.id),
+        (isolated.id,),
+    )
+    assert counted.call_count == 2
+
+
 def test_greedy_avoids_overlap_between_mandatory_labels() -> None:
     first = make_label(
         "label:a",

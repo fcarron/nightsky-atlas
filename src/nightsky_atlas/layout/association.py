@@ -20,6 +20,7 @@ from nightsky_atlas.scene.models import ChartScene
 __all__ = [
     "SourceGeometry",
     "dso_source_geometries",
+    "nearest_source_geometry",
     "source_contains_point",
     "source_edge_distance",
     "source_outline_edge_distance",
@@ -97,11 +98,7 @@ def dso_source_geometries(
 def source_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
     """Measure from the rendered source boundary to its facing label edge."""
     if source.outline_paths:
-        return min(
-            _segment_rect_distance(start, end, rect)
-            for path in source.outline_paths
-            for start, end in zip(path, path[1:], strict=False)
-        )
+        return _outline_rect_distance(source, rect)
     if source.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:
         return _axis_aligned_rect_edge_distance(source, rect)
     return _ellipse_rect_edge_distance(source, rect)
@@ -111,16 +108,85 @@ def source_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
 def source_outline_edge_distance(source: SourceGeometry, rect: PageRect) -> float:
     """Measure clearance to the drawn outline, ignoring footprint containment."""
     if source.outline_paths:
-        return min(
-            _segment_rect_distance(start, end, rect)
-            for path in source.outline_paths
-            for start, end in zip(path, path[1:], strict=False)
-        )
+        return _outline_rect_distance(source, rect)
     if source.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:
         return _axis_aligned_rect_outline_distance(source, rect)
     if source.shape == DsoShape.DASHED_CIRCLE and source.dash_length_mm > 0.0:
         return _dashed_circle_rect_distance(source, rect)
     return _ellipse_rect_outline_distance(source, rect)
+
+
+@lru_cache(maxsize=256)
+def _outline_segments(
+    source: SourceGeometry,
+) -> tuple[tuple[PagePoint, PagePoint, float, float, float, float], ...]:
+    return tuple(
+        (
+            start, end,
+            min(start.x_mm, end.x_mm), min(start.y_mm, end.y_mm),
+            max(start.x_mm, end.x_mm), max(start.y_mm, end.y_mm),
+        )
+        for path in source.outline_paths
+        for start, end in zip(path, path[1:], strict=False)
+    )
+
+
+def _outline_rect_distance(source: SourceGeometry, rect: PageRect) -> float:
+    segments = _outline_segments(source)
+    if not segments:
+        raise ValueError("outline must contain at least one segment")
+    distance = math.inf
+    for start, end, left, top, right, bottom in segments:
+        dx = max(left - rect.right_mm, rect.left_mm - right, 0.0)
+        dy = max(top - rect.bottom_mm, rect.top_mm - bottom, 0.0)
+        if dx * dx + dy * dy > (distance + 1e-9) ** 2:
+            continue
+        distance = min(distance, _segment_rect_distance(start, end, rect))
+        if distance == 0.0:
+            break
+    return distance
+
+
+@lru_cache(maxsize=4096)
+def _source_bounds(source: SourceGeometry) -> PageRect:
+    if source.outline_paths:
+        points = tuple(point for path in source.outline_paths for point in path)
+        left = min(point.x_mm for point in points)
+        top = min(point.y_mm for point in points)
+        right = max(point.x_mm for point in points)
+        bottom = max(point.y_mm for point in points)
+        return PageRect(left, top, right - left, bottom - top)
+    radius = source.collision_radius_mm
+    return PageRect(
+        source.center.x_mm - radius,
+        source.center.y_mm - radius,
+        2.0 * radius,
+        2.0 * radius,
+    )
+
+
+def nearest_source_geometry(
+    sources: tuple[SourceGeometry, ...], rect: PageRect
+) -> SourceGeometry | None:
+    """Find the nearest source without measuring boundaries beyond the best gap."""
+    ranked = []
+    for source in sources:
+        bounds = _source_bounds(source)
+        lower_bound = math.hypot(
+            max(bounds.left_mm - rect.right_mm, rect.left_mm - bounds.right_mm, 0.0),
+            max(bounds.top_mm - rect.bottom_mm, rect.top_mm - bounds.bottom_mm, 0.0),
+        )
+        ranked.append((lower_bound, source.id, source))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    nearest = None
+    best_gap = math.inf
+    for lower_bound, _, source in ranked:
+        if lower_bound > best_gap + 1e-9:
+            break
+        gap = source_edge_distance(source, rect)
+        if nearest is None or (gap, source.id) < (best_gap, nearest.id):
+            nearest, best_gap = source, gap
+    return nearest
 
 
 def _dashed_circle_rect_distance(source: SourceGeometry, rect: PageRect) -> float:
@@ -290,6 +356,16 @@ def _ellipse_rect_outline_distance(source: SourceGeometry, rect: PageRect) -> fl
 
 
 def _ellipse_rect_boundary_distance(source: SourceGeometry, rect: PageRect) -> float:
+    if source.radius_x_mm == source.radius_y_mm:
+        nearest = math.hypot(
+            max(rect.left_mm - source.center.x_mm, source.center.x_mm - rect.right_mm, 0.0),
+            max(rect.top_mm - source.center.y_mm, source.center.y_mm - rect.bottom_mm, 0.0),
+        )
+        farthest = math.hypot(
+            max(abs(rect.left_mm - source.center.x_mm), abs(rect.right_mm - source.center.x_mm)),
+            max(abs(rect.top_mm - source.center.y_mm), abs(rect.bottom_mm - source.center.y_mm)),
+        )
+        return max(nearest - source.radius_x_mm, source.radius_x_mm - farthest, 0.0)
     cos_angle = math.cos(source.rotation_rad)
     sin_angle = math.sin(source.rotation_rad)
 
