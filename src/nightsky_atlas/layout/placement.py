@@ -84,7 +84,7 @@ class _CandidateScoreCache:
         self.furniture = furniture
         self.max_entries = max_entries
         self._versions: dict[str, Label] = {}
-        self._hits = dict.fromkeys(("static", "geometry", "validity"), 0)
+        self._hits = dict.fromkeys(("static", "geometry", "validity", "rejection"), 0)
         self._misses = self._hits.copy()
         self._evictions = self._hits.copy()
         self._retained = self._hits.copy()
@@ -93,6 +93,7 @@ class _CandidateScoreCache:
             tuple[str, str], tuple[tuple[SymbolCircle, ...], tuple[StarCircle, ...]]
         ] = {}
         self._validity: dict[tuple[str, str], tuple[bool, PageRect]] = {}
+        self._rejection: dict[tuple[str, str], str | None] = {}
 
     def prepare_labels(self, labels: tuple[Label, ...]) -> None:
         """Retain only entries whose complete non-placement label state matches."""
@@ -185,6 +186,22 @@ class _CandidateScoreCache:
             )
             self._remember("validity", key, validity)
         return validity[0]
+
+    def source_rejection(self, label: Label, candidate: LabelCandidate) -> str | None:
+        """Reuse source/star rejection reasons, independently of placed labels."""
+        key = (label.id, candidate.id)
+        present = key in self._rejection
+        self._hits["rejection"] += present
+        self._misses["rejection"] += not present
+        if not present:
+            self._remember(
+                "rejection", key,
+                _source_candidate_rejection_reason(
+                    label, candidate, self.symbols_index, self.stars_index,
+                    self.stars, self.style, self.sources,
+                ),
+            )
+        return self._rejection[key]
 
     def cost(
         self,
@@ -693,6 +710,7 @@ def _candidate_rejection_reason(
     *,
     furniture: tuple[PageRect, ...],
     source_geometries: tuple[SourceGeometry, ...],
+    cost_cache: _CandidateScoreCache | None = None,
 ) -> str | None:
     bounds = candidate.bounds
     collision_bounds = _collision_bounds(label, candidate, style)
@@ -714,6 +732,23 @@ def _candidate_rejection_reason(
         )
     ):
         return "label_label_overlap"
+    if cost_cache is not None:
+        return cost_cache.source_rejection(label, candidate)
+    return _source_candidate_rejection_reason(
+        label, candidate, symbols_index, stars_index, stars, style, source_geometries
+    )
+
+
+def _source_candidate_rejection_reason(
+    label: Label,
+    candidate: LabelCandidate,
+    symbols_index: RectIndex[SymbolCircle],
+    stars_index: RectIndex[StarCircle],
+    stars: tuple[StarCircle, ...],
+    style: StyleConfig,
+    source_geometries: tuple[SourceGeometry, ...],
+) -> str | None:
+    bounds = candidate.bounds
     visible_bounds = (
         candidate_ink_bounds(candidate)
         if label.id.startswith("label:dso:")
@@ -733,8 +768,9 @@ def _candidate_rejection_reason(
         )
         if wrong_owner:
             return "foreign_source_closer_than_owner"
-    for star in _nearby_stars(label, bounds, stars_index, stars, style):
-        related = _related_star_ids(label, stars)
+    nearby_stars = _nearby_stars(label, bounds, stars_index, stars, style)
+    related = _related_star_ids(label, stars) if nearby_stars else frozenset()
+    for star in nearby_stars:
         hard_min = (
             style.label.star_clearance.associated.hard_min_mm
             if related & star.star_ids

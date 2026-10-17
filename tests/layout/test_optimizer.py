@@ -28,10 +28,12 @@ from nightsky_atlas.layout.placement import (
     _association_scale,
     _build_star_index,
     _build_symbol_index,
+    _candidate_rejection_reason,
     _CandidateScoreCache,
     _is_valid,
 )
-from nightsky_atlas.layout.scoring import CostWeights, SymbolCircle
+from nightsky_atlas.layout.scoring import CostWeights, StarCircle, SymbolCircle
+from nightsky_atlas.layout.spatial import RectIndex
 from nightsky_atlas.render.symbols import StarSizeModel
 from nightsky_atlas.scene.builder import build_scene
 
@@ -117,6 +119,56 @@ def test_candidate_cache_reuses_static_validity_for_changed_neighbors(
     assert counted.call_count == 1
 
 
+@pytest.mark.parametrize("star_present", [False, True])
+def test_leader_rejection_cache_preserves_dynamic_collisions_and_reason_order(
+    monkeypatch, candidate_cache, star_present: bool,
+) -> None:
+    candidate = make_candidate("label:dso:X", CompassPosition.E, 100, 100)
+    label = make_label("label:dso:X", (candidate,))
+    if star_present:
+        star = StarCircle("S", frozenset({"S"}), PagePoint(103, 101), 1.0)
+        candidate_cache.stars = (star,)
+        candidate_cache.stars_index = _build_star_index((star,))
+    candidate_cache.prepare_labels((label,))
+    counted = Mock(wraps=placement_module._source_candidate_rejection_reason)
+    monkeypatch.setattr(placement_module, "_source_candidate_rejection_reason", counted)
+    index = RectIndex(8.0)
+
+    def reason(*, cached: bool, furniture: tuple[PageRect, ...] = ()) -> str | None:
+        return _candidate_rejection_reason(
+            label, candidate, index, candidate_cache.symbols_index,
+            candidate_cache.stars_index, candidate_cache.stars,
+            candidate_cache.printable, STYLE, furniture=furniture, source_geometries=(),
+            cost_cache=candidate_cache if cached else None,
+        )
+
+    expected = "star_clearance" if star_present else None
+    assert reason(cached=True) == expected
+    assert reason(cached=True) == expected
+    assert counted.call_count == 1
+    index.set("other", candidate.bounds, candidate.bounds)
+    assert reason(cached=True) == reason(cached=False) == "label_label_overlap"
+    assert reason(cached=True, furniture=(candidate.bounds,)) == "page_furniture_overlap"
+    index.discard("other")
+    assert reason(cached=True) == reason(cached=False) == expected
+    assert candidate_cache.statistics()["rejection"]["hits"] == 2
+
+
+def test_rejection_cache_updates_related_star_clearance_after_target_change(
+    candidate_cache,
+) -> None:
+    candidate = make_candidate("label:star:X", CompassPosition.E, 100, 100)
+    label = make_label("label:star:X", (candidate,))
+    star = StarCircle("S", frozenset({"S"}), PagePoint(103, 101), 0.5)
+    candidate_cache.stars = (star,)
+    candidate_cache.stars_index = _build_star_index((star,))
+    candidate_cache.prepare_labels((label,))
+    assert candidate_cache.source_rejection(label, candidate) is None
+    related_label = replace(label, target_id="S")
+    candidate_cache.prepare_labels((related_label,))
+    assert candidate_cache.source_rejection(related_label, candidate) == "star_clearance"
+
+
 @pytest.mark.parametrize(
     "change", ["locked", "leader_line", "text", "target", "geometry", "glyphs"]
 )
@@ -128,9 +180,11 @@ def test_candidate_cache_invalidates_changed_label_semantics_and_geometry(
     candidate_cache.prepare_labels((label,))
     candidate_cache.cost(label, candidate, ())
     candidate_cache.valid(label, candidate, ())
+    candidate_cache.source_rejection(label, candidate)
     placement_only = replace(label, selected_candidate_id=candidate.id, hidden=True)
     candidate_cache.prepare_labels((placement_only,))
     assert candidate_cache.statistics()["static"]["retained"] == 1
+    assert candidate_cache.statistics()["rejection"]["retained"] == 1
     if change == "locked":
         changed = replace(label, locked=True)
     elif change == "leader_line":
@@ -160,8 +214,10 @@ def test_candidate_cache_eviction_is_bounded_and_preserves_scores(candidate_cach
     for candidate in candidates:
         candidate_cache.cost(label, candidate, ())
         candidate_cache.valid(label, candidate, ())
+        candidate_cache.source_rejection(label, candidate)
     assert all(item["entries"] <= 2 for item in candidate_cache.statistics().values())
     assert candidate_cache.statistics()["static"]["evictions"] > 0
+    assert candidate_cache.statistics()["rejection"]["evictions"] > 0
     assert candidate_cache.cost(label, candidates[0], ()) == expected
 
 

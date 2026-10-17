@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import pickle
 from dataclasses import replace
 
 import pytest
@@ -21,6 +22,26 @@ from nightsky_atlas.layout.association import (
     source_scoring_distance,
 )
 from nightsky_atlas.render.symbols import DsoShape
+
+
+def test_contour_hash_collisions_keep_distance_cache_entries_distinct() -> None:
+    first = SourceGeometry(
+        "same-source", DsoType.BRIGHT_NEBULA, PagePoint(5, 2), 5, 2,
+        outline_paths=((PagePoint(0, 0), PagePoint(10, 0)),),
+    )
+    second = replace(first, outline_paths=((PagePoint(0, 4), PagePoint(10, 4)),))
+    assert hash(first) == hash(second)
+    assert first != second
+    rect = PageRect(1, 0, 1, 0.1)
+    for distance in (source_edge_distance, source_scoring_distance, source_outline_edge_distance):
+        for _ in range(2):
+            assert distance(first, rect) == 0.0
+            assert distance(second, rect) == pytest.approx(3.9)
+    assert len({first, second}) == 2
+    restored = pickle.loads(pickle.dumps(first))
+    assert restored == first
+    assert hash(restored) == hash(first)
+    assert source_edge_distance(restored, rect) == 0.0
 
 
 @pytest.mark.parametrize("scale", [0.25, 1.0, 4.0])

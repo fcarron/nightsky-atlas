@@ -51,6 +51,12 @@ class SourceGeometry:
     dash_gap_mm: float = 0.0
     outline_width_mm: float = 0.0
 
+    def __hash__(self) -> int:
+        """Keep cache-key hashing independent of the contour vertex count."""
+        return hash((
+            self.id, self.center, self.radius_x_mm, self.radius_y_mm, self.rotation_rad,
+        ))
+
     @property
     def collision_radius_mm(self) -> float:
         if self.shape in {DsoShape.SQUARE, DsoShape.DASHED_SQUARE}:

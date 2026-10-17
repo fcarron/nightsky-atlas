@@ -1440,6 +1440,7 @@ def _consider_dso_leader_fallbacks(
             style,
             furniture=furniture,
             source_geometries=sources,
+            cost_cache=cost_cache,
         )
         eligible: list[tuple[float, str, LabelCandidate, CostBreakdown]] = []
         for candidate in label.candidates:
@@ -1475,6 +1476,7 @@ def _consider_dso_leader_fallbacks(
                 style,
                 furniture=furniture,
                 source_geometries=sources,
+                cost_cache=cost_cache,
             )
             if rejection is None:
                 options.append((
