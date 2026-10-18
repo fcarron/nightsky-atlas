@@ -143,6 +143,11 @@ below the frame; declination values sit at its sides. Labels closer than 13 mm
 along an edge are thinned, favouring round values, and labels are omitted where
 they would overlap page furniture. Polar RA labels appear only every 2 h.
 
+Colour editions use the same neutral coordinate-grid greys and line widths as
+their B&W base styles, including the edition-specific polar RA treatment.
+`color_atlas.coordinate_grid: null` inherits these tones; an explicit hex colour
+overrides them. The field-guide grid sample follows the same setting.
+
 ## Visible notation and page furniture
 
 Internal ids stay long (`standard-068`) but the printed atlas uses a short,

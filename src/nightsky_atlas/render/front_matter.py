@@ -818,7 +818,8 @@ def _draw_map_lines(
         x = left + column * width / 2.0
         y = top + 8.0 + row * 5.4
         cr.save()
-        cr.set_source_rgb(*(_hex_rgb(colors[name]) if name in colors else (gray, gray, gray)))
+        color = colors.get(name)
+        cr.set_source_rgb(*(_hex_rgb(color) if color else (gray, gray, gray)))
         cr.set_line_width(mm_to_pt(width_mm))
         if dash_mm:
             cr.set_dash([mm_to_pt(value) for value in dash_mm])

@@ -9,7 +9,7 @@ color_atlas:
   labels: "#252525"
   constellation_names: "#92969E"
   constellation_lines: "#748B80"
-  coordinate_grid: "#D6D9DC"
+  coordinate_grid: null
   constellation_boundaries: "#C2C6CA"
   dso:
     galaxies: "#B97A63"

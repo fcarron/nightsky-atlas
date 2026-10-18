@@ -9,7 +9,8 @@ from unittest.mock import Mock, call
 import cairo
 import pytest
 
-from nightsky_atlas.atlas.config import StyleConfig, load_style_config
+from nightsky_atlas.atlas.config import StyleConfig, load_atlas_config, load_style_config
+from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.catalog.galaxy_visibility import GalaxyContourClass
 from nightsky_atlas.catalog.milky_way import MilkyWayContour, load_milky_way_contours
 from nightsky_atlas.catalog.models import DsoType
@@ -20,6 +21,7 @@ from nightsky_atlas.projection.base import ChartPoint
 from nightsky_atlas.projection.stereographic import StereographicProjection
 from nightsky_atlas.render.cairo import (
     _draw_dso_shape,
+    _draw_grid,
     _draw_milky_way_contours,
     _dso_color,
     _dso_fill_and_outline_alpha,
@@ -82,6 +84,45 @@ def test_color_styles_inherit_edition_and_select_fill_levels(
 def test_existing_edition_styles_remain_uncolored(edition: str) -> None:
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     assert style.color_atlas is None
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+@pytest.mark.parametrize("polar", (False, True))
+@pytest.mark.parametrize("grid_color", (None, "#395C7A"))
+def test_color_grid_inherits_bw_rendering_unless_explicitly_overridden(
+    edition: str, polar: bool, grid_color: str | None,
+) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
+    base = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    color = load_style_config(REPO_ROOT / "styles" / "color" / f"{edition}.yaml")
+    assert color.color_atlas is not None
+    assert color.color_atlas.coordinate_grid is None
+    color = color.model_copy(update={
+        "color_atlas": color.color_atlas.model_copy(update={"coordinate_grid": grid_color}),
+    })
+    chart = next(
+        item for item in chart_definitions(atlas)
+        if item.center_dec_deg == (90.0 if polar else 0.0)
+    )
+    page = atlas.page.to_geometry()
+    transform = PageTransform(chart, page, scale_mm_per_degree=atlas.mm_per_degree)
+
+    def render_grid(style: StyleConfig) -> bytes:
+        surface = cairo.ImageSurface(
+            cairo.FORMAT_ARGB32, math.ceil(mm_to_pt(page.width_mm)),
+            math.ceil(mm_to_pt(page.height_mm)),
+        )
+        cr = cairo.Context(surface)
+        cr.set_source_rgb(1.0, 1.0, 1.0)
+        cr.paint()
+        assert _draw_grid(cr, transform, chart, style)
+        surface.flush()
+        return bytes(surface.get_data())
+
+    if grid_color is None:
+        assert render_grid(color) == render_grid(base)
+    else:
+        assert render_grid(color) != render_grid(base)
 
 
 def test_open_cluster_color_style_reduces_large_symbol_fill_only() -> None:

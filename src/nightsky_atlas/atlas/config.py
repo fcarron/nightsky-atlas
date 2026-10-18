@@ -1318,7 +1318,7 @@ class ColorAtlasStyle(_StrictModel):
     labels: str = Field(default="#252525", pattern=r"^#[0-9A-Fa-f]{6}$")
     constellation_names: str = Field(default="#92969E", pattern=r"^#[0-9A-Fa-f]{6}$")
     constellation_lines: str = Field(default="#748B80", pattern=r"^#[0-9A-Fa-f]{6}$")
-    coordinate_grid: str = Field(default="#D6D9DC", pattern=r"^#[0-9A-Fa-f]{6}$")
+    coordinate_grid: str | None = Field(default="#D6D9DC", pattern=r"^#[0-9A-Fa-f]{6}$")
     constellation_boundaries: str = Field(default="#C2C6CA", pattern=r"^#[0-9A-Fa-f]{6}$")
     dso: ColorDSOPalette
     dso_fill_white_blend: tuple[float, float, float, float] = (0.0, 0.10, 0.22, 0.34)
