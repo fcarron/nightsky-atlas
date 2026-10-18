@@ -3,6 +3,7 @@ from pathlib import Path
 import cairo
 import pytest
 
+from nightsky_atlas import __version__
 from nightsky_atlas.atlas.config import load_atlas_config, load_style_config
 from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.chart.page import PagePoint, PageTransform
@@ -17,6 +18,7 @@ from nightsky_atlas.render.front_matter import (
 )
 from nightsky_atlas.render.symbols import (
     SPOKED_CIRCLE_OUTER_FACTOR,
+    DsoShape,
     compact_star_reference_magnitudes,
 )
 
@@ -57,7 +59,10 @@ def test_legend_uses_edition_dso_geometry(
     style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
     symbols = {item.name: item for item in legend_symbols(style, mm_per_degree)}
 
-    assert len(symbols) == 8
+    assert len(symbols) == 10
+    assert symbols["Bright nebula"].extent.shape == DsoShape.SQUARE
+    assert symbols["Reflection nebula"].extent.shape == DsoShape.SQUARE
+    assert symbols["Supernova remnant"].extent.shape == DsoShape.DASHED_SQUARE
     galaxy = symbols["Galaxy"]
     globular = symbols["Globular cluster"]
     assert galaxy.angular_size_arcmin == pytest.approx(sample_size)
@@ -82,10 +87,10 @@ def test_legend_uses_edition_dso_geometry(
     pn_widths = tuple(extent.width_mm for _, extent in planetary.size_classes)
     assert pn_widths[0] > pn_widths[1] > pn_widths[2]
     if edition in {"deep", "eyepiece", "eyepiece_deep"}:
-        assert symbols["Bright nebula / SNR"].minimum_extent is None
+        assert symbols["Bright nebula"].minimum_extent is None
         assert symbols["Dark nebula"].minimum_extent is None
     else:
-        assert symbols["Bright nebula / SNR"].minimum_extent is not None
+        assert symbols["Bright nebula"].minimum_extent is not None
         assert symbols["Dark nebula"].minimum_extent is not None
     assert symbols["Galaxy cluster"].minimum_extent is not None
     assert planetary.extent.width_mm == pytest.approx(
@@ -232,6 +237,8 @@ def test_introduction_uses_current_edition_chart_geometry(
     text = " ".join(rendered_text)
 
     assert "NightSky Atlas" in text
+    assert f"Public Alpha · v{__version__}" in text
+    assert any("Some label overlaps remain" in value for value in paragraphs)
     assert paragraphs[:3] == [
         "NightSky Atlas is a freely available, printable star atlas designed for visual observing.",
         "The atlas PDFs can be downloaded and printed free of charge. The software used to "
@@ -266,6 +273,7 @@ def test_introduction_uses_current_edition_chart_geometry(
     assert "Pocket gives the wider view" not in text
     assert layout_fact in paragraphs[-2]
     assert "The northern and southern overview maps" in paragraphs[-2]
+    assert "their own scales and stellar magnitude limits" in paragraphs[-2]
     assert "Print at 100% (actual size)" in paragraphs[-1]
 
 
@@ -383,7 +391,9 @@ def test_field_guide_contains_edition_content_and_pn_ranges(monkeypatch) -> None
         "Globular cluster",
         "Open cluster",
         "Planetary nebula",
-        "Bright nebula / SNR",
+        "Bright nebula",
+        "Reflection nebula",
+        "Supernova remnant",
         "Dark nebula",
         "Galaxy cluster",
         "Other / unknown",
@@ -426,9 +436,11 @@ def test_double_star_primitives_discard_stale_paths_without_connector_artifacts(
 
 
 @pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
-def test_field_guide_is_deterministic_and_paints_within_page(edition: str) -> None:
+@pytest.mark.parametrize("color", (False, True))
+def test_field_guide_is_deterministic_and_paints_within_page(edition: str, color: bool) -> None:
     atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
-    style = load_style_config(REPO_ROOT / "styles" / f"{edition}.yaml")
+    style_dir = REPO_ROOT / "styles" / "color" if color else REPO_ROOT / "styles"
+    style = load_style_config(style_dir / f"{edition}.yaml")
     scale = _configured_mm_per_degree(edition)
     page = atlas.page.to_geometry()
     records = []
@@ -444,3 +456,42 @@ def test_field_guide_is_deterministic_and_paints_within_page(edition: str) -> No
     assert y >= page.margin_mm * 72.0 / 25.4 - 1.0
     assert x + width <= (page.width_mm - page.margin_mm) * 72.0 / 25.4 + 1.0
     assert y + height <= (page.height_mm - page.margin_mm) * 72.0 / 25.4 + 1.0
+
+
+@pytest.mark.parametrize("edition", ("pocket", "standard", "deep"))
+@pytest.mark.parametrize("color", (False, True))
+def test_field_guide_renders_dso_palette_only_in_color_editions(
+    edition: str, color: bool,
+) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / f"{edition}.yaml")
+    style_dir = REPO_ROOT / "styles" / "color" if color else REPO_ROOT / "styles"
+    style = load_style_config(style_dir / f"{edition}.yaml")
+    page = atlas.page.to_geometry()
+    surface = cairo.ImageSurface(
+        cairo.FORMAT_ARGB32,
+        round(page.width_mm * 144.0 / 25.4),
+        round(page.height_mm * 144.0 / 25.4),
+    )
+    cr = cairo.Context(surface)
+    options = cairo.FontOptions()
+    options.set_antialias(cairo.ANTIALIAS_GRAY)
+    cr.set_font_options(options)
+    cr.set_source_rgb(1.0, 1.0, 1.0)
+    cr.paint()
+    cr.scale(2.0, 2.0)
+    draw_field_guide(
+        cr, atlas, style, chart_count=39, mm_per_degree=_configured_mm_per_degree(edition),
+    )
+    surface.flush()
+    colors = {value & 0xFFFFFF for value in surface.get_data().cast("I")}
+    assert 0 in colors
+    if style.color_atlas is None:
+        assert all(value >> 16 == (value >> 8) & 255 == value & 255 for value in colors)
+    else:
+        palette = style.color_atlas.dso
+        for value in (
+            palette.galaxies, palette.clusters, palette.planetary_nebulae,
+            palette.bright_nebulae, palette.reflection_nebulae, palette.dark_nebulae,
+            palette.supernova_remnants,
+        ):
+            assert int(value[1:], 16) in colors, f"Missing legend fill: {value}"

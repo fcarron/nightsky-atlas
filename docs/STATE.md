@@ -3,6 +3,22 @@
 Handoff snapshot. The authoritative contract remains `AGENTS.md`; the granular
 plan is `docs/DEVELOPMENT_PLAN.md`.
 
+## Alpha editorial follow-up (2026-10-18)
+
+The introduction identifies the public alpha with the package version and a
+brief feedback/label-overlap notice. It clarifies that detail charts have their
+own scales and stellar limits. The symbol key separates bright nebulae,
+reflection nebulae and supernova remnants. Colour keys reuse the chart palette,
+size-dependent fill opacity and black outlines; map-line samples use the active
+palette. B&W keys retain monochrome symbols. The short UCC credit omits the
+licence-status aside; detailed source terms remain in the existing documents.
+The README links to Releases and records 20 Deep detail charts.
+
+Six three-page editorial proofs (introduction, key, credits) are available in
+`build/alpha-editorial-20261018/`. Focused frontmatter, colour and credit tests:
+**97 passed**; Ruff and diff whitespace checks pass. These are editorial proofs,
+not regenerated complete atlases or publication approval.
+
 ## Alpha readiness audit (2026-10-16)
 
 Non-layout follow-up completed at the user's request: WDS metadata no longer

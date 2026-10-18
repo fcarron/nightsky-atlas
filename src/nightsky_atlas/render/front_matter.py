@@ -16,7 +16,15 @@ from nightsky_atlas.atlas.tiling import chart_definitions
 from nightsky_atlas.catalog.models import DeepSkyObject, DsoType, Provenance
 from nightsky_atlas.chart.models import ChartDefinition, PageGeometry
 from nightsky_atlas.chart.page import PagePoint, PageTransform
-from nightsky_atlas.render.cairo import _draw_double_star_mark, draw_dso_symbol, draw_star_disk
+from nightsky_atlas.projection.base import ChartPoint
+from nightsky_atlas.render.cairo import (
+    _draw_double_star_mark,
+    _dso_color,
+    _dso_fill_and_outline_alpha,
+    _hex_rgb,
+    draw_dso_symbol,
+    draw_star_disk,
+)
 from nightsky_atlas.render.detail_markers import build_detail_marker, draw_detail_markers
 from nightsky_atlas.render.double_stars import DoubleStarMark
 from nightsky_atlas.render.symbols import (
@@ -32,6 +40,7 @@ from nightsky_atlas.render.text import (
     measure_point_size,
 )
 from nightsky_atlas.render.variable_stars import draw_variable_star_ring
+from nightsky_atlas.scene.models import SceneDso
 from nightsky_atlas.units import mm_to_pt
 
 __all__ = [
@@ -49,6 +58,7 @@ class LegendSymbol:
     object_type: DsoType
     angular_size_arcmin: float | None
     extent: SymbolExtent
+    source: DeepSkyObject
     minimum_extent: SymbolExtent | None = None
     minimum_label: str | None = None
     size_classes: tuple[tuple[str, SymbolExtent], ...] = ()
@@ -88,22 +98,24 @@ def planetary_nebula_size_ranges(threshold_arcmin: float) -> tuple[str, ...]:
     )
 
 
-_SAMPLES: tuple[tuple[str, DsoType], ...] = (
-    ("Galaxy", DsoType.GALAXY),
-    ("Globular cluster", DsoType.GLOBULAR_CLUSTER),
-    ("Open cluster", DsoType.OPEN_CLUSTER),
-    ("Planetary nebula", DsoType.PLANETARY_NEBULA),
-    ("Bright nebula / SNR", DsoType.BRIGHT_NEBULA),
-    ("Dark nebula", DsoType.DARK_NEBULA),
-    ("Galaxy cluster", DsoType.GALAXY_CLUSTER),
-    ("Other / unknown", DsoType.OTHER),
+_SAMPLES: tuple[tuple[str, DsoType, str | None], ...] = (
+    ("Galaxy", DsoType.GALAXY, None),
+    ("Globular cluster", DsoType.GLOBULAR_CLUSTER, None),
+    ("Open cluster", DsoType.OPEN_CLUSTER, None),
+    ("Planetary nebula", DsoType.PLANETARY_NEBULA, None),
+    ("Bright nebula", DsoType.BRIGHT_NEBULA, None),
+    ("Reflection nebula", DsoType.BRIGHT_NEBULA, "reflection"),
+    ("Dark nebula", DsoType.DARK_NEBULA, None),
+    ("Supernova remnant", DsoType.SUPERNOVA_REMNANT, None),
+    ("Galaxy cluster", DsoType.GALAXY_CLUSTER, None),
+    ("Other / unknown", DsoType.OTHER, None),
 )
 
 
 def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymbol, ...]:
     """Build to-scale and below-minimum examples with chart symbol geometry."""
     symbols = []
-    for name, object_type in _SAMPLES:
+    for name, object_type, semantic_subtype in _SAMPLES:
         extent_style = style.dso.extent_style(object_type)
         minimum_arcmin = (
             extent_style.min_angular_major_axis_arcmin
@@ -124,6 +136,7 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
             sample_type: DsoType,
             major: float | None,
             minor: float | None,
+            subtype: str | None = semantic_subtype,
         ) -> DeepSkyObject:
             return DeepSkyObject(
                 id=sample_id,
@@ -134,6 +147,7 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
                 major_axis_arcmin=major,
                 minor_axis_arcmin=minor,
                 position_angle_deg=90.0 if sample_type == DsoType.GALAXY else None,
+                semantic_subtype=subtype,
             )
 
         sample = make_sample(
@@ -185,12 +199,40 @@ def legend_symbols(style: StyleConfig, mm_per_degree: float) -> tuple[LegendSymb
                 object_type,
                 sample_arcmin,
                 dso_symbol_extent(sample, mm_per_deg=mm_per_degree, style=style),
+                sample,
                 minimum_extent,
                 minimum_label,
                 size_classes,
             )
         )
     return tuple(symbols)
+
+
+def _draw_legend_symbol(
+    cr: cairo.Context[cairo.Surface],
+    symbol: LegendSymbol,
+    extent: SymbolExtent,
+    style: StyleConfig,
+    x_mm: float,
+    y_mm: float,
+) -> None:
+    scene_dso = SceneDso(symbol.source, ChartPoint(0.0, 0.0))
+    color = _dso_color(style, scene_dso)
+    fill_alpha, outline_alpha = _dso_fill_and_outline_alpha(style, scene_dso, extent)
+    cr.save()
+    cr.new_path()
+    cr.set_line_width(mm_to_pt(style.dso.line_width_mm))
+    if color is not None:
+        draw_dso_symbol(
+            cr, mm_to_pt(x_mm), mm_to_pt(y_mm), extent, style.dso.dash_mm,
+            fill_color=_hex_rgb(color), fill_alpha=fill_alpha, fill_only=True,
+        )
+    cr.set_source_rgba(0.0, 0.0, 0.0, outline_alpha)
+    draw_dso_symbol(
+        cr, mm_to_pt(x_mm), mm_to_pt(y_mm), extent, style.dso.dash_mm,
+        outline_only=color is not None,
+    )
+    cr.restore()
 
 
 def _text(
@@ -594,6 +636,18 @@ def draw_introduction(
             line_step_mm=4.2,
             max_y_mm=134.0,
         )
+    alpha_x = right - 98.0
+    _text(
+        cr, f"Public Alpha · v{__version__}", alpha_x, page.margin_mm + 11.0,
+        family, 9.5, bold=True, gray=0.25,
+    )
+    _paragraph(
+        cr,
+        "Ready for printing and evaluation. Some label overlaps remain. "
+        "Feedback from visual observers is welcome.",
+        alpha_x, page.margin_mm + 20.0, right - alpha_x, family,
+        size_pt=8.5, line_step_mm=4.2, max_y_mm=64.0,
+    )
     _rule(cr, left, right, 139.0)
     lower_gap = 12.0
     lower_width = (width - lower_gap) / 2.0
@@ -671,7 +725,8 @@ def _edition_chart_layout(
             f"{chart_summary} {symmetry} "
             f"{grid_text} Adjacent charts overlap to allow continuous navigation. The northern "
             "and southern overview maps show the arrangement and numbering. Additional detail "
-            "charts are provided for selected regions."
+            "charts are provided for selected regions, with their own scales and stellar "
+            "magnitude limits."
         )
     return (
         f"{edition} covers the whole sky with {chart_count} charts. The chart fields are "
@@ -736,26 +791,34 @@ def _draw_map_lines(
     samples.extend(
         (
             (
-                "Bright nebula / SNR",
+                "Nebula / SNR contour",
                 style.dso.outline_gray,
                 style.dso.outline_line_width_mm,
                 (),
             ),
             (
-                "Dark nebula",
+                "Dark nebula contour",
                 style.dso.outline_gray,
                 style.dso.outline_line_width_mm,
                 (style.dso.outline_dash_mm, style.dso.outline_dash_mm),
             ),
         )
     )
+    palette = style.color_atlas
+    colors = {
+        "Figure bold": palette.constellation_lines,
+        "Figure normal": palette.constellation_lines,
+        "Figure thin": palette.constellation_lines,
+        "Boundary": palette.constellation_boundaries,
+        "Grid": palette.coordinate_grid,
+    } if palette is not None else {}
     _text(cr, "MAP LINES", left, top, family, 8.0, bold=True, gray=0.38)
     for index, (name, gray, width_mm, dash_mm) in enumerate(samples):
         column, row = index % 2, index // 2
         x = left + column * width / 2.0
         y = top + 8.0 + row * 5.4
         cr.save()
-        cr.set_source_rgb(gray, gray, gray)
+        cr.set_source_rgb(*(_hex_rgb(colors[name]) if name in colors else (gray, gray, gray)))
         cr.set_line_width(mm_to_pt(width_mm))
         if dash_mm:
             cr.set_dash([mm_to_pt(value) for value in dash_mm])
@@ -875,7 +938,7 @@ def draw_field_guide(
     _text(cr, "Field guide & symbol key", left, page.margin_mm + 5.5, family, 19.0, bold=True)
     _text(
         cr,
-        f"{atlas.resolved_edition().name}  ·  {chart_count} charts  ·  stars to "
+        f"{atlas.resolved_edition().name}  ·  {chart_count} main charts  ·  stars to "
         f"magnitude {atlas.stellar_limit_magnitude:g}  ·  J2000 / ICRS  ·  "
         f"{mm_per_degree:.1f} mm/°",
         left,
@@ -963,21 +1026,14 @@ def draw_field_guide(
     symbols = legend_symbols(style, mm_per_degree)
     for index, symbol in enumerate(symbols):
         x = left
-        y = 123.0 + index * 6.0 + (2.0 if index >= 4 else 0.0)
+        y = 123.0 + index * 4.8 + (2.0 if index >= 4 else 0.0)
         _text(cr, symbol.name, x + 1.0, y + 1.3, family, 7.0, bold=True)
         if symbol.size_classes:
             ranges = planetary_nebula_size_ranges(symbol.angular_size_arcmin or 0.0)
             samples = (("scale", symbol.extent), *symbol.size_classes)
             for sample_index, (_, extent) in enumerate(samples):
                 center_x = x + 68.0 + sample_index * 14.0
-                cr.new_path()
-                draw_dso_symbol(
-                    cr,
-                    mm_to_pt(center_x),
-                    mm_to_pt(y + 3.2),
-                    extent,
-                    style.dso.dash_mm,
-                )
+                _draw_legend_symbol(cr, symbol, extent, style, center_x, y + 3.2)
                 draw_centered_text(
                     cr,
                     ranges[sample_index],
@@ -989,8 +1045,7 @@ def draw_field_guide(
                 )
             continue
         sample_x = x + 68.0
-        cr.new_path()
-        draw_dso_symbol(cr, mm_to_pt(sample_x), mm_to_pt(y + 3.1), symbol.extent, style.dso.dash_mm)
+        _draw_legend_symbol(cr, symbol, symbol.extent, style, sample_x, y + 3.1)
         if symbol.minimum_extent is not None:
             draw_centered_text(
                 cr,
@@ -1001,13 +1056,8 @@ def draw_field_guide(
                 6.0,
                 "normal",
             )
-            cr.new_path()
-            draw_dso_symbol(
-                cr,
-                mm_to_pt(sample_x + 23.0),
-                mm_to_pt(y + 3.1),
-                symbol.minimum_extent,
-                style.dso.dash_mm,
+            _draw_legend_symbol(
+                cr, symbol, symbol.minimum_extent, style, sample_x + 23.0, y + 3.1,
             )
             draw_centered_text(
                 cr,

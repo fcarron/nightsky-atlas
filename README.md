@@ -18,9 +18,10 @@ write a complete PDF and still exit with status 1 because it found hard layout
 issues; inspect its manifest and draft report. `--publication` is a stricter
 zero-hard-issue check, not legal clearance or field-use approval.
 
-No tagged public atlas download is linked here yet. The fixture quickstart
-below generates an installation example; full-catalogue charts require the
-separate data preparation steps. Run commands from the repository root.
+Check [GitHub Releases](https://github.com/fcarron/nightsky-atlas/releases) for
+available alpha PDF downloads. The fixture quickstart below generates an
+installation example; full-catalogue charts require the separate data
+preparation steps. Run commands from the repository root.
 
 ## Requirements: Ubuntu 24.04 and WSL
 
@@ -225,8 +226,9 @@ import it again before this check:
 ```
 
 To build Pocket or Deep instead, change `--edition standard` to `pocket` or
-`deep`. Pocket has 39 main charts and four details; Deep has 492 main charts
-and ten details. Prepare UCAC4 for Pocket PD02 as described above. Explicit configuration paths are also accepted with `--atlas` and
+`deep`. Pocket has 39 main charts and four details; Standard has 129 main charts
+and eight details; Deep has 492 main charts and twenty details. Prepare UCAC4
+for Pocket PD02 as described above. Explicit configuration paths are also accepted with `--atlas` and
 `--style`; for example, the experimental Eyepiece configuration is
 `atlas/eyepiece.yaml` with `styles/eyepiece.yaml`.
 

@@ -5,7 +5,7 @@
 id: standard
 
 star:
-  min_diameter_mm: 0.32
+  min_diameter_mm: 0.28
   max_diameter_mm: 6.0
   bright_magnitude: 0.0
   faint_magnitude: 9.0
@@ -13,7 +13,7 @@ star:
   # A faint star overlapping a brighter star is redrawn above it with this
   # physical white knockout ring, retaining both real positions.
   close_overlap_halo_mm: 0.12
-  diameter_curve: [[0.0, 6.0], [1.0, 5.0], [2.0, 4.2], [3.0, 3.15], [4.0, 2.4], [5.0, 1.65], [6.0, 1.1], [7.0, 0.78], [8.0, 0.54], [9.0, 0.32]]
+  diameter_curve: [[0.0, 6.0], [1.0, 5.0], [2.0, 4.2], [3.0, 3.15], [4.0, 2.4], [5.0, 1.65], [6.0, 1.1], [7.0, 0.78], [8.0, 0.51], [9.0, 0.28]]
 
 label:
   font_family: "Lato"

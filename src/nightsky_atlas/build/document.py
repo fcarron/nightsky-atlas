@@ -281,7 +281,7 @@ def _credits_columns(
         name = metadata.get("name") or catalogue_id
         if catalogue_id.lower() == "ucc" or "unified cluster" in str(name).lower():
             dso_entries.append(
-                "Unified Cluster Catalogue — Perren et al. (2023); data licence not stated"
+                "Unified Cluster Catalogue — Perren et al. (2023)"
             )
         else:
             dso_entries.append(str(name))

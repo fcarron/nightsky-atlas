@@ -175,12 +175,13 @@ Furniture sits outside the chart frame and is deliberately quiet
 ## Faint-star sizing
 
 The approved Pocket P06 comparison uses 0.42 mm at magnitude 7 and 0.28 mm
-at 7.5, preserving the brighter curve through magnitude 6. Standard follows
-with 0.54 mm at magnitude 8 and 0.32 mm at 9. Deep and the experimental
-Eyepiece profiles reduce their faint intermediate points while retaining their
-existing smallest dots (Deep: 0.25 mm; Eyepiece profiles: 0.14 mm). The extended
-Deep detail profiles receive the same treatment while retaining their own
-minimum sizes. Values between knots use the existing linear interpolation.
+at 7.5, preserving the brighter curve through magnitude 6. All three main
+editions use a smallest dot of 0.28 mm at their respective magnitude limits.
+Standard uses 0.51 mm at magnitude 8 and 0.28 mm at 9, preserving its curve
+through magnitude 7. Deep uses 0.33 mm at magnitude 10 and 0.28 mm at 10.5,
+preserving its curve through magnitude 9. The experimental Eyepiece profiles
+and extended Deep detail profiles retain their independently calibrated curves
+and minimum sizes. Values between knots use the existing linear interpolation.
 Magnitude limits and bright-star knots are unchanged. The shared base styles
 apply these curves to both colour and B&W output; detail charts inherit their
 selected star profile.
