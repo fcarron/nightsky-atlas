@@ -341,7 +341,6 @@ def test_detail_directory_codes_and_parent_codes_are_independent_and_linkable() 
     )
     assert [entry.chart_code for entry in details] == [
         "SD01",
-        "SD02",
         "SD03",
         "SD04",
         "SD05",

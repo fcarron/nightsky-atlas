@@ -206,7 +206,7 @@ Build the complete Standard chart set with the star and OpenNGC catalogues:
     --dsos data/processed/dso/openngc.json
 ```
 
-Standard contains 129 main charts plus eight detail charts. The default build uses two
+Standard contains 129 main charts plus seven detail charts. The default build uses two
 workers and also creates per-chart PNG previews. Use `--jobs 1` to build
 serially, `--jobs 4` if several GiB of memory are available, or `--no-png` to
 skip preview images. A full build can take substantially longer than the

@@ -296,7 +296,6 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
     assert [detail.code for detail in pocket.detail_charts] == ["PD01", "PD02", "PD03", "PD04"]
     assert [detail.code for detail in details] == [
         "SD01",
-        "SD02",
         "SD03",
         "SD04",
         "SD05",
@@ -318,17 +317,21 @@ def test_detail_charts_use_stable_codes_supported_scales_and_edition_stars() -> 
         "Perseus Double Cluster",
         "Pleiades · M45",
     }
-    assert [detail.mm_per_degree for detail in details] == [20, 80, 40, 40, 20, 20, 20, 40]
+    assert [detail.mm_per_degree for detail in details] == [20, 20, 40, 20, 20, 20, 40]
     assert [detail.star_profile for detail in details] == [
         "deep",
-        "eyepiece_deep",
-        "eyepiece",
+        "deep",
         "eyepiece",
         "deep",
         "deep",
         "deep",
         "eyepiece",
     ]
+    virgo, south_virgo = details[:2]
+    assert south_virgo.code == "SD03"
+    assert south_virgo.width_deg == virgo.width_deg == 13.0
+    assert south_virgo.height_deg == virgo.height_deg == 8.5
+    assert south_virgo.dso_profile == virgo.dso_profile == "deep"
     standard_pleiades = details[-1]
     pocket_pleiades = pocket.detail_charts[1]
     assert standard_pleiades.width_deg == pocket_pleiades.width_deg == 6.5
@@ -712,7 +715,7 @@ def test_standard_detail_star_depth_does_not_change_dso_selection() -> None:
         atlas=atlas,
         style=style,
     )
-    detail = next(detail for detail in atlas.detail_charts if detail.code == "SD02")
+    detail = next(detail for detail in atlas.detail_charts if detail.code == "SD03")
     definition = detail.to_definition(atlas_id=atlas.id)
 
     selected_ids = []

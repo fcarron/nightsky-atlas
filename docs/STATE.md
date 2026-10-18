@@ -3,6 +3,19 @@
 Handoff snapshot. The authoritative contract remains `AGENTS.md`; the granular
 plan is `docs/DEVELOPMENT_PLAN.md`.
 
+## Standard Virgo detail simplification (2026-10-18)
+
+Removed SD02 (Virgo core). SD03 (South Virgo) retains its code and centre,
+but now matches SD01 at 20 mm/degree, with a 13 x 8.5 degree field and Deep
+star/DSO profiles. Standard now has seven detail charts. Geometric relations
+link SD03 to S066, S051, S065 and S050.
+
+SW/colour proof subsets in `build/proofs/standard-virgo-details-{bw,color}/`
+contain those four main charts plus SD01/SD03, with zero hard issues.
+Edition, index, detail-marker and configuration tests: 96 passed, one existing
+failure in the Deep faint-star test, which still expects 0.31/0.25 mm instead
+of the previously adopted 0.33/0.28 mm. Full Standard PDFs have not been rebuilt.
+
 ## Alpha editorial follow-up (2026-10-18)
 
 The introduction identifies the public alpha with the package version and a

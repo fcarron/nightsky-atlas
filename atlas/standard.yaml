@@ -61,26 +61,16 @@ detail_charts:
     mm_per_degree: 20.0
     star_profile: deep
     dso_profile: deep
-  - id: detail-virgo-core-label-fallback
-    code: SD02
-    name: Virgo core
-    center_ra_deg: 186.75
-    center_dec_deg: 13.0
-    width_deg: 3.25
-    height_deg: 2.125
-    mm_per_degree: 80.0
-    star_profile: eyepiece_deep
-    dso_profile: eyepiece_deep
   - id: detail-virgo-south-label-fallback
     code: SD03
     name: South Virgo
     center_ra_deg: 185.5
     center_dec_deg: 5.0
-    width_deg: 6.5
-    height_deg: 4.25
-    mm_per_degree: 40.0
-    star_profile: eyepiece
-    dso_profile: eyepiece
+    width_deg: 13.0
+    height_deg: 8.5
+    mm_per_degree: 20.0
+    star_profile: deep
+    dso_profile: deep
   - id: detail-fornax-core-label-fallback
     code: SD04
     name: Fornax core
