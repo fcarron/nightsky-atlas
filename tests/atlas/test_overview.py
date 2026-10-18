@@ -69,6 +69,27 @@ def test_equatorial_pocket_charts_appear_on_both_symmetric_overviews() -> None:
             assert _point_in_polygon(cell.label_point, cell.polygon)
 
 
+@pytest.mark.parametrize("hemisphere", (NORTH, SOUTH))
+@pytest.mark.parametrize("color", (False, True))
+def test_deep_overview_chart_numbers_stay_inside_their_ring_cells(
+    hemisphere: str, color: bool,
+) -> None:
+    atlas = load_atlas_config(REPO_ROOT / "atlas" / "deep.yaml")
+    style_dir = REPO_ROOT / "styles"
+    if color:
+        style_dir /= "color"
+    style = load_style_config(style_dir / "deep.yaml")
+    overview = build_overview(
+        chart_definitions(atlas),
+        hemisphere=hemisphere,
+        edition=atlas.resolved_edition(),
+        equatorial_extension_deg=style.overview.equatorial_extension_deg,
+    )
+    for cell in overview.cells:
+        assert cell.label_point is not None, cell.chart_code
+        assert _point_in_polygon(cell.label_point, cell.polygon), cell.chart_code
+
+
 def test_standard_overviews_show_full_equatorial_chart_row_on_both_hemispheres() -> None:
     atlas = load_atlas_config(ATLAS)
     style_path = REPO_ROOT / "styles" / "standard.yaml"

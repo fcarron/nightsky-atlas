@@ -1,6 +1,8 @@
 # Shared physical print style inherited from Standard; Deep alters only content density.
 extends: standard.yaml
 id: deep
+overview:
+  equatorial_extension_deg: 4.5
 star:
   faint_magnitude: 10.5
   label_magnitude_limit: 6.5

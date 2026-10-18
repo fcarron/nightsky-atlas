@@ -376,6 +376,10 @@ research evidence and the atlas-wide audit.
 
 ## Overview maps and locator
 
+Deep extends each overview 4.5 degrees past the equator, matching half its
+9-degree chart height. It overrides Standard's 9.25-degree extension so the
+adjacent ±7.5-degree ring retains its width and contains its chart numbers.
+
 The atlas opens with whole-sky **overview pages** (after the front matter):
 a northern and a southern pole-centred azimuthal equidistant map. By default,
 each extends 90 degrees from its pole. Pocket extends both maps 18 degrees past
